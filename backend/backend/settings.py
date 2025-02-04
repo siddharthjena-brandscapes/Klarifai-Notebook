@@ -210,8 +210,6 @@ os.makedirs(os.path.join(MEDIA_ROOT, 'generated_images'), exist_ok=True)
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# In your settings.py
-LOCAL_SENTENCE_TRANSFORMER_PATH = r'C:\Users\TapasmitaPattanaik\Desktop\ReactClone\backend'
 
 # Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
