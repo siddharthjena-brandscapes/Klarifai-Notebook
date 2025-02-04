@@ -1,10 +1,12 @@
 # Virtual Environment
+my_venv/
 venv/
 *.dll
 *.lib
 
 # Node
 node_modules/
+package-lock.json
 
 # Media and Data files
 *.png

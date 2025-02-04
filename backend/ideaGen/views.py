@@ -1,3 +1,10 @@
+
+
+
+###############################################################
+#PROJECT INTEGRATION
+###############################################################
+
 # views.py
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse,HttpResponse
@@ -14,9 +21,13 @@ import io
 import base64
 from django.core.files.base import ContentFile
 from datetime import datetime
-from django.db.models import Q
+from django.db.models import Max, Q
 import os
 from django.conf import settings
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
  
 # API configurations
 GOOGLE_API_KEY = "AIzaSyC5Dqjx0DLbkRXH9YWqWZ1SPTK0w0C4oFY"
@@ -31,25 +42,9 @@ hf_client = InferenceClient(
 )
  
  
-def generate_image(prompt, size=768, steps=30, guidance_scale=7.5):
-    """Generate image using Hugging Face model"""
-    parameters = {
-        "width": size,
-        "height": size,
-        "num_inference_steps": steps,
-        "guidance_scale": guidance_scale
-    }
-   
-    try:
-        response = hf_client.post(
-            json={"inputs": prompt, "parameters": parameters}
-        )
-        return Image.open(io.BytesIO(response)), None
-    except Exception as e:
-        return None, str(e)
- 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(['POST', 'GET', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def generate_ideas(request):
     if request.method == "OPTIONS":
         response = HttpResponse()
@@ -63,20 +58,41 @@ def generate_ideas(request):
         try:
             data = json.loads(request.body)
             
-            # Extract base data
+            # Extract base data including project_id
+            project_id = data.get('project_id')
+            if not project_id:
+                raise ValueError("project_id is required")
+
+            # Get the project instance
+            try:
+                project = Project.objects.get(id=project_id, user=request.user)
+            except Project.DoesNotExist:
+                raise ValueError(f"Project with id {project_id} does not exist")
+
+            # Get the current maximum set number for this project
+            max_set_number = Idea.objects.filter(
+                product_idea__project_id=project_id
+            ).aggregate(Max('idea_set'))['idea_set__max'] or 0
+            
+            current_set = max_set_number + 1
+
             product = data.get('product')
             brand = data.get('brand')
             category = data.get('category')
             number_of_ideas = int(data.get('number_of_ideas', 1))
             dynamic_fields = data.get('dynamicFields', {})
+            negative_prompt = data.get('negative_prompt', '')
             
-            # Create a ProductIdea2 instance
+            # Create a ProductIdea2 instance with project association
             product_idea = ProductIdea2.objects.create(
+                user=request.user,
+                project=project,
                 product=product,
                 brand=brand,
                 category=category,
                 number_of_ideas=number_of_ideas,
-                dynamic_fields=dynamic_fields
+                dynamic_fields=dynamic_fields,
+                negative_prompt=negative_prompt
             )
             
             # Generate ideas using existing prompt logic
@@ -85,6 +101,11 @@ def generate_ideas(request):
                 "In addition to the standard details provided, the following dynamic attributes have been included:\n"
                 f"{dynamic_fields}\n"
                 "The dynamic attributes are provided as a dictionary, where the keys represent attribute categories or columns, and the values represent their corresponding details or inputs from the user.\n"
+                
+                # Negative Prompt Section
+                f"IMPORTANT CONSTRAINTS: Avoid generating ideas that involve the following terms or concepts: {negative_prompt}\n"
+                "If any generated idea contains or relates to these terms, immediately discard that idea and generate a completely different one.\n"
+                
                 "Format each idea as a JSON object with 'product_name' and 'description' fields.\n"
                 "The 'description' should be clear, engaging, and written in simple language that highlights the product's key features and unique selling points. Ensure that the description explains how the product benefits the user and what makes it special, making it easy to visualize the idea.\n"
                 "Make each idea unique and creative, focusing on different aspects of the product, including dynamic attributes, to appeal to a variety of user segments."
@@ -102,18 +123,23 @@ def generate_ideas(request):
                     generated_ideas = [generated_ideas]
                 
                 validated_ideas = []
-                for idea_data in generated_ideas[:number_of_ideas]:
+                for index, idea_data in enumerate(generated_ideas[:number_of_ideas]):
                     if isinstance(idea_data, dict) and 'product_name' in idea_data and 'description' in idea_data:
-                        # Create Idea instance in database
+                        idea_set_label = f"Set {current_set}-{index}"
                         idea = Idea.objects.create(
                             product_idea=product_idea,
                             product_name=idea_data['product_name'],
-                            description=idea_data['description']
+                            description=idea_data['description'],
+                            idea_set=current_set,
+                            idea_set_label=idea_set_label
                         )
+                        idea.save()
                         validated_ideas.append({
                             'idea_id': idea.id,
                             'product_name': idea.product_name,
-                            'description': idea.description
+                            'description': idea.description,
+                            'idea_set': current_set,
+                            'idea_set_label': idea_set_label
                         })
                     
             except json.JSONDecodeError:
@@ -123,18 +149,22 @@ def generate_ideas(request):
                 current_name = None
                 current_description = []
                 
-                for line in lines:
+                for index, line in enumerate(lines):
                     if ' - ' in line:
                         if current_name and current_description:
                             idea = Idea.objects.create(
                                 product_idea=product_idea,
                                 product_name=current_name,
-                                description=' '.join(current_description)
+                                description=' '.join(current_description),
+                                idea_set=current_set,
+                                idea_set_label=f"Set {current_set}-{len(validated_ideas) + 1}"
                             )
                             validated_ideas.append({
                                 'idea_id': idea.id,
                                 'product_name': idea.product_name,
-                                'description': idea.description
+                                'description': idea.description,
+                                'idea_set': current_set,
+                                'idea_set_label': f"Set {current_set}-{len(validated_ideas) + 1}"
                             })
                         name_part, desc_part = line.split(' - ', 1)
                         current_name = name_part.strip()
@@ -146,12 +176,16 @@ def generate_ideas(request):
                     idea = Idea.objects.create(
                         product_idea=product_idea,
                         product_name=current_name,
-                        description=' '.join(current_description)
+                        description=' '.join(current_description),
+                        idea_set=current_set,
+                        idea_set_label=f"Set {current_set}-{len(validated_ideas) + 1}"
                     )
                     validated_ideas.append({
                         'idea_id': idea.id,
                         'product_name': idea.product_name,
-                        'description': idea.description
+                        'description': idea.description,
+                        'idea_set': current_set,
+                        'idea_set_label': f"Set {current_set}-{len(validated_ideas) + 1}"
                     })
             
             response = JsonResponse({
@@ -159,10 +193,13 @@ def generate_ideas(request):
                 "ideas": validated_ideas,
                 "stored_data": {
                     "product_idea_id": product_idea.id,
+                    "project_id": project.id,
+                    "project_name": project.name,
                     "product": product_idea.product,
                     "brand": product_idea.brand,
                     "category": product_idea.category,
-                    "dynamic_fields": product_idea.dynamic_fields
+                    "dynamic_fields": product_idea.dynamic_fields,
+                    "current_set": current_set
                 }
             })
             response["Access-Control-Allow-Origin"] = "http://localhost:5173"
@@ -174,8 +211,9 @@ def generate_ideas(request):
             response["Access-Control-Allow-Origin"] = "http://localhost:5173"
             return response
 
-@csrf_exempt
-@require_http_methods(["PUT", "OPTIONS"])
+@api_view(['POST', 'GET', 'DELETE', 'PUT'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def update_idea(request):
     if request.method == "OPTIONS":
         response = HttpResponse()
@@ -224,8 +262,9 @@ def update_idea(request):
             return response
             
 
-@csrf_exempt
-@require_http_methods(["DELETE", "OPTIONS"])
+@api_view(['POST', 'GET', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def delete_idea(request):
     if request.method == "OPTIONS":
         response = HttpResponse()
@@ -259,20 +298,27 @@ def decompose_product_description(product_description, model):
     """Break down product description into specific aspects using Gemini AI"""
     prompt = f"""
      You are an expert product designer and professional product photographer.
-     Carefully analyze the following product description and decompose it into distinct visual elements that must be captured in a single product photograph.
+     Carefully analyze the following product description and decompose it into distinct visual elements that must be captured in a single image or scene.
  
  
     Product Description:
     {product_description}
  
     Instructions:
-    1. Identify each visual component necessary for a comprehensive product shot.
+    1. Identify each visual component necessary for a comprehensive representation of the product.
     2. For every component, provide a one line description focusing on:
        - Physical attributes (shape, Dimensions, size, colors)
        - Materials and textures
        - Key features and functionality
        - Style and aesthetic elements
        - Target market positioning (if relevant)
+       - Specific brand elements (if relevant)
+       - Product positioning (if relevant)
+       - Specific product elements (if relevant)
+       - Specific product features (if relevant)
+       - Product catalog positioning (if relevant)
+       - Potential usage scenarios or environments, including relevant occasions or target audiences, lighting, temperature, humidity, and other factors (if applicable)
+
     3. Include both technical and aesthetic aspects
  
     Important: Format your response as a simple list with one aspect per line, starting each line with a hyphen (-).
@@ -298,7 +344,7 @@ def synthesize_product_aspects(product_description, aspects, model):
     """Synthesize product aspects into an enhanced description"""
     try:
         synthesis_prompt = f"""
-        You are a seasoned product photographer and creative director. Using the following information, craft a single, cohesive product visualization description for an image.
+        You are a seasoned product photographer and creative director. Using the following information, craft a single, cohesive product visualization description for an image or scene that showcases not only the product bu also relevant usage environments, occasions, or target audience contexts.
  
         Original Product Description: {product_description}
        
@@ -307,10 +353,11 @@ def synthesize_product_aspects(product_description, aspects, model):
        
         Requirements:
         1. Seamlessly integrate all identified aspects into one holistic description.
-        2. Emphasize key visual details and composition (angles, focus points, etc.).
-        3. Adhere to professional product photography standards (lighting, background, clarity).
+        2. Emphasize key visual details, composition (angles, focus points, etc.), and environmental or contextual elements.
+        3. Adhere to professional product photography standards (lighting, background, clarity, brand consistency).
         4. Note any crucial details (such as scale, brand elements, or unique design features).
         5. Make the description concise yet detailed enough for image generation.
+        6. Highlight usage occasions, relevant backdrops, or user demographics if it strengthens the overall scene and visual appeal.
  
  
         Deliverable:
@@ -336,16 +383,16 @@ def enhance_prompt(product_description, model):
         enhanced_description = product_description
    
     # Base prompt with stronger emphasis on composition and detail
-    base_prompt = f"""Ultra-detailed professional product photography of {enhanced_description}.
-    - centered composition with all elements clearly visible
-    - pure white seamless background
-    - studio lighting setup with three-point lighting for balanced illumination
-    - photorealistic high-resolution quality, razor sharp focus
-    - perfectly clear and legible text or branding elements (if applicable)
+    base_prompt = f"""Ultra-detailed professional product photography or scene of {enhanced_description}.
+    - include relevant usage environment or setting if it enhances the product story
+    - if appropriate, depict target audience or typical usage occasions
+    - balanced composition with all elements clearly visible
+    - professional lighting setup with three-point lighting or suitable alternative for clarity and balanced illumination
+    - photorealistic, high-resolution quality
+    - perfectly clear and legible text or branding elements
     - commercial advertising style
-    - product catalog photography
-    - emphasis on key features and textures
-    - clean, polished, and visualy striking appearance
+    - emphasis on both product details and contextual elements
+    - clean, polished, and visualy striking presentation
     - professional marketing photo with balanced composition"""
    
     # Parse for specific elements
@@ -455,52 +502,93 @@ def enhance_prompt(product_description, model):
         focus on clarity and straightforward presentation, intangible services represented by abstract or symbolic visuals"""
  
     # Add emphasis on maintaining all elements
-    base_prompt += """, ensuring all mentioned elements remain in final composition,
+    base_prompt += """, ensuring all mentioned elements remain clear in final composition,
     no elements missing or obscured, complete product representation,
-    all features mentioned in description visible and clear"""
+    all features mentioned in description visible and clear, 
+    retain any crucial branding, design, or environmental details"""
+
+    print('\nbase_prompt=', base_prompt)
  
     return base_prompt
 
-def generate_image_with_retry(client, prompt, size=768, steps=30, guidance_scale=7.5, max_retries=3, initial_delay=1):
-    """Generate image with retry mechanism"""
-    parameters = {
-        "width": size,
-        "height": size,
-        "num_inference_steps": steps,
-        "guidance_scale": guidance_scale
-    }
+def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50, guidance_scale=7.5, max_retries=3, initial_delay=1):
+    """
+    Enhanced image generation with sophisticated retry and fallback mechanism
     
-    for attempt in range(max_retries):
-        try:
-            response = client.post(
-                json={"inputs": prompt, "parameters": parameters}
-            )
-            
-            image = Image.open(io.BytesIO(response))
-            return image, None
-            
-        except Exception as e:
-            error_msg = str(e)
-            
-            if attempt == max_retries - 1:
-                return None, f"Failed after {max_retries} attempts. Last error: {error_msg}"
-            
-            delay = initial_delay * (2 ** attempt) + random.uniform(0, 0.1)
-            time.sleep(delay)
-            
-            if "500" in error_msg and "Model too busy" in error_msg:
-                steps = max(20, steps - 5)
-                size = max(512, size - 256)
-                parameters.update({
-                    "width": size,
-                    "height": size,
-                    "num_inference_steps": steps
-                })
+    Args:
+        client: HuggingFace inference client
+        prompt (str): Image generation prompt
+        initial_size (int): Initial image size (default: 1024)
+        initial_steps (int): Initial inference steps (default: 50)
+        guidance_scale (float): Guidance scale for generation (default: 7.5)
+        max_retries (int): Maximum number of retry attempts (default: 3)
+        initial_delay (int): Initial delay between retries in seconds (default: 1)
+    
+    Returns:
+        tuple: (PIL.Image or None, error message or None)
+    """
+    # Fallback configurations ordered by priority
+    fallback_configs = [
+        {"size": 768, "steps": 50},  # First attempt - highest quality
+        {"size": 768, "steps": 40},  # First fallback - reduce steps
+        {"size": 768, "steps": 45},   # Second fallback - reduce size
+        {"size": 768, "steps": 40},   # Third fallback - reduce both
+        {"size": 512, "steps": 30}    # Last resort - minimum viable config
+    ]
+    
+    last_error = None
+    current_config_index = 0
+    
+    while current_config_index < len(fallback_configs):
+        config = fallback_configs[current_config_index]
+        current_size = config["size"]
+        current_steps = config["steps"]
+        
+        parameters = {
+            "width": current_size,
+            "height": current_size,
+            "num_inference_steps": current_steps,
+            "guidance_scale": guidance_scale
+        }
+        
+        for attempt in range(max_retries):
+            try:
+                response = client.post(
+                    json={"inputs": prompt, "parameters": parameters}
+                )
+                
+                image = Image.open(io.BytesIO(response))
+                
+                # Log successful generation parameters
+                print(f"Successfully generated image with size={current_size}, steps={current_steps} on attempt {attempt + 1}")
+                
+                return image, None
+                
+            except Exception as e:
+                last_error = str(e)
+                
+                # Calculate exponential backoff with jitter
+                delay = initial_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                
+                # If not the last retry of current config, wait and try again
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    print(f"Retrying with same parameters after {delay:.2f}s delay...")
+                    continue
+                
+                # If all retries failed with current config, try next fallback
+                print(f"Failed with size={current_size}, steps={current_steps}. Trying next fallback configuration...")
+                break
+        
+        current_config_index += 1
+    
+    return None, f"Image generation failed after all fallback attempts. Last error: {last_error}"
 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(['POST', 'GET', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def generate_product_image(request):
-    """Enhanced image generation endpoint with retry mechanism and fallback options"""
+    """Enhanced image generation endpoint with optimized retry mechanism"""
     if request.method == "OPTIONS":
         response = JsonResponse({})
         response["Access-Control-Allow-Origin"] = "http://localhost:5173"
@@ -515,8 +603,8 @@ def generate_product_image(request):
             idea_id = data.get('idea_id')
             
             # Get optional parameters with defaults
-            size = data.get('size', 768)
-            steps = data.get('steps', 30)
+            initial_size = data.get('size', 768)
+            initial_steps = data.get('steps', 50)
             guidance_scale = data.get('guidance_scale', 7.5)
             
             if not product_description:
@@ -528,60 +616,47 @@ def generate_product_image(request):
             # Generate enhanced prompt
             enhanced_prompt = enhance_prompt(product_description, model)
             
-            # Try generating image with provided parameters
+            # Try generating image with optimized retry mechanism
             image, error = generate_image_with_retry(
                 hf_client,
                 enhanced_prompt,
-                size=size,
-                steps=steps,
+                initial_size=initial_size,
+                initial_steps=initial_steps,
                 guidance_scale=guidance_scale
             )
             
             if error:
-                # Try fallback parameters
-                image, fallback_error = generate_image_with_retry(
-                    hf_client,
-                    enhanced_prompt,
-                    size=512,
-                    steps=20,
-                    guidance_scale=guidance_scale,
-                    max_retries=2
-                )
-                
-                if fallback_error:
-                    return JsonResponse({
-                        "success": False,
-                        "error": f"Image generation failed: {fallback_error}"
-                    })
+                return JsonResponse({
+                    "success": False,
+                    "error": f"Image generation failed: {error}"
+                })
             
             # Convert PIL image to base64 for response
             img_buffer = io.BytesIO()
             image.save(img_buffer, format="PNG")
-            img_str = base64.b64encode(img_buffer.getvalue()).decode()
-
-            # Ensure generated_images directory exists
+            
             # Ensure generated_images directory exists
             os.makedirs(os.path.join(settings.MEDIA_ROOT, 'generated_images'), exist_ok=True)
-        
+            
             # Create a unique filename
             filename = f"product_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             full_path = os.path.join(settings.MEDIA_ROOT, 'generated_images', filename)
-
+            
             # Save image to file system
             with open(full_path, 'wb') as f:
                 f.write(img_buffer.getvalue())
-
+            
             # Save image to database with parameters
             generated_image = GeneratedImage2.objects.create(
                 idea=idea,
                 prompt=enhanced_prompt,
                 image=ContentFile(
                     img_buffer.getvalue(),
-                    name=f"product_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    name=filename
                 ),
                 parameters=json.dumps({
-                    'size': size,
-                    'steps': steps,
+                    'size': initial_size,
+                    'steps': initial_steps,
                     'guidance_scale': guidance_scale
                 })
             )
@@ -600,8 +675,8 @@ def generate_product_image(request):
                 "idea_id": idea_id,
                 "generated_image_id": generated_image.id,
                 "parameters": {
-                    'size': size,
-                    'steps': steps,
+                    'size': initial_size,
+                    'steps': initial_steps,
                     'guidance_scale': guidance_scale
                 }
             })
@@ -612,8 +687,9 @@ def generate_product_image(request):
                 "error": str(e)
             })
 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(['POST', 'GET', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def regenerate_product_image(request):
     if request.method == "OPTIONS":
         response = JsonResponse({})
@@ -626,20 +702,18 @@ def regenerate_product_image(request):
         try:
             data = json.loads(request.body)
             product_description = data.get('description')
+            negative_prompt = data.get('negative_prompt', '')  # New optional parameter
             idea_id = data.get('idea_id')
             
-            # Get generation parameters
-            size = int(data.get('size', 768))  # Default to 768
-            steps = int(data.get('steps', 30))  # Default to 30
-            guidance_scale = float(data.get('guidance_scale', 7.5))  # Default to 7.5
+            # Get generation parameters with higher quality defaults for regeneration
+            size = int(data.get('size', 1024))  # Default to 1024 for regeneration
+            steps = int(data.get('steps', 30))  # Default to 30 for regeneration
+            guidance_scale = float(data.get('guidance_scale', 7.5))
             
-            # Validate parameters
-            if size not in [512, 768, 1024, 1280]:
-                size = 768  # Default if invalid
-            if not (20 <= steps <= 50):
-                steps = 30  # Default if out of range
-            if not (1.0 <= guidance_scale <= 20.0):
-                guidance_scale = 7.5  # Default if out of range
+            # Validate and enforce minimum quality parameters for regeneration
+            size = max(size, 768)  # Minimum size 768 for regeneration
+            steps = max(steps, 40)  # Minimum 40 steps for regeneration
+            guidance_scale = min(max(guidance_scale, 7.0), 20.0)  # Keep guidance scale in reasonable range
             
             if not product_description:
                 return JsonResponse({"success": False, "error": "Product description is required"})
@@ -647,39 +721,53 @@ def regenerate_product_image(request):
             # Get the idea instance
             idea = get_object_or_404(Idea, id=idea_id)
             
-            # Generate enhanced prompt
+            # Generate enhanced prompt with additional emphasis on quality
             enhanced_prompt = enhance_prompt(product_description, model)
             
-            # Try generating image with provided parameters
+            # Modify enhanced prompt to include negative prompting
+            if negative_prompt:
+                # Parse and clean up negative prompt
+                cleaned_negative_prompt = ", ".join(
+                    [term.strip() for term in negative_prompt.split(',') if term.strip()]
+                )
+                
+                # Default negative prompt terms to always exclude low-quality elements
+                default_negative_terms = [
+                    "low quality", 
+                    "blurry", 
+                    "distorted", 
+                    "poor details", 
+                    "bad composition", 
+                    "artifact", 
+                    "watermark"                     
+                ]
+                
+                # Combine user-specified negative terms with default terms
+                full_negative_prompt = ", ".join(
+                    list(set(default_negative_terms + [cleaned_negative_prompt]))
+                )
+                
+                enhanced_prompt += f"\nNegative prompt: {full_negative_prompt}"
+            
+            # Try generating image with optimized retry mechanism
             image, error = generate_image_with_retry(
                 hf_client,
                 enhanced_prompt,
-                size=size,
-                steps=steps,
-                guidance_scale=guidance_scale
+                initial_size=size,
+                initial_steps=steps,
+                guidance_scale=guidance_scale,
+                max_retries=4  # One extra retry for regeneration
             )
             
             if error:
-                # Try fallback parameters
-                image, fallback_error = generate_image_with_retry(
-                    hf_client,
-                    enhanced_prompt,
-                    size=512,
-                    steps=20,
-                    guidance_scale=guidance_scale,
-                    max_retries=2
-                )
-                
-                if fallback_error:
-                    return JsonResponse({
-                        "success": False,
-                        "error": f"Image regeneration failed: {fallback_error}"
-                    })
+                return JsonResponse({
+                    "success": False,
+                    "error": f"Image regeneration failed: {error}"
+                })
             
             # Convert PIL image to base64 for response
             img_buffer = io.BytesIO()
             image.save(img_buffer, format="PNG")
-            img_str = base64.b64encode(img_buffer.getvalue()).decode()
             
             # Save regenerated image to database
             generated_image = GeneratedImage2.objects.create(
@@ -694,9 +782,12 @@ def regenerate_product_image(request):
                     'steps': steps,
                     'guidance_scale': guidance_scale,
                     'is_regenerated': True,
-                    'original_description': product_description
+                    'original_description': product_description,
+                    'negative_prompt': negative_prompt  # Store user's negative prompt
                 })
             )
+            
+            img_str = base64.b64encode(img_buffer.getvalue()).decode()
             
             return JsonResponse({
                 "success": True,
@@ -705,7 +796,8 @@ def regenerate_product_image(request):
                 "parameters": {
                     'size': size,
                     'steps': steps,
-                    'guidance_scale': guidance_scale
+                    'guidance_scale': guidance_scale,
+                    'negative_prompt': negative_prompt
                 },
                 "generated_image_id": generated_image.id
             })
@@ -793,8 +885,9 @@ def get_idea_history(request, idea_id):
             'error': str(e)
         }, status=400)
 
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(['POST', 'GET', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def restore_idea_version(request):
     try:
         data = json.loads(request.body)
@@ -872,5 +965,377 @@ def restore_idea_version(request):
             'success': False,
             'error': str(e)
         })
-    
 
+
+# views.py
+from django.shortcuts import render, get_object_or_404
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+import json
+from .models import Project, ProductIdea2, Idea, GeneratedImage2
+from django.utils import timezone
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+
+
+@api_view(['POST', 'GET', 'DELETE', 'PUT'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def project_operations(request, project_id=None):
+    if not request.user.is_authenticated:
+        return JsonResponse({
+            'success': False,
+            'error': 'Authentication required'
+        }, status=401)
+    
+    main_project_id = request.GET.get('main_project_id') or request.data.get('main_project_id')
+    if request.method == "GET":
+        print("Starting project operations...")
+        try:
+            # Filter projects by user
+            projects = Project.objects.filter(user=request.user, main_project_id=main_project_id).order_by('-last_modified')[:5]
+            print(f"Found {projects.count()} projects for user {request.user.username}")
+            
+            project_list = []
+            
+            for project in projects:
+                try:
+                    # Filter product ideas by project and user
+                    product_ideas = project.product_ideas.filter(user=request.user, )
+                    print(f"\nProject {project.id} - {project.name}")
+                    print(f"Has {product_ideas.count()} product ideas")
+                    
+                    latest_product_idea = product_ideas.first()
+                    
+                    accepted_ideas = []
+                    for product_idea in product_ideas:
+                        ideas = product_idea.ideas.all()
+                        print(f"\nProduct idea {product_idea.id}")
+                        print(f"Has {ideas.count()} ideas")
+                        
+                        for idea in ideas:
+                            print(f"\nProcessing idea {idea.id} - {idea.product_name}")
+                            
+                            # Explicitly check for related images
+                            all_images = GeneratedImage2.objects.filter(idea=idea)
+                            successful_images = all_images.filter(generation_status='success')
+                            
+                            print(f"Total images found: {all_images.count()}")
+                            print(f"Successful images: {successful_images.count()}")
+                            
+                            latest_image = successful_images.first()
+                            
+                            if latest_image:
+                                print(f"Latest image details:")
+                                print(f"- ID: {latest_image.id}")
+                                print(f"- Status: {latest_image.generation_status}")
+                                print(f"- Has image file: {bool(latest_image.image)}")
+                                if latest_image.image:
+                                    print(f"- Image path: {latest_image.image.path}")
+                                    print(f"- Image URL: {latest_image.image.url}")
+                            
+                            image_url = None
+                            if latest_image and latest_image.image:
+                                try:
+                                    image_url = latest_image.image.url
+                                except Exception as img_error:
+                                    print(f"Error getting image URL: {str(img_error)}")
+                            
+                            accepted_ideas.append({
+                                'id': idea.id,
+                                'title': idea.product_name,
+                                'description': idea.description,
+                                'image_url': image_url,
+                                'debug_info': {
+                                    'total_images': all_images.count(),
+                                    'successful_images': successful_images.count(),
+                                    'has_latest_image': bool(latest_image),
+                                    'has_image_file': bool(latest_image.image) if latest_image else False,
+                                    'generation_status': latest_image.generation_status if latest_image else None
+                                }
+                            })
+                    
+                    project_data = {
+                        'id': project.id,
+                        'name': project.name,
+                        'created': project.created_at.isoformat(),
+                        'lastModified': project.last_modified.isoformat(),
+                        'acceptedIdeas': accepted_ideas,
+                        'formData': {
+                            'product': latest_product_idea.product if latest_product_idea else None,
+                            'brand': latest_product_idea.brand if latest_product_idea else None,
+                            'category': latest_product_idea.category if latest_product_idea else None,
+                            'dynamicFields': latest_product_idea.dynamic_fields if latest_product_idea else {}
+                        } if latest_product_idea else None
+                    }
+                    project_list.append(project_data)
+                    
+                except Exception as project_error:
+                    print(f"Error processing project {project.id}: {str(project_error)}")
+                    import traceback
+                    print(f"Full traceback: {traceback.format_exc()}")
+                    continue
+            
+            return JsonResponse({'success': True, 'projects': project_list})
+            
+        except Exception as e:
+            print("Error in project_operations:", str(e))
+            import traceback
+            print("Full traceback:", traceback.format_exc())
+            return JsonResponse({'success': False, 'error': str(e)})
+        
+    elif request.method == "POST":
+        try:
+            
+            project_name = request.data.get('name')
+            
+            if not project_name:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Project name is required'
+                }, status=400)
+            
+            # Create new project with user
+            project = Project.objects.create(
+                
+                name=project_name,
+                created_at=timezone.now(),
+                last_modified=timezone.now(),
+                user=request.user,
+                main_project_id=main_project_id, # Add user to project
+            )
+            
+            # Create initial response data
+            project_data = {
+                'id': project.id,
+                'name': project.name,
+                'created': project.created_at.isoformat(),
+                'lastModified': project.last_modified.isoformat(),
+                'acceptedIdeas': [],
+                'formData': None
+            }
+            
+            return JsonResponse({
+                'success': True,
+                'project': project_data
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON data'
+            }, status=400)
+            
+        except Exception as e:
+            print(f"Error creating project: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+        
+    elif request.method == "DELETE":
+        if not project_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Project ID is required'
+            }, status=400)
+        try:
+            # Filter by user
+            project = get_object_or_404(Project, id=project_id, user=request.user)
+            project.delete()
+            return JsonResponse({
+                'success': True,
+                'message': 'Project deleted successfully'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+        
+    elif request.method == "PUT":
+        try:
+            project = get_object_or_404(Project, id=project_id, user=request.user)
+            
+            # Get the new name from request data
+            new_name = request.data.get('name')
+            if not new_name:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Project name is required'
+                }, status=400)
+            
+            # Update the project name
+            project.name = new_name
+            project.last_modified = timezone.now()
+            project.save()
+            
+            return JsonResponse({
+                'success': True,
+                'project': {
+                    'id': project.id,
+                    'name': project.name,
+                    'created': project.created_at.isoformat(),
+                    'lastModified': project.last_modified.isoformat()
+                }
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+        
+    
+            
+
+
+@api_view(['POST', 'GET', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_project(request, project_id):
+    if request.method == "GET":
+        try:
+            project = get_object_or_404(Project, id=project_id, user=request.user)
+            product_ideas = project.product_ideas.filter(user=request.user)
+            latest_product_idea = product_ideas.first()
+            
+            # Get ALL ideas first (both accepted and unaccepted)
+            all_ideas = []
+            accepted_ideas = []
+            all_idea_metadata = {}  # Store metadata for ALL ideas
+            version_history = {}    # Store version history for all ideas
+            
+            # Get max set number for the project
+            max_set = Idea.objects.filter(
+                product_idea__project=project
+            ).aggregate(Max('idea_set'))['idea_set__max'] or 0
+            
+            for product_idea in product_ideas:
+                ideas = product_idea.ideas.all()
+                for idea in ideas:
+                    # Create the base idea data structure with set information
+                    idea_data = {
+                        'id': idea.id,
+                        'idea_id': idea.id,
+                        'title': idea.product_name,
+                        'product_name': idea.product_name,
+                        'description': idea.description,
+                        'created_at': idea.created_at.isoformat(),
+                        'idea_set': idea.idea_set,
+                         'idea_set_label': idea.idea_set_label or f"Set {idea.idea_set}-1"
+                    }
+                    
+                    idea_metadata = {
+                        'baseData': {
+                            'product': product_idea.product,
+                            'category': product_idea.category,
+                            'brand': product_idea.brand,
+                            'number_of_ideas': product_idea.number_of_ideas,
+                            'ideaSet': idea.idea_set,
+                            'ideaSetLabel': idea.idea_set_label,
+                            'negative_prompt': product_idea.negative_prompt,
+                            'project_id': project.id,
+                            'project_name': project.name,
+                            'product_idea_id': idea.id
+                        },
+                        'dynamicFields': product_idea.dynamic_fields or {},
+                        'timestamp': idea.created_at.isoformat()
+                    }
+                        
+                    # Store metadata for ALL ideas
+                    all_idea_metadata[str(idea.id)] = idea_metadata
+                    
+                    # Add to all_ideas with metadata
+                    idea_data['metadata'] = idea_metadata
+                    all_ideas.append(idea_data)
+                    
+                    # Handle image versions and history
+                    image_versions = []
+                    for image in idea.images.all().order_by('-created_at'):
+                        if image and image.image:
+                            try:
+                                import base64
+                                with open(image.image.path, 'rb') as img_file:
+                                    image_data = base64.b64encode(img_file.read()).decode('utf-8')
+                                
+                                image_version = {
+                                    'image_url': image_data,
+                                    'created_at': image.created_at.isoformat(),
+                                    'parameters': image.parameters if hasattr(image, 'parameters') else None,
+                                }
+                                image_versions.append(image_version)
+                                
+                                # If this is the latest image, use it for accepted ideas
+                                if image == idea.images.first():
+                                    # Add image and copy metadata to accepted idea
+                                    accepted_idea = idea_data.copy()
+                                    accepted_idea['image_url'] = f"data:image/{image.image.path.split('.')[-1]};base64,{image_data}"
+                                    accepted_ideas.append(accepted_idea)
+                            except Exception as e:
+                                print(f"Error processing image {image.id}: {str(e)}")
+                                continue
+                    
+                    # Store version history for this idea
+                    if image_versions:
+                        version_history[str(idea.id)] = {
+                            'image_versions': image_versions,
+                            'idea_id': idea.id
+                        }
+            
+            project_data = {
+                'id': project.id,
+                'name': project.name,
+                'created': project.created_at.isoformat(),
+                'lastModified': project.last_modified.isoformat(),
+                'ideas': all_ideas,
+                'acceptedIdeas': accepted_ideas,
+                'formData': {
+                    'product': latest_product_idea.product if latest_product_idea else None,
+                    'brand': latest_product_idea.brand if latest_product_idea else None,
+                    'category': latest_product_idea.category if latest_product_idea else None,
+                    'dynamicFields': latest_product_idea.dynamic_fields if latest_product_idea else {},
+                } if latest_product_idea else None,
+                'ideaMetadata': all_idea_metadata,
+                'versionHistory': version_history,
+                'max_set_number': max_set
+            }
+            
+            return JsonResponse({
+                'success': True,
+                'project': project_data
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+
+@csrf_exempt
+@require_http_methods(["DELETE", "OPTIONS"])
+def delete_project(request, project_id):
+    if request.method == "OPTIONS":
+        response = HttpResponse()
+        response["Access-Control-Allow-Origin"] = "http://localhost:5173"
+        response["Access-Control-Allow-Methods"] = "DELETE, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+
+    if request.method == "DELETE":
+        try:
+            project = get_object_or_404(Project, id=project_id)
+            project.delete()
+            return JsonResponse({
+                'success': True,
+                'message': 'Project deleted successfully'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+        

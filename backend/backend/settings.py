@@ -1,3 +1,5 @@
+
+
 """
 Django settings for backend project.
 
@@ -49,8 +51,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'chat',
     'ideaGen',
-    'structruedDataQuery',
-    'topicModelling',
+    
+    'core'
+   
 ]
 
 
@@ -108,15 +111,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'Klarifai_database',
-        'USER': 'postgres',
-        'PASSWORD': 'root',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    },
-    'data_analysis': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'data_analysis',  # For structured data queries
+        'NAME': 'klarifai-appserver-database',
         'USER': 'postgres',
         'PASSWORD': 'root',
         'HOST': 'localhost',
@@ -125,8 +120,7 @@ DATABASES = {
     
 }
 
-# Database routers configuration
-DATABASE_ROUTERS = ['backend.routers.DatabaseRouter']
+
 
 # # The database URL for structuredDataQuery
 # DATABASE_URL = f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'root')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/data_analysis"
@@ -248,3 +242,7 @@ LOGGING = {
         },
     },
 }
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+MEDIA_ROOT_PATH = os.path.join(BASE_DIR, 'media')
+PROFILE_PICTURES_PATH = os.path.join(MEDIA_ROOT_PATH, 'profile_pictures')
+os.makedirs(PROFILE_PICTURES_PATH, exist_ok=True)

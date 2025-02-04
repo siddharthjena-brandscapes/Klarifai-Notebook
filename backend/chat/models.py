@@ -1,9 +1,12 @@
 
+
+
 # models.py
 from django.db import models
 from django.contrib.auth.models import User
 import uuid
 import google.generativeai as genai
+import os
 
 # Ensure you have the GENERATIVE_MODEL configured at the top of your views.py or in a separate configuration file
 GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash', 
@@ -24,7 +27,7 @@ class Document(models.Model):
     file = models.FileField(upload_to='documents/')
     filename = models.CharField(max_length=255)
     uploaded_at = models.DateTimeField(auto_now_add=True)
-
+    main_project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='chat_documents', null=True)
     def __str__(self):
         return self.filename
     class Meta:
@@ -79,6 +82,7 @@ class ChatHistory(models.Model):
     is_active = models.BooleanField(default=True)
     
     follow_up_questions = models.JSONField(blank=True, null=True)
+    main_project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='chat_histories', null=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -166,6 +170,36 @@ class ConversationMemoryBuffer(models.Model):
             print(f"Error generating context summary: {str(e)}")
             return "Unable to generate conversation summary"
 
+
+    class Meta:
+        app_label = 'chat'
+        
+def profile_picture_path(instance, filename):
+    # Get the file extension
+    ext = filename.split('.')[-1]
+    # Generate a unique filename
+    filename = f"{instance.user.username}_{uuid.uuid4().hex[:8]}.{ext}"
+    # Return the upload path
+    return os.path.join('profile_pictures', filename)
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    profile_picture = models.ImageField(upload_to=profile_picture_path, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username}'s profile"
+    
+    def save(self, *args, **kwargs):
+        # Delete old file when replacing with a new file
+        try:
+            if self.pk:
+                old_profile = UserProfile.objects.get(pk=self.pk)
+                if old_profile.profile_picture and old_profile.profile_picture != self.profile_picture:
+                    old_profile.profile_picture.delete(save=False)
+        except:
+            pass  # When new photo
+        super().save(*args, **kwargs)
 
     class Meta:
         app_label = 'chat'
