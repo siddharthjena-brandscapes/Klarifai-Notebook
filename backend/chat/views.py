@@ -2809,87 +2809,27 @@ class ChatView(APIView):
 
         prompt = f"""
         RESPONSE GENERATION GUIDELINES:
-        1. STRUCTURE AND SPACING:
-        - Use single line breaks between sections
-        - No double spacing or excess line breaks
-        - Keep formatting consistent and clean
- 
-        2. HTML FORMATTING RULES:
-        - Paragraphs: <p>Your text here</p>
-        - Headers/Important text: <b>Your header here</b>
-        - Bullet lists:
-            <ul>
-            <li>First item</li>
-            <li>Second item</li>
-            </ul>
-        - Numbered lists:
-            <ol>
-            <li>First item</li>
-            <li>Second item</li>
-            </ol>
- 
-        3. LIST FORMATTING:
-        - Always use proper <ul> or <ol> tags for lists
-        - Each list item must be wrapped in <li> tags
-        - Lists should be properly indented in the HTML
-        - Use unordered lists (<ul>) for bullet points
-        - Use ordered lists (<ol>) for sequential steps
- 
-        4. SPACING RULES:
-        - One line break after headers
-        - One line break between paragraphs
-        - No multiple line breaks
-        - No excess spacing between sections
-        5. SECTIONING:
-            - Use <b> tags for section headings
-            - Add empty lines before and after sections
-            - Ensure clear visual hierarchy
-        6. OVERALL STRUCTURE:
-            - Start with a clear introduction
-            - Group related information together
-            - End with a conclusion or summary if appropriate
-            - Use consistent spacing throughout
-        7. LIST TYPE SELECTION:
-            Use <ol> (ordered lists) for:
-            - Step-by-step instructions or procedures
-            - Sequential processes or timelines
-            - Priority-ranked items
-            - Methodological explanations
-            - Chronological events
-            - Hierarchical information
-           
-            Use <ul> (unordered lists) for:
-            - Related but non-sequential items
-            - Feature lists
-            - Examples or options
-            - General points
-            - Parallel ideas
-        8. CONTENT ORGANIZATION:
-            - Analyze if the information has a natural sequence or order
-            - Use <ol> when explaining 'how to' or 'step by step' processes
-            - Use <ul> for listing features, characteristics, or parallel ideas
-            - Mix both types when appropriate (e.g., steps followed by examples)
- 
-        PREVIOUS CONVERSATION CONTEXT:
-        {previous_context or "No previous conversation context"}
+        - Provide a clear, concise, and informative answer
+        - Use semantic HTML tags for structure: <b>, <p>, <ul>, <li>
+        - Maintain a natural, conversational tone
+        - Ensure the response is directly derived from the provided context
 
         DOCUMENT CONTEXT:
         {context_str}
- 
-        USER QUERY:
-        {query}
- 
-        CRITICAL REQUIREMENTS:
-        - Use proper HTML list tags (<ul>, <ol>, <li>)
-        - Maintain single line spacing
-        - Remove any excess blank lines
-        - Keep formatting consistent throughout
-        - Use only information from provided documents
-        - Maintain clear visual separation between different sections
-        - Use HTML tags consistently for structure
-            - Focus on readability and clear information hierarchy
-            - Use ONLY information from the provided documents
-            - NO external or speculative information
+
+        USER QUERY: {query}
+
+        RESPONSE FORMAT REQUIREMENTS:
+        1. Begin with a brief introductory paragraph
+        2. Use <b> tags for key section headings
+        3. Use <p> tags for detailed explanations
+        4. Use <ul> and <li> for list-based information
+        5. Ensure the response flows naturally and is easy to read
+
+        CRITICAL CONSTRAINTS:
+        - Use ONLY information from the provided documents
+        - NO external or speculative information
+        - Maintain clarity and readability
         """
         return prompt
 
@@ -3043,85 +2983,21 @@ class ChatView(APIView):
             raise
 
     def generate_follow_up_questions(self, context):
-        def is_valid_question(q):
-            """Check if a string is a valid question."""
-            # Remove common prefixes that aren't part of the actual question
-            q = re.sub(r'^(Here are|Following are|These are|Here\'s)\b.*?:', '', q, flags=re.IGNORECASE)
-            q = re.sub(r'^\d+\.\s*', '', q)
-            q = re.sub(r'^(Question|Q):\s*', '', q)
-            q = q.strip()
-           
-            # Check if it's a proper question
-            return (
-                q and  # not empty
-                q.endswith('?') and  # ends with question mark
-                len(q) > 10 and  # reasonable length
-                not q.startswith("Here are") and  # not a header
-                not q.startswith("Following are") and
-                not any(q.startswith(prefix) for prefix in ["1.", "2.", "3."]) and  # no numbered prefixes
-                "?" in q  # contains at least one question mark
-            )
- 
-        def generate_questions():
-            """Generate and validate questions."""
-            prompt = f"""
-            Generate exactly 3 distinct follow-up questions based on this context.
-           
-            Requirements:
-            - Each must be a complete, standalone question
-            - Do not include any numbering or prefixes
-            - Questions must end with a question mark
-            - Keep questions concise and direct
-            - Do not include phrases like "Here are three questions" or similar headers
-           
-            Context:
-            {''.join(context[:3])}
-            """
-           
-            try:
-                response = GENERATIVE_MODEL.generate_content(prompt)
-                # Split and clean the response
-                questions = [q.strip() for q in response.text.split('\n') if q.strip()]
-               
-                # Clean and validate each question
-                valid_questions = []
-                for q in questions:
-                    cleaned = re.sub(r'^\d+\.\s*', '', q)  # Remove numbered prefixes
-                    cleaned = re.sub(r'^(Question|Q):\s*', '', cleaned)  # Remove question prefixes
-                    cleaned = cleaned.strip()
-                    if is_valid_question(cleaned):
-                        valid_questions.append(cleaned)
-               
-                return valid_questions
-            except Exception as e:
-                logger.error(f"Error in question generation: {str(e)}")
-                return []
- 
-        # Try to generate valid questions up to 3 times
-        max_attempts = 2
-        for attempt in range(max_attempts):
-            questions = generate_questions()
-           
-            # If we have exactly 3 valid questions, return them
-            if len(questions) == 3:
-                return questions
-           
-            logger.warning(f"Attempt {attempt + 1}: Generated {len(questions)} valid questions, retrying...")
-       
-        # If we still don't have 3 valid questions after all attempts,
-        # fill in with default questions
-        default_questions = [
-            "What specific aspects of this topic would you like to explore further?",
-            "Could you clarify which parts of this information are most relevant to your needs?",
-            "How can I provide more detailed information about this subject?"
-        ]
-       
-        # Combine any valid generated questions with default questions
-        final_questions = questions[:3]  # Take any valid questions we did get
-        while len(final_questions) < 3:
-            final_questions.append(default_questions[len(final_questions)])
-       
-        return final_questions
+        prompt = f"""
+        Based on this context, suggest 3 relevant follow-up questions, the length of the questions should be short:
+        {''.join(context[:3])}
+        """
+        
+        try:
+            response = GENERATIVE_MODEL.generate_content(prompt)
+            questions = response.text.split('\n')
+            return questions[:3]
+        except Exception as e:
+            return [
+                "What additional information would you like to know?",
+                "Would you like me to elaborate on any specific point?",
+                "How can I help clarify this information further?"
+            ]
         
 class GetConversationView(APIView):
     permission_classes = [IsAuthenticated]
