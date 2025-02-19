@@ -1,5 +1,5 @@
 // AdvancedRegenControls.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, RotateCw } from 'lucide-react';
 import {
   Dialog,
@@ -9,30 +9,77 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
+import axios from 'axios';
+import { ideaService } from '../utils/axiosConfig';
 
-const AdvancedRegenControls = ({ 
-  idea, 
-  onRegenerate, 
-  isLoading 
-}) => {
+const AdvancedRegenControls = ({ idea, onRegenerate, isLoading }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [settings, setSettings] = useState({
-    prompt: `${idea.product_name}: ${idea.description}`,
-    negativePrompt: '', // New field for negative prompting
+    prompt: '',
+    negativePrompt: '',
     size: 768,
     steps: 30,
     guidance_scale: 7.5
   });
+  const [isLoading2, setIsLoading2] = useState(true);
 
-  // Random parameter generation within safe bounds
+  useEffect(() => {
+    const loadVisualizationPrompt = async () => {
+      if (!idea?.idea_id) return;
+
+      setIsLoading2(true);
+      try {
+        // First try to use the prompt from the idea prop
+        if (idea.visualization_prompt) {
+          setSettings(prev => ({
+            ...prev,
+            prompt: idea.visualization_prompt
+          }));
+          return;
+        }
+
+        // If not available, fetch from API
+        const response = await ideaService.getIdeaDetails(idea.idea_id);
+        if (response.data.success && response.data.idea.visualization_prompt) {
+          setSettings(prev => ({
+            ...prev,
+            prompt: response.data.idea.visualization_prompt
+          }));
+        } else {
+          // If still not available, use fallback
+          setSettings(prev => ({
+            ...prev,
+            prompt: `${idea.product_name}: ${idea.description}`
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading visualization prompt:', error);
+        // Fallback if API fails
+        setSettings(prev => ({
+          ...prev,
+          prompt: `${idea.product_name}: ${idea.description}`
+        }));
+      } finally {
+        setIsLoading2(false);
+      }
+    };
+
+    loadVisualizationPrompt();
+  }, [idea?.idea_id, idea?.visualization_prompt]);
+
   const handleQuickRegenerate = () => {
     const randomParams = {
-      size: 768, // Keep size constant for consistency
-      steps: Math.floor(Math.random() * (40 - 20) + 20), // Random steps between 20-40
-      guidance_scale: Number((Math.random() * (9 - 6) + 6).toFixed(1)) // Random guidance between 6-9
+      size: 768, 
+      steps: Math.floor(Math.random() * (40 - 20) + 20), 
+      guidance_scale: Number((Math.random() * (9 - 6) + 6).toFixed(1)) 
     };
+    
+    const currentPrompt = settings.prompt || 
+                         idea?.visualization_prompt ||
+                         `${idea?.product_name || ''}: ${idea?.description || ''}`;
+                         
     onRegenerate({
-      description: `${idea.product_name}: ${idea.description}`,
+      description: currentPrompt,
       idea_id: idea.idea_id,
       ...randomParams
     });
@@ -46,9 +93,13 @@ const AdvancedRegenControls = ({
   };
 
   const handleAdvancedRegenerate = () => {
+    const currentPrompt = settings.prompt || 
+                         idea?.visualization_prompt ||
+                         `${idea?.product_name || ''}: ${idea?.description || ''}`;
+                         
     onRegenerate({
-      description: settings.prompt,
-      negative_prompt: settings.negativePrompt, // Add negative prompt to regeneration
+      description: currentPrompt,
+      negative_prompt: settings.negativePrompt,
       idea_id: idea.idea_id,
       size: settings.size,
       steps: settings.steps,
@@ -57,125 +108,219 @@ const AdvancedRegenControls = ({
     setShowAdvanced(false);
   };
 
+  
   return (
     <div className="flex gap-2">
       <button
         onClick={handleQuickRegenerate}
-        className="btn btn-secondary bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white"
-        title='Regenerate Image'
-        disabled={isLoading}
+        className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-medium transition-all duration-200 flex items-center gap-2 shadow-lg shadow-violet-500/20"
+        title="Regenerate Image"
+        disabled={isLoading || isLoading2}
       >
         {isLoading ? (
-          <div className="flex items-center">
-            <div className="loading-spinner mr-2"></div>
+          <div className="flex items-center gap-2">
+            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
             Regenerating...
           </div>
         ) : (
-          <>
-            <RotateCw size={16} />
-          </>
+          <RotateCw className="w-4 h-4" />
         )}
       </button>
       
       <Dialog open={showAdvanced} onOpenChange={setShowAdvanced}>
         <DialogTrigger asChild>
-          <button className="btn btn-secondary bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700" disabled={isLoading} title='Advance Regenerate'>
-            <Settings size={16} />
+          <button 
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-medium transition-all duration-200 shadow-lg shadow-violet-500/20"
+            disabled={isLoading || isLoading2}
+            title="Advanced Regenerate"
+          >
+            <Settings className="w-4 h-4" />
           </button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Advanced Regeneration Settings</DialogTitle>
+        <DialogContent className="sm:max-w-2xl bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-800 shadow-2xl">
+          <DialogHeader className="border-b border-gray-800 pb-4 relative">
+            <button
+              onClick={() => setShowAdvanced(false)}
+              className="absolute right-0 top-0 p-2 text-gray-400 hover:text-white transition-colors duration-200 rounded-lg hover:bg-gray-800"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+            <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent pr-8">
+              Advanced Regeneration Settings
+            </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-6 py-4 overflow-y-auto max-h-[65vh] pr-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">
-                Generation Prompt
+          <div className="space-y-6 py-6 overflow-y-auto max-h-[70vh] px-6 custom-scrollbar">
+            <style jsx global>{`
+              .custom-scrollbar::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+              }
+              
+              .custom-scrollbar::-webkit-scrollbar-track {
+                background: rgba(75, 85, 99, 0.1);
+                border-radius: 4px;
+                margin: 4px;
+              }
+              
+              .custom-scrollbar::-webkit-scrollbar-thumb {
+                background: linear-gradient(to bottom, rgb(139, 92, 246), rgb(79, 70, 229));
+                border-radius: 4px;
+                border: 2px solid transparent;
+                background-clip: content-box;
+              }
+              
+              .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                background: linear-gradient(to bottom, rgb(124, 58, 237), rgb(67, 56, 202));
+                border: 2px solid transparent;
+                background-clip: content-box;
+              }
+
+              .custom-scrollbar::-webkit-scrollbar-corner {
+                background: transparent;
+              }
+
+              .custom-scrollbar {
+                scrollbar-width: thin;
+                scrollbar-color: rgb(139, 92, 246) rgba(75, 85, 99, 0.1);
+              }
+            `}</style>
+            <div className="space-y-3">
+              <label className="text-base font-semibold text-white flex items-center gap-2">
+                Visualization Prompt
+                <span className="text-xs font-normal text-gray-400">(AI-enhanced prompt for image generation)</span>
               </label>
               <textarea
                 value={settings.prompt}
                 onChange={(e) => handleSettingChange('prompt', e.target.value)}
-                rows={4}
-                className="w-full p-2 bg-gray-800 border border-gray-700 rounded-md text-white"
+                rows={6}
+                className="w-full p-4 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all duration-200 custom-scrollbar"
+                placeholder={`${idea?.product_name || ''}: ${idea?.description || ''}`}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">
-                Negative Prompt (Elements to Avoid)
+            <div className="space-y-3">
+              <label className="text-base font-semibold text-white flex items-center gap-2">
+                Negative Prompt
+                <span className="text-xs font-normal text-gray-400">(Elements to exclude)</span>
               </label>
               <textarea
                 value={settings.negativePrompt}
                 onChange={(e) => handleSettingChange('negativePrompt', e.target.value)}
-                rows={3}
+                rows={4}
                 placeholder="Enter elements you want to exclude from the image (e.g., blurry, low quality, watermarks)"
-                className="w-full p-2 bg-gray-800 border border-gray-700 rounded-md text-white"
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                Specify elements you want to avoid in the generated image. Separate multiple elements with commas.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">
-                Image Size: {settings.size}px
-              </label>
-              <select
-                value={settings.size}
-                onChange={(e) => handleSettingChange('size', Number(e.target.value))}
-                className="w-full p-2 bg-gray-800 border border-gray-700 rounded-md text-white"
-              >
-                <option value={512}>512px</option>
-                <option value={768}>768px</option>
-                <option value={1024}>1024px</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">
-                Quality Steps: {settings.steps}
-              </label>
-              <Slider
-                value={[settings.steps]}
-                onValueChange={([value]) => handleSettingChange('steps', value)}
-                min={20}
-                max={50}
-                step={1}
-                className="w-full"
+                className="w-full p-4 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all duration-200"
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">
-                Guidance Scale: {settings.guidance_scale}
-              </label>
-              <Slider
-                value={[settings.guidance_scale]}
-                onValueChange={([value]) => handleSettingChange('guidance_scale', value)}
-                min={1}
-                max={20}
-                step={0.1}
-                className="w-full"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <label className="text-base font-semibold text-white flex items-center gap-2">
+                  Image Size
+                  <span className="text-sm font-medium text-violet-400">{settings.size}px</span>
+                </label>
+                <select
+                  value={settings.size}
+                  onChange={(e) => handleSettingChange('size', Number(e.target.value))}
+                  className="w-full p-3 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all duration-200"
+                >
+                  <option value={512}>512px</option>
+                  <option value={768}>768px</option>
+                  <option value={1024}>1024px</option>
+                </select>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-base font-semibold text-white flex items-center gap-2">
+                  Quality Steps
+                  <span className="text-sm font-medium text-violet-400">{settings.steps}</span>
+                </label>
+                <div className="px-2 py-4">
+                  <div className="relative">
+                    <div className="absolute -top-2 left-0 w-full h-1 bg-gray-700 rounded">
+                      <div 
+                        className="absolute h-1 bg-gradient-to-r from-violet-500 to-indigo-500 rounded" 
+                        style={{ width: `${((settings.steps - 20) / (50 - 20)) * 100}%` }}
+                      />
+                    </div>
+                    <Slider
+                      value={[settings.steps]}
+                      onValueChange={([value]) => handleSettingChange('steps', value)}
+                      min={20}
+                      max={50}
+                      step={1}
+                      className="relative z-10"
+                      thumbClassName="w-4 h-4 bg-white rounded-full shadow-lg cursor-pointer hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-all duration-200"
+                      trackClassName="bg-transparent"
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-xs text-gray-500">20</span>
+                    <span className="text-xs text-gray-500">50</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Higher values = better quality, slower generation</p>
+              </div>
+
+              <div className="space-y-3 md:col-span-2">
+                <label className="text-base font-semibold text-white flex items-center gap-2">
+                  Guidance Scale
+                  <span className="text-sm font-medium text-violet-400">{settings.guidance_scale}</span>
+                </label>
+                <div className="px-2 py-4">
+                  <div className="relative">
+                    <div className="absolute -top-2 left-0 w-full h-1 bg-gray-700 rounded">
+                      <div 
+                        className="absolute h-1 bg-gradient-to-r from-violet-500 to-indigo-500 rounded" 
+                        style={{ width: `${((settings.guidance_scale - 1) / (20 - 1)) * 100}%` }}
+                      />
+                    </div>
+                    <Slider
+                      value={[settings.guidance_scale]}
+                      onValueChange={([value]) => handleSettingChange('guidance_scale', value)}
+                      min={1}
+                      max={20}
+                      step={0.1}
+                      className="relative z-10"
+                      thumbClassName="w-4 h-4 bg-white rounded-full shadow-lg cursor-pointer hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-all duration-200"
+                      trackClassName="bg-transparent"
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-xs text-gray-500">1.0</span>
+                    <span className="text-xs text-gray-500">20.0</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Controls how closely the image follows the prompt</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex justify-end gap-3 pt-6 border-t border-gray-800">
             <button
               onClick={() => setShowAdvanced(false)}
-              className="btn btn-secondary"
+              className="px-4 py-2 rounded-lg bg-gray-800 text-white font-medium hover:bg-gray-700 transition-all duration-200"
             >
               Cancel
             </button>
             <button
               onClick={handleAdvancedRegenerate}
-              className="btn btn-primary"
-              disabled={isLoading}
+              className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-medium transition-all duration-200 shadow-lg shadow-violet-500/20"
+              disabled={isLoading || isLoading2}
             >
               {isLoading ? (
-                <div className="flex items-center">
-                  <div className="loading-spinner mr-2"></div>
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
                   Regenerating...
                 </div>
               ) : (

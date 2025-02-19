@@ -1,8 +1,9 @@
 # Virtual Environment
 my_venv/
 venv/
+myVenv/
 *.dll
-*.lib
+.vscode/
 
 # Node
 node_modules/

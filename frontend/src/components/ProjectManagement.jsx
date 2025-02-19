@@ -1,13 +1,4 @@
 
-
-
-
-
-///////////////////////////////////////////////////////////
-//PROJECT INTEGRATION
-///////////////////////////////////////////////////////////
-///
-
 //IdeaGeneartor parent component
 import React, { useState, useEffect } from 'react';
 import { Plus, FolderOpen, Clock, Eye, Trash2, ChevronRight, Loader, Edit } from 'lucide-react';
@@ -244,7 +235,7 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
           <div className="space-y-3 text-gray-400 text-sm">
             <p className="flex items-center gap-2">
               <Clock size={14} className="text-gray-500" />
-              Last modified: {format(new Date(displayData.lastModified), 'MMM d, yyyy')}
+              Created at: {format(new Date(displayData.lastModified), 'MMM d, yyyy')}
             </p>
             
             
@@ -390,7 +381,7 @@ const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
       
       <div className="max-w-4xl mx-auto p-8 space-y-8">
         <div className="flex justify-between items-center">
-          <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+          <h2 className="text-4xl pb-1 font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
             My Idea Projects
           </h2>
           <button 
@@ -455,6 +446,7 @@ const ProjectProvider = ({ children }) => {
         id: idea.idea_id,
         title: idea.product_name,
         description: idea.description,
+        visualization_prompt: idea.visualization_prompt,
         image_url: projectData.generatedImages[idea.idea_id]?.replace('data:image/png;base64,', '') || null
       }));
 
@@ -466,19 +458,33 @@ const ProjectProvider = ({ children }) => {
         fieldActivation: projectData.fieldActivation
       };
 
+      // Ensure visualization_prompt is preserved in the stored metadata
+      const enhancedIdeaMetadata = Object.entries(projectData.ideaMetadata || {}).reduce((acc, [key, value]) => {
+        acc[key] = {
+          ...value,
+          baseData: {
+            ...value.baseData,
+            visualization_prompt: value.baseData?.visualization_prompt || 
+                                projectData.ideas.find(i => i.idea_id.toString() === key)?.visualization_prompt
+          }
+        };
+        return acc;
+      }, {});
+
       const response = await ideaService.updateProject({
         id: currentProject.id,
         name: projectData.name,
         formData: completeFormData,
         acceptedIdeas: transformedAcceptedIdeas,
         lastModified: new Date().toISOString(),
-        ideaMetadata: projectData.ideaMetadata,
+        ideaMetadata: enhancedIdeaMetadata,
         ideaSetCounter: projectData.ideaSetCounter
       });
 
       if (response.data.success) {
         setCurrentProject({
           ...projectData,
+          ideaMetadata: enhancedIdeaMetadata,
           lastModified: new Date().toISOString()
         });
       } else {
@@ -501,8 +507,9 @@ const ProjectProvider = ({ children }) => {
           idea_id: idea.id,
           product_name: idea.title,
           description: idea.description,
-          ideaSet: idea.ideaSet || 1,
-          ideaSetLabel: idea.ideaSetLabel || `Set 1-${idea.id}`
+          visualization_prompt: idea.visualization_prompt,
+          idea_set: idea.idea_set,
+          idea_set_label: idea.idea_set_label
         }));
 
         // Transform only the explicitly accepted ideas
@@ -510,9 +517,10 @@ const ProjectProvider = ({ children }) => {
           idea_id: idea.id,
           product_name: idea.title,
           description: idea.description,
+          visualization_prompt: idea.visualization_prompt,
           image_url: idea.image_url,
-          ideaSet: idea.ideaSet || 1,
-          ideaSetLabel: idea.ideaSetLabel || `Set 1-${idea.id}`
+          idea_set: idea.idea_set,
+          idea_set_label: idea.idea_set_label
         }));
   
         // Create generatedImages object only for accepted ideas
@@ -541,6 +549,20 @@ const ProjectProvider = ({ children }) => {
             acc[key] = true;
             return acc;
           }, {});
+
+        // Ensure ideaMetadata preserves visualization_prompt
+        const enhancedIdeaMetadata = Object.entries(projectData.ideaMetadata || {}).reduce((acc, [key, value]) => {
+          acc[key] = {
+            ...value,
+            baseData: {
+              ...value.baseData,
+              visualization_prompt: value.baseData?.visualization_prompt || 
+                                  allIdeas.find(i => i.idea_id.toString() === key)?.visualization_prompt
+            }
+          };
+          return acc;
+        }, {});
+
   
         const transformedProject = {
           id: projectData.id,
@@ -554,8 +576,8 @@ const ProjectProvider = ({ children }) => {
           ideas: allIdeas, // Use all ideas here
           acceptedIdeas: transformedAcceptedIdeas, // Use only explicitly accepted ideas
           generatedImages: initialGeneratedImages,
-          ideaMetadata: projectData.ideaMetadata || {},
-          ideaSetCounter: projectData.ideaSetCounter || 1,
+          ideaMetadata: enhancedIdeaMetadata,
+          ideaSetCounter: projectData.ideaSetCounter,
           skipToIdeas: project.skipToIdeas
         };
   

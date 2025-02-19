@@ -1,5 +1,3 @@
-
-
 //IdeaForm.jsx
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { ideaService } from "../utils/axiosConfig";
@@ -13,7 +11,12 @@ import backgroundImage from "../assets/bg-main.jpg";
 import IdeaMetadata from "./IdeaMetadata";
 import ScrollNavigationButtons from "./ScrollNavigationButtons";
 import FieldManager from "./FieldManager";
-
+import EditIdeaPanel from "./IdeaGenerator/EditIdeaPanel";
+import ZoomImageViewer from "./IdeaGenerator/ZoomImageViewer";
+import IdeaAnalysis from "./IdeaGenerator/IdeaAnalysis";
+import HighlightedDescription from "./IdeaGenerator/HighlightedDescription";
+import ComparisonModeToggle from "./IdeaGenerator/ComparisonModeToggle";
+import IdeaTitle from "./IdeaGenerator/IdeaTitle";
 
 import {
   PlusCircle,
@@ -83,7 +86,12 @@ const IdeaForm = () => {
 
   //for negative prompt
   const [negativePrompt, setNegativePrompt] = useState("");
-  
+
+  //for image zooming
+  const [zoomImageUrl, setZoomImageUrl] = useState(null);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
+
+  const [isComparisonMode, setIsComparisonMode] = useState(false);
 
   const contentRef = useRef(null);
 
@@ -101,42 +109,7 @@ const IdeaForm = () => {
     }
   }, [ideas.length]);
 
-  const generateMetadataForExistingIdeas = (ideas, projectData) => {
-    return ideas.reduce((acc, idea) => {
-      // Only generate metadata if it doesn't already exist
-      if (!acc[idea.idea_id]) {
-        // Check if the idea already has metadata in the project data
-        const existingMetadata = projectData.ideaMetadata?.[idea.idea_id];
-
-        if (existingMetadata) {
-          // Use existing metadata if available
-          acc[idea.idea_id] = existingMetadata;
-        } else {
-          // Generate new metadata only if none exists
-          acc[idea.idea_id] = {
-            baseData: {
-              // Use idea-specific data instead of current project data
-              product: idea.product_name || "",
-              category: idea.category || "",
-              brand: idea.brand || "",
-              number_of_ideas: idea.number_of_ideas || 1,
-              ideaSet: idea.ideaSet || 1,
-              ideaSetLabel: idea.ideaSetLabel || "",
-              negative_prompt: idea.negative_prompt || "",
-              project_id: projectData.id,
-              project_name: projectData.name,
-              product_idea_id: idea.idea_id,
-            },
-            // Use idea-specific dynamic fields if available, otherwise empty object
-            dynamicFields: idea.dynamicFields || {},
-            timestamp: idea.created_at || new Date().toISOString(),
-          };
-        }
-      }
-      return acc;
-    }, {});
-  };
-
+  
   // to load project data
   useEffect(() => {
     if (currentProject) {
@@ -152,6 +125,8 @@ const IdeaForm = () => {
       // Load dynamic fields
       const loadedDynamicFields = currentProject.dynamicFields || {};
       setDynamicFields(loadedDynamicFields);
+
+  
 
       // Load custom field types - Ensure proper array conversion
       if (currentProject.customFieldTypes) {
@@ -210,15 +185,18 @@ const IdeaForm = () => {
       // Ensure we're only setting accepted ideas that actually exist in the ideas array
       const validAcceptedIdeas = existingAcceptedIdeas.filter((accepted) =>
         existingIdeas.some((idea) => idea.idea_id === accepted.idea_id)
-      );
-
-       // Map metadata to ideas if not already present
-      const ideasWithMetadata = existingIdeas.map(idea => ({
+      ).map(idea => ({
         ...idea,
-        ideaSet: idea.idea_set,
-        ideaSetLabel: idea.idea_set_label,
+        visualization_prompt: idea.visualization_prompt, // Preserve visualization_prompt
+      }));
 
-        metadata: idea.metadata || currentProject.ideaMetadata?.[idea.idea_id]
+      // Map metadata to ideas if not already present
+      const ideasWithMetadata = existingIdeas.map((idea) => ({
+        ...idea,
+        idea_set: idea.metadata?.baseData?.idea_set || idea.idea_set,
+        idea_set_label: idea.metadata?.baseData?.idea_set_label || idea.idea_set_label,
+        visualization_prompt: idea.visualization_prompt,
+        metadata: idea.metadata || currentProject.ideaMetadata?.[idea.idea_id],
       }));
       setIdeas(ideasWithMetadata);
       setAcceptedIdeas(validAcceptedIdeas);
@@ -251,8 +229,14 @@ const IdeaForm = () => {
         },
         dynamicFields,
         fieldActivation,
-        ideas,
-        acceptedIdeas,
+        ideas: ideas.map(idea => ({
+          ...idea,
+          visualization_prompt: idea.visualization_prompt, // Ensure visualization_prompt is saved
+        })),
+        acceptedIdeas: acceptedIdeas.map(idea => ({
+          ...idea,
+          visualization_prompt: idea.visualization_prompt, // Ensure visualization_prompt is saved
+        })),
         generatedImages,
         showForm,
         showImageGeneration,
@@ -528,22 +512,30 @@ const IdeaForm = () => {
           product_name: response.data.updated_data.product_name,
           description: response.data.updated_data.description,
           // Preserve the original ideaSet and ideaSetLabel
-          ideaSet: ideas.find((idea) => idea.idea_id === ideaId)?.ideaSet,
-          ideaSetLabel: ideas.find((idea) => idea.idea_id === ideaId)
-            ?.ideaSetLabel,
+          idea_set: ideas.find((idea) => idea.idea_id === ideaId)?.idea_set,
+          idea_set_label: ideas.find((idea) => idea.idea_id === ideaId)
+            ?.idea_set_label,
         };
 
-        setIdeas(
-          ideas.map((idea) =>
-            idea.idea_id === ideaId ? { ...idea, ...updatedIdea } : idea
-          )
-        );
+        // setIdeas(
+        //   ideas.map((idea) =>
+        //     idea.idea_id === ideaId ? { ...idea, ...updatedIdea } : idea
+        //   )
+        // );
 
-        setAcceptedIdeas(
-          acceptedIdeas.map((idea) =>
-            idea.idea_id === ideaId ? { ...idea, ...updatedIdea } : idea
-          )
-        );
+        // setAcceptedIdeas(
+        //   acceptedIdeas.map((idea) =>
+        //     idea.idea_id === ideaId ? { ...idea, ...updatedIdea } : idea
+        //   )
+        // );
+        // Update and sort both ideas arrays
+        setIdeas(prev => (
+          prev.map(idea => idea.idea_id === ideaId ? updatedIdea : idea)
+        ));
+        
+        setAcceptedIdeas(prev => (
+          prev.map(idea => idea.idea_id === ideaId ? updatedIdea : idea)
+        ));
 
         // Check if the idea is in accepted ideas and regenerate its image
         const isAccepted = acceptedIdeas.some(
@@ -789,106 +781,105 @@ const IdeaForm = () => {
   }, [ideas]);
 
   // Update the handleSubmit function to properly store metadata for new ideas
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setIsLoading(true);
-  setIsGenerating(true);
-  setError(null);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setIsGenerating(true);
+    setError(null);
 
+    const activeFields = Object.entries(dynamicFields)
+      .filter(([fieldId]) => fieldActivation[fieldId] !== false)
+      .reduce(
+        (acc, [fieldId, field]) => ({
+          ...acc,
+          [fieldId]: field,
+        }),
+        {}
+      );
 
+    const submissionData = {
+      ...formData,
+      project_id: currentProject.id,
+      dynamicFields: activeFields,
+      negative_prompt: negativePrompt,
+    };
 
-  const activeFields = Object.entries(dynamicFields)
-    .filter(([fieldId]) => fieldActivation[fieldId] !== false)
-    .reduce(
-      (acc, [fieldId, field]) => ({
-        ...acc,
-        [fieldId]: field,
-      }),
-      {}
-    );
+    try {
+      const response = await ideaService.generateIdeas(submissionData);
 
-  const submissionData = {
-    ...formData,
-    project_id: currentProject.id,
-    dynamicFields: activeFields,
-    negative_prompt: negativePrompt,
-  };
+      if (response.data.success) {
+        const { ideas: newIdeas, stored_data } = response.data;
 
-  try {
-    const response = await ideaService.generateIdeas(submissionData);
+        // Use the set number from the server response
+        const currentSetNumber = stored_data.current_set;
 
-    if (response.data.success) {
-      const { ideas: newIdeas, stored_data } = response.data;
+        const ideasWithMetadata = (newIdeas || []).map((idea, index) => {
+          const metadata = {
+            baseData: {
+              product: stored_data.product,
+              category: stored_data.category,
+              brand: stored_data.brand,
+              number_of_ideas: formData.number_of_ideas,
+              idea_set: currentSetNumber,
+              idea_set_label: idea.idea_set_label,
+              negative_prompt: negativePrompt,
+              project_id: stored_data.project_id,
+              project_name: stored_data.project_name,
+              product_idea_id: stored_data.product_idea_id,
+            },
+            dynamicFields: stored_data.dynamic_fields,
+            timestamp: new Date().toISOString(),
+          };
 
-      // Use the set number from the server response
-      const currentSetNumber = stored_data.current_set;
-      
-
-      const ideasWithMetadata = (newIdeas || []).map((idea, index) => {
-        const metadata = {
-          baseData: {
-            product: stored_data.product,
-            category: stored_data.category,
-            brand: stored_data.brand,
-            number_of_ideas: formData.number_of_ideas,
-            ideaSet: currentSetNumber,
-            ideaSetLabel: `Set ${currentSetNumber}-${index + 1}`,
-            negative_prompt: negativePrompt,
+          return {
+            ...idea,
+            idea_set: currentSetNumber,
+            idea_set_label: idea.idea_set_label,
             project_id: stored_data.project_id,
             project_name: stored_data.project_name,
-            product_idea_id: stored_data.product_idea_id,
-          },
-          dynamicFields: stored_data.dynamic_fields,
-          timestamp: new Date().toISOString(),
-        };
+            metadata,
+          };
+        });
 
-        return {
-          ...idea,
-          ideaSet: currentSetNumber,
-          ideaSetLabel: `Set ${currentSetNumber}-${index + 1}`,
-          project_id: stored_data.project_id,
-          project_name: stored_data.project_name,
-          metadata,
-        };
-      });
+        // Update metadata state
+        const newMetadata = ideasWithMetadata.reduce((acc, idea) => {
+          acc[idea.idea_id] = idea.metadata;
+          return acc;
+        }, {});
 
-      // Update metadata state
-      const newMetadata = ideasWithMetadata.reduce((acc, idea) => {
-        acc[idea.idea_id] = idea.metadata;
-        return acc;
-      }, {});
+        setIdeaMetadata((prev) => ({
+          ...prev,
+          ...newMetadata,
+        }));
 
-      setIdeaMetadata(prev => ({
-        ...prev,
-        ...newMetadata,
-      }));
+        // Update ideas state
+        setIdeas((prevIdeas) => {
+          const uniqueNewIdeas = ideasWithMetadata.filter(
+            (newIdea) =>
+              !prevIdeas.some(
+                (existingIdea) => existingIdea.idea_id === newIdea.idea_id
+              )
+          );
+          const combinedIDeas = [...uniqueNewIdeas, ...prevIdeas]
+          return combinedIDeas;
+        });
 
-      // Update ideas state
-      setIdeas(prevIdeas => {
-        const uniqueNewIdeas = ideasWithMetadata.filter(
-          newIdea => !prevIdeas.some(
-            existingIdea => existingIdea.idea_id === newIdea.idea_id
-          )
-        );
-        return [...uniqueNewIdeas, ...prevIdeas];
-      });
+        setIdeaSetCounter((prev) => prev + 1);
 
-      setIdeaSetCounter(prev => prev + 1);
-
-      if (showForm) {
-        setShowForm(false);
+        if (showForm) {
+          setShowForm(false);
+        }
+      } else {
+        setError(response.data.error || "Failed to generate ideas");
       }
-    } else {
-      setError(response.data.error || "Failed to generate ideas");
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to connect to the server");
+      console.error("Generation error:", err);
+    } finally {
+      setIsLoading(false);
+      setIsGenerating(false);
     }
-  } catch (err) {
-    setError(err.response?.data?.error || "Failed to connect to the server");
-    console.error("Generation error:", err);
-  } finally {
-    setIsLoading(false);
-    setIsGenerating(false);
-  }
-};
+  };
   const handleNewIdea = () => {
     setShowForm(true);
     setIdeas([]);
@@ -1140,13 +1131,13 @@ const handleSubmit = async (e) => {
         <nav className="navbar">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <Header />
-            
+
             <div className="flex items-center justify-center h-16">
               <h1 className="text-xl font-bold text-white">Idea Generator</h1>
             </div>
           </div>
         </nav>
-       
+
         <main className="  container mx-auto px-4 py-8 pt-2">
           <div className="max-w-4xl mx-auto space-y-8">
             {renderNavigation()}
@@ -1388,20 +1379,25 @@ const handleSubmit = async (e) => {
                 className="  sticky top-4 z-10 rounded-lg border border-gray-700 p-6 animate-fade-in bg-gray-900/90 backdrop-blur-sm"
               >
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="flex items-center gap-2 text-2xl font-bold text-white">
+                  <h3 className="flex items-center gap-2 text-2xl font-bold text-emerald-400">
                     Image Generation
                     <span className="px-3 py-1 bg-indigo-600/50 border border-indigo-500/50 rounded-full text-sm font-medium text-white">
                       {acceptedIdeas.length}{" "}
                       {acceptedIdeas.length === 1 ? "idea" : "ideas"}
                     </span>
                   </h3>
+                  <ComparisonModeToggle
+                    isEnabled={isComparisonMode}
+                    onToggle={() => setIsComparisonMode((prev) => !prev)}
+                  />
                 </div>
 
                 <div className="space-y-6">
                   {acceptedIdeas.map((idea) => {
+                    console.log('Image Generation Page - Full Idea Object:', JSON.stringify(idea, null, 2));
                     const ideaId = idea.idea_id.toString();
                     const isEditing = editingIdea === idea.idea_id;
-
+                    console.log("Rendering accepted idea:", idea);
                     return (
                       <div
                         key={ideaId}
@@ -1410,63 +1406,35 @@ const handleSubmit = async (e) => {
                         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                           <div className="flex-1">
                             {isEditing ? (
-                              <div className="space-y-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Product Name
-                                  </label>
-                                  <input
-                                    type="text"
-                                    name="product_name"
-                                    value={editForm.product_name}
-                                    onChange={handleEditChange}
-                                    className="input-field"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Description
-                                  </label>
-                                  <textarea
-                                    name="description"
-                                    value={editForm.description}
-                                    onChange={handleEditChange}
-                                    rows={3}
-                                    className="input-field"
-                                  />
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() =>
-                                      handleUpdateIdea(idea.idea_id)
-                                    }
-                                    className="btn btn-success"
-                                  >
-                                    <Check size={16} /> Save
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingIdea(null)}
-                                    className="btn btn-secondary"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
+                              <EditIdeaPanel
+                                editForm={editForm}
+                                handleEditChange={handleEditChange}
+                                handleUpdateIdea={handleUpdateIdea}
+                                setEditingIdea={setEditingIdea}
+                                ideaId={idea.idea_id}
+                                className="mb-4"
+                              />
                             ) : (
                               <>
-                                <h4 className="text-xl font-semibold text-white mb-2">
-                                  {idea.product_name}
-                                  {/* <span className="text-sm text-emerald-400 ml-2">
-                                    (
-                                    {idea.ideaSetLabel ||
-                                      `Set ${idea.ideaSet || "N/A"}`}
-                                    )
-                                  </span> */}
-                                </h4>
+                              
+                                <IdeaTitle idea={idea} />
 
-                                <p className="text-gray-300 mb-4">
-                                  {idea.description}
+                                <p className="text-gray-300 mb-4 text-justify leading-relaxed">
+                                  <HighlightedDescription
+                                    description={idea.description}
+                                    dynamicFields={dynamicFields}
+                                    formData={formData}
+                                    isComparisonMode={isComparisonMode}
+                                  />
+                                  {/* Add the IdeaAnalysis component here */}
+                                  <IdeaAnalysis
+                                    idea={idea}
+                                    dynamicFields={dynamicFields}
+                                    formData={formData}
+                                    isComparisonMode={isComparisonMode}
+                                  />
                                 </p>
+
                                 <div className="flex flex-wrap gap-2">
                                   {generatedImages[ideaId] && (
                                     <AdvancedRegenControls
@@ -1505,6 +1473,10 @@ const handleSubmit = async (e) => {
                                   src={generatedImages[ideaId]}
                                   alt={idea.product_name}
                                   className="object-cover w-full h-full"
+                                  onClick={() => {
+                                    setZoomImageUrl(generatedImages[ideaId]);
+                                    setIsZoomOpen(true);
+                                  }}
                                 />
                               </div>
                             ) : (
@@ -1531,23 +1503,28 @@ const handleSubmit = async (e) => {
                 className="  sticky top-2 z-10 rounded-lg border border-gray-700 p-6 animate-fade-in bg-gray-900/90 backdrop-blur-sm"
               >
                 <div className="flex justify-between items-center mb-6 gap-2">
-                  <h3 className="flex items-center gap-2 text-2xl font-bold text-white">
+                  <h3 className="flex items-center gap-2 text-2xl font-bold text-emerald-400">
                     Generate Ideas
                     <span className="px-3 py-1 bg-indigo-600/50 border border-indigo-500/50 rounded-full text-sm font-medium text-white">
                       {ideas.length} {ideas.length === 1 ? "idea" : "ideas"}
                     </span>
                   </h3>
-                  {/* Additional content */}
+                  {/* Add the comparison toggle here */}
+                  <ComparisonModeToggle
+                    isEnabled={isComparisonMode}
+                    onToggle={() => setIsComparisonMode((prev) => !prev)}
+                  />
                 </div>
 
                 <div className="space-y-6">
                   {ideas.map((idea) => {
+                    console.log('Generate Ideas Page - Full Idea Object:', JSON.stringify(idea, null, 2));
                     const ideaId = idea.idea_id.toString();
                     const isEditing = editingIdea === idea.idea_id;
                     const isAccepted = acceptedIdeas.some(
                       (accepted) => accepted.idea_id === idea.idea_id
                     );
-
+                    console.log("Rendering idea:", idea);
                     return (
                       <div
                         key={ideaId}
@@ -1560,64 +1537,34 @@ const handleSubmit = async (e) => {
                         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                           <div className="flex-1">
                             {isEditing ? (
-                              <div className="space-y-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Product Name
-                                  </label>
-                                  <input
-                                    type="text"
-                                    name="product_name"
-                                    value={editForm.product_name}
-                                    onChange={handleEditChange}
-                                    className="input-field"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Description
-                                  </label>
-                                  <textarea
-                                    name="description"
-                                    value={editForm.description}
-                                    onChange={handleEditChange}
-                                    rows={3}
-                                    className="input-field"
-                                  />
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() =>
-                                      handleUpdateIdea(idea.idea_id)
-                                    }
-                                    className="btn btn-success"
-                                  >
-                                    <Check size={16} /> Save
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingIdea(null)}
-                                    className="btn btn-secondary"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
+                              <EditIdeaPanel
+                                editForm={editForm}
+                                handleEditChange={handleEditChange}
+                                handleUpdateIdea={handleUpdateIdea}
+                                setEditingIdea={setEditingIdea}
+                                ideaId={idea.idea_id}
+                                className="mb-4"
+                              />
                             ) : (
                               <>
                                 <div className="flex flex-1 gap-2">
-                                  <h4 className="text-xl font-semibold text-white mb-2">
-                                    {idea.product_name}
-                                    {/* <span className="text-sm text-emerald-400 ml-2">
-                                      (
-                                      {idea.ideaSetLabel ||
-                                        `Set ${idea.ideaSet || "N/A"}`}
-                                      )
-                                    </span> */}
-                                  </h4>
+                                <IdeaTitle idea={idea} />
                                 </div>
 
-                                <p className="text-gray-300 mb-4">
-                                  {idea.description}
+                                <p className="text-gray-300 mb-4 text-justify leading-relaxed">
+                                  <HighlightedDescription
+                                    description={idea.description}
+                                    dynamicFields={dynamicFields}
+                                    formData={formData}
+                                    isComparisonMode={isComparisonMode}
+                                  />
+                                  {/* Add the IdeaAnalysis component here */}
+                                  <IdeaAnalysis
+                                    idea={idea}
+                                    dynamicFields={dynamicFields}
+                                    formData={formData}
+                                    isComparisonMode={isComparisonMode}
+                                  />
                                 </p>
 
                                 <div className="flex flex-wrap gap-2">
@@ -1755,6 +1702,12 @@ const handleSubmit = async (e) => {
                 </div>
               </div>
             )}
+            {/* Image Zoom Modal */}
+            <ZoomImageViewer
+              isOpen={isZoomOpen}
+              onClose={() => setIsZoomOpen(false)}
+              imageUrl={zoomImageUrl}
+            />
           </div>
         </main>
       </div>
