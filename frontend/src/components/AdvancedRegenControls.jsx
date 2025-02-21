@@ -77,6 +77,8 @@ const AdvancedRegenControls = ({ idea, onRegenerate, isLoading }) => {
     const currentPrompt = settings.prompt || 
                          idea?.visualization_prompt ||
                          `${idea?.product_name || ''}: ${idea?.description || ''}`;
+    
+    console.log("Quick regenerate using prompt:", currentPrompt.substring(0, 100));
                          
     onRegenerate({
       description: currentPrompt,
@@ -96,7 +98,8 @@ const AdvancedRegenControls = ({ idea, onRegenerate, isLoading }) => {
     const currentPrompt = settings.prompt || 
                          idea?.visualization_prompt ||
                          `${idea?.product_name || ''}: ${idea?.description || ''}`;
-                         
+    
+    console.log("Advanced regenerate using prompt:", currentPrompt.substring(0, 100));
     onRegenerate({
       description: currentPrompt,
       negative_prompt: settings.negativePrompt,
