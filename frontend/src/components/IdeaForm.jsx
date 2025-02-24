@@ -609,7 +609,54 @@ const IdeaForm = () => {
     }
   };
 
-    
+  const handleRegenerateImage = useCallback(
+    async (params) => {
+      // If params is not an object (old way), convert it to the expected format
+      const ideaId = typeof params === "object" ? params.idea_id : params;
+
+      if (loadingStates[ideaId]) return;
+
+      setLoadingStates((prev) => ({ ...prev, [ideaId]: true }));
+      setError(null);
+
+      try {
+        // Find the idea from acceptedIdeas if not provided in params
+        const idea = acceptedIdeas.find((i) => i.idea_id === ideaId);
+        if (!idea) throw new Error("Idea not found");
+
+        // Use visualization_prompt if available, otherwise construct fallback
+        const description = params.description || idea.visualization_prompt || `${idea.product_name}: ${idea.description}`;
+        console.log("Using prompt for image generation:", description);
+
+        const response = await ideaService.regenerateProductImage({
+          description: description,
+          idea_id: ideaId,
+          size: params.size || 768,
+          steps: params.steps || 30,
+          guidance_scale: params.guidance_scale || 7.5,
+        });
+
+        if (response.data.success) {
+          setGeneratedImages((prev) => ({
+            ...prev,
+            [ideaId]: `data:image/png;base64,${response.data.image}`,
+          }));
+        } else {
+          throw new Error(response.data.error || "Failed to regenerate image");
+        }
+      } catch (err) {
+        console.error("Image regeneration error:", err);
+        setError(
+          err.response?.data?.error ||
+            err.message ||
+            "Failed to regenerate image"
+        );
+      } finally {
+        setLoadingStates((prev) => ({ ...prev, [ideaId]: false }));
+      }
+    },
+    [acceptedIdeas, loadingStates]
+  );
 
   const handleBaseFieldChange = (e) => {
     const { name, value } = e.target;
