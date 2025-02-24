@@ -63,14 +63,7 @@ def generate_prompt_text(dynamic_fields):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def generate_ideas(request):
-    if request.method == "OPTIONS":
-        response = HttpResponse()
-        response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-        response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type"
-        response["Access-Control-Allow-Credentials"] = "true"
-        return response
-       
+     
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
@@ -348,32 +341,21 @@ def generate_ideas(request):
 
             print("Sending response:", json.dumps(response_data, indent=2))
             
-            response = JsonResponse(response_data)
-            response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-            response["Access-Control-Allow-Credentials"] = "true"
-            return response
+            
+            return JsonResponse(response_data)
             
         except Exception as e:
             print("Error:", str(e))
-            response = JsonResponse({
+            return JsonResponse({
                 "success": False,
                 "error": str(e)
-            })
-            response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-            response["Access-Control-Allow-Credentials"] = "true"
-            return response
+            }, status=500)
 
 @api_view(['POST', 'GET', 'DELETE', 'PUT'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def update_idea(request):
-    if request.method == "OPTIONS":
-        response = HttpResponse()
-        response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-        response["Access-Control-Allow-Methods"] = "PUT, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type"
-        response["Access-Control-Allow-Credentials"] = "true"
-        return response
+  
 
     if request.method == 'PUT':
         try:
@@ -409,7 +391,7 @@ def update_idea(request):
                 visualization_prompt=visualization_prompt,
                 original_idea_id=original_idea.id
             )
-            
+
             response = JsonResponse({
                 "success": True,
                 "message": "New idea version created successfully",
@@ -420,8 +402,7 @@ def update_idea(request):
                     "visualization_prompt": visualization_prompt
                 }
             })
-            response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-            response["Access-Control-Allow-Credentials"] = "true"
+            
             return response
             
         except Exception as e:
@@ -429,23 +410,17 @@ def update_idea(request):
                 "success": False,
                 "error": str(e)
             })
-            response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-            response["Access-Control-Allow-Credentials"] = "true"
+            
             return response
+            
+           
             
 
 @api_view(['POST', 'GET', 'DELETE'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def delete_idea(request):
-    if request.method == "OPTIONS":
-        response = HttpResponse()
-        response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-        response["Access-Control-Allow-Methods"] = "DELETE, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type"
-        response["Access-Control-Allow-Credentials"] = "true"
-        return response
-
+   
     if request.method == 'DELETE':
         try:
             data = json.loads(request.body)
@@ -1576,12 +1551,6 @@ def get_project(request, project_id):
 @csrf_exempt
 @require_http_methods(["DELETE", "OPTIONS"])
 def delete_project(request, project_id):
-    if request.method == "OPTIONS":
-        response = HttpResponse()
-        response["Access-Control-Allow-Origin"] = "http://localhost:5173"
-        response["Access-Control-Allow-Methods"] = "DELETE, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type"
-        return response
 
     if request.method == "DELETE":
         try:
