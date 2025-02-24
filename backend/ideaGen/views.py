@@ -521,6 +521,176 @@ def synthesize_product_aspects(idea_data, aspects, model):
         print(f"Error in synthesis: {str(e)}")
         return idea_data['description']
  
+# def enhance_prompt(enhanced_description, model):
+#     """
+#     Generate an enhanced product description prompt for image generation.
+#     Takes the synthesized description and adds specific styling and composition elements.
+#     """
+   
+#     # Base prompt with stronger emphasis on composition and detail
+#     base_prompt = f"""Ultra-detailed professional product photography or scene of {enhanced_description}.
+#     - include relevant usage environment or setting if it enhances the product story
+#     - if appropriate, depict target audience or typical usage occasions
+#     - balanced composition with all elements clearly visible
+#     - professional lighting setup with three-point lighting or suitable alternative for clarity and balanced illumination
+#     - photorealistic, high-resolution quality
+#     - perfectly clear and legible text or branding elements
+#     - commercial advertising style
+#     - emphasis on both product details and contextual elements
+#     - clean, polished, and visualy striking presentation
+#     - professional marketing photo with balanced composition"""
+   
+#      # Analyze description for specific product categories and add relevant styling
+#     description_lower = enhanced_description.lower()
+   
+#     # Technology and gadgets
+#     if any(word in description_lower for word in ['tech', 'gadget', 'electronic', 'digital', 'smart', 'device']):
+#         base_prompt += """, modern tech aesthetic, blue-tinted studio lighting,
+#         clean minimalist style, glossy finish on surfaces, subtle reflections,
+#         power indicators and displays clearly visible, interface elements sharp and legible,
+#         precise edge definition"""
+   
+#     # Natural and eco-friendly products
+#     if any(word in description_lower for word in ['eco', 'natural', 'organic', 'sustainable', 'bamboo', 'wood']):
+#         base_prompt += """, natural material textures clearly visible,
+#         warm lighting to highlight organic materials, matte finish,
+#         environmental styling, earth tones, texture detail preserved,
+#         sustainable packaging visible, natural color accuracy"""
+   
+#     # Luxury items
+#     if any(word in description_lower for word in ['luxury', 'premium', 'high-end', 'elegant', 'exclusive']):
+#         base_prompt += """, luxury product photography style, dramatic lighting,
+#         premium finish with metallic accents, sophisticated composition,
+#         attention to material quality, subtle shadows, elegant presentation,
+#         premium brand aesthetic, high-end commercial look"""
+   
+#     # Fashion and accessories
+#     if any(word in description_lower for word in ['fashion', 'clothing', 'wear', 'accessory', 'jewelry', 'watch']):
+#         base_prompt += """, fashion magazine style, fabric textures clearly visible,
+#         detailed stitching, material draping, accessories prominently displayed,
+#         fashion lighting setup, premium fabric detail capture,
+#         clear view of patterns and textures, product fit visualization"""
+ 
+#     # Food & Beverage
+#     if any(word in description_lower for word in ['food', 'beverage', 'drink', 'edible', 'snack', 'meal']):
+#         base_prompt += """, mouth-watering presentation, vibrant colors to highlight freshness,
+#         clean plating or container styling, subtle steam or condensation for realism,
+#         appetizing composition, clear visibility of texture and ingredients,
+#         focus on tempting food photography style"""
+ 
+#     # Cosmetics & Personal Care
+#     if any(word in description_lower for word in ['cosmetic', 'skincare', 'beauty', 'makeup', 'personal care', 'cream', 'lotion']):
+#         base_prompt += """, glossy or matte finish to highlight product texture,
+#         soft lighting to capture subtle details, chic aesthetic, emphasis on packaging design,
+#         crisp labeling and brand logos, premium beauty photography style,
+#         clean and minimalist arrangement"""
+ 
+#     # Furniture & Home Décor
+#     if any(word in description_lower for word in ['furniture', 'sofa', 'table', 'chair', 'decor', 'home decor', 'interior']):
+#         base_prompt += """, emphasis on form and function, highlight material texture,
+#         realistic room setting or context if needed, warm and inviting lighting,
+#         balanced composition focusing on design lines, high-res detail capture,
+#         décor styling that complements the piece"""
+ 
+#     # Sports & Fitness Gear
+#     if any(word in description_lower for word in ['fitness', 'sports', 'gym', 'workout', 'exercise', 'athletic', 'equipment']):
+#         base_prompt += """, dynamic lighting to emphasize performance aspect,
+#         athletic or energetic vibe, highlight durable materials and ergonomic design,
+#         bright, high-contrast style, clear brand logos and performance features,
+#         sturdy construction visible"""
+ 
+#     # Kids & Toys
+#     if any(word in description_lower for word in ['kids', 'toy', 'children', 'child', 'toddler', 'baby', 'play']):
+#         base_prompt += """, playful and colorful composition, bright and cheerful lighting,
+#         emphasize safety features and soft edges, focus on fun and imaginative elements,
+#         child-friendly design details, attention to whimsical or cartoon styling"""
+ 
+#     # Automotive Products
+#     if any(word in description_lower for word in ['automotive', 'car accessory', 'vehicle', 'car care', 'motorcycle']):
+#         base_prompt += """, sleek automotive aesthetic, metallic finishes where applicable,
+#         emphasis on durability and craftsmanship, detail in mechanical design,
+#         brand or model references if relevant, rugged environment or track setting if needed,
+#         polished reflections for a premium look"""
+ 
+#     # Tools & Hardware
+#     if any(word in description_lower for word in ['tool', 'hardware', 'utility', 'drill', 'hammer', 'screwdriver']):
+#         base_prompt += """, focus on robust construction, industrial lighting style,
+#         highlight steel or metal textures, close-up detail of functional parts,
+#         brand or model labeling visible, functional stance, minimal background clutter"""
+ 
+#     # Healthcare & Medical Devices
+#     if any(word in description_lower for word in ['medical', 'healthcare', 'hospital', 'patient', 'monitor', 'diagnostic']):
+#         base_prompt += """, clean and clinical look, sterile white or light blue background,
+#         emphasis on safety and precision, clearly visible user interface or display,
+#         brand or classification labeling, highlight ergonomic design,
+#         precise and organized composition"""
+ 
+#     # E-Commerce
+#     if any(word in description_lower for word in ['e-commerce', 'ecommerce', 'marketplace', 'online store', 'digital cart', 'web shop', 'online platform'    ]):        
+#         base_prompt += """, packaging design with clear branding, device screens or interface elements visible if relevant,
+#         minimalist background with emphasis on the product or brand,
+#         cohesive color scheme that aligns with online retail aesthetics,
+#         modern commercial style photography, promotional-style lighting"""
+ 
+#     # BFSI (Banking, Financial Services, Insurance)
+#     if any(word in description_lower for word in ['finance', 'bank', 'insurance', 'loan', 'credit', 'debit', 'investment', 'fintech', 'financial', 'accounting', 'tax', 'mortgage' ]):
+#         base_prompt += """, emphasis on trustworthiness and credibility,
+#         sleek corporate color palette, subtle brand identity elements,
+#         minimalistic yet professional lighting, well-defined details symbolizing security and reliability,
+#         neat composition illustrating professional standards"""
+ 
+#     # B2B Services (Enterprise / Corporate / Consulting)
+#     if any(word in description_lower for word in ['enterprise', 'company', 'organization','b2b', 'corporate solutions', 'business services', 'professional services', 'consulting', 'industrial']):
+#         base_prompt += """, polished corporate look, professional environment cues,
+#         well-defined brand imagery or placeholders, subtle references to collaboration,
+#         modern and sophisticated lighting, neutral color palette,
+#         focus on clarity and straightforward presentation, intangible services represented by abstract or symbolic visuals"""
+ 
+#     # Add composition and technical requirements
+#     base_prompt += """
+
+#     Technical Requirements:
+#     - Professional lighting setup
+#     - Sharp focus on key elements
+#     - Proper depth of field
+#     - Color accuracy
+#     - Texture detail preservation
+#     - Commercial photography standards
+#     - Professional post-processing
+#     - Brand guideline adherence
+
+#     Composition Guidelines:
+#     - Rule of thirds application
+#     - Leading lines utilization
+#     - Balance in visual elements
+#     - Depth creation
+#     - Negative space utilization
+#     - Scale demonstration
+#     - Focal point emphasis
+#     - Background context
+#     """
+
+#     # Generate final enhanced prompt using Gemini
+#     try:
+#         visualization_prompt = f"""
+#         As an expert product photographer and creative director, enhance and refine the following product visualization prompt while maintaining all key elements and requirements:
+
+#         {base_prompt}
+
+#         Create a concise, optimized version that maintains all critical elements but is more streamlined for image generation.
+#         Focus on the most impactful visual elements while preserving all product-specific requirements.
+#         """
+
+#         response = model.generate_content(visualization_prompt)
+
+#         print("Generated Final Prompt:")
+#         print(response.text)                 # print the final prompt
+#         return response.text.strip()
+    
+#     except Exception as e:
+#         print(f"Error in enhance_prompt: {str(e)}")
+#         return base_prompt
+    
 def enhance_prompt(enhanced_description, model):
     """
     Generate an enhanced product description prompt for image generation.
@@ -646,52 +816,27 @@ def enhance_prompt(enhanced_description, model):
         modern and sophisticated lighting, neutral color palette,
         focus on clarity and straightforward presentation, intangible services represented by abstract or symbolic visuals"""
  
-    # Add composition and technical requirements
-    base_prompt += """
-
-    Technical Requirements:
-    - Professional lighting setup
-    - Sharp focus on key elements
-    - Proper depth of field
-    - Color accuracy
-    - Texture detail preservation
-    - Commercial photography standards
-    - Professional post-processing
-    - Brand guideline adherence
-
-    Composition Guidelines:
-    - Rule of thirds application
-    - Leading lines utilization
-    - Balance in visual elements
-    - Depth creation
-    - Negative space utilization
-    - Scale demonstration
-    - Focal point emphasis
-    - Background context
-    """
-
-    # Generate final enhanced prompt using Gemini
+ 
+     # Generate final enhanced prompt
     try:
+        # Construct a clear instruction for Gemini to create a concise, paragraph-style prompt
         visualization_prompt = f"""
-        As an expert product photographer and creative director, enhance and refine the following product visualization prompt while maintaining all key elements and requirements:
-
+        As an expert product photographer, rewrite the following technical photography instructions into a single cohesive paragraph that directs an AI image generator to create ONE professional product photograph. Avoid numbered images, lists, or asterisks. Focus on creating a natural, flowing description of exactly what the final single image should look like:
+ 
         {base_prompt}
-
-        Create a concise, optimized version that maintains all critical elements but is more streamlined for image generation.
-        Focus on the most impactful visual elements while preserving all product-specific requirements.
+       
+        Deliver your response as a single unified paragraph of instructions from the perspective of a professional product photographer directing a commercial shoot.
         """
-
+ 
         response = model.generate_content(visualization_prompt)
-
-        print("Generated Final Prompt:")
-        print(response.text)                 # print the final prompt
+ 
+        print("Generated Visualization Prompt:")
+        print(response.text)
         return response.text.strip()
-    
+   
     except Exception as e:
         print(f"Error in enhance_prompt: {str(e)}")
         return base_prompt
-    
-
 def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50, guidance_scale=7.5, max_retries=3, initial_delay=1):
     """
     Enhanced image generation with sophisticated retry and fallback mechanism
