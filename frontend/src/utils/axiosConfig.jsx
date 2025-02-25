@@ -1,5 +1,3 @@
-
-
 // //axiosConfig.jsx
 // import axios from 'axios';
 
@@ -24,11 +22,63 @@
 // );
 
 
+// export const topicModelingService = {
+//   uploadDataset: (formData) => {
+//     return axiosInstance.post('/analysis/upload_dataset/', formData, {
+//       headers: {
+//         'Content-Type': 'multipart/form-data'
+//       }
+//     });
+//   },
 
+//   enhancedCustomAnalysis: (data) => {
+//     return axiosInstance.post('/analysis/enhanced_handle_custom_analysis/', data);
+//   },
+
+//   analyzeSentiment: (data) => {
+//     return axiosInstance.post('/analysis/analyze_sentiment/', data);
+//   },
+
+//   semanticSearch: (data) => {
+//     return axiosInstance.post('/analysis/semantic_search/', data);
+//   }
+// };
+
+
+// export const dataAnalysisService = {
+//   uploadFile: (formData) => {
+//     return axiosInstance.post('/data/analysis/', formData, {
+//       headers: {
+//         'Content-Type': 'multipart/form-data'
+//       }
+//     });
+//   },
+
+//   analyzeData: (query) => {
+//     return axiosInstance.post('/data/analysis/', { query }, {
+//       headers: {
+//         'Content-Type': 'application/json',
+//         'Accept': 'application/json'
+//       }
+//     });
+//   },
+
+//   saveResults: (results) => {
+//     return axiosInstance.post('/data/save-results/', { results }, {
+//       headers: {
+//         'Content-Type': 'application/json',
+//         'Accept': 'application/json'
+//       }
+//     });
+//   }
+// };
 
 // export const ideaService = {
 //   generateIdeas: (data) => {
 //     return axiosInstance.post('/ideas/generate_ideas/', data);
+//   },
+//   getIdeaDetails: (ideaId) => {
+//     return axiosInstance.get(`/ideas/${ideaId}/details/`); // added for Visualization_ prompt(sourav/ 11-02-2025)
 //   },
 //   updateIdea: (data) => {
 //     return axiosInstance.put('/ideas/update_idea/', data);
@@ -59,8 +109,61 @@
 //     });
 //   },
 //   // Create project
-//   createProject: (data) => {
-//     return axiosInstance.post('/ideas/projects/', data);
+//   createProject: async (data) => {
+//     try {
+//       const response = await axiosInstance.post('/ideas/projects/', data);
+//       return response;
+//     } catch (error) {
+//       // Enhanced error handling
+//       if (error.response) {
+//         // Server responded with an error status
+//         if (error.response.status === 500) {
+//           const errorData = error.response.data?.toString() || '';
+          
+//           // Check for duplicate key violation
+//           if (errorData.includes('duplicate key value') && errorData.includes('already exists')) {
+//             // Extract the project name from the error message if possible
+//             const nameMatch = errorData.match(/Key \(name\)=\(([^)]+)\)/);
+//             const projectName = nameMatch ? nameMatch[1] : 'this name';
+            
+//             // Create a user-friendly error response
+//             error.response.data = {
+//               success: false,
+//               error: `A project with the name "${projectName}" already exists. Please choose a different name.`
+//             };
+//           } else {
+//             // For other 500 errors
+//             error.response.data = {
+//               success: false,
+//               error: 'There was a server error creating your project. Please try again later.'
+//             };
+//           }
+//         } else if (!error.response.data || typeof error.response.data.error === 'undefined') {
+//           // Ensure there's a structured error response
+//           error.response.data = {
+//             success: false,
+//             error: error.response.statusText || 'Error creating project'
+//           };
+//         }
+//       } else if (error.request) {
+//         // The request was made but no response was received
+//         error.response = {
+//           data: {
+//             success: false,
+//             error: 'No response from server. Please check your connection and try again.'
+//           }
+//         };
+//       } else {
+//         // Something happened in setting up the request
+//         error.response = {
+//           data: {
+//             success: false,
+//             error: error.message || 'Error creating project'
+//           }
+//         };
+//       }
+//       throw error;
+//     }
 //   },
 
 //   // Delete project
@@ -78,9 +181,6 @@
 //     return axiosInstance.get(`/ideas/projects/${projectId}/details/`, { params });
 //   },
 
-//   updateProject: (projectId, data) => {
-//     return axiosInstance.put(`/ideas/projects/${projectId}/`, data);
-// },
  
 // };
 
@@ -147,6 +247,12 @@
 //       }
 //     });
 //   },
+//   generateSummary: (documentIds, mainProjectId) => {
+//     return axiosInstance.post('/generate-document-summary/', {
+//       document_ids: documentIds,
+//       main_project_id: mainProjectId
+//     });
+//   },
 
 //   deleteDocument: (documentId, mainProjectId) =>
 //     axiosInstance.delete(`/documents/${documentId}/delete/`, {
@@ -174,21 +280,27 @@
 //   },
   
 //   updateConversationTitle: (conversationId, data) => {
-//     console.log("Updating conversation title:", { conversationId, data });
-//     return axiosInstance.patch(`/conversations/${conversationId}/update/`, {
-//         title: data.title,
-//         is_active: data.is_active,
-//         main_project_id: data.main_project_id
-//     })
-//     .then(response => {
-//         console.log("Title update response:", response.data);
-//         return response.data;
-//     })
-//     .catch(error => {
-//         console.error("Title update error:", error);
+//     console.log("Updating conversation title:", conversationId, data);
+    
+//     // Create a properly formatted request payload
+//     const payload = {
+//       title: data.title,
+//       is_active: data.is_active || true,
+//       // Include main_project_id if available
+//       ...(data.main_project_id && { main_project_id: data.main_project_id })
+//     };
+    
+//     // Send PATCH request to the correct endpoint
+//     return axiosInstance.patch(`/conversations/${conversationId}/`, payload)
+//       .then(response => {
+//         console.log("Conversation title update response:", response.data);
+//         return response;
+//       })
+//       .catch(error => {
+//         console.error("Conversation title update error:", error.response || error);
 //         throw error;
-//     });
-// },
+//       });
+//   },
 
 //   manageConversation: (conversationId, data) => {
 //     return axiosInstance.patch(`/conversations/${conversationId}/`, data)
@@ -355,34 +467,12 @@
 //         console.error("Failed to delete project:", error.response?.data || error.message);
 //         throw error;
 //       });
-//   },
-
-//   updateProject: (projectId, projectData) => {
-//     console.log('Sending update request to:', `/core/projects/${projectId}/update`);
-//     return axiosInstance.put(`/core/projects/${projectId}/update/`, {
-//       name: projectData.name,
-//       description: projectData.description,
-//       category: projectData.category,
-//       selected_modules: projectData.selected_modules
-//     })
-//     .then(response => {
-//       console.log("Project updated:", response.data);
-//       return response.data;
-//     })
-//     .catch(error => {
-//       console.error("Failed to update project:", error.response?.data || error.message);
-//       throw error;
-//     });
 //   }
 // };
 
 
 
 // export default axiosInstance;
-
-
-
-
 
 //axiosConfig.jsx
 import axios from 'axios';
@@ -640,6 +730,13 @@ export const documentService = {
     });
   },
 
+  generateConsolidatedSummary: (documentIds, projectId) => {
+    return axiosInstance.post("/consolidated_summary/", {
+      document_ids: documentIds,
+      main_project_id: projectId
+    });
+  },
+
   deleteDocument: (documentId, mainProjectId) =>
     axiosInstance.delete(`/documents/${documentId}/delete/`, {
       params: { main_project_id: mainProjectId }
@@ -861,4 +958,4 @@ export const coreService = {
 export default axiosInstance;
 
 
-      
+           

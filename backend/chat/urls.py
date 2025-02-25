@@ -1,3 +1,6 @@
+
+
+
 # chat/urls.py
 from django.urls import path
 from .views import (LoginView, SignupView, DocumentUploadView, 
@@ -11,7 +14,8 @@ from .views import (LoginView, SignupView, DocumentUploadView,
     DeleteDocumentView,
     ManageConversationView,
     ChangePasswordView,
-    GenerateDocumentSummaryView
+    GenerateDocumentSummaryView,
+    ConsolidatedSummaryView,
 
     
 )
@@ -44,5 +48,5 @@ urlpatterns = [
          ManageConversationView.as_view(), 
          name='update_conversation'),
 
-    
+     path('consolidated_summary/', ConsolidatedSummaryView.as_view(), name='consolidated_summary'),
 ]
