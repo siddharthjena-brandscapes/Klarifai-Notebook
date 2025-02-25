@@ -495,8 +495,61 @@ export const ideaService = {
     });
   },
   // Create project
-  createProject: (data) => {
-    return axiosInstance.post('/ideas/projects/', data);
+  createProject: async (data) => {
+    try {
+      const response = await axiosInstance.post('/ideas/projects/', data);
+      return response;
+    } catch (error) {
+      // Enhanced error handling
+      if (error.response) {
+        // Server responded with an error status
+        if (error.response.status === 500) {
+          const errorData = error.response.data?.toString() || '';
+          
+          // Check for duplicate key violation
+          if (errorData.includes('duplicate key value') && errorData.includes('already exists')) {
+            // Extract the project name from the error message if possible
+            const nameMatch = errorData.match(/Key \(name\)=\(([^)]+)\)/);
+            const projectName = nameMatch ? nameMatch[1] : 'this name';
+            
+            // Create a user-friendly error response
+            error.response.data = {
+              success: false,
+              error: `A project with the name "${projectName}" already exists. Please choose a different name.`
+            };
+          } else {
+            // For other 500 errors
+            error.response.data = {
+              success: false,
+              error: 'There was a server error creating your project. Please try again later.'
+            };
+          }
+        } else if (!error.response.data || typeof error.response.data.error === 'undefined') {
+          // Ensure there's a structured error response
+          error.response.data = {
+            success: false,
+            error: error.response.statusText || 'Error creating project'
+          };
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        error.response = {
+          data: {
+            success: false,
+            error: 'No response from server. Please check your connection and try again.'
+          }
+        };
+      } else {
+        // Something happened in setting up the request
+        error.response = {
+          data: {
+            success: false,
+            error: error.message || 'Error creating project'
+          }
+        };
+      }
+      throw error;
+    }
   },
 
   // Delete project
@@ -514,13 +567,6 @@ export const ideaService = {
     return axiosInstance.get(`/ideas/projects/${projectId}/details/`, { params });
   },
 
-//   updateProject: (data) => {
-//     return axiosInstance.put(`/ideas/projects/${data.id}/`, {
-//         name: data.name,
-//         formData: data.formData,
-//         lastModified: data.lastModified
-//     });
-// },
  
 };
 
@@ -587,6 +633,12 @@ export const documentService = {
       }
     });
   },
+  generateSummary: (documentIds, mainProjectId) => {
+    return axiosInstance.post('/generate-document-summary/', {
+      document_ids: documentIds,
+      main_project_id: mainProjectId
+    });
+  },
 
   deleteDocument: (documentId, mainProjectId) =>
     axiosInstance.delete(`/documents/${documentId}/delete/`, {
@@ -613,11 +665,28 @@ export const chatService = {
     });
   },
   
-  updateConversationTitle: (conversationId, data) =>
-    axiosInstance.patch(`/conversations/${conversationId}/`, {
-      ...data,
-      main_project_id: data.mainProjectId
-    }),
+  updateConversationTitle: (conversationId, data) => {
+    console.log("Updating conversation title:", conversationId, data);
+    
+    // Create a properly formatted request payload
+    const payload = {
+      title: data.title,
+      is_active: data.is_active || true,
+      // Include main_project_id if available
+      ...(data.main_project_id && { main_project_id: data.main_project_id })
+    };
+    
+    // Send PATCH request to the correct endpoint
+    return axiosInstance.patch(`/conversations/${conversationId}/`, payload)
+      .then(response => {
+        console.log("Conversation title update response:", response.data);
+        return response;
+      })
+      .catch(error => {
+        console.error("Conversation title update error:", error.response || error);
+        throw error;
+      });
+  },
 
   manageConversation: (conversationId, data) => {
     return axiosInstance.patch(`/conversations/${conversationId}/`, data)

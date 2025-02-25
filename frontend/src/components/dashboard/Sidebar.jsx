@@ -323,7 +323,7 @@ const Sidebar = ({
       if (isSubscribed) {
         fetchUserDocuments();
       }
-    }, 50000);
+    }, 30000);
   
     // Cleanup function
     return () => {

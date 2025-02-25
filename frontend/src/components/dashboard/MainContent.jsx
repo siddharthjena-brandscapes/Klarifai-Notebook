@@ -1,4 +1,5 @@
 
+
 // MainContent.jsx
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -9,10 +10,8 @@ import {
   Bot,
   ChevronDown,
   ChevronUp,
-  X,
   FileText,
   MessageCircle,
-  ExternalLink,
   Copy,
 } from "lucide-react";
 import PropTypes from "prop-types";
@@ -20,7 +19,8 @@ import { documentService, chatService } from "../../utils/axiosConfig";
 import { toast } from "react-toastify";
 import Card from "../Card";
 import EditableMessage from "./EditableMessage";
-import SummaryFormatter from "./SummaryFormatter";
+
+import  { SummaryGenerationLoader, SummaryFormatter, summaryStyles  } from "./EnhancedSummaryFormatter";
 
 const MainContent = ({
   selectedChat,
@@ -57,7 +57,7 @@ const MainContent = ({
 
   // New state for view toggle
   const [currentView, setCurrentView] = useState("chat");
-  const [isSourcesOpen, setIsSourcesOpen] = useState(false);
+  
 
   //  new state for document processing
   const [isDocumentProcessing, setIsDocumentProcessing] = useState(false);
@@ -67,6 +67,8 @@ const MainContent = ({
   const [messageHistory, setMessageHistory] = useState({});
   const [activeDocumentForSummary, setActiveDocumentForSummary] =
     useState(null);
+
+    const [isSummaryGenerating, setIsSummaryGenerating] = useState(false);
 
   // Add a new Citation component for inline citations
   const InlineCitation = ({ citation, index }) => {
@@ -176,6 +178,43 @@ const MainContent = ({
     }
   };
 
+   // Add new method to handle summary generation
+   const handleGenerateSummary = async () => {
+    if (!localSelectedDocuments.length) {
+      toast.warning("Please select documents to generate summary");
+      return;
+    }
+
+    setIsSummaryGenerating(true);
+    try {
+      const response = await documentService.generateSummary(
+        localSelectedDocuments,
+        mainProjectId
+      );
+
+      if (response.data.summaries) {
+        // Combine all summaries
+        const combinedSummary = response.data.summaries
+          .map((summary) => {
+            return `<h3 class="text-lg font-bold mb-2">${summary.filename}</h3>${summary.summary}`;
+          })
+          .join('<hr class="my-4 border-blue-500/20" />');
+
+        setSummary(combinedSummary);
+        setPersistentSummary(combinedSummary);
+        setIsSummaryVisible(true);
+
+        toast.success("Summary generated successfully!");
+      }
+    } catch (error) {
+      console.error("Summary Generation Error:", error);
+      toast.error("Failed to generate summary. Please try again.");
+    } finally {
+      setIsSummaryGenerating(false);
+    }
+  };
+
+
   const renderSummaryView = () => {
     // If no documents are selected, show a placeholder
     if (!localSelectedDocuments || localSelectedDocuments.length === 0) {
@@ -197,6 +236,14 @@ const MainContent = ({
     const currentDocId = activeDocumentForSummary || localSelectedDocuments[0];
     const currentDocument = documents.find(
       (doc) => doc.id.toString() === currentDocId
+    );
+
+    // Check if all selected documents have summaries
+    const selectedDocs = documents.filter(doc => 
+      localSelectedDocuments.includes(doc.id.toString())
+    );
+    const allDocsHaveSummaries = selectedDocs.every(doc => 
+      doc.summary && doc.summary.trim() !== ""
     );
 
     // Determine which summary to show
@@ -316,6 +363,32 @@ const MainContent = ({
                   })}
                 </select>
               )}
+                {/* Generate Summary Button - Only show if summaries don't exist */}
+                {!allDocsHaveSummaries && (
+                <button
+                  onClick={handleGenerateSummary}
+                  disabled={isSummaryGenerating}
+                  className={`
+                    px-4 py-2 rounded-lg text-sm
+                    ${isSummaryGenerating
+                      ? "bg-gray-600 cursor-not-allowed"
+                      : "bg-gradient-to-r from-blue-600 to-green-500 hover:from-blue-700 hover:to-green-600"}
+                    text-white transition-all duration-300 flex items-center space-x-2
+                  `}
+                >
+                  {isSummaryGenerating ? (
+                    <>
+                      
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Bot className="h-4 w-4" />
+                      <span>Generate Summary</span>
+                    </>
+                  )}
+                </button>
+              )}
 
               {/* Copy Button */}
               <button
@@ -328,12 +401,28 @@ const MainContent = ({
             </div>
           </div>
 
-          {/* Summary Content */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar bg-gray-900/80 p-4">
-            <SummaryFormatter content={summaryToShow} />
+           {/* Summary Content */}
+           <div className="flex-1 overflow-y-auto custom-scrollbar bg-gray-900/80 p-4">
+           {!persistentSummary ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <FileText className="h-16 w-16 mb-4 text-gray-600" />
+                <p className="mb-4 text-center">
+                  {allDocsHaveSummaries
+                    ? "Loading summary..."
+                    : "Click 'Generate Summary' to analyze the selected documents"}
+                </p>
+              </div>
+            ) : (
+              <SummaryFormatter content={summaryToShow} />
+            )}
           </div>
         </div>
       </div>
+        {/* Show loading overlay when generating summary */}
+        {isSummaryGenerating && <SummaryGenerationLoader />}
+
+   {/* Styles */}
+   <style>{summaryStyles}</style>
       </div>
     );
   };
@@ -513,61 +602,9 @@ const MainContent = ({
           setSelectedDocuments(newSelectedDocuments);
         }
 
-        // Smooth transition to Summary view
-        setCurrentView("summary");
-
-        // Collect all formatted summaries
-        const allFormattedSummaries = documents.map((document) => {
-          // Log document details
-          console.log("Document:", document);
-
-          // Attempt to set summary with fallback
-          const summaryText =
-            document.summary || document.text_summary || "No summary available";
-
-          // Ensure follow-up questions is an array
-          const followUpQuestions = Array.isArray(document.follow_up_questions)
-            ? document.follow_up_questions
-            : document.follow_up_questions
-            ? [document.follow_up_questions]
-            : [];
-        });
-
-        // Combine all summaries
-        const combinedFormattedSummary = allFormattedSummaries.join(
-          '<hr class="my-4 border-blue-500/20" />'
-        );
-
-        // Update summary and follow-up questions
-        setSummary(combinedFormattedSummary);
-
-        // Collect all follow-up questions
-        const allFollowUpQuestions = documents.flatMap((document) =>
-          Array.isArray(document.follow_up_questions)
-            ? document.follow_up_questions
-            : document.follow_up_questions
-            ? [document.follow_up_questions]
-            : []
-        );
-
-        setFollowUpQuestions(allFollowUpQuestions);
-        setCurrentFollowUpQuestions(allFollowUpQuestions);
-
-        // Attempt to set active document for the last uploaded document
-        if (documents.length > 0) {
-          try {
-            documentService.setActiveDocument(
-              documents[documents.length - 1].id
-            );
-          } catch (error) {
-            console.error("Failed to set active document:", error);
-          }
-        }
-
-        setIsSummaryPopupOpen(true);
-        setPersistentSummary(combinedFormattedSummary);
-        setIsSummaryVisible(true);
-
+        setCurrentView("chat");
+        setProcessingProgress(100);
+        
         // Update documents list
         setDocuments((prevDocs) => {
           const newDocs = documents.filter(
@@ -577,38 +614,14 @@ const MainContent = ({
           return [...prevDocs, ...newDocs];
         });
 
-        // Switch to summary view
-        setCurrentView("summary");
-        setIsDocumentProcessing(false);
-        setProcessingProgress(100);
-
-        // Toast notification
         toast.success(
-          `${documents.length} document(s) uploaded and processed successfully!`
+          `${documents.length} document(s) uploaded successfully! Click "Generate Summary" to analyze the content.`
         );
-      } else {
-        toast.warning("No documents were processed. Please try again.");
       }
     } catch (error) {
-      console.error("Full Error Object:", error);
-
-      if (error.response) {
-        console.error("Error Status:", error.response.status);
-        console.error("Error Data:", error.response.data);
-
-        toast.error(
-          `Upload failed: ${
-            error.response.data.error || "Unknown server error"
-          }`
-        );
-      } else if (error.request) {
-        console.error("No response received:", error.request);
-        toast.error("No response from server. Please check your connection.");
-      } else {
-        console.error("Error Message:", error.message);
-        toast.error(`Upload error: ${error.message}`);
-      }
-
+      console.error("Upload Error:", error);
+      toast.error("Upload failed. Please try again.");
+    } finally {
       setIsDocumentProcessing(false);
     }
   };
@@ -691,10 +704,7 @@ const MainContent = ({
   DocumentProcessingLoader.defaultProps = {
     progress: 0,
   };
-  // Method to toggle summary visibility
-  const toggleSummaryVisibility = () => {
-    setIsSummaryVisible((prev) => !prev);
-  };
+  
 
   const handleSendMessage = async (message) => {
     if (!message.trim()) return;
@@ -761,167 +771,8 @@ const MainContent = ({
     }
   };
 
-  // Add a method to update selected documents
-  const updateSelectedDocuments = (documents) => {
-    // Validate input
-    if (!Array.isArray(documents)) {
-      console.error("updateSelectedDocuments expects an array of document IDs");
-      return;
-    }
-
-    // Convert all document IDs to strings for consistency
-    const documentIds = documents.map((doc) => doc.toString());
-
-    // Update local state
-    setLocalSelectedDocuments(documentIds);
-
-    // Sync with parent component if prop exists
-    if (setSelectedDocuments) {
-      setSelectedDocuments(documentIds);
-    }
-  };
-  const renderMessage = (msg) => {
-    if (msg.role === "assistant") {
-      const formattedContent = `
-      <div class="space-y-2">
-        <p class="text-gray-200">${msg.content}</p>
-        
-        ${
-          msg.additional_insights
-            ? `
-          <div class="mt-2">
-            <h4 class="text-sm font-semibold text-blue-300 mb-1">Additional Insights</h4>
-            <p class="text-gray-300 text-xs italic">${msg.additional_insights}</p>
-          </div>
-        `
-            : ""
-        }
-        
-        ${
-          msg.key_points && msg.key_points.length > 0
-            ? `
-          <div class="mt-2">
-            <h4 class="text-sm font-semibold text-blue-300 mb-1">Key Points</h4>
-            <ul class="list-disc list-inside text-gray-300 text-xs space-y-1">
-              ${msg.key_points.map((point) => `<li>${point}</li>`).join("")}
-            </ul>
-          </div>
-        `
-            : ""
-        }
-      </div>
-    `;
-
-      return (
-        <div className="flex flex-col space-y-2">
-          <div
-            className="text-sm relative citation-container"
-            dangerouslySetInnerHTML={{ __html: formattedContent }}
-          />
-          {msg.citations && msg.citations.length > 0 && (
-            <div className="mt-2 text-sm text-gray-300 relative">
-              <button
-                onClick={() => setIsSourcesOpen(!isSourcesOpen)}
-                className="
-                flex 
-                items-center 
-                justify-between 
-                w-full 
-                bg-gray-800/50 
-                p-2 
-                rounded-lg 
-                hover:bg-gray-700/50 
-                transition-colors
-              "
-              >
-                <span className="font-bold">
-                  Sources ({msg.citations.length})
-                </span>
-                {isSourcesOpen ? <ChevronUp /> : <ChevronDown />}
-              </button>
-
-              {isSourcesOpen && (
-                <div
-                  className="
-                  mt-2 
-                  bg-gray-800/50 
-                  rounded-lg 
-                  overflow-hidden 
-                  border 
-                  border-gray-700/50
-                "
-                >
-                  {msg.citations.map((citation, index) => (
-                    <div
-                      key={index}
-                      className="
-                      p-3 
-                      border-b 
-                      border-gray-700/50 
-                      last:border-b-0 
-                      hover:bg-gray-700/30 
-                      transition-colors
-                      group
-                    "
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-bold text-blue-400">
-                            Source [{index + 1}]
-                          </p>
-                          <p className="text-xs text-gray-300 mt-1">
-                            {citation.source_file || "Unknown Source"}
-                          </p>
-                        </div>
-                        <a
-                          href={citation.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="
-                          opacity-0 
-                          group-hover:opacity-100 
-                          transition-opacity 
-                          text-blue-300 
-                          hover:text-blue-200
-                        "
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </div>
-
-                      {citation.page_number && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Page: {citation.page_number}
-                        </p>
-                      )}
-
-                      {citation.snippet && (
-                        <div
-                          className="
-                          mt-2 
-                          text-xs 
-                          text-gray-300 
-                          italic 
-                          bg-gray-900/50 
-                          p-2 
-                          rounded
-                        "
-                        >
-                          {citation.snippet}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return <p className="text-sm">{msg.content}</p>;
-  };
+  
+  
 
   const toggleFollowUpQuestions = () => {
     setIsFollowUpQuestionsMinimized((prev) => !prev);
@@ -1071,43 +922,7 @@ const MainContent = ({
       },
     }));
   };
-  // Add this method to handle message reversion
-  const handleMessageRevert = (
-    messageIndex,
-    originalMessage,
-    originalResponse,
-    subsequentMessages
-  ) => {
-    const historyEntry = messageHistory[messageIndex];
-
-    if (historyEntry) {
-      // Create the reverted conversation
-      const conversationUpToRevert = conversation.slice(0, messageIndex);
-
-      const revertedMessage = {
-        ...conversation[messageIndex],
-        content: originalMessage,
-        edited: false,
-      };
-
-      let updatedConversation = [
-        ...conversationUpToRevert,
-        revertedMessage,
-        originalResponse,
-        ...(subsequentMessages || []),
-      ];
-
-      setConversation(updatedConversation);
-
-      // Remove this entry from message history
-      const updatedHistory = { ...messageHistory };
-      delete updatedHistory[messageIndex];
-      setMessageHistory(updatedHistory);
-
-      toast.success("Message reverted to original version");
-    }
-  };
-
+  
   // Add a useEffect to further clean up conversation on initial load
   useEffect(() => {
     if (conversation.length > 0) {

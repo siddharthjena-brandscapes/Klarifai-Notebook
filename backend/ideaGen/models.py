@@ -143,7 +143,7 @@ def generate_unique_filename(instance, filename):
     return os.path.join('generated_images', filename)
 
 class Project(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(default=timezone.now)
     last_modified = models.DateTimeField(auto_now=True)
     # Add user field

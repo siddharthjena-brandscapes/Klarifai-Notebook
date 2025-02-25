@@ -11,11 +11,13 @@ from .views import (LoginView, SignupView, DocumentUploadView,
     DeleteDocumentView,
     ManageConversationView,
     ChangePasswordView,
+    GenerateDocumentSummaryView
 
     
 )
 
 urlpatterns = [
+     path('generate-document-summary/', GenerateDocumentSummaryView.as_view(), name='generate-document-summary'),
     path('login/', LoginView.as_view(), name='login'),
     path('signup/', SignupView.as_view(), name='signup'),  # New signup endpoint
 
@@ -38,7 +40,7 @@ urlpatterns = [
     path('user-documents/', GetUserDocumentsView.as_view(), name='user-documents'),
     path('set-active-document/', SetActiveDocumentView.as_view(), name='set_active_document'),
     path('documents/<int:document_id>/delete/', DeleteDocumentView.as_view(), name='delete_document'),
-    path('conversations/<str:conversation_id>/update/', 
+    path('conversations/<str:conversation_id>/', 
          ManageConversationView.as_view(), 
          name='update_conversation'),
 

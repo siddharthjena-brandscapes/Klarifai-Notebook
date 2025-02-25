@@ -34,15 +34,26 @@ const Alert = ({ title, description, onConfirm, onCancel }) => (
 const ProjectNameModal = ({ onSubmit, onCancel }) => {
   const [projectName, setProjectName] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (projectName.trim()) {
-      onSubmit(projectName.trim());
-      setProjectName('');
-      setError('');
-    } else {
+    
+    if (!projectName.trim()) {
       setError('Project name is required');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(''); // Clear previous errors
+    
+    try {
+      await onSubmit(projectName.trim());
+      // If successful, the modal will be closed by the parent component
+    } catch (err) {
+      // Display the error message
+      setError(err.message || 'Failed to create project');
+      setIsSubmitting(false);
     }
   };
 
@@ -60,13 +71,20 @@ const ProjectNameModal = ({ onSubmit, onCancel }) => {
             <input
               type="text"
               value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
+              onChange={(e) => {
+                setProjectName(e.target.value);
+                if (error) setError(''); // Clear error when typing
+              }}
               placeholder="Enter Idea project name"
-              className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className={`w-full px-4 py-3 bg-gray-700/50 border ${
+                error ? 'border-red-500' : 'border-gray-600'
+              } rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
               autoFocus
             />
             {error && (
-              <p className="mt-2 text-sm text-red-400">{error}</p>
+              <p className="mt-2 text-sm text-red-400 bg-red-900/20 p-2 rounded border border-red-500/50">
+                {error}
+              </p>
             )}
           </div>
           <div className="flex justify-end gap-3 pt-2">
@@ -74,15 +92,23 @@ const ProjectNameModal = ({ onSubmit, onCancel }) => {
               type="button"
               onClick={onCancel}
               className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all duration-200 focus:ring-2 focus:ring-gray-400 focus:outline-none"
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={!projectName.trim()}
-              className="px-6 py-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-lg"
+              disabled={!projectName.trim() || isSubmitting}
+              className="px-6 py-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-lg flex items-center gap-2"
             >
-              Create Idea Project
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Creating...
+                </>
+              ) : (
+                "Create Idea Project"
+              )}
             </button>
           </div>
         </form>
@@ -274,8 +300,6 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
 };
 
 
-
-
 const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
   const [projects, setProjects] = useState([]);
   const [showNameModal, setShowNameModal] = useState(false);
@@ -311,16 +335,32 @@ const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
         name: projectName,
         main_project_id: mainProjectId
       });
+      
       if (response.data.success) {
         setProjects([response.data.project, ...projects].slice(0, 5));
         setShowNameModal(false);
         onNewProject(response.data.project);
+        return true;
       } else {
-        setError(response.data.error);
+        // If the server responded with success: false
+        throw new Error(response.data.error || 'Failed to create project');
       }
     } catch (error) {
-      setError('Error creating project');
-      console.error('Error creating project:', error);
+      // Extract error message from the response
+      let errorMessage = 'Error creating project';
+      
+      if (error.response && error.response.data) {
+        if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      console.error('Project creation error:', errorMessage);
+      
+      // Throw a new error with the extracted message to be caught by the modal component
+      throw new Error(errorMessage);
     }
   };
 
