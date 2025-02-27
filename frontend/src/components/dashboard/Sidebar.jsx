@@ -246,6 +246,15 @@ const Sidebar = ({
 
          // Log the follow-up questions for debugging
         console.log('Follow-up questions:', fullChatData.follow_up_questions);
+
+        const chatDocIds = fullChatData.selected_documents.map(doc => 
+          doc.toString ? doc.toString() : String(doc)
+        );
+
+        if (chatDocIds.length > 0) {
+          scrollToSelectedDocument(chatDocIds[0]);
+        }
+    
   
         if (onSelectChat) {
           onSelectChat(fullChatData);
@@ -257,7 +266,58 @@ const Sidebar = ({
     }
   };
 
-// Fetch documents on component mount and set up periodic refresh
+// New function to scroll to a selected document with visual feedback
+const scrollToSelectedDocument = (documentId) => {
+  if (!documentId) return;
+  
+  console.log('Attempting to scroll to document:', documentId);
+  
+  // Find the document element by its data attribute
+  const documentElement = document.querySelector(`[data-doc-id="${documentId}"]`);
+  
+  if (documentElement) {
+    console.log('Found document element:', documentElement);
+    
+    // Force update the checkbox state
+    const checkbox = documentElement.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+      console.log('Found checkbox, ensuring it is checked');
+      checkbox.checked = true;
+    }
+    
+    // Get the document container - the scrollable parent
+    const documentContainer = documentElement.closest('.custom-scrollbar');
+    
+    if (documentContainer) {
+      // Function to handle the visual highlighting
+      const highlightDocument = () => {
+        // Add a highlight animation class
+        documentElement.classList.add('document-highlight-animation');
+        
+        // Remove the highlight class after animation completes
+        setTimeout(() => {
+          documentElement.classList.remove('document-highlight-animation');
+        }, 2000);
+      };
+      
+      // Scroll the document into view with a smooth animation
+      documentElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+      
+      // Apply the highlight effect after scrolling
+      setTimeout(highlightDocument, 300);
+      
+      // Also display a toast notification to enhance UX
+      
+    }
+  } else {
+    console.log('Document element not found for ID:', documentId);
+  }
+};
+
+  // Fetch documents on component mount and set up periodic refresh
   useEffect(() => {
     console.log('mainProjectId changed to:', mainProjectId);
     if (mainProjectId) {
@@ -1091,6 +1151,39 @@ const handleResetChatSearch = () => {
           .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: rgba(255,255,255,0.3);
           }
+
+            @keyframes documentHighlight {
+        0% { background-color: rgba(95, 242, 182, 0.6); box-shadow: 0 0 10px rgba(95, 242, 182, 0.8); }
+        50% { background-color: rgba(95, 242, 182, 0.3); box-shadow: 0 0 15px rgba(95, 242, 182, 0.4); }
+        100% { background-color: transparent; box-shadow: none; }
+      }
+      
+      .document-highlight-animation {
+        animation: documentHighlight 2s ease-out forwards;
+      }
+      
+      .selected-document {
+        background: linear-gradient(to right, rgba(95, 242, 182, 0.1), rgba(44, 62, 149, 0.1)) !important;
+        border: 1px solid rgba(95, 242, 182, 0.5) !important;
+      }
+      
+      /* Make checkboxes more visible */
+      input[type="checkbox"] {
+        accent-color: #5ff2b6;
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+      }
+      
+      /* Ensure checkboxes are properly positioned */
+      [data-doc-id] {
+        position: relative;
+      }
+      
+      /* Style for when document is both selected and active */
+      [data-doc-id].selected-document.document-highlight-animation {
+        border: 1px solid rgba(95, 242, 182, 0.8) !important;
+      }
         `}</style>
         <DeleteModal
   isOpen={isDeleteModalOpen}
