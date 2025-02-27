@@ -63,7 +63,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                 </div>
             )}
             <div>
-            <label className="block text-sm font-medium text-gray-600">User Name</label>
+            <label className="block text-sm font-medium text-gray-600">Username</label>
             <input
               type="text"
               required
