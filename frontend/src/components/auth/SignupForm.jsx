@@ -67,7 +67,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
             <input
               type="text"
               required
-              placeholder='User Name'
+              placeholder='Username'
               value={username} onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
             />
