@@ -31,7 +31,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-                <label className="block text-sm font-medium text-gray-600">Email</label>
+                <label className="block text-sm font-medium text-gray-600">Username</label>
                 <input
                     type="text" 
                     placeholder="Username" 
