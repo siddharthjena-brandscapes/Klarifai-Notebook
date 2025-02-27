@@ -1710,7 +1710,6 @@ const MainContent = ({
               </div>
 
               <div className="flex items-center space-x-3">
-                {/* Document Selector - Only show if multiple documents are selected */}
                 {/* Enhanced Document Selector */}
                 {localSelectedDocuments.length > 0 && (
                   <DocumentSelector
@@ -1763,6 +1762,7 @@ const MainContent = ({
             </div>
 
             {/* Summary Content */}
+            {/* Summary Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar bg-gray-900/80 p-4">
               {isConsolidatedView && !consolidatedSummary ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -1773,7 +1773,10 @@ const MainContent = ({
                       : "Click 'Analyze Together' to create a unified summary across all documents"}
                   </p>
                 </div>
-              ) : !persistentSummary && !consolidatedSummary ? (
+              ) : (!persistentSummary &&
+                  !consolidatedSummary &&
+                  !summaryToShow) ||
+                summaryToShow === "No summary available" ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
                   <FileText className="h-16 w-16 mb-4 text-gray-600" />
                   <p className="mb-4 text-center">
@@ -1893,36 +1896,6 @@ const MainContent = ({
       setSelectedDocuments(localSelectedDocuments);
     }
   }, [localSelectedDocuments, setSelectedDocuments]);
-
-  // const ConsolidatedSummaryLoader = () => (
-  //   <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/80 backdrop-blur-lg">
-  //     <div className="text-center">
-  //       <div className="flex flex-col items-center justify-center mb-6">
-  //         <div className="relative">
-  //           <FileText className="h-16 w-16 text-blue-400 animate-pulse" />
-  //           <div className="absolute -top-1 -right-1">
-  //             <FileText className="h-10 w-10 text-green-400 animate-pulse" />
-  //           </div>
-  //         </div>
-  //       </div>
-  //       <h3 className="text-xl font-bold text-white mb-2">Creating Consolidated Summary</h3>
-  //       <p className="text-gray-300 mb-6">
-  //         Analyzing relationships across multiple documents...
-  //       </p>
-
-  //       <div className="w-64 h-2 bg-gray-800 rounded-full overflow-hidden mb-2">
-  //         <div
-  //           className="h-full bg-gradient-to-r from-blue-500 to-green-500 animate-pulse"
-  //           style={{ width: "100%" }}
-  //         />
-  //       </div>
-
-  //       <div className="text-sm text-gray-400">
-  //         This may take a moment for complex documents
-  //       </div>
-  //     </div>
-  //   </div>
-  // );
 
   // 4. Add method to generate consolidated summary
   const handleGenerateConsolidatedSummary = async () => {
