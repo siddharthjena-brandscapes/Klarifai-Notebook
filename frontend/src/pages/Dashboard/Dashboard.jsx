@@ -180,6 +180,7 @@ const Dashboard = () => {
             selectedDocuments={selectedDocuments}
             onToggle={toggleSidebar}
             onNewChat={handleNewChat}
+            
           />
           
           {/* Centered Main Content Container */}

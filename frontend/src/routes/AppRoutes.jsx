@@ -11,6 +11,7 @@ import ForgotPasswordForm from '../components/auth/ForgotPasswordForm';
 import ResetPasswordForm from '../components/auth/ResetPasswordForm';
 import IdeaForm from '../components/IdeaForm';
 import ProjectsIdeaGen from '../components/ProjectsIdeaGen';
+import { ProjectProvider } from '../components/ProjectManagement';
 
 
 const AppRoutes = () => {
@@ -42,6 +43,16 @@ const AppRoutes = () => {
             <Route path="form" element={<IdeaForm />} />
           </Route>
         </Route>
+
+       
+        {/* New Direct Route to IdeaForm with ProjectProvider */}
+        <Route path="/idea-generation/new-from-document" element={
+          <PrivateRoute>
+            <ProjectProvider>
+              <IdeaForm />
+            </ProjectProvider>
+          </PrivateRoute>
+        } />
         
         
         

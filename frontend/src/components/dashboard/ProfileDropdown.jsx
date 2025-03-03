@@ -1,10 +1,9 @@
-/* eslint-disable react/prop-types */
 import  { useRef, useState } from 'react';
-import { Mail, Calendar, Camera, Upload, X, Lock } from 'lucide-react';
+import { Mail, Calendar, Camera, Upload, X, Lock, LogOut } from 'lucide-react';
 import { toast } from 'react-toastify';
 import axiosInstance from '../../utils/axiosConfig';
 
-const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfileUpdate }) => {
+const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfileUpdate, onLogout }) => {
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
@@ -77,47 +76,45 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
   // Using your original password handling code
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    
+  
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error('New passwords do not match');
       return;
     }
-
+  
     if (passwordData.newPassword.length < 8) {
       toast.error('Password must be at least 8 characters long');
       return;
     }
-
+  
     const hasUpperCase = /[A-Z]/.test(passwordData.newPassword);
     const hasLowerCase = /[a-z]/.test(passwordData.newPassword);
     const hasNumbers = /\d/.test(passwordData.newPassword);
     const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword);
-
+  
     if (!(hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar)) {
       toast.error('Password must contain uppercase, lowercase, numbers, and special characters');
       return;
     }
-
+  
     try {
-
-      toast.success('Password changed successfully');
-      setShowPasswordForm(false);
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
+      const response = await axiosInstance.post('/user/change-password/', {
+        current_password: passwordData.currentPassword,
+        new_password: passwordData.newPassword
       });
+  
+      if (response.status === 200) {
+        toast.success('Password changed successfully');
+        setShowPasswordForm(false);
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      }
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to change password';
       toast.error(errorMessage);
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
     }
   };
-
+  
   const handlePasswordFormClick = (e) => {
     e.stopPropagation();
   };
@@ -231,6 +228,17 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
         )}
       </div>
 
+      {/* Logout Button - Added here */}
+      <div className="pt-4 border-t border-gray-700">
+        <button
+          onClick={onLogout}
+          className="flex items-center space-x-2 text-gray-200 hover:text-red-400 transition-colors w-full p-2 rounded-lg hover:bg-gray-800 group"
+        >
+          <LogOut className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+          <span className="text-sm">Logout</span>
+        </button>
+      </div>
+
       {/* Upload Instructions */}
       <div className="text-xs text-gray-300 space-y-1 bg-gray-800 p-3 rounded-lg">
         <p>• Click profile picture to upload a new image</p>
@@ -250,3 +258,5 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
 };
 
 export default ProfileDropdown;
+
+

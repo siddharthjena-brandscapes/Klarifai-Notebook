@@ -1,9 +1,6 @@
-
-
-
 # chat/urls.py
 from django.urls import path
-from .views import (LoginView, SignupView, DocumentUploadView, 
+from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaContextView,
     ChatView, 
     GetChatHistoryView,
     GetConversationView,
@@ -16,6 +13,7 @@ from .views import (LoginView, SignupView, DocumentUploadView,
     ChangePasswordView,
     GenerateDocumentSummaryView,
     ConsolidatedSummaryView,
+    ChatDownloadView,
 
     
 )
@@ -32,6 +30,7 @@ urlpatterns = [
 
     # Document handling
     path('upload-documents/', DocumentUploadView.as_view(), name='upload-documents'),
+    path('generate-idea-context/', GenerateIdeaContextView.as_view(), name='generate-idea-context'),
     
     # Chat functionality
     path('chat/', ChatView.as_view(), name='chat'),
@@ -48,5 +47,6 @@ urlpatterns = [
          ManageConversationView.as_view(), 
          name='update_conversation'),
 
-     path('consolidated_summary/', ConsolidatedSummaryView.as_view(), name='consolidated_summary'),
-]
+    path('consolidated_summary/', ConsolidatedSummaryView.as_view(), name='consolidated_summary'),
+    path('download-chats/', ChatDownloadView.as_view(), name='download_chats'),
+]   

@@ -1,6 +1,5 @@
-
 import { useState, useEffect, useRef } from "react";
-import { LogOut, User, ChevronLeft, FolderOpen, Home } from "lucide-react";
+import { User, ChevronLeft, FolderOpen, Home } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import logo from "../../assets/Logo1.png";
 import { toast } from "react-toastify";
@@ -181,7 +180,7 @@ const Header = () => {
           )}
         </div>
 
-        {/* Right Section: User Profile and Logout */}
+        {/* Right Section: User Profile */}
         <div className="flex items-center space-x-4 px-3" ref={dropdownRef}>
           <div
             className="relative cursor-pointer"
@@ -206,6 +205,7 @@ const Header = () => {
               userDetails={userDetails}
               isOpen={showDropdown}
               onProfileUpdate={handleProfileUpdate}
+              onLogout={handleLogout}
             />
           </div>
 
@@ -216,14 +216,6 @@ const Header = () => {
           >
             {username}
           </span>
-
-          <button
-            onClick={handleLogout}
-            className="text-gray-300 hover:text-red-400 transition-colors group"
-            title="Logout"
-          >
-            <LogOut className="h-5 w-5 group-hover:rotate-12 transition-transform" />
-          </button>
         </div>
       </div>
     </header>

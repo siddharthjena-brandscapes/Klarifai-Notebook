@@ -520,176 +520,7 @@ def synthesize_product_aspects(idea_data, aspects, model):
     except Exception as e:
         print(f"Error in synthesis: {str(e)}")
         return idea_data['description']
- 
-# def enhance_prompt(enhanced_description, model):
-#     """
-#     Generate an enhanced product description prompt for image generation.
-#     Takes the synthesized description and adds specific styling and composition elements.
-#     """
-   
-#     # Base prompt with stronger emphasis on composition and detail
-#     base_prompt = f"""Ultra-detailed professional product photography or scene of {enhanced_description}.
-#     - include relevant usage environment or setting if it enhances the product story
-#     - if appropriate, depict target audience or typical usage occasions
-#     - balanced composition with all elements clearly visible
-#     - professional lighting setup with three-point lighting or suitable alternative for clarity and balanced illumination
-#     - photorealistic, high-resolution quality
-#     - perfectly clear and legible text or branding elements
-#     - commercial advertising style
-#     - emphasis on both product details and contextual elements
-#     - clean, polished, and visualy striking presentation
-#     - professional marketing photo with balanced composition"""
-   
-#      # Analyze description for specific product categories and add relevant styling
-#     description_lower = enhanced_description.lower()
-   
-#     # Technology and gadgets
-#     if any(word in description_lower for word in ['tech', 'gadget', 'electronic', 'digital', 'smart', 'device']):
-#         base_prompt += """, modern tech aesthetic, blue-tinted studio lighting,
-#         clean minimalist style, glossy finish on surfaces, subtle reflections,
-#         power indicators and displays clearly visible, interface elements sharp and legible,
-#         precise edge definition"""
-   
-#     # Natural and eco-friendly products
-#     if any(word in description_lower for word in ['eco', 'natural', 'organic', 'sustainable', 'bamboo', 'wood']):
-#         base_prompt += """, natural material textures clearly visible,
-#         warm lighting to highlight organic materials, matte finish,
-#         environmental styling, earth tones, texture detail preserved,
-#         sustainable packaging visible, natural color accuracy"""
-   
-#     # Luxury items
-#     if any(word in description_lower for word in ['luxury', 'premium', 'high-end', 'elegant', 'exclusive']):
-#         base_prompt += """, luxury product photography style, dramatic lighting,
-#         premium finish with metallic accents, sophisticated composition,
-#         attention to material quality, subtle shadows, elegant presentation,
-#         premium brand aesthetic, high-end commercial look"""
-   
-#     # Fashion and accessories
-#     if any(word in description_lower for word in ['fashion', 'clothing', 'wear', 'accessory', 'jewelry', 'watch']):
-#         base_prompt += """, fashion magazine style, fabric textures clearly visible,
-#         detailed stitching, material draping, accessories prominently displayed,
-#         fashion lighting setup, premium fabric detail capture,
-#         clear view of patterns and textures, product fit visualization"""
- 
-#     # Food & Beverage
-#     if any(word in description_lower for word in ['food', 'beverage', 'drink', 'edible', 'snack', 'meal']):
-#         base_prompt += """, mouth-watering presentation, vibrant colors to highlight freshness,
-#         clean plating or container styling, subtle steam or condensation for realism,
-#         appetizing composition, clear visibility of texture and ingredients,
-#         focus on tempting food photography style"""
- 
-#     # Cosmetics & Personal Care
-#     if any(word in description_lower for word in ['cosmetic', 'skincare', 'beauty', 'makeup', 'personal care', 'cream', 'lotion']):
-#         base_prompt += """, glossy or matte finish to highlight product texture,
-#         soft lighting to capture subtle details, chic aesthetic, emphasis on packaging design,
-#         crisp labeling and brand logos, premium beauty photography style,
-#         clean and minimalist arrangement"""
- 
-#     # Furniture & Home Décor
-#     if any(word in description_lower for word in ['furniture', 'sofa', 'table', 'chair', 'decor', 'home decor', 'interior']):
-#         base_prompt += """, emphasis on form and function, highlight material texture,
-#         realistic room setting or context if needed, warm and inviting lighting,
-#         balanced composition focusing on design lines, high-res detail capture,
-#         décor styling that complements the piece"""
- 
-#     # Sports & Fitness Gear
-#     if any(word in description_lower for word in ['fitness', 'sports', 'gym', 'workout', 'exercise', 'athletic', 'equipment']):
-#         base_prompt += """, dynamic lighting to emphasize performance aspect,
-#         athletic or energetic vibe, highlight durable materials and ergonomic design,
-#         bright, high-contrast style, clear brand logos and performance features,
-#         sturdy construction visible"""
- 
-#     # Kids & Toys
-#     if any(word in description_lower for word in ['kids', 'toy', 'children', 'child', 'toddler', 'baby', 'play']):
-#         base_prompt += """, playful and colorful composition, bright and cheerful lighting,
-#         emphasize safety features and soft edges, focus on fun and imaginative elements,
-#         child-friendly design details, attention to whimsical or cartoon styling"""
- 
-#     # Automotive Products
-#     if any(word in description_lower for word in ['automotive', 'car accessory', 'vehicle', 'car care', 'motorcycle']):
-#         base_prompt += """, sleek automotive aesthetic, metallic finishes where applicable,
-#         emphasis on durability and craftsmanship, detail in mechanical design,
-#         brand or model references if relevant, rugged environment or track setting if needed,
-#         polished reflections for a premium look"""
- 
-#     # Tools & Hardware
-#     if any(word in description_lower for word in ['tool', 'hardware', 'utility', 'drill', 'hammer', 'screwdriver']):
-#         base_prompt += """, focus on robust construction, industrial lighting style,
-#         highlight steel or metal textures, close-up detail of functional parts,
-#         brand or model labeling visible, functional stance, minimal background clutter"""
- 
-#     # Healthcare & Medical Devices
-#     if any(word in description_lower for word in ['medical', 'healthcare', 'hospital', 'patient', 'monitor', 'diagnostic']):
-#         base_prompt += """, clean and clinical look, sterile white or light blue background,
-#         emphasis on safety and precision, clearly visible user interface or display,
-#         brand or classification labeling, highlight ergonomic design,
-#         precise and organized composition"""
- 
-#     # E-Commerce
-#     if any(word in description_lower for word in ['e-commerce', 'ecommerce', 'marketplace', 'online store', 'digital cart', 'web shop', 'online platform'    ]):        
-#         base_prompt += """, packaging design with clear branding, device screens or interface elements visible if relevant,
-#         minimalist background with emphasis on the product or brand,
-#         cohesive color scheme that aligns with online retail aesthetics,
-#         modern commercial style photography, promotional-style lighting"""
- 
-#     # BFSI (Banking, Financial Services, Insurance)
-#     if any(word in description_lower for word in ['finance', 'bank', 'insurance', 'loan', 'credit', 'debit', 'investment', 'fintech', 'financial', 'accounting', 'tax', 'mortgage' ]):
-#         base_prompt += """, emphasis on trustworthiness and credibility,
-#         sleek corporate color palette, subtle brand identity elements,
-#         minimalistic yet professional lighting, well-defined details symbolizing security and reliability,
-#         neat composition illustrating professional standards"""
- 
-#     # B2B Services (Enterprise / Corporate / Consulting)
-#     if any(word in description_lower for word in ['enterprise', 'company', 'organization','b2b', 'corporate solutions', 'business services', 'professional services', 'consulting', 'industrial']):
-#         base_prompt += """, polished corporate look, professional environment cues,
-#         well-defined brand imagery or placeholders, subtle references to collaboration,
-#         modern and sophisticated lighting, neutral color palette,
-#         focus on clarity and straightforward presentation, intangible services represented by abstract or symbolic visuals"""
- 
-#     # Add composition and technical requirements
-#     base_prompt += """
 
-#     Technical Requirements:
-#     - Professional lighting setup
-#     - Sharp focus on key elements
-#     - Proper depth of field
-#     - Color accuracy
-#     - Texture detail preservation
-#     - Commercial photography standards
-#     - Professional post-processing
-#     - Brand guideline adherence
-
-#     Composition Guidelines:
-#     - Rule of thirds application
-#     - Leading lines utilization
-#     - Balance in visual elements
-#     - Depth creation
-#     - Negative space utilization
-#     - Scale demonstration
-#     - Focal point emphasis
-#     - Background context
-#     """
-
-#     # Generate final enhanced prompt using Gemini
-#     try:
-#         visualization_prompt = f"""
-#         As an expert product photographer and creative director, enhance and refine the following product visualization prompt while maintaining all key elements and requirements:
-
-#         {base_prompt}
-
-#         Create a concise, optimized version that maintains all critical elements but is more streamlined for image generation.
-#         Focus on the most impactful visual elements while preserving all product-specific requirements.
-#         """
-
-#         response = model.generate_content(visualization_prompt)
-
-#         print("Generated Final Prompt:")
-#         print(response.text)                 # print the final prompt
-#         return response.text.strip()
-    
-#     except Exception as e:
-#         print(f"Error in enhance_prompt: {str(e)}")
-#         return base_prompt
     
 def enhance_prompt(enhanced_description, model):
     """
@@ -1710,3 +1541,330 @@ def delete_project(request, project_id):
                 'success': False,
                 'error': str(e)
             })
+        
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def generate_ideas_from_document(request):
+    """
+    API endpoint to generate ideas using parameters extracted from documents
+    """
+    try:
+        data = json.loads(request.body)
+        print("Received document-based idea generation data:", json.dumps(data, indent=2))
+       
+        # Extract document source information
+        document_id = data.get('document_id')
+        document_name = data.get('document_name')
+        idea_parameters = data.get('idea_parameters', {})
+       
+        if not document_id or not idea_parameters:
+            return JsonResponse({
+                "success": False,
+                "error": "Missing required parameters: document_id and idea_parameters"
+            }, status=400)
+       
+        # Extract project information
+        project_id = data.get('project_id')
+        if not project_id:
+            return JsonResponse({
+                "success": False,
+                "error": "project_id is required"
+            }, status=400)
+       
+        # Get the project instance
+        try:
+            project = Project.objects.get(id=project_id, user=request.user)
+        except Project.DoesNotExist:
+            return JsonResponse({
+                "success": False,
+                "error": f"Project with id {project_id} does not exist"
+            }, status=404)
+       
+        # Get current set number
+        max_set_number = Idea.objects.filter(
+            product_idea__project_id=project_id
+        ).aggregate(Max('idea_set'))['idea_set__max'] or 0
+        current_set = max_set_number + 1
+       
+        # Map document parameters to idea generator fields
+        product = idea_parameters.get('Concept', '')
+        brand = idea_parameters.get('Brand_Name', '')
+        category = idea_parameters.get('Category', '')
+        number_of_ideas = int(data.get('number_of_ideas', 3))  # Default to 3 ideas
+       
+        # Convert document parameters to dynamic fields format
+        dynamic_fields = {
+            "benefits": idea_parameters.get('Benefits', ''),
+            "rtb": idea_parameters.get('RTB', ''),
+            "ingredients": idea_parameters.get('Ingredients', ''),
+            "features": idea_parameters.get('Features', ''),
+            "theme": idea_parameters.get('Theme', ''),
+            "demographics": idea_parameters.get('Demographics', '')
+        }
+       
+        # Remove empty values
+        dynamic_fields = {k: v for k, v in dynamic_fields.items() if v}
+       
+        negative_prompt = data.get('negative_prompt', '')
+       
+        # Create ProductIdea2 instance
+        product_idea = ProductIdea2.objects.create(
+            user=request.user,
+            project=project,
+            product=product,
+            brand=brand,
+            category=category,
+            number_of_ideas=number_of_ideas,
+            dynamic_fields=dynamic_fields,
+            negative_prompt=negative_prompt,
+            source_document_id=document_id,
+            source_document_name=document_name
+        )
+       
+        # Generate formatted prompt text
+        formatted_dynamic_fields = generate_prompt_text(dynamic_fields)
+       
+        # Generate ideas using existing prompt logic
+        ideas_prompt = (
+            f"Generate {number_of_ideas} unique and creative product ideas for product named {product} under the brand {brand} with category {category}.\n"
+            "While crafting these ideas, consider the following dynamic attributes as contextual guidelines. Use these inputs to shape the tone, style, and features of each idea so that they naturally resonate with the intended audience, without explicitly mentioning the attribute values.\n"
+            f"Dynamic Attributes: {formatted_dynamic_fields}\n"
+            f"IMPORTANT CONSTRAINTS: Avoid generating ideas that involve the following terms or concepts: {negative_prompt}\n"
+            "If any generated idea contains or relates to these terms, immediately discard that idea and generate a completely different one.\n"
+            "Format each idea as a clean, valid JSON object with 'product_name' and 'description' fields, like this example:\n"
+            "{\n  \"product_name\": \"Example Name\",\n  \"description\": \"Example description\"\n}\n"
+            "The 'description' should be clear, engaging, and written in simple language that highlights the product's key features and unique selling points. "
+            "Ensure that the description explains how the product benefits the user and what makes it special, making it easy to visualize the idea, while seamlessly integrating the contextual cues from the dynamic attributes.\n"
+            "Aim for a variety of ideas such that each is unique and creative, and focuses on different aspects of the product.\n"
+            "For each idea, provide a detailed explanation with at most 70 words in the description."
+        )
+ 
+        print("Generated prompt for document-based idea generation:", ideas_prompt)
+       
+        response = model.generate_content(
+            ideas_prompt,
+            generation_config={
+                'temperature': 1.0,
+                'max_output_tokens': 4000
+            }
+        )
+ 
+        print("Generated Ideas Response:", response.text)
+       
+        # Process generated ideas (using same logic as in original function)
+        validated_ideas = []
+        try:
+            # Split the response into individual JSON objects
+            json_objects = response.text.split('```json')
+            cleaned_jsons = []
+           
+            for obj in json_objects:
+                if obj.strip():
+                    # Remove backticks and clean the JSON string
+                    cleaned = obj.strip().strip('`').strip()
+                    if cleaned:
+                        cleaned_jsons.append(cleaned)
+ 
+            print("Cleaned JSON objects:", cleaned_jsons)
+           
+            for index, json_text in enumerate(cleaned_jsons):
+                try:
+                    idea_data = json.loads(json_text)
+                    print(f"Processing idea {index + 1}:", idea_data)
+                   
+                    if isinstance(idea_data, dict) and 'product_name' in idea_data and 'description' in idea_data:
+                        # Decompose and synthesize the idea
+                        aspects = decompose_product_description(idea_data, model)
+                        enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+                       
+                        # Generate visualization prompt
+                        visualization_prompt = enhance_prompt(enhanced_description, model)
+                       
+                        # Create idea instance
+                        idea_set_label = f"Set {current_set}-{index + 1}"
+                        idea = Idea.objects.create(
+                            product_idea=product_idea,
+                            product_name=idea_data['product_name'],
+                            description=idea_data['description'],
+                            decomposed_aspects=aspects,
+                            enhanced_description=enhanced_description,
+                            visualization_prompt=visualization_prompt,
+                            idea_set=current_set,
+                            idea_set_label=idea_set_label
+                        )
+                       
+                        validated_ideas.append({
+                            'idea_id': idea.id,
+                            'product_name': idea.product_name,
+                            'description': idea.description,
+                            'decomposed_aspects': aspects,
+                            'enhanced_description': enhanced_description,
+                            'visualization_prompt': visualization_prompt,
+                            'idea_set': current_set,
+                            'idea_set_label': idea_set_label
+                        })
+                        print(f"Successfully processed idea {index + 1}")
+                except json.JSONDecodeError as e:
+                    # Same fallback logic as in original function
+                    print(f"Error parsing JSON for idea {index + 1}:", str(e))
+                    try:
+                        # Remove any trailing characters after the closing brace
+                        cleaned_json = json_text.split('}')[0] + '}'
+                        idea_data = json.loads(cleaned_json)
+                        # Process the idea same as above
+                        aspects = decompose_product_description(idea_data, model)
+                        enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+                        visualization_prompt = enhance_prompt(enhanced_description, model)
+                       
+                        idea_set_label = f"Set {current_set}-{index + 1}"
+                        idea = Idea.objects.create(
+                            product_idea=product_idea,
+                            product_name=idea_data['product_name'],
+                            description=idea_data['description'],
+                            decomposed_aspects=aspects,
+                            enhanced_description=enhanced_description,
+                            visualization_prompt=visualization_prompt,
+                            idea_set=current_set,
+                            idea_set_label=idea_set_label
+                        )
+                       
+                        validated_ideas.append({
+                            'idea_id': idea.id,
+                            'product_name': idea.product_name,
+                            'description': idea.description,
+                            'decomposed_aspects': aspects,
+                            'enhanced_description': enhanced_description,
+                            'visualization_prompt': visualization_prompt,
+                            'idea_set': current_set,
+                            'idea_set_label': idea_set_label
+                        })
+                        print(f"Successfully processed idea {index + 1} after cleaning")
+                    except Exception as e2:
+                        print(f"Failed to process idea {index + 1} even after cleaning:", str(e2))
+                        continue
+                except Exception as e:
+                    print(f"Unexpected error processing idea {index + 1}:", str(e))
+                    continue
+           
+            # Fallback text parsing logic (same as original function)
+            if not validated_ideas:
+                print("No ideas processed from JSON, falling back to text parsing")
+                lines = response.text.split('\n')
+                current_name = None
+                current_description = []
+               
+                for line in lines:
+                    if ' - ' in line:
+                        # Process previous idea if exists
+                        if current_name and current_description:
+                            description_text = ' '.join(current_description)
+                           
+                            idea_data = {
+                                'product_name': current_name,
+                                'description': description_text
+                            }
+                           
+                            aspects = decompose_product_description(idea_data, model)
+                            enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+                            visualization_prompt = enhance_prompt(enhanced_description, model)
+                           
+                            idea_set_label = f"Set {current_set}-{len(validated_ideas) + 1}"
+                            idea = Idea.objects.create(
+                                product_idea=product_idea,
+                                product_name=current_name,
+                                description=description_text,
+                                decomposed_aspects=aspects,
+                                enhanced_description=enhanced_description,
+                                visualization_prompt=visualization_prompt,
+                                idea_set=current_set,
+                                idea_set_label=idea_set_label
+                            )
+                           
+                            validated_ideas.append({
+                                'idea_id': idea.id,
+                                'product_name': idea.product_name,
+                                'description': idea.description,
+                                'decomposed_aspects': aspects,
+                                'enhanced_description': enhanced_description,
+                                'visualization_prompt': visualization_prompt,
+                                'idea_set': current_set,
+                                'idea_set_label': idea_set_label
+                            })
+                       
+                        # Start new idea
+                        name_part, desc_part = line.split(' - ', 1)
+                        current_name = name_part.strip()
+                        current_description = [desc_part.strip()]
+                    elif line.strip() and current_name:
+                        current_description.append(line.strip())
+               
+                # Process the last idea if exists
+                if current_name and current_description:
+                    description_text = ' '.join(current_description)
+                    idea_data = {
+                        'product_name': current_name,
+                        'description': description_text
+                    }
+                   
+                    aspects = decompose_product_description(idea_data, model)
+                    enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+                    visualization_prompt = enhance_prompt(enhanced_description, model)
+                   
+                    idea_set_label = f"Set {current_set}-{len(validated_ideas) + 1}"
+                    idea = Idea.objects.create(
+                        product_idea=product_idea,
+                        product_name=current_name,
+                        description=description_text,
+                        decomposed_aspects=aspects,
+                        enhanced_description=enhanced_description,
+                        visualization_prompt=visualization_prompt,
+                        idea_set=current_set,
+                        idea_set_label=idea_set_label
+                    )
+                   
+                    validated_ideas.append({
+                        'idea_id': idea.id,
+                        'product_name': idea.product_name,
+                        'description': idea.description,
+                        'decomposed_aspects': aspects,
+                        'enhanced_description': enhanced_description,
+                        'visualization_prompt': visualization_prompt,
+                        'idea_set': current_set,
+                        'idea_set_label': idea_set_label
+                    })
+ 
+        except Exception as e:
+            print(f"Error in idea processing: {str(e)}")
+            raise
+ 
+        print("Final validated ideas:", json.dumps(validated_ideas, indent=2))
+       
+        response_data = {
+            "success": True,
+            "ideas": validated_ideas,
+            "stored_data": {
+                "product_idea_id": product_idea.id,
+                "project_id": project.id,
+                "project_name": project.name,
+                "product": product_idea.product,
+                "brand": product_idea.brand,
+                "category": product_idea.category,
+                "dynamic_fields": product_idea.dynamic_fields,
+                "current_set": current_set,
+                "negative_prompt": negative_prompt,
+                "source_document_id": document_id,
+                "source_document_name": document_name
+            }
+        }
+ 
+        print("Sending response:", json.dumps(response_data, indent=2))
+       
+        return JsonResponse(response_data)
+       
+    except Exception as e:
+        print("Error in document-based idea generation:", str(e))
+        return JsonResponse({
+            "success": False,
+            "error": str(e)
+        }, status=500)

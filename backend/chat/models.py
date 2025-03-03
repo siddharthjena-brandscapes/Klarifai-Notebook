@@ -37,6 +37,7 @@ class ProcessedIndex(models.Model):
     faiss_index = models.CharField(max_length=255, help_text="Path to saved FAISS index file")
     metadata = models.CharField(max_length=255, help_text="Path to saved metadata file")
     summary = models.TextField(help_text="Generated summary of the document")
+    idea_parameters = models.JSONField(null=True, blank=True)  # by sourav for idea gen integration
     markdown_path = models.CharField(max_length=255, help_text="Path to saved Markdown file with key terms")
     follow_up_question_1 = models.TextField(blank=True, null=True, help_text="First follow-up question")
     follow_up_question_2 = models.TextField(blank=True, null=True, help_text="Second follow-up question")

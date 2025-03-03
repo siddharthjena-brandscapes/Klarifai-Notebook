@@ -1,7 +1,3 @@
-
-
-#Simplified Code
-
 #views.py original
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
@@ -10,8 +6,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import IsAuthenticated, AllowAny  # Combined imports
-# from rest_framework_simplejwt.tokens import RefreshToken  # Added only once
+from rest_framework.permissions import IsAuthenticated, AllowAny  
 import faiss
 import numpy as np
 import os
@@ -21,14 +16,8 @@ import re
 from datetime import datetime
 from django.core.files.storage import default_storage
 from django.conf import settings
-# from nltk.tokenize import word_tokenize
-# from nltk.corpus import stopwords
-# from nltk.util import ngrams
 from collections import Counter
-import google.generativeai as genai  # Merged single instance
-# from sklearn.feature_extraction.text import TfidfVectorizer
-# from sklearn.decomposition import LatentDirichletAllocation
-# from llama_parse import LlamaParse
+import google.generativeai as genai 
 from .models import (
     ChatHistory,
     ChatMessage,
@@ -48,6 +37,15 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import tiktoken
+import json
+import csv
+from io import StringIO, BytesIO
+import pytz
+from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.html import strip_tags
+from django.shortcuts import get_object_or_404
+from django.contrib.auth import update_session_auth_hash
 
 
 load_dotenv()
@@ -157,31 +155,23 @@ class LoginView(APIView):
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
-
+ 
     def post(self, request):
         user = request.user
         current_password = request.data.get('current_password')
         new_password = request.data.get('new_password')
-
-        # Validate input
+ 
         if not current_password or not new_password:
-            return Response({
-                'message': 'Both current and new password are required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Check if current password is correct
-        if not check_password(current_password, user.password):
-            return Response({
-                'message': 'Current password is incorrect'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Set new password
+            return Response({'message': 'Both current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
+ 
+        if not user.check_password(current_password):  # Use user.check_password()
+            return Response({'message': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+ 
         user.set_password(new_password)
         user.save()
-
-        return Response({
-            'message': 'Password updated successfully'
-        }, status=status.HTTP_200_OK)
+        update_session_auth_hash(request, user)  # Important: Keep user logged in
+ 
+        return Response({'message': 'Password updated successfully'}, status=status.HTTP_200_OK)
 
 #new
 class UserProfileView(APIView):
@@ -298,6 +288,8 @@ class GetUserDocumentsView(APIView):
                                 processed.follow_up_question_3]) else []
                     }
                     document_list.append(document_data)
+
+                 
 
                    
                 except ProcessedIndex.DoesNotExist:
@@ -624,8 +616,6 @@ from rest_framework.parsers import JSONParser
 
 class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
-
-
 
     def load_faiss_index(self, session_id):
     
@@ -1869,3 +1859,680 @@ class DeleteConversationView(APIView):
                 {'error': f'Failed to delete conversation: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+class ChatDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def clean_html_content(self, content):
+        """Strip HTML tags and normalize whitespace for better readability"""
+        # Replace <p>, <div>, etc. with newlines before stripping tags
+        content = re.sub(r'</(p|div|h\d|li)>', '\n', content)
+        content = re.sub(r'<br\s*/?>', '\n', content)
+        
+        # Replace list tags with bullets and newlines
+        content = re.sub(r'<li>', '• ', content)
+        content = re.sub(r'<ul>', '\n', content)
+        content = re.sub(r'</ul>', '\n', content)
+        
+        # Convert <b> or <strong> to uppercase or add asterisks
+        bold_content = re.findall(r'<(b|strong)>(.*?)</\1>', content)
+        for tag, text in bold_content:
+            content = content.replace(f'<{tag}>{text}</{tag}>', f'*{text}*')
+        
+        # Strip remaining HTML tags
+        cleaned_content = strip_tags(content)
+        
+        # Normalize whitespace
+        cleaned_content = re.sub(r'\n\s*\n', '\n\n', cleaned_content)
+        cleaned_content = re.sub(r' {2,}', ' ', cleaned_content)
+        
+        return cleaned_content.strip()
+    
+    # Update this method in the ChatDownloadView class to improve text formatting
+
+    def format_messages_for_download(self, messages, format_type='txt'):
+        """
+        Format messages for download in specified format
+        """
+        if format_type == 'json':
+            # For JSON, we just need to structure the data
+            return messages
+        
+        # For text format, create a readable conversation
+        formatted_text = ""
+        for msg in messages:
+            role = "You" if msg['role'] == 'user' else "Assistant"
+            timestamp = datetime.fromisoformat(msg['created_at'].replace(' ', 'T'))
+            formatted_date = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Clean the content if it has HTML formatting
+            content = self.clean_html_content(msg['content'])
+            
+            formatted_text += f"[{formatted_date}] {role}:\n"
+            formatted_text += f"{content}\n\n"
+            
+            # Add citations if they exist
+            if msg.get('citations') and len(msg['citations']) > 0:
+                formatted_text += "Sources:\n"
+                for i, citation in enumerate(msg['citations'], 1):
+                    formatted_text += f"  {i}. {citation.get('source_file', 'Unknown')}"
+                    if citation.get('page_number'):
+                        formatted_text += f", Page: {citation['page_number']}"
+                    formatted_text += "\n"
+                formatted_text += "\n"
+                
+        return formatted_text
+        
+    def generate_filename(self, conversation=None, date_range=None):
+            """Generate appropriate filename based on download type"""
+            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+            
+            if conversation:
+                # Single conversation download
+                title = conversation.title or f"Chat_{conversation.conversation_id[:8]}"
+                # Replace spaces and special chars for filename safety
+                safe_title = "".join([c if c.isalnum() else "_" for c in title])
+                return f"{safe_title}_{timestamp}"
+            
+            if date_range:
+                # Date range download
+                start_date = date_range.get('start_date', 'all')
+                end_date = date_range.get('end_date', 'now')
+                return f"Chats_{start_date}_to_{end_date}_{timestamp}"
+            
+            # Default filename if neither is provided
+            return f"Chat_export_{timestamp}"
+        
+        # Update this method in the ChatDownloadView class to fix the PDF generation
+
+    def create_pdf(self, content, title="Chat Export"):
+        """
+        Create a PDF file from the provided content with improved handling of user messages
+        """
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib import colors
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.lib.units import inch
+            
+            buffer = BytesIO()
+            
+            # Create the PDF document
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=A4,
+                rightMargin=72,
+                leftMargin=72,
+                topMargin=72,
+                bottomMargin=72
+            )
+            
+            # Define styles
+            styles = getSampleStyleSheet()
+            styleN = styles["BodyText"]
+            styleH = styles["Heading1"]
+            styleH2 = styles["Heading2"]
+            styleH3 = styles["Heading3"]
+            
+            # Create a custom style for user messages
+            user_style = ParagraphStyle(
+                name='UserStyle',
+                parent=styles['BodyText'],
+                fontName='Helvetica-Bold',
+                fontSize=10,
+                textColor=colors.blue
+            )
+            
+            # Create a custom style for assistant messages
+            assistant_style = ParagraphStyle(
+                name='AssistantStyle',
+                parent=styles['BodyText'],
+                fontSize=10
+            )
+            
+            # Create a custom style for citations
+            citation_style = ParagraphStyle(
+                name='CitationStyle',
+                parent=styles['BodyText'],
+                fontSize=8,
+                textColor=colors.gray
+            )
+            
+            # Create the content elements
+            elements = []
+            
+            # Add title
+            elements.append(Paragraph(title, styleH))
+            elements.append(Spacer(1, 0.25*inch))
+            
+            # Process content by parsing our text formatting
+            if isinstance(content, list):
+                # Handle multiple conversations
+                for conversation in content:
+                    elements.append(Paragraph(f"Conversation: {conversation['title']}", styleH2))
+                    elements.append(Paragraph(f"Date: {conversation['created_at']}", styleN))
+                    elements.append(Spacer(1, 0.1*inch))
+                    
+                    for message in conversation['messages']:
+                        # Message header
+                        role = "You" if message['role'] == 'user' else "Assistant"
+                        elements.append(Paragraph(f"[{message['created_at']}] {role}:", styleH3))
+                        
+                        # Choose style based on role
+                        current_style = user_style if message['role'] == 'user' else assistant_style
+                        
+                        # Message content - split paragraphs
+                        paragraphs = self.clean_html_content(message['content']).split('\n\n')
+                        for para in paragraphs:
+                            if para.strip():
+                                elements.append(Paragraph(para, current_style))
+                                elements.append(Spacer(1, 0.05*inch))
+                        
+                        # Add citations if they exist
+                        if message.get('citations') and len(message['citations']) > 0:
+                            citation_text = "Sources: "
+                            citations = []
+                            for i, citation in enumerate(message['citations'], 1):
+                                source = citation.get('source_file', 'Unknown')
+                                page = citation.get('page_number', '')
+                                if page:
+                                    citations.append(f"{i}. {source}, Page: {page}")
+                                else:
+                                    citations.append(f"{i}. {source}")
+                            
+                            elements.append(Paragraph(", ".join(citations), citation_style))
+                        
+                        elements.append(Spacer(1, 0.2*inch))
+                    
+                    elements.append(Spacer(1, 0.5*inch))
+            else:
+                # Single conversation as formatted text - parse line by line for better control
+                lines = content.split('\n')
+                i = 0
+                while i < len(lines):
+                    line = lines[i].strip()
+                    
+                    if not line:
+                        i += 1
+                        continue
+                    
+                    # Check if this line is a message header
+                    header_match = re.match(r'\[(.*?)\] (You|Assistant):', line)
+                    if header_match:
+                        timestamp, role = header_match.groups()
+                        elements.append(Paragraph(f"[{timestamp}] {role}:", styleH3))
+                        
+                        # Set current style based on role
+                        current_style = user_style if role == "You" else assistant_style
+                        
+                        # Move to next line to start collecting message content
+                        i += 1
+                        message_content = []
+                        
+                        # Collect all lines until next header or sources
+                        while i < len(lines) and not re.match(r'\[(.*?)\] (You|Assistant):', lines[i]) and not lines[i].startswith("Sources:"):
+                            if lines[i].strip():
+                                message_content.append(lines[i])
+                            i += 1
+                        
+                        # Join message content and split into paragraphs
+                        if message_content:
+                            para_text = "\n".join(message_content)
+                            paragraphs = para_text.split('\n\n')
+                            for para in paragraphs:
+                                if para.strip():
+                                    elements.append(Paragraph(para, current_style))
+                                    elements.append(Spacer(1, 0.05*inch))
+                        
+                        # Check if next line is Sources
+                        if i < len(lines) and lines[i].startswith("Sources:"):
+                            elements.append(Paragraph(lines[i], citation_style))
+                            i += 1
+                            # Include additional source lines
+                            while i < len(lines) and lines[i].strip() and not re.match(r'\[(.*?)\] (You|Assistant):', lines[i]):
+                                elements.append(Paragraph(lines[i], citation_style))
+                                i += 1
+                    else:
+                        # For any other type of line, just add it as regular text
+                        elements.append(Paragraph(line, styleN))
+                        i += 1
+                
+            # Build the PDF
+            doc.build(elements)
+            
+            # Get the value of the BytesIO buffer
+            pdf = buffer.getvalue()
+            buffer.close()
+            
+            return pdf
+            
+        except Exception as e:
+            print(f"Error creating PDF: {str(e)}")
+            # Return a simple error PDF
+            try:
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=letter)
+                styles = getSampleStyleSheet()
+                elements = []
+                elements.append(Paragraph(f"Error creating PDF: {str(e)}", styles["Heading1"]))
+                doc.build(elements)
+                pdf = buffer.getvalue()
+                buffer.close()
+                return pdf
+            except:
+                # If even the error PDF fails, return a placeholder
+                return b"PDF generation failed"
+    
+    def post(self, request):
+        user = request.user
+        conversation_id = request.data.get('conversation_id')
+        date_range = request.data.get('date_range')
+        format_type = request.data.get('format', 'txt').lower()
+        main_project_id = request.data.get('main_project_id')
+        
+        if not main_project_id:
+            return Response({
+                'error': 'Main project ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate format type
+        if format_type not in ['txt', 'json', 'csv', 'pdf']:
+            return Response({
+                'error': 'Invalid format. Supported formats: txt, json, csv, pdf'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            if conversation_id:
+                # Download a single conversation
+                try:
+                    conversation = ChatHistory.objects.get(
+                        conversation_id=conversation_id,
+                        user=user,
+                        main_project_id=main_project_id
+                    )
+                except ChatHistory.DoesNotExist:
+                    return Response({
+                        'error': 'Conversation not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                # Get all messages for this conversation
+                messages = conversation.messages.all().order_by('created_at')
+                
+                # Format messages for download
+                message_list = [
+                    {
+                        'role': message.role,
+                        'content': message.content,
+                        'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
+                        'citations': message.citations or []
+                    } for message in messages
+                ]
+                
+                filename = self.generate_filename(conversation)
+                title = conversation.title or f"Chat {conversation.conversation_id[:8]}"
+                
+            elif date_range:
+                # Download conversations within date range
+                start_date = date_range.get('start_date')
+                end_date = date_range.get('end_date')
+                
+                # Build query for conversations within date range
+                query = {
+                    'user': user,
+                    'main_project_id': main_project_id
+                }
+                
+                if start_date:
+                    query['created_at__gte'] = start_date
+                
+                if end_date:
+                    query['created_at__lte'] = end_date
+                
+                # Get conversations matching the criteria
+                conversations = ChatHistory.objects.filter(**query).order_by('-created_at')
+                
+                if not conversations.exists():
+                    return Response({
+                        'error': 'No conversations found within specified date range'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                # Initialize data structure for all conversations
+                all_conversations = []
+                
+                # Get messages for each conversation
+                for conv in conversations:
+                    messages = conv.messages.all().order_by('created_at')
+                    
+                    message_list = [
+                        {
+                            'role': message.role,
+                            'content': message.content,
+                            'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
+                            'citations': message.citations or []
+                        } for message in messages
+                    ]
+                    
+                    all_conversations.append({
+                        'conversation_id': str(conv.conversation_id),
+                        'title': conv.title or f"Chat from {conv.created_at.strftime('%Y-%m-%d %H:%M')}",
+                        'created_at': conv.created_at.strftime('%Y-%m-%d %H:%M'),
+                        'messages': message_list
+                    })
+                
+                filename = self.generate_filename(date_range=date_range)
+                message_list = all_conversations  # Use the full conversation structure
+                title = f"Chats from {start_date or 'all time'} to {end_date or 'present'}"
+                
+            else:
+                return Response({
+                    'error': 'Either conversation_id or date_range must be provided'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Generate download file based on requested format
+            if format_type == 'json':
+                # JSON format
+                json_data = json.dumps(message_list, indent=2)
+                response = HttpResponse(json_data, content_type='application/json')
+                response['Content-Disposition'] = f'attachment; filename="{filename}.json"'
+                
+            elif format_type == 'csv':
+                # CSV format
+                csv_buffer = StringIO()
+                csv_writer = csv.writer(csv_buffer)
+                
+                if conversation_id:
+                    # Single conversation CSV format
+                    csv_writer.writerow(['Timestamp', 'Role', 'Content', 'Citations'])
+                    
+                    for msg in message_list:
+                        # Clean HTML from content
+                        clean_content = self.clean_html_content(msg['content'])
+                        citations = ', '.join([f"{c.get('source_file', 'Unknown')}" for c in msg.get('citations', [])])
+                        csv_writer.writerow([
+                            msg['created_at'],
+                            'You' if msg['role'] == 'user' else 'Assistant',
+                            clean_content,
+                            citations
+                        ])
+                else:
+                    # Multiple conversations CSV format
+                    csv_writer.writerow(['Conversation', 'Timestamp', 'Role', 'Content', 'Citations'])
+                    
+                    for conv in message_list:
+                        for msg in conv['messages']:
+                            # Clean HTML from content
+                            clean_content = self.clean_html_content(msg['content'])
+                            citations = ', '.join([f"{c.get('source_file', 'Unknown')}" for c in msg.get('citations', [])])
+                            csv_writer.writerow([
+                                conv['title'],
+                                msg['created_at'],
+                                'You' if msg['role'] == 'user' else 'Assistant',
+                                clean_content,
+                                citations
+                            ])
+                
+                response = HttpResponse(csv_buffer.getvalue(), content_type='text/csv')
+                response['Content-Disposition'] = f'attachment; filename="{filename}.csv"'
+            
+            elif format_type == 'pdf':
+                # PDF format
+                if conversation_id:
+                    # Single conversation
+                    formatted_text = self.format_messages_for_download(message_list, 'txt')
+                    pdf_content = self.create_pdf(formatted_text, title)
+                else:
+                    # Multiple conversations
+                    pdf_content = self.create_pdf(message_list, title)
+                
+                response = HttpResponse(pdf_content, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename="{filename}.pdf"'
+                
+            else:
+                # Default: TXT format
+                if conversation_id:
+                    # Single conversation
+                    formatted_text = self.format_messages_for_download(message_list, format_type)
+                else:
+                    # Multiple conversations
+                    formatted_text = ""
+                    for conv in message_list:
+                        formatted_text += f"=== {conv['title']} ===\n"
+                        formatted_text += f"Date: {conv['created_at']}\n\n"
+                        formatted_text += self.format_messages_for_download(conv['messages'], format_type)
+                        formatted_text += "\n\n" + "="*50 + "\n\n"
+                
+                response = HttpResponse(formatted_text, content_type='text/plain')
+                response['Content-Disposition'] = f'attachment; filename="{filename}.txt"'
+            
+            return response
+            
+        except Exception as e:
+            print(f"Error downloading chat: {str(e)}")
+            return Response({
+                'error': f'Failed to download chat: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class GenerateIdeaContextView(APIView):
+    """
+    API endpoint to extract structured idea generation parameters
+    from documents or query results.
+    """
+   
+    def post(self, request):
+        user = request.user
+        document_id = request.data.get('document_id')
+        query = request.data.get('query')
+       
+        # Validate input - need either document_id or query
+        if not document_id and not query:
+            return Response({
+                'error': 'Either document_id or query parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+           
+        try:
+            # Case 1: Using Document ID - fetch existing parameters or extract new ones
+            if document_id:
+                document = get_object_or_404(Document, id=document_id, user=user)
+               
+                try:
+                    # Check if we already have parameters stored
+                    processed_index = ProcessedIndex.objects.get(document=document)
+                   
+                    # If parameters exist, return them
+                    if processed_index.idea_parameters:
+                        return Response({
+                            'document_id': document_id,
+                            'document_name': document.filename,
+                            'idea_parameters': processed_index.idea_parameters
+                        })
+                   
+                    # If no parameters yet, extract them from the document
+                    index_file = processed_index.faiss_index
+                    metadata_file = processed_index.metadata
+                   
+                    # Load index and metadata
+                    index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
+                   
+                    # Extract parameters from document content
+                    full_text = " ".join([chunk['text'] for chunk in chunks])
+                    idea_params = self.extract_idea_parameters(full_text, chunks)
+                   
+                    # Save the parameters for future use
+                    processed_index.idea_parameters = idea_params
+                    processed_index.save()
+                   
+                    return Response({
+                        'document_id': document_id,
+                        'document_name': document.filename,
+                        'idea_parameters': idea_params
+                    })
+                   
+                except ProcessedIndex.DoesNotExist:
+                    return Response({
+                        'error': 'Document has not been processed yet'
+                    }, status=status.HTTP_404_NOT_FOUND)
+           
+            # Case 2: Using Query - search across documents and extract from relevant chunks
+            else:
+                # Get active/selected document
+                active_doc_id = request.session.get('active_document_id')
+                if not active_doc_id:
+                    return Response({
+                        'error': 'No active document selected'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+               
+                document = get_object_or_404(Document, id=active_doc_id, user=user)
+                processed_index = get_object_or_404(ProcessedIndex, document=document)
+               
+                # Load index and metadata
+                index_file = processed_index.faiss_index
+                metadata_file = processed_index.metadata
+                index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
+               
+                # Get embedding for query
+                query_embedding = self.get_query_embedding(query)
+               
+                # Search for relevant chunks
+                relevant_chunks = self.search_faiss_index(index, chunks, query_embedding, k=5)
+               
+                # Extract parameters from relevant chunks
+                idea_params = self.extract_idea_parameters(query, relevant_chunks)
+               
+                return Response({
+                    'document_id': active_doc_id,
+                    'document_name': document.filename,
+                    'query': query,
+                    'idea_parameters': idea_params
+                })
+               
+        except Exception as e:
+            print(f"Error generating idea context: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while generating idea context'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+   
+    def load_faiss_index_from_paths(self, index_file, metadata_file):
+        """Load FAISS index and metadata from file paths"""
+        import faiss
+        import pickle
+       
+        try:
+            index = faiss.read_index(index_file)
+            with open(metadata_file, "rb") as f:
+                chunks = pickle.load(f)
+            return index, chunks
+        except Exception as e:
+            print(f"Error loading FAISS index: {str(e)}")
+            return None, []
+   
+    def get_query_embedding(self, query):
+        """Get embedding for the query"""
+        from openai import OpenAI
+        client = OpenAI()  # Initialize the client
+       
+        try:
+            response = client.embeddings.create(
+                input=[query],
+                model="text-embedding-3-small"
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            print(f"Error getting embedding for query: {str(e)}")
+            raise
+   
+    def search_faiss_index(self, index, chunks, query_embedding, k=5):
+        """Search FAISS index for relevant chunks"""
+        import numpy as np
+       
+        # Convert embedding to numpy array
+        query_vector = np.array([query_embedding]).astype('float32')
+       
+        # Search index
+        distances, indices = index.search(query_vector, k=k)
+       
+        # Get relevant chunks
+        results = []
+        for i in indices[0]:
+            if i < len(chunks):
+                results.append(chunks[i])
+       
+        return results
+   
+    def extract_idea_parameters(self, context, relevant_chunks=None):
+        """
+        Extract structured parameters for the Idea Generator
+       
+        Args:
+            context (str): Either full document content or query
+            relevant_chunks (list, optional): List of relevant chunks from search
+           
+        Returns:
+            dict: Structured parameters for idea generation
+        """
+        from openai import OpenAI
+        client = OpenAI()  # Initialize the client
+        import json
+       
+        try:
+            # If relevant chunks are provided, use them for extraction context
+            if relevant_chunks and len(relevant_chunks) > 0:
+                extraction_context = "\n\n".join([chunk['text'] for chunk in relevant_chunks])
+            else:
+                # If no chunks available, use the context directly
+                extraction_context = context
+               
+            # Create extraction prompt
+            extraction_prompt = f"""
+            Extract the following key parameters from the provided context.
+            If a parameter isn't explicitly mentioned, infer it from context or leave it blank.
+           
+            Context:
+            {extraction_context}
+           
+            Extract these parameters:
+            - Brand_Name: The company or product brand mentioned
+            - Category: The product category or market area
+            - Concept: The main idea, campaign, or product concept
+            - Benefits: Key benefits or value propositions (list up to 3)
+            - RTB: Reason to Believe - evidence supporting the benefits (list up to 3)
+            - Ingredients: Key ingredients or components (if applicable)
+            - Features: Notable product/service features (list up to 3)
+            - Theme: Overall theme or tone
+            - Demographics: Target audience demographics
+           
+            Format the response as a valid JSON object with these fields.
+            """
+           
+            # Call LLM to extract parameters
+            response = client.chat.completions.create(
+                model="gpt-4o",  
+                messages=[
+                    {"role": "system", "content": "You are a specialist in extracting structured information from documents."},
+                    {"role": "user", "content": extraction_prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+           
+            # Parse JSON response
+            extracted_params = json.loads(response.choices[0].message.content)
+           
+            return extracted_params
+       
+        except Exception as e:
+            print(f"Error extracting idea parameters: {str(e)}")
+            # Return empty structure if extraction fails
+            return {
+                "Brand_Name": "",
+                "Category": "",
+                "Concept": "",
+                "Benefits": "",
+                "RTB": "",
+                "Ingredients": "",
+                "Features": "",
+                "Theme": "",
+                "Demographics": ""
+            }
+ 
