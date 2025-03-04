@@ -65,30 +65,3 @@ class IdeaGeneratorModule(models.Model):
 
     def __str__(self):
         return f"Idea Generator Module - {self.project_module.project.name}"
-
-class ProjectActivity(models.Model):
-    ACTIVITY_TYPES = (
-        ('created', 'Created'),
-        ('updated', 'Updated'),
-        ('deleted', 'Deleted'),
-        ('document_added', 'Document Added'),
-        ('chat_started', 'Chat Started'),
-        ('idea_generated', 'Idea Generated'),
-    )
-
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='activities')
-    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPES)
-    description = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    
-    # Optional reference to related objects
-    content_type = models.ForeignKey('contenttypes.ContentType', on_delete=models.CASCADE, null=True)
-    object_id = models.PositiveIntegerField(null=True)
-
-    class Meta:
-        ordering = ['-created_at']
-        verbose_name_plural = 'Project Activities'
-
-    def __str__(self):
-        return f"{self.activity_type} - {self.project.name}"

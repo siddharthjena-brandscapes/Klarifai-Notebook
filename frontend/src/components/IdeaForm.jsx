@@ -1,3 +1,6 @@
+
+
+
 // //IdeaForm.jsx
 // import React, { useState, useCallback, useEffect, useRef } from "react";
 // import { ideaService } from "../utils/axiosConfig";
@@ -17,6 +20,7 @@
 // import HighlightedDescription from "./IdeaGenerator/HighlightedDescription";
 // import ComparisonModeToggle from "./IdeaGenerator/ComparisonModeToggle";
 // import IdeaTitle from "./IdeaGenerator/IdeaTitle";
+// import { useLocation } from 'react-router-dom';
 
 // import {
 //   PlusCircle,
@@ -31,8 +35,9 @@
 //   ToggleRight,
 //   ToggleLeft,
 //   AlertTriangle,
+//   AlertCircle
 // } from "lucide-react";
-
+// import { toast } from 'react-toastify';
 // const IdeaForm = () => {
 //   const { currentProject, saveProject, setShowProjectList } = useProject();
 
@@ -94,6 +99,16 @@
 //   const [isComparisonMode, setIsComparisonMode] = useState(false);
 
 //   const contentRef = useRef(null);
+//   const location = useLocation();
+//   const { setCurrentProject} = useProject();
+//   const [showDocParamsModal, setShowDocParamsModal] = useState(false);
+//   const [docParams, setDocParams] = useState(null);
+  
+//   // Add a state to track if the form has been initialized from document
+//   const [initializedFromDoc, setInitializedFromDoc] = useState(false);
+
+//   // Add additional state to track project loading source
+//   const [projectSource, setProjectSource] = useState(null);
 
 //   // Effect to scroll to top when ideas are generated or added
 //   useEffect(() => {
@@ -1113,6 +1128,319 @@
 //     );
 //   };
 
+// // Replace the first useEffect with this improved version
+// useEffect(() => {
+//   // Skip if we've already processed this project loading
+//   if (initializedFromDoc) return;
+  
+//   // Determine the source of project loading
+//   if (location.state?.fromDocQA && location.state?.idea_parameters) {
+//     // Coming from Doc Q&A with new parameters
+//     console.log("Loading project from Doc Q&A integration");
+//     setProjectSource('doc_qa');
+    
+//     if (location.state.newProject && location.state.newProject.id) {
+//       console.log("New project data received:", location.state.newProject);
+      
+//       // Populate current project with the new project data
+//       const newProject = {
+//         id: location.state.newProject.id,
+//         name: location.state.newProject.name,
+//         created: new Date().toISOString(),
+//         lastModified: new Date().toISOString(),
+//         formData: {
+//           product: "",
+//           brand: "",
+//           category: "",
+//           number_of_ideas: 3,
+//           negative_prompt: ""
+//         },
+//         dynamicFields: {},
+//         ideas: [],
+//         acceptedIdeas: [],
+//         generatedImages: {},
+//         fieldActivation: {},
+//         customFieldTypes: []
+//       };
+      
+//       console.log("Setting current project to:", newProject);
+//       setCurrentProject(newProject);
+      
+//       // Set docParams for the modal
+//       setDocParams({
+//         document_id: location.state.document_id,
+//         document_name: location.state.document_name,
+//         idea_parameters: location.state.idea_parameters,
+//         main_project_id: location.state.main_project_id
+//       });
+      
+//       // Show the modal to ask about auto-filling
+//       setShowDocParamsModal(true);
+//       setInitializedFromDoc(true);
+      
+//       // Clean up the location state to prevent the modal from appearing on refresh
+//       window.history.replaceState({}, document.title);
+//     }
+//   } else if (currentProject?.id) {
+//     // Normal project loading
+//     console.log("Loading existing project:", currentProject.id);
+//     setProjectSource('normal');
+//     setInitializedFromDoc(true); // Mark as initialized to prevent modal
+//   }
+// }, [location.state, initializedFromDoc, currentProject, setCurrentProject]);
+
+// // Add this effect to save the project when it changes and we're not coming from Doc Q&A
+// useEffect(() => {
+//   // Only auto-save if we have a project and not in the middle of Doc Q&A initialization
+//   if (currentProject?.id && initializedFromDoc && projectSource === 'normal') {
+//     console.log("Auto-saving project changes");
+//     saveProject(currentProject);
+//   }
+// }, [currentProject, initializedFromDoc, projectSource, saveProject]);
+
+
+// // Update the useEffect in IdeaForm.jsx to ensure the modal only appears when coming from Doc Q&A
+// useEffect(() => {
+//   // Only process if we haven't initialized yet AND we have location state from Doc Q&A
+//   if (!initializedFromDoc && location.state?.fromDocQA && location.state?.idea_parameters) {
+//     console.log("Location state received from Doc Q&A:", location.state);
+    
+//     // Check if we have a new project data in the state
+//     if (location.state.newProject && location.state.newProject.id) {
+//       console.log("New project data received:", location.state.newProject);
+      
+//       // Set docParams for the modal
+//       setDocParams({
+//         document_id: location.state.document_id,
+//         document_name: location.state.document_name,
+//         idea_parameters: location.state.idea_parameters,
+//         main_project_id: location.state.main_project_id
+//       });
+      
+//       // Show the modal to ask about auto-filling
+//       setShowDocParamsModal(true);
+//       setInitializedFromDoc(true);
+      
+//       // Clean up the location state to prevent the modal from appearing on refresh
+//       window.history.replaceState({}, document.title);
+//     }
+//   }
+// }, [location.state, initializedFromDoc, setCurrentProject]);
+
+// // Add this useEffect to ensure we don't lose work when loading existing projects
+// useEffect(() => {
+//   // If we have a current project with ID but it's not from Doc Q&A, mark as initialized
+//   if (currentProject?.id && !location.state?.fromDocQA) {
+//     setInitializedFromDoc(true);
+//     setShowDocParamsModal(false); // Ensure modal is closed for existing projects
+//   }
+// }, [currentProject, location.state]);
+
+// // Add a cleanup effect to reset the state when unmounting
+// useEffect(() => {
+//   return () => {
+//     setInitializedFromDoc(false);
+//     setShowDocParamsModal(false);
+//   };
+// }, []);
+
+// const isMountedRef = useRef(true);
+
+// // Set up the mounted ref
+// useEffect(() => {
+//   isMountedRef.current = true;
+  
+//   return () => {
+//     isMountedRef.current = false;
+//   };
+// }, []);
+ 
+// const fillFormWithDocParams = () => {
+//   if (!isMountedRef.current || !docParams || !currentProject) return;
+  
+//   // Rest of your function remains the same
+//   const params = docParams.idea_parameters;
+//   console.log("Filling form with parameters:", params);
+  
+//   // Helper function to safely extract string values
+//   const safeString = (value) => {
+//     if (!value) return '';
+//     return typeof value === 'string' ? value : JSON.stringify(value);
+//   };
+  
+//   // Set base form data
+//   const updatedFormData = {
+//     product: safeString(params.Concept),
+//     brand: safeString(params.Brand_Name),
+//     category: safeString(params.Category),
+//     number_of_ideas: 3, // Default value
+//     negative_prompt: safeString(params.negative_terms)
+//   };
+  
+//   // Create dynamic fields from the parameters
+//   const newDynamicFields = {};
+  
+//   // Handle Benefits
+//   if (params.Benefits) {
+//     newDynamicFields['benefits-1'] = {
+//       type: 'Benefits',
+//       value: safeString(params.Benefits),
+//       active: true
+//     };
+//   }
+  
+//   // Handle RTB (Reason to Believe)
+//   if (params.RTB) {
+//     newDynamicFields['rtb-1'] = {
+//       type: 'RTB',
+//       value: safeString(params.RTB),
+//       active: true
+//     };
+//   }
+  
+//   // Handle Ingredients
+//   if (params.Ingredients) {
+//     newDynamicFields['ingredients-1'] = {
+//       type: 'Ingredients',
+//       value: safeString(params.Ingredients),
+//       active: true
+//     };
+//   }
+  
+//   // Handle Features
+//   if (params.Features) {
+//     newDynamicFields['features-1'] = {
+//       type: 'Features',
+//       value: safeString(params.Features),
+//       active: true
+//     };
+//   }
+  
+//   // Set all fields as active
+//   const newFieldActivation = {};
+//   Object.keys(newDynamicFields).forEach(key => {
+//     newFieldActivation[key] = true;
+//   });
+  
+//   // Prepare custom field types from the document parameters
+//   const customFieldTypes = [];
+  
+//   // Handle Theme as a custom field
+//   if (params.Theme) {
+//     newDynamicFields['theme-1'] = {
+//       type: 'Theme',
+//       value: safeString(params.Theme),
+//       active: true
+//     };
+//     customFieldTypes.push('Theme');
+//   }
+  
+//   // Handle Demographics as a custom field
+//   if (params.Demographics) {
+//     newDynamicFields['demographics-1'] = {
+//       type: 'Demographics',
+//       value: safeString(params.Demographics),
+//       active: true
+//     };
+//     customFieldTypes.push('Demographics');
+//   }
+  
+//   // Create updated project
+//   const updatedProject = {
+//     ...currentProject,
+//     formData: updatedFormData,
+//     dynamicFields: newDynamicFields,
+//     fieldActivation: newFieldActivation,
+//     customFieldTypes: customFieldTypes
+//   };
+  
+//   console.log("Updated project with document parameters:", updatedProject);
+  
+//   if (isMountedRef.current) {
+//     setCurrentProject(updatedProject);
+//     saveProject(updatedProject);
+//     setShowDocParamsModal(false);
+    
+//     toast.success(`Form auto-filled with parameters from "${docParams.document_name}"`, {
+//       position: "bottom-right",
+//       autoClose: 3000
+//     });
+//   }
+// };
+
+//   // Add the Document Parameters Modal
+//   // Updated DocumentParamsModal with type checking
+// const DocumentParamsModal = () => {
+//   if (!isMountedRef.current || !showDocParamsModal || !docParams) return null;
+  
+//   // Debug the parameters
+//   console.log("Document parameters for modal:", docParams.idea_parameters);
+  
+//   return (
+//     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+//       <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl shadow-xl max-w-lg w-full border border-purple-500/30 overflow-hidden">
+//         <div className="p-5 bg-gradient-to-r from-purple-600/30 to-blue-600/30 border-b border-purple-500/20">
+//           <h3 className="text-xl font-bold text-white">
+//             Document Parameters Detected
+//           </h3>
+//         </div>
+        
+//         <div className="p-6">
+//           <p className="text-gray-300 mb-4">
+//             Parameters have been extracted from <span className="font-semibold text-purple-300">"{docParams.document_name}"</span>.
+//           </p>
+          
+//           <div className="bg-gray-800/50 rounded-lg p-4 mb-6 border border-gray-700/50">
+//             <h4 className="text-sm font-medium text-gray-300 mb-2">Detected parameters:</h4>
+//             <div className="grid grid-cols-2 gap-3 text-sm">
+//               {Object.entries(docParams.idea_parameters).map(([key, value]) => {
+//                 // Check if value exists and convert to string safely
+//                 const displayValue = value ? 
+//                   (typeof value === 'string' ? 
+//                     value : 
+//                     JSON.stringify(value)) 
+//                   : '';
+                
+//                 // Only render if there's a value
+//                 return displayValue ? (
+//                   <div key={key} className="flex flex-col">
+//                     <span className="text-xs text-purple-400">{key}</span>
+//                     <span className="text-white truncate">
+//                       {displayValue.length > 30 ? 
+//                         `${displayValue.substring(0, 30)}...` : 
+//                         displayValue}
+//                     </span>
+//                   </div>
+//                 ) : null;
+//               })}
+//             </div>
+//           </div>
+          
+//           <p className="text-gray-400 mb-6 text-sm">
+//             Would you like to use these parameters to pre-fill the idea generation form?
+//           </p>
+          
+//           <div className="flex justify-end gap-4">
+//             <button
+//               onClick={() => setShowDocParamsModal(false)}
+//               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors border border-gray-600"
+//             >
+//               No, Start Fresh
+//             </button>
+            
+//             <button
+//               onClick={fillFormWithDocParams}
+//               className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-xl"
+//             >
+//               Yes, Auto-Fill Form
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
+
 //   return (
 //     <div
 //       ref={contentRef}
@@ -1713,11 +2041,14 @@
 //           </div>
 //         </main>
 //       </div>
+//       <DocumentParamsModal />
 //     </div>
 //   );
 // };
 
 // export default IdeaForm;
+
+
 
 
 //IdeaForm.jsx
@@ -2998,70 +3329,197 @@ const fillFormWithDocParams = () => {
   
   // Create dynamic fields from the parameters
   const newDynamicFields = {};
+  const newFieldActivation = {};
+  const customFieldTypes = [];
   
   // Handle Benefits
   if (params.Benefits) {
-    newDynamicFields['benefits-1'] = {
-      type: 'Benefits',
-      value: safeString(params.Benefits),
-      active: true
-    };
+    let benefitsValues = params.Benefits;
+    
+    // Parse if it's a stringified array
+    if (typeof benefitsValues === 'string' && benefitsValues.startsWith('[') && benefitsValues.endsWith(']')) {
+      try {
+        benefitsValues = JSON.parse(benefitsValues);
+      } catch (e) {
+        benefitsValues = [benefitsValues]; // Keep as single item if parsing fails
+      }
+    }
+    
+    // Convert to array if it's not already
+    if (!Array.isArray(benefitsValues)) {
+      benefitsValues = [benefitsValues];
+    }
+    
+    // Create a field for each benefit
+    benefitsValues.forEach((benefit, index) => {
+      const fieldId = `benefits-${index + 1}`;
+      newDynamicFields[fieldId] = {
+        type: 'Benefits',
+        value: typeof benefit === 'string' ? benefit : String(benefit),
+        active: true
+      };
+      newFieldActivation[fieldId] = true;
+    });
   }
   
   // Handle RTB (Reason to Believe)
   if (params.RTB) {
-    newDynamicFields['rtb-1'] = {
-      type: 'RTB',
-      value: safeString(params.RTB),
-      active: true
-    };
+    let rtbValues = params.RTB;
+    
+    // Parse if it's a stringified array
+    if (typeof rtbValues === 'string' && rtbValues.startsWith('[') && rtbValues.endsWith(']')) {
+      try {
+        rtbValues = JSON.parse(rtbValues);
+      } catch (e) {
+        rtbValues = [rtbValues]; // Keep as single item if parsing fails
+      }
+    }
+    
+    // Convert to array if it's not already
+    if (!Array.isArray(rtbValues)) {
+      rtbValues = [rtbValues];
+    }
+    
+    // Create a field for each RTB
+    rtbValues.forEach((rtb, index) => {
+      const fieldId = `rtb-${index + 1}`;
+      newDynamicFields[fieldId] = {
+        type: 'RTB',
+        value: typeof rtb === 'string' ? rtb : String(rtb),
+        active: true
+      };
+      newFieldActivation[fieldId] = true;
+    });
   }
   
   // Handle Ingredients
   if (params.Ingredients) {
-    newDynamicFields['ingredients-1'] = {
-      type: 'Ingredients',
-      value: safeString(params.Ingredients),
-      active: true
-    };
+    let ingredientsValues = params.Ingredients;
+    
+    // Parse if it's a stringified array
+    if (typeof ingredientsValues === 'string' && ingredientsValues.startsWith('[') && ingredientsValues.endsWith(']')) {
+      try {
+        ingredientsValues = JSON.parse(ingredientsValues);
+      } catch (e) {
+        ingredientsValues = [ingredientsValues]; // Keep as single item if parsing fails
+      }
+    }
+    
+    // Convert to array if it's not already
+    if (!Array.isArray(ingredientsValues)) {
+      ingredientsValues = [ingredientsValues];
+    }
+    
+    // Create a field for each ingredient
+    ingredientsValues.forEach((ingredient, index) => {
+      const fieldId = `ingredients-${index + 1}`;
+      newDynamicFields[fieldId] = {
+        type: 'Ingredients',
+        value: typeof ingredient === 'string' ? ingredient : String(ingredient),
+        active: true
+      };
+      newFieldActivation[fieldId] = true;
+    });
   }
   
   // Handle Features
   if (params.Features) {
-    newDynamicFields['features-1'] = {
-      type: 'Features',
-      value: safeString(params.Features),
-      active: true
-    };
+    let featuresValues = params.Features;
+    
+    // Parse if it's a stringified array
+    if (typeof featuresValues === 'string' && featuresValues.startsWith('[') && featuresValues.endsWith(']')) {
+      try {
+        featuresValues = JSON.parse(featuresValues);
+      } catch (e) {
+        featuresValues = [featuresValues]; // Keep as single item if parsing fails
+      }
+    }
+    
+    // Convert to array if it's not already
+    if (!Array.isArray(featuresValues)) {
+      featuresValues = [featuresValues];
+    }
+    
+    // Create a field for each feature
+    featuresValues.forEach((feature, index) => {
+      const fieldId = `features-${index + 1}`;
+      newDynamicFields[fieldId] = {
+        type: 'Features',
+        value: typeof feature === 'string' ? feature : String(feature),
+        active: true
+      };
+      newFieldActivation[fieldId] = true;
+    });
   }
-  
-  // Set all fields as active
-  const newFieldActivation = {};
-  Object.keys(newDynamicFields).forEach(key => {
-    newFieldActivation[key] = true;
-  });
-  
-  // Prepare custom field types from the document parameters
-  const customFieldTypes = [];
   
   // Handle Theme as a custom field
   if (params.Theme) {
-    newDynamicFields['theme-1'] = {
-      type: 'Theme',
-      value: safeString(params.Theme),
-      active: true
-    };
-    customFieldTypes.push('Theme');
+    let themeValues = params.Theme;
+    
+    // Parse if it's a stringified array
+    if (typeof themeValues === 'string' && themeValues.startsWith('[') && themeValues.endsWith(']')) {
+      try {
+        themeValues = JSON.parse(themeValues);
+      } catch (e) {
+        themeValues = [themeValues]; // Keep as single item if parsing fails
+      }
+    }
+    
+    // Convert to array if it's not already
+    if (!Array.isArray(themeValues)) {
+      themeValues = [themeValues];
+    }
+    
+    // Add Theme to custom field types if not already included
+    if (!customFieldTypes.includes('Theme')) {
+      customFieldTypes.push('Theme');
+    }
+    
+    // Create a field for each theme
+    themeValues.forEach((theme, index) => {
+      const fieldId = `theme-${index + 1}`;
+      newDynamicFields[fieldId] = {
+        type: 'Theme',
+        value: typeof theme === 'string' ? theme : String(theme),
+        active: true
+      };
+      newFieldActivation[fieldId] = true;
+    });
   }
   
   // Handle Demographics as a custom field
   if (params.Demographics) {
-    newDynamicFields['demographics-1'] = {
-      type: 'Demographics',
-      value: safeString(params.Demographics),
-      active: true
-    };
-    customFieldTypes.push('Demographics');
+    let demographicsValues = params.Demographics;
+    
+    // Parse if it's a stringified array
+    if (typeof demographicsValues === 'string' && demographicsValues.startsWith('[') && demographicsValues.endsWith(']')) {
+      try {
+        demographicsValues = JSON.parse(demographicsValues);
+      } catch (e) {
+        demographicsValues = [demographicsValues]; // Keep as single item if parsing fails
+      }
+    }
+    
+    // Convert to array if it's not already
+    if (!Array.isArray(demographicsValues)) {
+      demographicsValues = [demographicsValues];
+    }
+    
+    // Add Demographics to custom field types if not already included
+    if (!customFieldTypes.includes('Demographics')) {
+      customFieldTypes.push('Demographics');
+    }
+    
+    // Create a field for each demographic
+    demographicsValues.forEach((demographic, index) => {
+      const fieldId = `demographics-${index + 1}`;
+      newDynamicFields[fieldId] = {
+        type: 'Demographics',
+        value: typeof demographic === 'string' ? demographic : String(demographic),
+        active: true
+      };
+      newFieldActivation[fieldId] = true;
+    });
   }
   
   // Create updated project

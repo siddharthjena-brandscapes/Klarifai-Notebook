@@ -2,7 +2,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
-from .models import Project, ProjectModule, ProjectActivity, DocumentQAModule, IdeaGeneratorModule
+from .models import Project, ProjectModule, DocumentQAModule, IdeaGeneratorModule
 from django.db import transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.authentication import TokenAuthentication
@@ -54,13 +54,6 @@ def create_project(request):
                 elif module_type == 'idea-generator':
                     IdeaGeneratorModule.objects.create(project_module=project_module)
             
-            # Record activity
-            ProjectActivity.objects.create(
-                project=project,
-                activity_type='created',
-                description=f'Project "{project.name}" created',
-                user=request.user
-            )
             
             return JsonResponse({
                 'status': 'success',
@@ -96,11 +89,6 @@ def project_list(request):
             'category': project.category,
             'created_at': project.created_at.isoformat(),
             'selected_modules': project.selected_modules,
-            'activities': [{
-                'type': activity.activity_type,
-                'description': activity.description,
-                'created_at': activity.created_at.isoformat()
-            } for activity in project.activities.all()[:5]]
         } for project in projects]
     })
 
@@ -158,18 +146,11 @@ def get_module_data(module):
 def delete_project(request, project_id):
     if request.method == 'POST':
         project = get_object_or_404(Project, id=project_id, user=request.user)
-        project.is_active = False
-        project.save()
-        
-        ProjectActivity.objects.create(
-            project=project,
-            activity_type='deleted',
-            description=f'Project "{project.name}" deleted',
-            user=request.user
-        )
-        
+        project_name = project.name  # Store project name before deleting
+        project.delete()  # Permanently delete the project
+           
         return JsonResponse({'status': 'success'})
-    
+   
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
 from rest_framework import status
@@ -197,13 +178,6 @@ def update_project(request, project_id):
             
         project.save()
         
-        # Record activity
-        ProjectActivity.objects.create(
-            project=project,
-            activity_type='updated',
-            description=f'Project "{project.name}" updated',
-            user=request.user
-        )
         
         return JsonResponse({
             'status': 'success',
