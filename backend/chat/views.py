@@ -2572,7 +2572,8 @@ from .models import (
     ChatMessage,
     Document,
     ProcessedIndex,
-    ConversationMemoryBuffer
+    UserAPITokens,
+    ConversationMemoryBuffer,
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -2635,6 +2636,8 @@ class SignupView(APIView):
         username = request.data.get('username')
         email = request.data.get('email')
         password = request.data.get('password')
+        huggingface_token = request.data.get('huggingface_token', '')
+        gemini_token = request.data.get('gemini_token', '')
 
         # Validate input
         if not username or not email or not password:
@@ -2654,6 +2657,13 @@ class SignupView(APIView):
                 username=username, 
                 email=email, 
                 password=password
+            )
+            
+            # Create API tokens record
+            UserAPITokens.objects.create(
+                user=user,
+                huggingface_token=huggingface_token,
+                gemini_token=gemini_token
             )
             
             # Generate token for the new user
