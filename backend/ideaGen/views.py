@@ -24,18 +24,16 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from chat.models import UserAPITokens
+
+
+# HF_API_TOKEN = "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"
  
-# API configurations
-GOOGLE_API_KEY = "AIzaSyDig5jy2E0r4ngWd69Jik0UvB1pa166LV8"
-HF_API_TOKEN = "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"
- 
-# Initialize APIs
-genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
-hf_client = InferenceClient(
-    model="black-forest-labs/FLUX.1-schnell",
-    token=HF_API_TOKEN
-)
+
+# hf_client = InferenceClient(
+#     model="black-forest-labs/FLUX.1-schnell",
+#     token=HF_API_TOKEN
+# )
  
  
 def generate_prompt_text(dynamic_fields):
@@ -107,8 +105,15 @@ def generate_ideas(request):
                 number_of_ideas=number_of_ideas,
                 dynamic_fields=dynamic_fields,
                 negative_prompt=negative_prompt
+
             )
+            user_tokens = UserAPITokens.objects.get(user=request.user)
+            GOOGLE_API_KEY = user_tokens.gemini_token 
+           # hf_api_token = user_tokens.huggingface_token 
             
+            # Initialize APIs
+            genai.configure(api_key=GOOGLE_API_KEY)
+            model = genai.GenerativeModel('gemini-1.5-flash')            
             # Generate ideas using existing prompt logic
             ideas_prompt = (
                 f"Generate {number_of_ideas} unique and creative product ideas for product named {product} under the brand {brand} with category {category}.\n"
@@ -373,6 +378,14 @@ def update_idea(request):
                 'product_name': data.get('product_name', original_idea.product_name),
                 'description': data.get('description', original_idea.description)
             }
+
+            user_tokens = UserAPITokens.objects.get(user=request.user)
+            GOOGLE_API_KEY = user_tokens.gemini_token 
+           
+            
+            # Initialize APIs
+            genai.configure(api_key=GOOGLE_API_KEY)
+            model = genai.GenerativeModel('gemini-1.5-flash') 
             
             # Only regenerate visualization prompt if content changed
             if (idea_data['product_name'] != original_idea.product_name or 
@@ -784,6 +797,16 @@ def generate_product_image(request):
             initial_size = min(max(data.get('size', 768), 512), 1024)
             initial_steps = min(max(data.get('steps', 50), 20), 100)
             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
+
+
+            user_tokens = UserAPITokens.objects.get(user=request.user)
+
+            HF_API_TOKEN = user_tokens.huggingface_token
+            
+            hf_client = InferenceClient(
+                model="black-forest-labs/FLUX.1-schnell",
+                token=HF_API_TOKEN
+            )
             
             # Generate image using stored visualization_prompt
             try:
@@ -903,6 +926,16 @@ def regenerate_product_image(request):
             steps = min(max(data.get('steps', 30), 20), 100)
             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
             negative_prompt = data.get('negative_prompt', '')
+
+
+            user_tokens = UserAPITokens.objects.get(user=request.user)
+
+            HF_API_TOKEN = user_tokens.huggingface_token
+            
+            hf_client = InferenceClient(
+                model="black-forest-labs/FLUX.1-schnell",
+                token=HF_API_TOKEN
+            )
             
             # Generate image using the selected prompt
             try:
@@ -1622,8 +1655,19 @@ def generate_ideas_from_document(request):
             source_document_name=document_name
         )
        
+
+        user_tokens = UserAPITokens.objects.get(user=request.user)
+        GOOGLE_API_KEY = user_tokens.gemini_token 
+        # hf_api_token = user_tokens.huggingface_token 
+        
+        # Initialize APIs
+        genai.configure(api_key=GOOGLE_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash') 
+
+
         # Generate formatted prompt text
         formatted_dynamic_fields = generate_prompt_text(dynamic_fields)
+
        
         # Generate ideas using existing prompt logic
         ideas_prompt = (
