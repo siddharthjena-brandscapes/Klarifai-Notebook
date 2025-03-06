@@ -98,7 +98,12 @@ const Dashboard = () => {
     }
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = (e) => {
+    // Prevent default behavior (page refresh)
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    
     // Reset relevant states
     setSelectedChat(null);
     setSelectedDocument(null);

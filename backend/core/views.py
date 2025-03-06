@@ -32,6 +32,13 @@ def create_project(request):
                     'message': 'Missing required fields'
                 }, status=400)
             
+            # Check if project with same name already exists for this user
+            if Project.objects.filter(user=request.user, name=name).exists():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Project with this name already exists for your account'
+                }, status=400)
+            
             # Create the project
             project = Project.objects.create(
                 name=name,
@@ -177,7 +184,6 @@ def update_project(request, project_id):
             project.selected_modules = request.data['selected_modules']
             
         project.save()
-        
         
         return JsonResponse({
             'status': 'success',
