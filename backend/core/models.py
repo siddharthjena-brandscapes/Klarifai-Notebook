@@ -16,7 +16,7 @@ class Project(models.Model):
         ('structured-data-query', 'Structured Data Query'),
     )
 
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
     description = models.TextField()
     category = models.CharField(max_length=50)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='projects')

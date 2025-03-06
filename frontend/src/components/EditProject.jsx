@@ -98,17 +98,16 @@ const EditProject = ({ project, modules, onClose, onUpdate }) => {
     }
 
     try {
-      const response = await coreService.updateProject(project.id, {
-        ...projectData,
-        category: finalCategory
-      });
-
-      if (response.status === 'success') {
-        onUpdate(response.project);
-        onClose();
-      } else {
-        setError(response.message || 'Failed to update project');
-      }
+      const updatedData = {
+        name: projectData.name,
+        description: projectData.description,
+        category: finalCategory,
+        selected_modules: projectData.selected_modules
+      };
+      
+      // Call onUpdate with the correct parameters - projectId and updatedData
+      onUpdate(project.id, updatedData);
+      onClose();
     } catch (err) {
       console.error('Error updating project:', err);
       setError(err.response?.data?.message || 'Failed to update project');

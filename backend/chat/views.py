@@ -1661,9 +1661,9 @@ class ChatView(APIView):
             
             answer_text = completion.choices[0].message.content
             usage = completion.usage
-            token_info = f"(Tokens used: prompt {usage.prompt_tokens}, completion {usage.completion_tokens}, total {usage.prompt_tokens + usage.completion_tokens})"
+            #token_info = f"(Tokens used: prompt {usage.prompt_tokens}, completion {usage.completion_tokens}, total {usage.prompt_tokens + usage.completion_tokens})"
             
-            return f"{answer_text}\n{token_info}"
+            return f"{answer_text}"
                 
         except Exception as e:
             logger.error(f"Error getting general chat answer: {str(e)}")
