@@ -1131,11 +1131,28 @@ export const coreService = {
         console.error("Failed to delete project:", error.response?.data || error.message);
         throw error;
       });
-  }
+  },
+
+
+// Update an existing project
+// In your coreService or axiosConfig.js file
+updateProject: (projectId, projectData) => {
+  return axiosInstance.put(`/core/projects/${projectId}/update/`, {
+    name: projectData.name,
+    description: projectData.description,
+    category: projectData.category,
+    selected_modules: projectData.selected_modules
+  })
+  .then(response => {
+    console.log("Update response:", response.data); // Debug log
+    return response.data.project; // Return the project object from the response
+  })
+  .catch(error => {
+    console.error("Update error details:", error);
+    throw error; // Rethrow so the component can handle it
+  });
+},
 };
-
-
-
 export default axiosInstance;
 
 
