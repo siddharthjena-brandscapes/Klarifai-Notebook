@@ -1245,15 +1245,15 @@ const activeConversation = activeConversationId ?
   
         {/* Footer Options (previous implementation remains the same) */}
           {isOpen && (
-            <div className="border-t border-gray-600 p-4 pt-2">
+            <div className=" border-gray-600 p-0 flex items-center justify-center">
               <div className="space-y-2">
               <ChatDownloadMenu
-        isOpen={isOpen}
-        activeConversation={activeConversation}
-        mainProjectId={mainProjectId}
-        className="mb-2"
-      />
-                <button
+  isOpen={isOpen}
+  activeConversation={activeConversation}
+  mainProjectId={mainProjectId}
+  className="w-full text-sm p-1.5 rounded-lg flex items-center justify-center  mb-1"
+/>
+                {/* <button
                   className="
                     text-white w-full text-left flex 
                     items-center gap-3 p-2 
@@ -1263,8 +1263,8 @@ const activeConversation = activeConversationId ?
                 >
                   <Settings size={20} className="text-blue-400" />
                   Settings
-                </button>
-                <button
+                </button> */}
+                {/* <button
                   className="
                     text-white w-full text-left flex 
                     items-center gap-3 p-2 
@@ -1274,7 +1274,7 @@ const activeConversation = activeConversationId ?
                 >
                   <CircleHelp size={20} className="text-green-400" />
                   Help
-                </button>
+                </button> */}
               </div>
             </div>
           )}
