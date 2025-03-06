@@ -370,15 +370,30 @@ function App() {
     setEditingProject(null);
   };
 
-  const handleProjectUpdate = (updatedProject) => {
-    // Update the projects list with the updated project
-    setProjects((prevProjects) =>
-      prevProjects.map((p) => (p.id === updatedProject.id ? updatedProject : p))
-    );
-
-    // If this is the current project, update it too
-    if (currentProject && currentProject.id === updatedProject.id) {
-      setCurrentProject(updatedProject);
+  const handleProjectUpdate = async (projectId, updatedData) => {
+    try {
+      console.log("Updating project with ID:", projectId, "and data:", updatedData);
+      const updatedProject = await coreService.updateProject(projectId, updatedData);
+      
+      console.log("Successfully received updated project:", updatedProject);
+      
+      // Update projects array
+      setProjects(prevProjects => 
+        prevProjects.map(p => p.id === projectId ? updatedProject : p)
+      );
+      
+      // Update current project if needed
+      if (currentProject && currentProject.id === projectId) {
+        setCurrentProject(updatedProject);
+      }
+      
+      // Close edit form
+      setIsEditing(false);
+      setEditingProject(null);
+      
+    } catch (error) {
+      console.error("Project update failed:", error);
+      setError("Failed to update project: " + (error.message || "Unknown error"));
     }
   };
 
