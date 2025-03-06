@@ -11,9 +11,10 @@ const Header = () => {
   const location = useLocation();
   const projectName = location.state?.projectName;
   
-  const [username, setUsername] = useState("");
-  const [profileImage, setProfileImage] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Initialize with localStorage values to prevent flashing
+  const [username, setUsername] = useState(localStorage.getItem("username") || "");
+  const [profileImage, setProfileImage] = useState(localStorage.getItem("profile_image") || "");
+  const [isLoading, setIsLoading] = useState(false); // Start as not loading
   const [showDropdown, setShowDropdown] = useState(false);
   const [userDetails, setUserDetails] = useState({
     email: "",
@@ -22,6 +23,7 @@ const Header = () => {
 
   const dropdownRef = useRef(null);
 
+  // Handle clicks outside dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -37,67 +39,58 @@ const Header = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Fetch user data in background without affecting render
   useEffect(() => {
     const fetchUserProfile = async () => {
+      const token = localStorage.getItem("token");
+      
+      if (!token) {
+        navigate("/auth");
+        return;
+      }
+      
       try {
-        const storedUsername = localStorage.getItem("username");
-        const storedProfileImage = localStorage.getItem("profile_image");
-
-        if (storedUsername) {
-          setUsername(storedUsername);
-        }
-
-        if (storedProfileImage) {
-          setProfileImage(storedProfileImage);
-        }
-
         const response = await axiosInstance.get("/user/profile/");
-
+        
         if (response.data.username) {
           setUsername(response.data.username);
           localStorage.setItem("username", response.data.username);
         }
 
-        const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          response.data.username
-        )}&background=random`;
+        // Generate fallback avatar if needed
+        const defaultAvatar = response.data.username ? 
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            response.data.username
+          )}&background=random` : "";
 
-        setProfileImage(response.data.profile_picture || defaultAvatar);
-        localStorage.setItem(
-          "profile_image",
-          response.data.profile_picture || defaultAvatar
-        );
+        // Use profile picture or default avatar
+        if (response.data.profile_picture || defaultAvatar) {
+          setProfileImage(response.data.profile_picture || defaultAvatar);
+          localStorage.setItem(
+            "profile_image",
+            response.data.profile_picture || defaultAvatar
+          );
+        }
 
+        // Update user details
         setUserDetails({
           email: response.data.email || "Not available",
-          joinedDate: new Date(response.data.date_joined).toLocaleDateString(),
+          joinedDate: response.data.date_joined ? 
+            new Date(response.data.date_joined).toLocaleDateString() : 
+            "Not available"
         });
       } catch (error) {
         console.error("Failed to fetch user profile:", error);
-
-        const fallbackUsername = localStorage.getItem("username") || "User";
-        setUsername(fallbackUsername);
-
-        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          fallbackUsername
-        )}&background=random`;
-        setProfileImage(fallbackAvatar);
-        localStorage.setItem("profile_image", fallbackAvatar);
-
-        toast.error("Could not retrieve full user profile");
-      } finally {
-        setIsLoading(false);
+        
+        // Only show toast if we don't have cached data
+        if (!username) {
+          toast.error("Could not retrieve user profile");
+        }
       }
     };
 
-    const token = localStorage.getItem("token");
-    if (token) {
-      fetchUserProfile();
-    } else {
-      navigate("/auth");
-      setIsLoading(false);
-    }
-  }, [navigate]);
+    fetchUserProfile();
+  }, [navigate, username]);
 
   const handleLogout = () => {
     try {
@@ -106,7 +99,6 @@ const Header = () => {
       localStorage.removeItem("profile_image");
 
       toast.success("Logged out successfully");
-
       navigate("/auth");
     } catch (error) {
       console.error("Logout error:", error);
@@ -122,16 +114,6 @@ const Header = () => {
     setProfileImage(newProfileImage);
     localStorage.setItem('profile_image', newProfileImage);
   };
-
-  if (isLoading) {
-    return (
-      <header className="fixed top-0 left-0 right-0 bg-gray-800 z-50">
-        <div className="flex justify-between items-center px-4 py-2">
-          <div>Loading...</div>
-        </div>
-      </header>
-    );
-  }
 
   const showProjectContext = location.pathname.includes('/dashboard') || 
                            location.pathname.includes('/idea-generation');
