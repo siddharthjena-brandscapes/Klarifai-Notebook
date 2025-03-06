@@ -51,7 +51,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'chat',
     'ideaGen',
-    
     'core'
    
 ]
