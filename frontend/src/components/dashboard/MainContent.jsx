@@ -1467,7 +1467,6 @@
 
 
 
-
 // MainContent.jsx
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -2704,23 +2703,32 @@ const MainContent = ({
 
                       {/* Add Copy option for Klarifai messages only */}
                       {msg.role !== "user" && (
-                        <div className="flex justify-end mt-4 text-gray-400 text-sm">
-                          <button
-                            onClick={() =>
-                              handleCopyMessage(msg.content, index)
-                            }
-                            className="flex items-center px-3 py-1 rounded hover:text-blue-400 hover:bg-blue-900/30 active:scale-95 transition-all duration-150"
-                          >
-                            {copyMessageIndex === index ? (
-                              <span className="text-green-400">Copied!</span>
-                            ) : (
-                              <>
-                                <Copy className="h-4 w-4 mr-1" /> Copy
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      )}
+  <div className="flex justify-end mt-4 text-gray-400 text-sm">
+    {/* Move Info icon and text to the left side */}
+    <div className="flex items-center mr-auto">
+      {msg.use_web_knowledge && (
+        <>
+          <Info className="h-3 w-3 mr-1" />
+          <span>This response includes information from both your documents and general knowledge.</span>
+        </>
+      )}
+    </div>
+
+    {/* Copy button remains on the right side */}
+    <button
+      onClick={() => handleCopyMessage(msg.content, index)}
+      className="flex items-center px-3 py-1 rounded hover:text-blue-400 hover:bg-blue-900/30 active:scale-95 transition-all duration-150"
+    >
+      {copyMessageIndex === index ? (
+        <span className="text-green-400 ml-2">Copied!</span>
+      ) : (
+        <>
+          <Copy className="h-4 w-4 ml-2" /> Copy
+        </>
+      )}
+    </button>
+  </div>
+)}
                     </div>
                   </div>
                 </React.Fragment>
@@ -2841,17 +2849,33 @@ const MainContent = ({
       <div className="flex items-center space-x-2 pr-3">
         {/* Web search toggle - Simplified */}
         {localSelectedDocuments.length > 0 && (
-          <button
-            onClick={toggleWebKnowledge}
-            className={`p-1.5 rounded-full transition-colors ${
-              useWebKnowledge 
-                ? "bg-blue-500/20 text-blue-400" 
-                : "text-gray-400 hover:text-gray-300"
-            }`}
-            title={useWebKnowledge ? "Disable web search" : "Enable web search"}
-          >
-            <Globe className="h-5 w-5" />
-          </button>
+           <button
+           onClick={toggleWebKnowledge}
+           className={`
+             flex items-center justify-center gap-1
+             px-3 py-2
+             rounded-xl 
+             transition-all 
+             duration-300
+             text-xs
+             ${useWebKnowledge
+               ? "bg-gradient-to-r from-purple-600/70 to-blue-500/70 text-white"
+               : "bg-gray-800/50 text-gray-300 hover:bg-gray-700/50"}
+           `}
+         >
+           {useWebKnowledge ? (
+             <>
+               <Globe className="h-4 w-4" />
+               <span className="hidden sm:inline">Web-Enhanced</span>
+             </>
+           ) : (
+             <>
+               <Database className="h-4 w-4" />
+               <span className="hidden sm:inline">Context-Only</span>
+             </>
+           )}
+         </button>
+       
         )}
         
         {/* Mic button with recording indicator */}
