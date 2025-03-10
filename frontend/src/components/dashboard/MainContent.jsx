@@ -1466,7 +1466,6 @@
 // export default MainContent;
 
 
-
 // MainContent.jsx
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -2814,7 +2813,7 @@ const MainContent = ({
         <button
           title="Upload documents"
           onClick={() => fileInputRef.current?.click()}
-          className="text-gray-400 hover:text-white transition-colors"
+          className="text-gray-400 hover:text-white transition-colors mb-4"
         >
           <Paperclip className="h-5 w-5" />
         </button>
@@ -2851,6 +2850,11 @@ const MainContent = ({
         {localSelectedDocuments.length > 0 && (
            <button
            onClick={toggleWebKnowledge}
+           title={
+            useWebKnowledge
+              ? "Answers from documents and web knowledge"
+              : "Answers from documents only"
+          }
            className={`
              flex items-center justify-center gap-1
              px-3 py-2
