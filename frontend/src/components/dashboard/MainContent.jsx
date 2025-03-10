@@ -1471,6 +1471,7 @@
 // MainContent.jsx
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import BotIcon from "/src/assets/demo-image.png";
 import {
   Paperclip,
   Globe,
@@ -2645,7 +2646,7 @@ const MainContent = ({
                         {msg.role === "user" ? (
                           <User className="mr-2 h-5 w-5" />
                         ) : (
-                          <Bot className="mr-2 h-5 w-5" />
+                         <img src={BotIcon} alt="Klarifai" className="mr-2 h-5 w-5" />
                         )}
                         <span className="font-bold">
                           {msg.role === "user" ? "You" : "Klarifai"}
