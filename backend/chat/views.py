@@ -1743,11 +1743,12 @@ class ChatView(APIView):
                 print("####################################################################################################")
                 user_prompt = f"""
                 RESPONSE GENERATION GUIDELINES WITH WEB KNOWLEDGE:
-                - Provide a comprehensive answer using both the provided document context AND your knowledge base
+                - Provide a clear and informative answer using the context and your Knowledge Base.
                 - When using information from documents, clearly attribute it
                 - When using your general knowledge, distinguish it clearly (e.g., "Based on general knowledge...")
                 - Use semantic HTML tags for structure: <b>, <p>, <ul>, <li>
                 - Maintain a natural, conversational tone
+                - Prioritize answering using the provided document context when sufficient information is available.
                 - For facts not in the documents but in your knowledge base, state this clearly
 
                 DOCUMENT CONTEXT:
@@ -1777,10 +1778,11 @@ class ChatView(APIView):
                 # Original context-only prompt
                 user_prompt = f"""
                 RESPONSE GENERATION GUIDELINES:
-                - Provide a clear and informative answer
-                - Use semantic HTML tags for structure: <b>, <p>, <ul>, <li>
-                - Maintain a natural, conversational tone
-                - Ensure the response is directly derived from the provided context
+                - Provide a clear and informative answer.
+                - Use semantic HTML tags for structure: <b>, <p>, <ul>, <li>.
+                - Maintain a natural, conversational tone.
+                - Ensure the response is directly derived from the provided document context.
+                - If the document does NOT contain relevant information, explicitly state that the document does not mention the topic and summarize related available content instead.
 
                 DOCUMENT CONTEXT:
                 {context}
@@ -1788,19 +1790,18 @@ class ChatView(APIView):
                 USER QUERY: {question}
 
                 RESPONSE FORMAT REQUIREMENTS:
-                1. Begin with a brief introductory paragraph
-                2. Use <b> tags for key section headings
-                3. Use <p> tags for detailed explanations
-                4. Use <ul> and <li> for list-based information
-                5. Ensure the response flows naturally and is easy to read
+                1. If the document contains relevant information, answer using the provided details.
+                2. If the document does NOT mention the topic, state: "The document does not contain any information about [user query topic]. However, it includes details on the following:" and summarize related topics.
+                3. Use <b> tags for key section headings.
+                4. Use <p> tags for detailed explanations.
+                5. Use <ul> and <li> for list-based information.
+                6. Ensure the response flows naturally and is easy to read.
 
                 CRITICAL CONSTRAINTS:
-                - Use ONLY information from the provided documents
-                - NO external or speculative information
-                - Maintain clarity and readability
+                - Use ONLY information from the provided document.
+                - DO NOT generate speculative or external information.
+                - Ensure clarity, accuracy, and readability.
                 """
-                
-                # Original system message
                 system_message = "You are a document analysis expert. Provide a comprehensive answer using all available document context."
             
             completion = client.chat.completions.create(
