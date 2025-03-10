@@ -1465,7 +1465,6 @@
 
 // export default MainContent;
 
-
 // MainContent.jsx
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -2805,44 +2804,51 @@ const MainContent = ({
                 </div>
                 {/* Input Area */}
                 <div className="bg-gradient-to-b from-gray-900/90 to-gray-800/90 backdrop-blur-xl rounded-b-2xl sm:rounded-b-3xl shadow-2xl p-4 relative border-t border-blue-500/10">
+                <style>
+    {`
+      .custom-textarea::placeholder {
+        padding-top: 7px;
+      }
+    `}
+  </style>
   <div className="flex items-center gap-2 w-full">
     {/* Input field with actions properly aligned */}
     <div className="flex-1 relative flex items-center bg-gray-900/20 rounded-2xl border border-gray-700/30 focus-within:border-blue-500/40 transition-colors overflow-hidden">
       {/* Left side actions */}
       <div className="flex items-center pl-3 space-x-2">
-        <button
-          title="Upload documents"
-          onClick={() => fileInputRef.current?.click()}
-          className="text-gray-400 hover:text-white transition-colors mb-4"
-        >
-          <Paperclip className="h-5 w-5" />
-        </button>
-      </div>
+  <button
+    title="Upload documents"
+    onClick={() => fileInputRef.current?.click()}
+    className="text-gray-400 hover:text-white transition-colors "
+  >
+    <Paperclip className="h-5 w-5" />
+  </button>
+</div>
       
       {/* Textarea - Auto-resizing */}
       <textarea
-        value={message}
-        onChange={(e) => {
-          setMessage(e.target.value);
-          // Auto-resize logic
-          e.target.style.height = "inherit";
-          const scrollHeight = e.target.scrollHeight;
-          const maxHeight = 140; // Maximum height in pixels
-          e.target.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
-        }}
-        onKeyPress={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage(message);
-          }
-        }}
-        placeholder={`${localSelectedDocuments.length === 0 
-          ? "Ask me anything..." 
-          : "Ask a question about your documents..."}`}
-        className="flex-1 bg-transparent text-white py-3 px-2 text-sm focus:outline-none resize-none overflow-y-auto min-h-[48px] max-h-[140px] custom-scrollbar"
-        disabled={isLoading}
-        style={{ scrollbarWidth: "thin" }}
-      />
+      value={message}
+      onChange={(e) => {
+        setMessage(e.target.value);
+        // Auto-resize logic
+        e.target.style.height = "inherit";
+        const scrollHeight = e.target.scrollHeight;
+        const maxHeight = 140; // Maximum height in pixels
+        e.target.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+      }}
+      onKeyPress={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          handleSendMessage(message);
+        }
+      }}
+      placeholder={`${localSelectedDocuments.length === 0 
+        ? "Ask me anything..." 
+        : "Ask a question about your documents..."}`}
+      className="flex-1 bg-transparent text-white py-3 px-2 text-sm focus:outline-none resize-none overflow-y-auto min-h-[48px] max-h-[140px] custom-scrollbar custom-textarea"
+      disabled={isLoading}
+      style={{ scrollbarWidth: "thin" }}
+    />
       
       {/* Right side actions */}
       <div className="flex items-center space-x-2 pr-3">
@@ -3058,6 +3064,8 @@ const MainContent = ({
           .mode-toggle-btn:hover::before {
             left: 100%;
           }
+
+          
         `}</style>
     </div>
   );
