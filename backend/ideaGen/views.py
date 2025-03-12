@@ -89,6 +89,7 @@ def generate_ideas(request):
             brand = data.get('brand')
             category = data.get('category')
             number_of_ideas = int(data.get('number_of_ideas', 1))
+            description_length = int(data.get('description_length', 70))  # New field with default value of 70
             dynamic_fields = data.get('dynamicFields', {})
             negative_prompt = data.get('negative_prompt', '')
 
@@ -103,9 +104,9 @@ def generate_ideas(request):
                 brand=brand,
                 category=category,
                 number_of_ideas=number_of_ideas,
+                description_length=description_length,  # New field
                 dynamic_fields=dynamic_fields,
                 negative_prompt=negative_prompt
-
             )
             user_tokens = UserAPITokens.objects.get(user=request.user)
             GOOGLE_API_KEY = user_tokens.gemini_token 
@@ -114,19 +115,20 @@ def generate_ideas(request):
             # Initialize APIs
             genai.configure(api_key=GOOGLE_API_KEY)
             model = genai.GenerativeModel('gemini-1.5-flash')            
-            # Generate ideas using existing prompt logic
+            # Generate ideas using modified prompt logic to include brand name and description length
             ideas_prompt = (
-                f"Generate {number_of_ideas} unique and creative product ideas for product named {product} under the brand {brand} with category {category}.\n"
+                f"Generate {number_of_ideas} unique and creative product ideas for product named {product} from the brand {brand} with category {category}.\n"
                 "While crafting these ideas, consider the following dynamic attributes as contextual guidelines. Use these inputs to shape the tone, style, and features of each idea so that they naturally resonate with the intended audience, without explicitly mentioning the attribute values.\n"
                 f"Dynamic Attributes: {formatted_dynamic_fields}\n"
                 f"IMPORTANT CONSTRAINTS: Avoid generating ideas that involve the following terms or concepts: {negative_prompt}\n"
                 "If any generated idea contains or relates to these terms, immediately discard that idea and generate a completely different one.\n"
+                f"CRITICAL REQUIREMENT: ALWAYS include the brand name '{brand}' at the beginning of each product name.\n"
                 "Format each idea as a clean, valid JSON object with 'product_name' and 'description' fields, like this example:\n"
-                "{\n  \"product_name\": \"Example Name\",\n  \"description\": \"Example description\"\n}\n"
+                f"{{  \"product_name\": \"{brand} Example Name\",\n  \"description\": \"Example description\"\n}}\n"
                 "The 'description' should be clear, engaging, and written in simple language that highlights the product's key features and unique selling points. "
                 "Ensure that the description explains how the product benefits the user and what makes it special, making it easy to visualize the idea, while seamlessly integrating the contextual cues from the dynamic attributes.\n"
                 "Aim for a variety of ideas such that each is unique and creative, and focuses on different aspects of the product.\n"
-                "For each idea, provide a detailed explanation with at most 70 words in the description."
+                f"For each idea, provide a detailed explanation with exactly {description_length} words in the description."
             )
 
             print("Generated prompt:", ideas_prompt)
@@ -135,7 +137,7 @@ def generate_ideas(request):
                 ideas_prompt,
                 generation_config={
                     'temperature': 1.0,
-                    'max_output_tokens': 4000
+                    # 'max_output_tokens': 4000
                 }
             )
 
@@ -163,6 +165,10 @@ def generate_ideas(request):
                         print(f"Processing idea {index + 1}:", idea_data)
                         
                         if isinstance(idea_data, dict) and 'product_name' in idea_data and 'description' in idea_data:
+                            # Ensure brand name is in product name
+                            if not idea_data['product_name'].startswith(brand):
+                                idea_data['product_name'] = f"{brand} {idea_data['product_name']}"
+                            
                             # Decompose and synthesize the idea
                             aspects = decompose_product_description(idea_data, model)
                             enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
@@ -200,6 +206,11 @@ def generate_ideas(request):
                             # Remove any trailing characters after the closing brace
                             cleaned_json = json_text.split('}')[0] + '}'
                             idea_data = json.loads(cleaned_json)
+                            
+                            # Ensure brand name is in product name
+                            if not idea_data['product_name'].startswith(brand):
+                                idea_data['product_name'] = f"{brand} {idea_data['product_name']}"
+                                
                             # Process the idea same as above
                             aspects = decompose_product_description(idea_data, model)
                             enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
@@ -248,6 +259,10 @@ def generate_ideas(request):
                             if current_name and current_description:
                                 description_text = ' '.join(current_description)
                                 
+                                # Ensure brand name is in product name
+                                if not current_name.startswith(brand):
+                                    current_name = f"{brand} {current_name}"
+                                
                                 idea_data = {
                                     'product_name': current_name,
                                     'description': description_text
@@ -290,6 +305,11 @@ def generate_ideas(request):
                     # Process the last idea if exists
                     if current_name and current_description:
                         description_text = ' '.join(current_description)
+                        
+                        # Ensure brand name is in product name
+                        if not current_name.startswith(brand):
+                            current_name = f"{brand} {current_name}"
+                            
                         idea_data = {
                             'product_name': current_name,
                             'description': description_text
@@ -355,6 +375,305 @@ def generate_ideas(request):
                 "success": False,
                 "error": str(e)
             }, status=500)
+
+# @api_view(['POST', 'GET', 'DELETE'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
+# def generate_ideas(request):
+     
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             print("Received data:", json.dumps(data, indent=2))
+            
+#             # Extract and validate project
+#             project_id = data.get('project_id')
+#             if not project_id:
+#                 raise ValueError("project_id is required")
+            
+#             # Get the project instance
+#             try:
+#                 project = Project.objects.get(id=project_id, user=request.user)
+#             except Project.DoesNotExist:
+#                 raise ValueError(f"Project with id {project_id} does not exist")
+
+#             # Get current set number
+#             max_set_number = Idea.objects.filter(
+#                 product_idea__project_id=project_id
+#             ).aggregate(Max('idea_set'))['idea_set__max'] or 0
+#             current_set = max_set_number + 1
+            
+#             # Extract other fields
+#             product = data.get('product')
+#             brand = data.get('brand')
+#             category = data.get('category')
+#             number_of_ideas = int(data.get('number_of_ideas', 1))
+#             dynamic_fields = data.get('dynamicFields', {})
+#             negative_prompt = data.get('negative_prompt', '')
+
+#             # Generate formatted prompt text
+#             formatted_dynamic_fields = generate_prompt_text(dynamic_fields)
+            
+#             # Create ProductIdea2 instance
+#             product_idea = ProductIdea2.objects.create(
+#                 user=request.user,
+#                 project=project,
+#                 product=product,
+#                 brand=brand,
+#                 category=category,
+#                 number_of_ideas=number_of_ideas,
+#                 dynamic_fields=dynamic_fields,
+#                 negative_prompt=negative_prompt
+
+#             )
+#             user_tokens = UserAPITokens.objects.get(user=request.user)
+#             GOOGLE_API_KEY = user_tokens.gemini_token 
+#            # hf_api_token = user_tokens.huggingface_token 
+            
+#             # Initialize APIs
+#             genai.configure(api_key=GOOGLE_API_KEY)
+#             model = genai.GenerativeModel('gemini-1.5-flash')            
+#             # Generate ideas using existing prompt logic
+#             ideas_prompt = (
+#                 f"Generate {number_of_ideas} unique and creative product ideas for product named {product} under the brand {brand} with category {category}.\n"
+#                 "While crafting these ideas, consider the following dynamic attributes as contextual guidelines. Use these inputs to shape the tone, style, and features of each idea so that they naturally resonate with the intended audience, without explicitly mentioning the attribute values.\n"
+#                 f"Dynamic Attributes: {formatted_dynamic_fields}\n"
+#                 f"IMPORTANT CONSTRAINTS: Avoid generating ideas that involve the following terms or concepts: {negative_prompt}\n"
+#                 "If any generated idea contains or relates to these terms, immediately discard that idea and generate a completely different one.\n"
+#                 "Format each idea as a clean, valid JSON object with 'product_name' and 'description' fields, like this example:\n"
+#                 "{\n  \"product_name\": \"Example Name\",\n  \"description\": \"Example description\"\n}\n"
+#                 "The 'description' should be clear, engaging, and written in simple language that highlights the product's key features and unique selling points. "
+#                 "Ensure that the description explains how the product benefits the user and what makes it special, making it easy to visualize the idea, while seamlessly integrating the contextual cues from the dynamic attributes.\n"
+#                 "Aim for a variety of ideas such that each is unique and creative, and focuses on different aspects of the product.\n"
+#                 "For each idea, provide a detailed explanation with at most 75 words in the description."
+#             )
+
+#             print("Generated prompt:", ideas_prompt)
+            
+#             response = model.generate_content(
+#                 ideas_prompt,
+#                 generation_config={
+#                     'temperature': 1.0,
+#                     # 'max_output_tokens': 4000
+#                 }
+#             )
+
+#             print("Generated Ideas Response:", response.text)
+            
+#             # Process generated ideas
+#             validated_ideas = []
+#             try:
+#                 # Split the response into individual JSON objects
+#                 json_objects = response.text.split('```json')
+#                 cleaned_jsons = []
+                
+#                 for obj in json_objects:
+#                     if obj.strip():
+#                         # Remove backticks and clean the JSON string
+#                         cleaned = obj.strip().strip('`').strip()
+#                         if cleaned:
+#                             cleaned_jsons.append(cleaned)
+
+#                 print("Cleaned JSON objects:", cleaned_jsons)
+                
+#                 for index, json_text in enumerate(cleaned_jsons):
+#                     try:
+#                         idea_data = json.loads(json_text)
+#                         print(f"Processing idea {index + 1}:", idea_data)
+                        
+#                         if isinstance(idea_data, dict) and 'product_name' in idea_data and 'description' in idea_data:
+#                             # Decompose and synthesize the idea
+#                             aspects = decompose_product_description(idea_data, model)
+#                             enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+                            
+#                             # Generate visualization prompt
+#                             visualization_prompt = enhance_prompt(enhanced_description, model)
+                            
+#                             # Create idea instance
+#                             idea_set_label = f"Set {current_set}-{index + 1}"
+#                             idea = Idea.objects.create(
+#                                 product_idea=product_idea,
+#                                 product_name=idea_data['product_name'],
+#                                 description=idea_data['description'],
+#                                 decomposed_aspects=aspects,
+#                                 enhanced_description=enhanced_description,
+#                                 visualization_prompt=visualization_prompt,
+#                                 idea_set=current_set,
+#                                 idea_set_label=idea_set_label
+#                             )
+                            
+#                             validated_ideas.append({
+#                                 'idea_id': idea.id,
+#                                 'product_name': idea.product_name,
+#                                 'description': idea.description,
+#                                 'decomposed_aspects': aspects,
+#                                 'enhanced_description': enhanced_description,
+#                                 'visualization_prompt': visualization_prompt,
+#                                 'idea_set': current_set,
+#                                 'idea_set_label': idea_set_label
+#                             })
+#                             print(f"Successfully processed idea {index + 1}")
+#                     except json.JSONDecodeError as e:
+#                         print(f"Error parsing JSON for idea {index + 1}:", str(e))
+#                         try:
+#                             # Remove any trailing characters after the closing brace
+#                             cleaned_json = json_text.split('}')[0] + '}'
+#                             idea_data = json.loads(cleaned_json)
+#                             # Process the idea same as above
+#                             aspects = decompose_product_description(idea_data, model)
+#                             enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+#                             visualization_prompt = enhance_prompt(enhanced_description, model)
+                            
+#                             idea_set_label = f"Set {current_set}-{index + 1}"
+#                             idea = Idea.objects.create(
+#                                 product_idea=product_idea,
+#                                 product_name=idea_data['product_name'],
+#                                 description=idea_data['description'],
+#                                 decomposed_aspects=aspects,
+#                                 enhanced_description=enhanced_description,
+#                                 visualization_prompt=visualization_prompt,
+#                                 idea_set=current_set,
+#                                 idea_set_label=idea_set_label
+#                             )
+                            
+#                             validated_ideas.append({
+#                                 'idea_id': idea.id,
+#                                 'product_name': idea.product_name,
+#                                 'description': idea.description,
+#                                 'decomposed_aspects': aspects,
+#                                 'enhanced_description': enhanced_description,
+#                                 'visualization_prompt': visualization_prompt,
+#                                 'idea_set': current_set,
+#                                 'idea_set_label': idea_set_label
+#                             })
+#                             print(f"Successfully processed idea {index + 1} after cleaning")
+#                         except Exception as e2:
+#                             print(f"Failed to process idea {index + 1} even after cleaning:", str(e2))
+#                             continue
+#                     except Exception as e:
+#                         print(f"Unexpected error processing idea {index + 1}:", str(e))
+#                         continue
+                
+#                 # If no ideas were processed through JSON parsing, try text parsing
+#                 if not validated_ideas:
+#                     print("No ideas processed from JSON, falling back to text parsing")
+#                     lines = response.text.split('\n')
+#                     current_name = None
+#                     current_description = []
+                    
+#                     for line in lines:
+#                         if ' - ' in line:
+#                             # Process previous idea if exists
+#                             if current_name and current_description:
+#                                 description_text = ' '.join(current_description)
+                                
+#                                 idea_data = {
+#                                     'product_name': current_name,
+#                                     'description': description_text
+#                                 }
+                                
+#                                 aspects = decompose_product_description(idea_data, model)
+#                                 enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+#                                 visualization_prompt = enhance_prompt(enhanced_description, model)
+                                
+#                                 idea_set_label = f"Set {current_set}-{len(validated_ideas) + 1}"
+#                                 idea = Idea.objects.create(
+#                                     product_idea=product_idea,
+#                                     product_name=current_name,
+#                                     description=description_text,
+#                                     decomposed_aspects=aspects,
+#                                     enhanced_description=enhanced_description,
+#                                     visualization_prompt=visualization_prompt,
+#                                     idea_set=current_set,
+#                                     idea_set_label=idea_set_label
+#                                 )
+                                
+#                                 validated_ideas.append({
+#                                     'idea_id': idea.id,
+#                                     'product_name': idea.product_name,
+#                                     'description': idea.description,
+#                                     'decomposed_aspects': aspects,
+#                                     'enhanced_description': enhanced_description,
+#                                     'visualization_prompt': visualization_prompt,
+#                                     'idea_set': current_set,
+#                                     'idea_set_label': idea_set_label
+#                                 })
+                            
+#                             # Start new idea
+#                             name_part, desc_part = line.split(' - ', 1)
+#                             current_name = name_part.strip()
+#                             current_description = [desc_part.strip()]
+#                         elif line.strip() and current_name:
+#                             current_description.append(line.strip())
+                    
+#                     # Process the last idea if exists
+#                     if current_name and current_description:
+#                         description_text = ' '.join(current_description)
+#                         idea_data = {
+#                             'product_name': current_name,
+#                             'description': description_text
+#                         }
+                        
+#                         aspects = decompose_product_description(idea_data, model)
+#                         enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+#                         visualization_prompt = enhance_prompt(enhanced_description, model)
+                        
+#                         idea_set_label = f"Set {current_set}-{len(validated_ideas) + 1}"
+#                         idea = Idea.objects.create(
+#                             product_idea=product_idea,
+#                             product_name=current_name,
+#                             description=description_text,
+#                             decomposed_aspects=aspects,
+#                             enhanced_description=enhanced_description,
+#                             visualization_prompt=visualization_prompt,
+#                             idea_set=current_set,
+#                             idea_set_label=idea_set_label
+#                         )
+                        
+#                         validated_ideas.append({
+#                             'idea_id': idea.id,
+#                             'product_name': idea.product_name,
+#                             'description': idea.description,
+#                             'decomposed_aspects': aspects,
+#                             'enhanced_description': enhanced_description,
+#                             'visualization_prompt': visualization_prompt,
+#                             'idea_set': current_set,
+#                             'idea_set_label': idea_set_label
+#                         })
+
+#             except Exception as e:
+#                 print(f"Error in idea processing: {str(e)}")
+#                 raise
+
+#             print("Final validated ideas:", json.dumps(validated_ideas, indent=2))
+            
+#             response_data = {
+#                 "success": True,
+#                 "ideas": validated_ideas,
+#                 "stored_data": {
+#                     "product_idea_id": product_idea.id,
+#                     "project_id": project.id,
+#                     "project_name": project.name,
+#                     "product": product_idea.product,
+#                     "brand": product_idea.brand,
+#                     "category": product_idea.category,
+#                     "dynamic_fields": product_idea.dynamic_fields,
+#                     "current_set": current_set,
+#                     "negative_prompt": negative_prompt
+#                 }
+#             }
+
+#             print("Sending response:", json.dumps(response_data, indent=2))
+            
+            
+#             return JsonResponse(response_data)
+            
+#         except Exception as e:
+#             print("Error:", str(e))
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": str(e)
+#             }, status=500)
 
 @api_view(['POST', 'GET', 'DELETE', 'PUT'])
 @authentication_classes([TokenAuthentication])
@@ -1457,7 +1776,7 @@ def get_project(request, project_id):
                         'title': idea.product_name,
                         'product_name': idea.product_name,
                         'description': idea.description,
-                        'visualization_prompt': idea.visualization_prompt,  # Add this line(sourav 11-02-25)
+                        'visualization_prompt': idea.visualization_prompt,  # Added this line(sourav 11-02-25)
                         'created_at': idea.created_at.isoformat(),
                         'idea_set': idea.idea_set,
                         'idea_set_label': idea.idea_set_label or f"Set {idea.idea_set}-1"
@@ -1625,8 +1944,9 @@ def generate_ideas_from_document(request):
         brand = idea_parameters.get('Brand_Name', '')
         category = idea_parameters.get('Category', '')
         number_of_ideas = int(data.get('number_of_ideas', 3))  # Default to 3 ideas
-       
-        # Convert document parameters to dynamic fields format
+        description_length = int(data.get('description_length', 70))  # New field with default value of 70
+        
+	# Convert document parameters to dynamic fields format
         dynamic_fields = {
             "benefits": idea_parameters.get('Benefits', ''),
             "rtb": idea_parameters.get('RTB', ''),
@@ -1649,6 +1969,7 @@ def generate_ideas_from_document(request):
             brand=brand,
             category=category,
             number_of_ideas=number_of_ideas,
+            description_length=description_length,  # New field
             dynamic_fields=dynamic_fields,
             negative_prompt=negative_prompt,
             source_document_id=document_id,
@@ -1664,24 +1985,23 @@ def generate_ideas_from_document(request):
         genai.configure(api_key=GOOGLE_API_KEY)
         model = genai.GenerativeModel('gemini-1.5-flash') 
 
-
         # Generate formatted prompt text
         formatted_dynamic_fields = generate_prompt_text(dynamic_fields)
-
        
-        # Generate ideas using existing prompt logic
+        # Generate ideas using modified prompt logic to include brand name and description length
         ideas_prompt = (
-            f"Generate {number_of_ideas} unique and creative product ideas for product named {product} under the brand {brand} with category {category}.\n"
+            f"Generate {number_of_ideas} unique and creative product ideas for product named {product} from the brand {brand} with category {category}.\n"
             "While crafting these ideas, consider the following dynamic attributes as contextual guidelines. Use these inputs to shape the tone, style, and features of each idea so that they naturally resonate with the intended audience, without explicitly mentioning the attribute values.\n"
             f"Dynamic Attributes: {formatted_dynamic_fields}\n"
             f"IMPORTANT CONSTRAINTS: Avoid generating ideas that involve the following terms or concepts: {negative_prompt}\n"
             "If any generated idea contains or relates to these terms, immediately discard that idea and generate a completely different one.\n"
+            f"CRITICAL REQUIREMENT: ALWAYS include the brand name '{brand}' at the beginning of each product name.\n"
             "Format each idea as a clean, valid JSON object with 'product_name' and 'description' fields, like this example:\n"
-            "{\n  \"product_name\": \"Example Name\",\n  \"description\": \"Example description\"\n}\n"
+            f"{{  \"product_name\": \"{brand} Example Name\",\n  \"description\": \"Example description\"\n}}\n"
             "The 'description' should be clear, engaging, and written in simple language that highlights the product's key features and unique selling points. "
             "Ensure that the description explains how the product benefits the user and what makes it special, making it easy to visualize the idea, while seamlessly integrating the contextual cues from the dynamic attributes.\n"
             "Aim for a variety of ideas such that each is unique and creative, and focuses on different aspects of the product.\n"
-            "For each idea, provide a detailed explanation with at most 70 words in the description."
+            f"For each idea, provide a detailed explanation with exactly {description_length} words in the description."
         )
  
         print("Generated prompt for document-based idea generation:", ideas_prompt)
@@ -1690,7 +2010,7 @@ def generate_ideas_from_document(request):
             ideas_prompt,
             generation_config={
                 'temperature': 1.0,
-                'max_output_tokens': 4000
+                # 'max_output_tokens': 4000
             }
         )
  
@@ -1718,6 +2038,9 @@ def generate_ideas_from_document(request):
                     print(f"Processing idea {index + 1}:", idea_data)
                    
                     if isinstance(idea_data, dict) and 'product_name' in idea_data and 'description' in idea_data:
+                        # Ensure brand name is in product name
+                        if not idea_data['product_name'].startswith(brand):
+                            idea_data['product_name'] = f"{brand} {idea_data['product_name']}"
                         # Decompose and synthesize the idea
                         aspects = decompose_product_description(idea_data, model)
                         enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
@@ -1756,6 +2079,11 @@ def generate_ideas_from_document(request):
                         # Remove any trailing characters after the closing brace
                         cleaned_json = json_text.split('}')[0] + '}'
                         idea_data = json.loads(cleaned_json)
+
+                        # Ensure brand name is in product name
+                        if not idea_data['product_name'].startswith(brand):
+                            idea_data['product_name'] = f"{brand} {idea_data['product_name']}"
+
                         # Process the idea same as above
                         aspects = decompose_product_description(idea_data, model)
                         enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
@@ -1804,6 +2132,9 @@ def generate_ideas_from_document(request):
                         if current_name and current_description:
                             description_text = ' '.join(current_description)
                            
+                            # Ensure brand name is in product name
+                            if not current_name.startswith(brand):
+                                current_name = f"{brand} {current_name}"
                             idea_data = {
                                 'product_name': current_name,
                                 'description': description_text
@@ -1846,6 +2177,9 @@ def generate_ideas_from_document(request):
                 # Process the last idea if exists
                 if current_name and current_description:
                     description_text = ' '.join(current_description)
+                    # Ensure brand name is in product name
+                    if not current_name.startswith(brand):
+                        current_name = f"{brand} {current_name}"
                     idea_data = {
                         'product_name': current_name,
                         'description': description_text
@@ -1911,4 +2245,343 @@ def generate_ideas_from_document(request):
         return JsonResponse({
             "success": False,
             "error": str(e)
-        }, status=500)
+        }, status=500)        
+        
+# @api_view(['POST'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
+# def generate_ideas_from_document(request):
+#     """
+#     API endpoint to generate ideas using parameters extracted from documents
+#     """
+#     try:
+#         data = json.loads(request.body)
+#         print("Received document-based idea generation data:", json.dumps(data, indent=2))
+       
+#         # Extract document source information
+#         document_id = data.get('document_id')
+#         document_name = data.get('document_name')
+#         idea_parameters = data.get('idea_parameters', {})
+       
+#         if not document_id or not idea_parameters:
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": "Missing required parameters: document_id and idea_parameters"
+#             }, status=400)
+       
+#         # Extract project information
+#         project_id = data.get('project_id')
+#         if not project_id:
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": "project_id is required"
+#             }, status=400)
+       
+#         # Get the project instance
+#         try:
+#             project = Project.objects.get(id=project_id, user=request.user)
+#         except Project.DoesNotExist:
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": f"Project with id {project_id} does not exist"
+#             }, status=404)
+       
+#         # Get current set number
+#         max_set_number = Idea.objects.filter(
+#             product_idea__project_id=project_id
+#         ).aggregate(Max('idea_set'))['idea_set__max'] or 0
+#         current_set = max_set_number + 1
+       
+#         # Map document parameters to idea generator fields
+#         product = idea_parameters.get('Concept', '')
+#         brand = idea_parameters.get('Brand_Name', '')
+#         category = idea_parameters.get('Category', '')
+#         number_of_ideas = int(data.get('number_of_ideas', 3))  # Default to 3 ideas
+       
+#         # Convert document parameters to dynamic fields format
+#         dynamic_fields = {
+#             "benefits": idea_parameters.get('Benefits', ''),
+#             "rtb": idea_parameters.get('RTB', ''),
+#             "ingredients": idea_parameters.get('Ingredients', ''),
+#             "features": idea_parameters.get('Features', ''),
+#             "theme": idea_parameters.get('Theme', ''),
+#             "demographics": idea_parameters.get('Demographics', '')
+#         }
+       
+#         # Remove empty values
+#         dynamic_fields = {k: v for k, v in dynamic_fields.items() if v}
+       
+#         negative_prompt = data.get('negative_prompt', '')
+       
+#         # Create ProductIdea2 instance
+#         product_idea = ProductIdea2.objects.create(
+#             user=request.user,
+#             project=project,
+#             product=product,
+#             brand=brand,
+#             category=category,
+#             number_of_ideas=number_of_ideas,
+#             dynamic_fields=dynamic_fields,
+#             negative_prompt=negative_prompt,
+#             source_document_id=document_id,
+#             source_document_name=document_name
+#         )
+       
+
+#         user_tokens = UserAPITokens.objects.get(user=request.user)
+#         GOOGLE_API_KEY = user_tokens.gemini_token 
+#         # hf_api_token = user_tokens.huggingface_token 
+        
+#         # Initialize APIs
+#         genai.configure(api_key=GOOGLE_API_KEY)
+#         model = genai.GenerativeModel('gemini-1.5-flash') 
+
+
+#         # Generate formatted prompt text
+#         formatted_dynamic_fields = generate_prompt_text(dynamic_fields)
+
+       
+#         # Generate ideas using existing prompt logic
+#         ideas_prompt = (
+#                 f"Generate {number_of_ideas} unique and creative product ideas for product named {product} from the brand {brand} with category {category}.\n"
+#                 "While crafting these ideas, consider the following dynamic attributes as contextual guidelines. Use these inputs to shape the tone, style, and features of each idea so that they naturally resonate with the intended audience, without explicitly mentioning the attribute values.\n"
+#                 f"Dynamic Attributes: {formatted_dynamic_fields}\n"
+#                 f"IMPORTANT CONSTRAINTS: Avoid generating ideas that involve the following terms or concepts: {negative_prompt}\n"
+#                 "If any generated idea contains or relates to these terms, immediately discard that idea and generate a completely different one.\n"
+#                 f"CRITICAL REQUIREMENT: ALWAYS include the brand name '{brand}' at the beginning of each product name.\n"
+#                 "Format each idea as a clean, valid JSON object with 'product_name' and 'description' fields, like this example:\n"
+#                 f"{{  \"product_name\": \"{brand} Example Name\",\n  \"description\": \"Example description\"\n}}\n"
+#                 "The 'description' should be clear, engaging, and written in simple language that highlights the product's key features and unique selling points. "
+#                 "Ensure that the description explains how the product benefits the user and what makes it special, making it easy to visualize the idea, while seamlessly integrating the contextual cues from the dynamic attributes.\n"
+#                 "Aim for a variety of ideas such that each is unique and creative, and focuses on different aspects of the product.\n"
+#                 "For each idea, provide a detailed explanation with exact 60-75 words in the description."
+#             )
+ 
+#         print("Generated prompt for document-based idea generation:", ideas_prompt)
+       
+#         response = model.generate_content(
+#             ideas_prompt,
+#             generation_config={
+#                 'temperature': 1.0,
+#                 # 'max_output_tokens': 4000
+#             }
+#         )
+ 
+#         print("Generated Ideas Response:", response.text)
+       
+#         # Process generated ideas (using same logic as in original function)
+#         validated_ideas = []
+#         try:
+#             # Split the response into individual JSON objects
+#             json_objects = response.text.split('```json')
+#             cleaned_jsons = []
+           
+#             for obj in json_objects:
+#                 if obj.strip():
+#                     # Remove backticks and clean the JSON string
+#                     cleaned = obj.strip().strip('`').strip()
+#                     if cleaned:
+#                         cleaned_jsons.append(cleaned)
+ 
+#             print("Cleaned JSON objects:", cleaned_jsons)
+           
+#             for index, json_text in enumerate(cleaned_jsons):
+#                 try:
+#                     idea_data = json.loads(json_text)
+#                     print(f"Processing idea {index + 1}:", idea_data)
+                   
+#                     if isinstance(idea_data, dict) and 'product_name' in idea_data and 'description' in idea_data:
+#                         # Decompose and synthesize the idea
+#                         aspects = decompose_product_description(idea_data, model)
+#                         enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+                       
+#                         # Generate visualization prompt
+#                         visualization_prompt = enhance_prompt(enhanced_description, model)
+                       
+#                         # Create idea instance
+#                         idea_set_label = f"Set {current_set}-{index + 1}"
+#                         idea = Idea.objects.create(
+#                             product_idea=product_idea,
+#                             product_name=idea_data['product_name'],
+#                             description=idea_data['description'],
+#                             decomposed_aspects=aspects,
+#                             enhanced_description=enhanced_description,
+#                             visualization_prompt=visualization_prompt,
+#                             idea_set=current_set,
+#                             idea_set_label=idea_set_label
+#                         )
+                       
+#                         validated_ideas.append({
+#                             'idea_id': idea.id,
+#                             'product_name': idea.product_name,
+#                             'description': idea.description,
+#                             'decomposed_aspects': aspects,
+#                             'enhanced_description': enhanced_description,
+#                             'visualization_prompt': visualization_prompt,
+#                             'idea_set': current_set,
+#                             'idea_set_label': idea_set_label
+#                         })
+#                         print(f"Successfully processed idea {index + 1}")
+#                 except json.JSONDecodeError as e:
+#                     # Same fallback logic as in original function
+#                     print(f"Error parsing JSON for idea {index + 1}:", str(e))
+#                     try:
+#                         # Remove any trailing characters after the closing brace
+#                         cleaned_json = json_text.split('}')[0] + '}'
+#                         idea_data = json.loads(cleaned_json)
+#                         # Process the idea same as above
+#                         aspects = decompose_product_description(idea_data, model)
+#                         enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+#                         visualization_prompt = enhance_prompt(enhanced_description, model)
+                       
+#                         idea_set_label = f"Set {current_set}-{index + 1}"
+#                         idea = Idea.objects.create(
+#                             product_idea=product_idea,
+#                             product_name=idea_data['product_name'],
+#                             description=idea_data['description'],
+#                             decomposed_aspects=aspects,
+#                             enhanced_description=enhanced_description,
+#                             visualization_prompt=visualization_prompt,
+#                             idea_set=current_set,
+#                             idea_set_label=idea_set_label
+#                         )
+                       
+#                         validated_ideas.append({
+#                             'idea_id': idea.id,
+#                             'product_name': idea.product_name,
+#                             'description': idea.description,
+#                             'decomposed_aspects': aspects,
+#                             'enhanced_description': enhanced_description,
+#                             'visualization_prompt': visualization_prompt,
+#                             'idea_set': current_set,
+#                             'idea_set_label': idea_set_label
+#                         })
+#                         print(f"Successfully processed idea {index + 1} after cleaning")
+#                     except Exception as e2:
+#                         print(f"Failed to process idea {index + 1} even after cleaning:", str(e2))
+#                         continue
+#                 except Exception as e:
+#                     print(f"Unexpected error processing idea {index + 1}:", str(e))
+#                     continue
+           
+#             # Fallback text parsing logic (same as original function)
+#             if not validated_ideas:
+#                 print("No ideas processed from JSON, falling back to text parsing")
+#                 lines = response.text.split('\n')
+#                 current_name = None
+#                 current_description = []
+               
+#                 for line in lines:
+#                     if ' - ' in line:
+#                         # Process previous idea if exists
+#                         if current_name and current_description:
+#                             description_text = ' '.join(current_description)
+                           
+#                             idea_data = {
+#                                 'product_name': current_name,
+#                                 'description': description_text
+#                             }
+                           
+#                             aspects = decompose_product_description(idea_data, model)
+#                             enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+#                             visualization_prompt = enhance_prompt(enhanced_description, model)
+                           
+#                             idea_set_label = f"Set {current_set}-{len(validated_ideas) + 1}"
+#                             idea = Idea.objects.create(
+#                                 product_idea=product_idea,
+#                                 product_name=current_name,
+#                                 description=description_text,
+#                                 decomposed_aspects=aspects,
+#                                 enhanced_description=enhanced_description,
+#                                 visualization_prompt=visualization_prompt,
+#                                 idea_set=current_set,
+#                                 idea_set_label=idea_set_label
+#                             )
+                           
+#                             validated_ideas.append({
+#                                 'idea_id': idea.id,
+#                                 'product_name': idea.product_name,
+#                                 'description': idea.description,
+#                                 'decomposed_aspects': aspects,
+#                                 'enhanced_description': enhanced_description,
+#                                 'visualization_prompt': visualization_prompt,
+#                                 'idea_set': current_set,
+#                                 'idea_set_label': idea_set_label
+#                             })
+                       
+#                         # Start new idea
+#                         name_part, desc_part = line.split(' - ', 1)
+#                         current_name = name_part.strip()
+#                         current_description = [desc_part.strip()]
+#                     elif line.strip() and current_name:
+#                         current_description.append(line.strip())
+               
+#                 # Process the last idea if exists
+#                 if current_name and current_description:
+#                     description_text = ' '.join(current_description)
+#                     idea_data = {
+#                         'product_name': current_name,
+#                         'description': description_text
+#                     }
+                   
+#                     aspects = decompose_product_description(idea_data, model)
+#                     enhanced_description = synthesize_product_aspects(idea_data, aspects, model)
+#                     visualization_prompt = enhance_prompt(enhanced_description, model)
+                   
+#                     idea_set_label = f"Set {current_set}-{len(validated_ideas) + 1}"
+#                     idea = Idea.objects.create(
+#                         product_idea=product_idea,
+#                         product_name=current_name,
+#                         description=description_text,
+#                         decomposed_aspects=aspects,
+#                         enhanced_description=enhanced_description,
+#                         visualization_prompt=visualization_prompt,
+#                         idea_set=current_set,
+#                         idea_set_label=idea_set_label
+#                     )
+                   
+#                     validated_ideas.append({
+#                         'idea_id': idea.id,
+#                         'product_name': idea.product_name,
+#                         'description': idea.description,
+#                         'decomposed_aspects': aspects,
+#                         'enhanced_description': enhanced_description,
+#                         'visualization_prompt': visualization_prompt,
+#                         'idea_set': current_set,
+#                         'idea_set_label': idea_set_label
+#                     })
+ 
+#         except Exception as e:
+#             print(f"Error in idea processing: {str(e)}")
+#             raise
+ 
+#         print("Final validated ideas:", json.dumps(validated_ideas, indent=2))
+       
+#         response_data = {
+#             "success": True,
+#             "ideas": validated_ideas,
+#             "stored_data": {
+#                 "product_idea_id": product_idea.id,
+#                 "project_id": project.id,
+#                 "project_name": project.name,
+#                 "product": product_idea.product,
+#                 "brand": product_idea.brand,
+#                 "category": product_idea.category,
+#                 "dynamic_fields": product_idea.dynamic_fields,
+#                 "current_set": current_set,
+#                 "negative_prompt": negative_prompt,
+#                 "source_document_id": document_id,
+#                 "source_document_name": document_name
+#             }
+#         }
+ 
+#         print("Sending response:", json.dumps(response_data, indent=2))
+       
+#         return JsonResponse(response_data)
+       
+#     except Exception as e:
+#         print("Error in document-based idea generation:", str(e))
+#         return JsonResponse({
+#             "success": False,
+#             "error": str(e)
+#         }, status=500)
