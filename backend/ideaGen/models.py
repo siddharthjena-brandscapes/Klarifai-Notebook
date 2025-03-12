@@ -43,6 +43,7 @@ class ProductIdea2(models.Model):
     brand = models.CharField(max_length=255)
     category = models.CharField(max_length=255)
     dynamic_fields = models.JSONField(default=dict)
+    description_length = models.IntegerField(default=70)   #added for lengh of the ideas (by sourav @ 12-03-2025)
     number_of_ideas = models.IntegerField(default=1)
     created_at = models.DateTimeField(default=timezone.now)
     negative_prompt = models.TextField(null=True, blank=True)

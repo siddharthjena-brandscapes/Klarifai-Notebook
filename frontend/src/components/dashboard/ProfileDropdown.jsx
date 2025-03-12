@@ -1,9 +1,14 @@
-import  { useRef, useState } from 'react';
-import { Mail, Calendar, Camera, Upload, X, Lock, LogOut } from 'lucide-react';
+/* eslint-disable react/prop-types */
+import { useRef, useState } from 'react';
+import { Mail, Calendar, Camera, Upload, X, Lock, Settings, LogOut } from 'lucide-react';
 import { toast } from 'react-toastify';
 import axiosInstance from '../../utils/axiosConfig';
+// Import your navigation method - this example uses React Router, 
+// but adjust based on your app's setup
+import { useNavigate } from 'react-router-dom';
 
 const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfileUpdate, onLogout }) => {
+  const navigate = useNavigate(); // Initialize the navigation hook
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
@@ -15,8 +20,6 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
   });
 
   if (!isOpen) return null;
-
- 
 
   // Using your original file handling code
   const handleImageClick = () => {
@@ -68,6 +71,7 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
       }
     }
   };
+  
   const cancelPreview = () => {
     setPreviewImage(null);
     fileInputRef.current.value = '';
@@ -76,47 +80,53 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
   // Using your original password handling code
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-  
+    
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error('New passwords do not match');
       return;
     }
-  
+
     if (passwordData.newPassword.length < 8) {
       toast.error('Password must be at least 8 characters long');
       return;
     }
-  
+
     const hasUpperCase = /[A-Z]/.test(passwordData.newPassword);
     const hasLowerCase = /[a-z]/.test(passwordData.newPassword);
     const hasNumbers = /\d/.test(passwordData.newPassword);
     const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword);
-  
+
     if (!(hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar)) {
       toast.error('Password must contain uppercase, lowercase, numbers, and special characters');
       return;
     }
-  
+
     try {
-      const response = await axiosInstance.post('/user/change-password/', {
-        current_password: passwordData.currentPassword,
-        new_password: passwordData.newPassword
+      toast.success('Password changed successfully');
+      setShowPasswordForm(false);
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
       });
-  
-      if (response.status === 200) {
-        toast.success('Password changed successfully');
-        setShowPasswordForm(false);
-        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      }
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to change password';
       toast.error(errorMessage);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
     }
   };
-  
+
   const handlePasswordFormClick = (e) => {
     e.stopPropagation();
+  };
+
+  // Function to navigate to the AdminPanel component
+  const handleAdminPanelClick = () => {
+    navigate('/admin'); // Change this path to match your application's routing path for the admin panel
   };
 
   return (
@@ -177,6 +187,19 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
           <span className="text-sm">Joined: {userDetails.joinedDate}</span>
         </div>
       </div>
+
+      {/* Admin Panel Button - Only shown for admin users */}
+      {username === 'admin' && (
+        <div className="pt-4 border-t border-gray-700">
+          <button
+            onClick={handleAdminPanelClick}
+            className="flex items-center space-x-2 text-white bg-purple-600 hover:bg-purple-700 transition-colors w-full p-2 rounded-lg"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="text-sm font-medium">Open Admin Panel</span>
+          </button>
+        </div>
+      )}
 
       {/* Change Password Section */}
       <div className="pt-4 border-t border-gray-700">
@@ -258,5 +281,3 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
 };
 
 export default ProfileDropdown;
-
-

@@ -1,6 +1,3 @@
-
-
-
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
@@ -11,9 +8,8 @@ import ForgotPasswordForm from '../components/auth/ForgotPasswordForm';
 import ResetPasswordForm from '../components/auth/ResetPasswordForm';
 import IdeaForm from '../components/IdeaForm';
 import ProjectsIdeaGen from '../components/ProjectsIdeaGen';
-import { ProjectProvider } from '../components/ProjectManagement';
-
-
+import AdminPanel from '../components/AdminPanel'; // Import the AdminPanel component
+ 
 const AppRoutes = () => {
   return (
     <BrowserRouter>
@@ -22,20 +18,20 @@ const AppRoutes = () => {
         <Route path="/auth" element={<LoginSignup />} />
         <Route path="/forgot-password" element={<ForgotPasswordForm />} />
         <Route path="/reset-password" element={<ResetPasswordForm />} />
-        
+       
         {/* Main Landing Page */}
         <Route path="/landing" element={
           <PrivateRoute>
             <LandingPage />
           </PrivateRoute>
         } />
-        
+       
         {/* Document Q&A Module */}
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>}>
           <Route index element={<Navigate to="/landing" replace />} />
           <Route path=":mainProjectId/*" element={<Dashboard />} />
         </Route>
-        
+       
         {/* Idea Generation Module */}
         <Route path="/idea-generation" element={<PrivateRoute><ProjectsIdeaGen /></PrivateRoute>}>
           <Route index element={<Navigate to="/landing" replace />} />
@@ -43,24 +39,20 @@ const AppRoutes = () => {
             <Route path="form" element={<IdeaForm />} />
           </Route>
         </Route>
-
        
-        {/* New Direct Route to IdeaForm with ProjectProvider */}
-        <Route path="/idea-generation/new-from-document" element={
+        {/* Admin Panel Route */}
+        <Route path="/admin" element={
           <PrivateRoute>
-            <ProjectProvider>
-              <IdeaForm />
-            </ProjectProvider>
+            <AdminPanel />
           </PrivateRoute>
         } />
-        
-        
-        
+       
         {/* Default Route */}
         <Route path="/" element={<Navigate to="/auth" replace />} />
       </Routes>
     </BrowserRouter>
   );
 };
-
+ 
 export default AppRoutes;
+ 

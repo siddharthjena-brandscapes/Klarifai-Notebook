@@ -2124,7 +2124,10 @@ const IdeaForm = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const [rawVersionHistory, setRawVersionHistory] = useState({});
-  const [formData, setFormData] = useState({});
+  const [formData, setFormData] = useState({
+    number_of_ideas: 3,
+    description_length: 70,  // Default to 70 words
+  });
 
   const [projectName, setProjectName] = useState(
     currentProject?.name || `Project ${new Date().toLocaleDateString()}`
@@ -2863,6 +2866,7 @@ const IdeaForm = () => {
 
     const submissionData = {
       ...formData,
+      description_length: formData.description_length || 70,  // Added description_length field with default
       project_id: currentProject.id,
       dynamicFields: activeFields,
       negative_prompt: negativePrompt,
@@ -2884,6 +2888,7 @@ const IdeaForm = () => {
               category: stored_data.category,
               brand: stored_data.brand,
               number_of_ideas: formData.number_of_ideas,
+              description_length: formData.description_length || 70,  // Add to metadata
               idea_set: currentSetNumber,
               idea_set_label: idea.idea_set_label,
               negative_prompt: negativePrompt,
@@ -3810,41 +3815,70 @@ const DocumentParamsModal = () => {
                     </p>
                   </div>
                   <div className="border-t border-gray-700 pt-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-300">
-                        Number of Ideas
-                        {hasManuallySetIdeas && (
-                          <span className="text-xs text-gray-500 ml-2">
-                            (Manual)
+                    <div className="flex flex-col md:flex-row md:gap-6">
+                      {/* Number of Ideas Field */}
+                      <div className="flex-1 mb-4 md:mb-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-gray-300">
+                            Number of Ideas
+                            {hasManuallySetIdeas && (
+                              <span className="text-xs text-gray-500 ml-2">
+                                (Manual)
+                              </span>
+                            )}
+                          </label>
+                          {hasManuallySetIdeas && (
+                            <button
+                              type="button"
+                              onClick={resetNumberOfIdeas}
+                              className="text-xs text-indigo-400 hover:text-indigo-300"
+                            >
+                              Reset to Auto
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="number"
+                            name="number_of_ideas"
+                            value={formData.number_of_ideas}
+                            onChange={handleBaseFieldChange}
+                            min="1"
+                            max="20"
+                            required
+                            className="input-field w-full"
+                          />
+                          {!hasManuallySetIdeas && (
+                            <span className="text-xs text-gray-400">
+                              Auto-calculated
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Idea Description Length Field */}
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-gray-300">
+                            Idea's Length (words)
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="number"
+                            name="description_length"
+                            value={formData.description_length || 70}
+                            onChange={handleBaseFieldChange}
+                            min="60"
+                            max="250"
+                            required
+                            className="input-field w-full"
+                          />
+                          <span className="text-xs text-gray-400">
+                            Range: 60-250
                           </span>
-                        )}
-                      </label>
-                      {hasManuallySetIdeas && (
-                        <button
-                          type="button"
-                          onClick={resetNumberOfIdeas}
-                          className="text-xs text-indigo-400 hover:text-indigo-300"
-                        >
-                          Reset to Auto
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="number"
-                        name="number_of_ideas"
-                        value={formData.number_of_ideas}
-                        onChange={handleBaseFieldChange}
-                        min="1"
-                        max="20"
-                        required
-                        className="input-field w-full md:w-1/4"
-                      />
-                      {!hasManuallySetIdeas && (
-                        <span className="text-xs text-gray-400">
-                          Auto-calculated based on field combinations
-                        </span>
-                      )}
+                        </div>
+                      </div>
                     </div>
                   </div>
 

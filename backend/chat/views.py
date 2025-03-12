@@ -2686,4 +2686,199 @@ class GenerateIdeaContextView(APIView):
                 "Theme": "",
                 "Demographics": ""
             }
+#  admin 
+
+from django.db import transaction
+from .models import UserAPITokens
  
+class AdminUserManagementView(APIView):
+    def get(self, request):
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can access this endpoint'
+                }, status=status.HTTP_403_FORBIDDEN)
+           
+            # Get all users with their API tokens
+            users = User.objects.all()
+           
+            user_data = []
+            for user in users:
+                # Get API tokens if they exist
+                api_tokens = None
+                try:
+                    api_tokens = user.api_tokens
+                except UserAPITokens.DoesNotExist:
+                    pass
+               
+                user_info = {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'api_tokens': {
+                        'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
+                        'gemini_token': api_tokens.gemini_token if api_tokens else None
+                    }
+                }
+                user_data.append(user_info)
+           
+            return Response(user_data, status=status.HTTP_200_OK)
+           
+        except Exception as e:
+            print(f"Error in AdminUserManagementView.get: {str(e)}")
+            return Response(
+                {'error': f'Failed to fetch user data: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+   
+    @transaction.atomic
+    def post(self, request):
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can create new users'
+                }, status=status.HTTP_403_FORBIDDEN)
+           
+            # Extract data from request
+            username = request.data.get('username')
+            email = request.data.get('email')
+            password = request.data.get('password')
+            huggingface_token = request.data.get('huggingface_token')
+            gemini_token = request.data.get('gemini_token')
+           
+            # Validate required fields
+            if not all([username, email, password]):
+                return Response({
+                    'error': 'Username, email, and password are required fields'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Check if username already exists
+            if User.objects.filter(username=username).exists():
+                return Response({
+                    'error': 'Username already exists'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Create the user
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password
+            )
+           
+            # Create API tokens for the user
+            UserAPITokens.objects.create(
+                user=user,
+                huggingface_token=huggingface_token,
+                gemini_token=gemini_token
+            )
+           
+            return Response({
+                'success': True,
+                'message': f'User {username} created successfully',
+                'user_id': user.id
+            }, status=status.HTTP_201_CREATED)
+           
+        except Exception as e:
+            print(f"Error in AdminUserManagementView.post: {str(e)}")
+            return Response(
+                {'error': f'Failed to create user: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+   
+    @transaction.atomic
+    def put(self, request):
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can update user data'
+                }, status=status.HTTP_403_FORBIDDEN)
+           
+            # Extract data from request
+            user_id = request.data.get('user_id')
+            huggingface_token = request.data.get('huggingface_token')
+            gemini_token = request.data.get('gemini_token')
+           
+            if not user_id:
+                return Response({
+                    'error': 'User ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Get the user
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'User not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+           
+            # Update API tokens
+            api_tokens, created = UserAPITokens.objects.get_or_create(user=user)
+           
+            if huggingface_token is not None:
+                api_tokens.huggingface_token = huggingface_token
+           
+            if gemini_token is not None:
+                api_tokens.gemini_token = gemini_token
+           
+            api_tokens.save()
+           
+            return Response({
+                'success': True,
+                'message': f'API tokens for user {user.username} updated successfully'
+            }, status=status.HTTP_200_OK)
+           
+        except Exception as e:
+            print(f"Error in AdminUserManagementView.put: {str(e)}")
+            return Response(
+                {'error': f'Failed to update user API tokens: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+   
+    @transaction.atomic
+    def delete(self, request):
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can delete users'
+                }, status=status.HTTP_403_FORBIDDEN)
+           
+            # Extract user_id from query parameters
+            user_id = request.query_params.get('user_id')
+           
+            if not user_id:
+                return Response({
+                    'error': 'User ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Don't allow deleting the admin user
+            if User.objects.get(id=user_id).username == 'admin':
+                return Response({
+                    'error': 'Cannot delete the admin user'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Get and delete the user
+            try:
+                user = User.objects.get(id=user_id)
+                username = user.username
+                user.delete()  # This will also delete related UserAPITokens due to CASCADE
+               
+                return Response({
+                    'success': True,
+                    'message': f'User {username} deleted successfully'
+                }, status=status.HTTP_200_OK)
+               
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'User not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+           
+        except Exception as e:
+            print(f"Error in AdminUserManagementView.delete: {str(e)}")
+            return Response(
+                {'error': f'Failed to delete user: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

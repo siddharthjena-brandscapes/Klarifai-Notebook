@@ -1158,6 +1158,70 @@ updateProject: (projectId, projectData) => {
   });
 },
 };
+
+
+export const adminService = {
+  // Get all users (admin only)
+  getAllUsers: () => {
+    return axiosInstance.get('/api/admin/users/')
+      .then(response => {
+        console.log("Admin service - get users response:", response.data);
+        return response.data;
+      })
+      .catch(error => {
+        console.error("Admin service - get users error:", error);
+        throw error;
+      });
+  },
+ 
+  // Create a new user (admin only)
+  createUser: (userData) => {
+    return axiosInstance.post('/api/admin/users/', userData)
+      .then(response => {
+        console.log("Admin service - create user response:", response.data);
+        return response.data;
+      })
+      .catch(error => {
+        console.error("Admin service - create user error:", error);
+        throw error;
+      });
+  },
+ 
+  // Update a user's API tokens (admin only)
+  updateUserTokens: (userId, tokenData) => {
+    return axiosInstance.put('/api/admin/users/', {
+      user_id: userId,
+      ...tokenData
+    })
+      .then(response => {
+        console.log("Admin service - update tokens response:", response.data);
+        return response.data;
+      })
+      .catch(error => {
+        console.error("Admin service - update tokens error:", error);
+        throw error;
+      });
+  },
+ 
+  // Delete a user (admin only)
+  deleteUser: (userId) => {
+    return axiosInstance.delete(`/api/admin/users/?user_id=${userId}`)
+      .then(response => {
+        console.log("Admin service - delete user response:", response.data);
+        return response.data;
+      })
+      .catch(error => {
+        console.error("Admin service - delete user error:", error);
+        throw error;
+      });
+  }
+};
+ 
+ 
+
+
+
+
 export default axiosInstance;
 
 
