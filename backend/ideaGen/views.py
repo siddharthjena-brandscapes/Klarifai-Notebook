@@ -1642,7 +1642,6 @@ def project_operations(request, project_id=None):
         
     elif request.method == "POST":
         try:
-            
             project_name = request.data.get('name')
             
             if not project_name:
@@ -1651,14 +1650,20 @@ def project_operations(request, project_id=None):
                     'error': 'Project name is required'
                 }, status=400)
             
+            # Check if project with same name already exists for this user
+            if Project.objects.filter(user=request.user, name=project_name, main_project_id=main_project_id).exists():
+                return JsonResponse({
+                    'success': False,
+                    'error': 'You already have a project with this name'
+                }, status=400)
+            
             # Create new project with user
             project = Project.objects.create(
-                
                 name=project_name,
                 created_at=timezone.now(),
                 last_modified=timezone.now(),
                 user=request.user,
-                main_project_id=main_project_id, # Add user to project
+                main_project_id=main_project_id,
             )
             
             # Create initial response data
