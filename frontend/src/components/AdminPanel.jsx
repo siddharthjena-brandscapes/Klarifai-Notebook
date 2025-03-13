@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { adminService } from '../utils/axiosConfig';
 import { FaUserPlus, FaUserEdit, FaUserMinus, FaKey, FaSave, FaTimes } from 'react-icons/fa';
+import Header from '../components/dashboard/Header'
 
 // Main Admin Panel Component
 const AdminPanel = () => {
@@ -116,9 +117,12 @@ const AdminPanel = () => {
   };
 
   return (
+    
     <div className="bg-gradient-to-br from-gray-900 via-black to-emerald-900 min-h-screen text-white p-6">
+       <Header/>
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+       
+        <div className="flex justify-between items-center mb-8 mt-14">
           <h1 className="text-3xl font-bold text-emerald-400">Admin Panel - User Management</h1>
           <button 
             className="bg-gradient-to-r from-blue-600/90 to-emerald-600/80 text-white px-4 py-2 rounded-md flex items-center shadow-lg transition-all"
