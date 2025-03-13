@@ -54,14 +54,14 @@ const DownloadChatsDateRangeModal = ({ isOpen, onClose, mainProjectId }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-gradient-to-br from-gray-900/90 via-gray-800/90 to-gray-900/90 border border-blue-500/20 rounded-xl shadow-2xl p-6 w-full max-w-md transform transition-all">
+      <div className="bg-gradient-to-br from-gray-900/90 via-gray-800/90 to-gray-900/90 border border-blue-500/20 rounded-xl shadow-2xl p-4 w-full max-w-md transform transition-all max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-white">Download Chats by Date</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
           >
-            <X className="h-6 w-6" />
+            <X className="h-5 w-6" />
           </button>
         </div>
 

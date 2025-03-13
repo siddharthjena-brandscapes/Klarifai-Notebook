@@ -60,12 +60,12 @@ const SignupForm = ({ onSuccess = () => {} }) => {
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 max-h-20 overflow-y-auto" role="alert">
                     <span className="block sm:inline">{error}</span>
                 </div>
             )}
             <div>
-                <label className="block text-sm font-medium text-gray-600">User Name</label>
+                <label className="block text-sm font-medium text-gray-600">Username</label>
                 <input
                     type="text"
                     required

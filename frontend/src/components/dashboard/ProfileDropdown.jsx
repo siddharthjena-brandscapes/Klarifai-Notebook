@@ -164,15 +164,21 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
             </div>
           )}
         </div>
-        <div className="flex-1">
-          <h3 className="text-white text-lg font-medium">{username}</h3>
-          <p className="text-gray-300 text-sm truncate">{userDetails.email}</p>
-          <button 
-            onClick={handleImageClick}
-            className="mt-2 text-blue-400 text-sm hover:text-blue-300 transition-colors"
-          >
-            Change Picture
+        <div className="flex-1">           
+          <h3 className="text-white text-lg font-medium">{username}</h3>           
+          <p className="text-gray-300 text-sm truncate">{userDetails.email}</p>           
+          <button              
+            onClick={handleImageClick}             
+            className="mt-2 text-blue-400 text-sm hover:text-blue-300 transition-colors"           
+          >             
+            Change Picture           
           </button>
+          <button
+            disabled={true}
+            className="ml-4 mt-2 text-gray-500 text-sm cursor-not-allowed opacity-50 pointer-events-none"
+          >
+            Change Password
+          </button>      
         </div>
       </div>
       
@@ -204,8 +210,8 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
       {/* Change Password Section */}
       <div className="pt-4 border-t border-gray-700">
         <button
-          onClick={() => setShowPasswordForm(!showPasswordForm)}
-          className="flex items-center space-x-2 text-gray-200 hover:text-white transition-colors w-full p-2 rounded-lg hover:bg-gray-800"
+          disabled={true}
+          className="flex items-center space-x-2 text-gray-500 w-full p-2 rounded-lg bg-gray-800 opacity-50 cursor-not-allowed"
         >
           <Lock className="w-4 h-4" />
           <span className="text-sm">Change Password</span>
