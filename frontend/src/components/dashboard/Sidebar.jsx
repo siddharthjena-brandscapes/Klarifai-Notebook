@@ -26,7 +26,7 @@ import { toast } from 'react-toastify';
 import DeleteModal from './DeleteModal';
 import DeleteChatModal  from './DeleteChatModal';
 import ChatDownloadMenu from './ChatDownload/ChatDownloadMenu';
-import { ideaService } from '../../utils/axiosConfig';
+import { ideaService, coreService } from '../../utils/axiosConfig';
 const Sidebar = ({ 
   isOpen, 
   isMobile,
@@ -66,79 +66,102 @@ const Sidebar = ({
   
   // Add this state for tracking the generate ideas button animation
   const [isGenerateIdeasAnimating, setIsGenerateIdeasAnimating] = useState(false);
+
+  const getMainProjectName = async () => {
+    try {
+      const project = await coreService.getProjectDetails(mainProjectId);
+      return project.name;
+    } catch (error) {
+      console.error("Error fetching project name:", error);
+      return "My Project"; // Fallback name
+    }
+  };
+ 
+
   
   // Function to handle generating ideas from selected documents
   // Update the handleGenerateIdeas function in your Sidebar.jsx
-const handleGenerateIdeas = async () => {
-  if (!selectedDocuments || selectedDocuments.length === 0) {
-    toast.warning("Please select at least one document first");
-    return;
-  }
-
-  try {
-    // Show animation while processing
-    setIsGenerateIdeasAnimating(true);
-    
-    toast.info("Extracting idea parameters from document...", {
-      autoClose: 3000
-    });
-
-    // Call the backend API to extract parameters from the first selected document
-    const response = await documentService.generateIdeaContext({
-      document_id: selectedDocuments[0],
-      main_project_id: mainProjectId
-    });
-
-    // Stop animation
-    setIsGenerateIdeasAnimating(false);
-
-    if (response.data && response.data.idea_parameters) {
-      // Find the selected document's name for project title
-      const selectedDoc = documents.find(doc => doc.id.toString() === selectedDocuments[0]);
-      const documentName = selectedDoc ? selectedDoc.filename : "Document";
+  const handleGenerateIdeas = async () => {
+    if (!selectedDocuments || selectedDocuments.length === 0) {
+      toast.warning("Please select at least one document first");
+      return;
+    }
+    const mainProjectName = await getMainProjectName();
+  
+    try {
+      // Show animation while processing
+      setIsGenerateIdeasAnimating(true);
       
-      // Create a default project name from document
-      const projectName = `Ideas from ${documentName}`;
-      
-      // Create a new project first
-      const projectResponse = await ideaService.createProject({
-        name: projectName,
+      toast.info("Extracting idea parameters from document...", {
+        autoClose: 3000
+      });
+  
+      // Call the backend API to extract parameters from the first selected document
+      const response = await documentService.generateIdeaContext({
+        document_id: selectedDocuments[0],
         main_project_id: mainProjectId
       });
-      
-      if (projectResponse.data && projectResponse.data.success) {
-        // Now navigate to the regular IdeaForm route with the new project ID
-        const newProjectId = projectResponse.data.project.id;
+  
+      // Stop animation
+      setIsGenerateIdeasAnimating(false);
+  
+      if (response.data && response.data.idea_parameters) {
+        // Use the suggested project name from the backend
+        const projectName = response.data.suggested_project_name || 
+                          `Ideas from ${response.data.document_name_no_ext || response.data.document_name}`;
         
-        // Navigate to the form endpoint for this new project
-        navigate(`/idea-generation/${mainProjectId}/form`, {
-          state: {
-            fromDocQA: true,
-            document_id: response.data.document_id,
-            document_name: response.data.document_name,
-            idea_parameters: response.data.idea_parameters,
-            main_project_id: mainProjectId,
-            newProject: {
-              id: newProjectId,
-              name: projectName
-            }
-          }
+        // Create a new project first
+        const projectResponse = await ideaService.createProject({
+          name: projectName,
+          main_project_id: mainProjectId
         });
         
-        toast.success("New project created! Loading Idea Generator...");
+        if (projectResponse.data && projectResponse.data.success) {
+          // Now navigate to the regular IdeaForm route with the new project ID
+          const newProjectId = projectResponse.data.project.id;
+          
+          // Navigate to the form endpoint for this new project
+          navigate(`/idea-generation/${mainProjectId}/form`, {
+            state: {
+              fromDocQA: true,
+              document_id: response.data.document_id,
+              document_name: response.data.document_name,
+              idea_parameters: response.data.idea_parameters,
+              main_project_id: mainProjectId,
+              newProject: {
+                id: newProjectId,
+                name: projectName
+              },
+              projectName: mainProjectName
+            }
+          });
+          
+          toast.success("New project created! Loading Idea Generator...");
+        } else {
+          throw new Error("Failed to create a new project");
+        }
       } else {
-        throw new Error("Failed to create a new project");
+        // More detailed error message
+        const errorMessage = response.data && response.data.error 
+          ? `Error: ${response.data.error}` 
+          : "Failed to extract idea parameters from the document.";
+        
+        console.error("API response error:", response);
+        toast.error(errorMessage);
       }
-    } else {
-      toast.error("Failed to extract idea parameters from the document.");
+    } catch (error) {
+      // Stop animation on error
+      setIsGenerateIdeasAnimating(false);
+      console.error("Error generating idea context:", error);
+      
+      // More detailed error message from the exception
+      const errorMessage = error.response && error.response.data && error.response.data.error
+        ? `Error: ${error.response.data.error}`
+        : "Failed to extract idea parameters. Please try again.";
+      
+      toast.error(errorMessage);
     }
-  } catch (error) {
-    // Stop animation on error
-    setIsGenerateIdeasAnimating(false);
-    console.error("Error generating idea context:", error);
-    toast.error("Failed to extract idea parameters. Please try again.");
-  }
-};
+  };
   const handleResetSearch = () => {
     setDocumentSearchTerm('');
   };

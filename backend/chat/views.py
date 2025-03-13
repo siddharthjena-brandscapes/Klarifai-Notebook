@@ -2475,6 +2475,7 @@ class GenerateIdeaContextView(APIView):
         user = request.user
         document_id = request.data.get('document_id')
         query = request.data.get('query')
+        main_project_id = request.data.get('main_project_id')
        
         # Validate input - need either document_id or query
         if not document_id and not query:
@@ -2486,6 +2487,18 @@ class GenerateIdeaContextView(APIView):
             # Case 1: Using Document ID - fetch existing parameters or extract new ones
             if document_id:
                 document = get_object_or_404(Document, id=document_id, user=user)
+                
+                # Get document name without extension
+                document_name_no_ext = self.remove_file_extension(document.filename)
+                
+                # Generate a unique project name - handle the case when main_project_id is None
+                suggested_project_name = f"Ideas from {document_name_no_ext}"
+                if main_project_id:
+                    try:
+                        suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
+                    except Exception as e:
+                        # Log the error but continue with the default name
+                        print(f"Error generating unique project name: {str(e)}")
                
                 try:
                     # Check if we already have parameters stored
@@ -2496,7 +2509,9 @@ class GenerateIdeaContextView(APIView):
                         return Response({
                             'document_id': document_id,
                             'document_name': document.filename,
-                            'idea_parameters': processed_index.idea_parameters
+                            'document_name_no_ext': document_name_no_ext,
+                            'idea_parameters': processed_index.idea_parameters,
+                            'suggested_project_name': suggested_project_name
                         })
                    
                     # If no parameters yet, extract them from the document
@@ -2517,7 +2532,9 @@ class GenerateIdeaContextView(APIView):
                     return Response({
                         'document_id': document_id,
                         'document_name': document.filename,
-                        'idea_parameters': idea_params
+                        'document_name_no_ext': document_name_no_ext,
+                        'idea_parameters': idea_params,
+                        'suggested_project_name': suggested_project_name
                     })
                    
                 except ProcessedIndex.DoesNotExist:
@@ -2536,6 +2553,18 @@ class GenerateIdeaContextView(APIView):
                
                 document = get_object_or_404(Document, id=active_doc_id, user=user)
                 processed_index = get_object_or_404(ProcessedIndex, document=document)
+                
+                # Get document name without extension
+                document_name_no_ext = self.remove_file_extension(document.filename)
+                
+                # Generate a unique project name - handle the case when main_project_id is None
+                suggested_project_name = f"Ideas from {document_name_no_ext}"
+                if main_project_id:
+                    try:
+                        suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
+                    except Exception as e:
+                        # Log the error but continue with the default name
+                        print(f"Error generating unique project name: {str(e)}")
                
                 # Load index and metadata
                 index_file = processed_index.faiss_index
@@ -2554,8 +2583,10 @@ class GenerateIdeaContextView(APIView):
                 return Response({
                     'document_id': active_doc_id,
                     'document_name': document.filename,
+                    'document_name_no_ext': document_name_no_ext,
                     'query': query,
-                    'idea_parameters': idea_params
+                    'idea_parameters': idea_params,
+                    'suggested_project_name': suggested_project_name
                 })
                
         except Exception as e:
@@ -2564,6 +2595,35 @@ class GenerateIdeaContextView(APIView):
                 'error': str(e),
                 'detail': 'An error occurred while generating idea context'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def remove_file_extension(self, filename):
+        """
+        Remove file extension from filename
+        """
+        import os
+        return os.path.splitext(filename)[0]
+    
+    def generate_unique_project_name(self, document_name, main_project_id):
+        """
+        Generate a unique project name based on document name,
+        adding (1), (2), etc. if needed to avoid duplicates
+        """
+        from ideaGen.models import Project
+        
+        base_name = f"Ideas from {document_name}"
+        project_name = base_name
+        counter = 1
+        
+        # Check for existing projects with this name in the main project
+        while Project.objects.filter(
+            name=project_name,
+            main_project_id=main_project_id
+        ).exists():
+            # Increment counter and update name
+            project_name = f"{base_name} ({counter})"
+            counter += 1
+            
+        return project_name
    
     def load_faiss_index_from_paths(self, index_file, metadata_file):
         """Load FAISS index and metadata from file paths"""
