@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import Header from "./dashboard/Header";
 import { coreService } from "../utils/axiosConfig";
 import EditProject from "./EditProject";
+import DeleteProjectModal from './DeleteProjectModal';
 
 const modules = [
   {
@@ -171,7 +172,8 @@ function App() {
   const [error, setError] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
   const navigate = useNavigate();
 
   // Load projects from API on initial render
@@ -348,7 +350,7 @@ function App() {
     try {
       await coreService.deleteProject(projectId);
       setProjects((prev) => prev.filter((project) => project.id !== projectId));
-
+  
       if (currentProject && currentProject.id === projectId) {
         setCurrentProject(null);
         setCurrentView("projects");
@@ -652,6 +654,20 @@ function App() {
             onUpdate={handleProjectUpdate}
           />
         )}
+
+         {/* Add the DeleteProjectModal HERE */}
+      {deleteModalOpen && projectToDelete && (
+        <DeleteProjectModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onConfirm={() => {
+            handleDeleteProject(projectToDelete.id);
+            setDeleteModalOpen(false);
+            setProjectToDelete(null);
+          }}
+          projectName={projectToDelete.name}
+        />
+      )}
         <Header />
         <div className="max-w-6xl mx-auto pt-16">
           <div className="flex justify-between items-center mb-8">
@@ -674,10 +690,16 @@ function App() {
                 >
                   <div className="p-6">
                     <div className="flex justify-between items-start mb-4">
+                  
+
+
+
+
                       <div
                         className="flex-1 cursor-pointer"
                         onClick={() => handleProjectSelect(project)}
                       >
+                        
                         <h3 className="text-2xl font-bold text-white group-hover:text-emerald-400 transition-colors">
                           {project.name}
                         </h3>
@@ -729,11 +751,15 @@ function App() {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDeleteProject(project.id)}
-                          className="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-300 rounded-lg transition-colors"
-                        >
-                          Delete
-                        </button>
+  onClick={(e) => {
+    e.stopPropagation();
+    setProjectToDelete(project); // Set the project to delete
+    setDeleteModalOpen(true); // Open the modal
+  }}
+  className="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-300 rounded-lg transition-colors"
+>
+  Delete
+</button>
                         <button
                           onClick={() => handleProjectSelect(project)}
                           className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 rounded-lg transition-colors flex items-center group"
