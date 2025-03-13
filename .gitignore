@@ -36,7 +36,7 @@ __pycache__/
 !/media/metadata/.gitkeep
 
 # Index and metadata directories (keep structure but ignore content)
-/faiss_indexes/*
+faiss_indexes
 /indices/*
 /markdown/*
 /metadata/*
