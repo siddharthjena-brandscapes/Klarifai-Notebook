@@ -1,9 +1,8 @@
-
 /* eslint-disable no-unused-vars */
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import LoginForm from '../../components/auth/LoginForm'; // Direct import
-import SignupForm from '../../components/auth/SignupForm'; // Direct import
+import LoginForm from '../../components/auth/LoginForm';
+import SignupForm from '../../components/auth/SignupForm';
 import backgroundImage from '../../assets/woman_face_merging_into_the_AI.jpg';
 import logo from '../../assets/klarifi-logo-blue.png';
 
@@ -32,12 +31,6 @@ const LoginSignup = () => {
 
       localStorage.setItem('token', token);
       
-      // // Determine redirect path
-      // const from = location.state?.from?.pathname || '/dashboard';
-      
-      // // Navigate to the determined path
-      // navigate(from, { replace: true });
-
       navigate('/landing', { replace: true });
     } catch (error) {
       console.error('Authentication error:', error);
@@ -47,45 +40,46 @@ const LoginSignup = () => {
   };
 
   return (
-    <div className="flex h-screen">
-      {/* Left Side: AI-Themed Image */}
+    <div className="flex flex-col md:flex-row h-screen">
+      {/* Left Side: AI-Themed Image - Hidden on mobile, visible on md and up */}
       <div
-        className="w-1/2 bg-cover bg-center"
+        className="hidden md:block md:w-1/2 bg-cover bg-center"
         style={{ backgroundImage: `url(${backgroundImage})` }}
       ></div>
 
-      {/* Right Side: Login/Signup Form */}
+      {/* Right Side: Login/Signup Form - Full width on mobile, half on md and up */}
       <div
-        className="w-1/2 flex items-center justify-center bg-cover bg-center"
-        style={{ 
-          backgroundImage: "url('./clone/src/assets/geometric_abstract_background.jpg')" 
+        className="w-full md:w-1/2 flex items-center justify-center bg-cover bg-center p-4"
+        style={{
+          backgroundImage: "url('./clone/src/assets/geometric_abstract_background.jpg')"
         }}
       >
-        <div 
-          className={`w-full max-w-md bg-white shadow-md rounded-lg transition-all duration-500 ease-in-out overflow-hidden`}
+        <div
+          className={`w-full max-w-md bg-white shadow-md rounded-lg transition-all duration-500 ease-in-out overflow-hidden mx-auto`}
           style={{
-            height: isLogin ? '560px' : '640px',
+            height: isLogin ? 'auto' : 'auto',
+            minHeight: isLogin ? '540px' : '620px',
             transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
           }}
         >
-          <div className="p-8 h-full">
+          <div className="p-4 sm:p-8 h-full">
             <div
               className={`transition-all duration-600 h-full ${
-                isAnimating 
-                  ? 'opacity-0 -translate-y-4 scale-95' 
+                isAnimating
+                  ? 'opacity-0 -translate-y-4 scale-95'
                   : 'opacity-100 translate-y-0 scale-100'
               }`}
             >
               {/* Logo */}
               <div className="flex justify-center mb-4">
-                <img 
-                  src={logo} 
-                  alt="Logo" 
-                  className="h-16 w-auto transition-transform duration-500 hover:scale-110"
+                <img
+                  src={logo}
+                  alt="Logo"
+                  className="h-12 sm:h-16 w-auto transition-transform duration-500 hover:scale-110"
                 />
               </div>
               
-              <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-center text-gray-800 mb-4 sm:mb-6">
                 {isLogin ? "Welcome!" : "Create Account"}
               </h2>
               
@@ -95,11 +89,11 @@ const LoginSignup = () => {
                 <SignupForm onSuccess={handleAuthSuccess} />
               )}
               
-              <div className="mt-6 text-center">
+              <div className="mt-4 sm:mt-6 text-center">
                 <p className="text-sm text-gray-600">
                   {isLogin ? "Don't have an account?" : "Already have an account?"}
-                  <button 
-                    onClick={toggleForm} 
+                  <button
+                    onClick={toggleForm}
                     className="ml-2 font-medium text-blue-900 hover:text-blue-800 transition-all duration-300"
                   >
                     {isLogin ? "Sign Up" : "Login"}
