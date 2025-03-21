@@ -4,27 +4,33 @@ venv/
 myVenv/
 *.dll
 .vscode/
-
+ 
 # Node
 node_modules/
 package-lock.json
-
+ 
 # Media and Data files
 *.png
 *.pdf
 *.csv
-
-
-
+*.xlsx
+*.xls
+*.docx
+*.doc
+*.pptx
+*.ppt
+ 
+ 
 # Python bytecode files
 __pycache__/
 *.py[cod]
 *$py.class
-
-
+ 
+ 
 # Log files
 *.log
-
+.git
+ 
 # Media uploads (keep directory structure but ignore content)
 /media/documents/*
 /media/profile_pictures/*
@@ -34,7 +40,7 @@ __pycache__/
 !/media/profile_pictures/.gitkeep
 !/media/indices/.gitkeep
 !/media/metadata/.gitkeep
-
+ 
 # Index and metadata directories (keep structure but ignore content)
 faiss_indexes
 /indices/*
@@ -44,18 +50,17 @@ faiss_indexes
 !/indices/.gitkeep
 !/markdown/.gitkeep
 !/metadata/.gitkeep
-
+ 
 # OS generated files
 .DS_Store
 Thumbs.db
-
+ 
 # Virtual environment
 venv/
 env/
 .venv/
-
+ 
 # IDE specific settings
 .vscode/
 .idea/
 *.sublime-workspace
-

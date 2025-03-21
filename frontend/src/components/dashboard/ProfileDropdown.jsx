@@ -173,12 +173,7 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
           >             
             Change Picture           
           </button>
-          <button
-            disabled={true}
-            className="ml-4 mt-2 text-gray-500 text-sm cursor-not-allowed opacity-50 pointer-events-none"
-          >
-            Change Password
-          </button>      
+            
         </div>
       </div>
       

@@ -1,5 +1,3 @@
-
-
 // //sidebar.jsx with project management
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -61,11 +59,74 @@ const Sidebar = ({
   const [chatToDelete, setChatToDelete] = useState(null);
   const [isDeleteChatModalOpen, setIsDeleteChatModalOpen] = useState(false);
 
+  const [disabledModules, setDisabledModules] = useState({});
+  const [projectModules, setProjectModules] = useState([]);
+
   // Add navigate for redirection
   const navigate = useNavigate();
   
   // Add this state for tracking the generate ideas button animation
   const [isGenerateIdeasAnimating, setIsGenerateIdeasAnimating] = useState(false);
+
+
+   // Check for disabled modules and project modules on mount
+   useEffect(() => {
+    // Get disabled modules from localStorage (set by Header component)
+    const storedDisabledModules = localStorage.getItem('disabled_modules');
+    if (storedDisabledModules) {
+      try {
+        setDisabledModules(JSON.parse(storedDisabledModules));
+      } catch (error) {
+        console.error('Error parsing disabled modules:', error);
+      }
+    }
+    
+    // Check if project modules in localStorage
+    const storedProjectModules = localStorage.getItem('project_modules');
+    if (storedProjectModules) {
+      try {
+        setProjectModules(JSON.parse(storedProjectModules));
+      } catch (error) {
+        console.error('Error parsing project modules:', error);
+      }
+    }
+  }, []);
+
+  // Fetch project details to get selected modules when not in localStorage
+  useEffect(() => {
+    const fetchProjectModules = async () => {
+      if (!mainProjectId || projectModules.length > 0) return;
+      
+      try {
+        const projectDetails = await coreService.getProjectDetails(mainProjectId);
+        if (projectDetails && projectDetails.selected_modules) {
+          setProjectModules(projectDetails.selected_modules);
+          // Store for other components
+          localStorage.setItem('project_modules', JSON.stringify(projectDetails.selected_modules));
+        }
+      } catch (error) {
+        console.error("Failed to fetch project details:", error);
+      }
+    };
+    
+    fetchProjectModules();
+  }, [mainProjectId, projectModules]);
+
+  
+  // Function to check if a module is disabled
+  const isModuleDisabled = (moduleId) => {
+    return disabledModules[moduleId] === true;
+  };
+
+   // Function to check if module is included in the current project
+   const isModuleIncludedInProject = (moduleId) => {
+    return projectModules.includes(moduleId);
+  };
+  
+  // Function to check if a module should be available
+  const isModuleAvailable = (moduleId) => {
+    return !isModuleDisabled(moduleId) && isModuleIncludedInProject(moduleId);
+  };
 
   const getMainProjectName = async () => {
     try {
@@ -76,92 +137,91 @@ const Sidebar = ({
       return "My Project"; // Fallback name
     }
   };
- 
-
+  
+  
   
   // Function to handle generating ideas from selected documents
   // Update the handleGenerateIdeas function in your Sidebar.jsx
-  const handleGenerateIdeas = async () => {
-    if (!selectedDocuments || selectedDocuments.length === 0) {
-      toast.warning("Please select at least one document first");
+const handleGenerateIdeas = async () => {
+
+    // Check if the idea-generator module is disabled or not included in project
+    if (!isModuleAvailable('idea-generator')) {
+      toast.error("Idea Generator is not available for this project");
       return;
     }
-    const mainProjectName = await getMainProjectName();
-  
-    try {
-      // Show animation while processing
-      setIsGenerateIdeasAnimating(true);
+  if (!selectedDocuments || selectedDocuments.length === 0) {
+    toast.warning("Please select at least one document first");
+    return;
+  }
+
+ 
+  const mainProjectName = await getMainProjectName();
+
+  try {
+    // Show animation while processing
+    setIsGenerateIdeasAnimating(true);
+    
+    toast.info("Extracting idea parameters from document...", {
+      autoClose: 3000
+    });
+
+    // Call the backend API to extract parameters from the first selected document
+    const response = await documentService.generateIdeaContext({
+      document_id: selectedDocuments[0],
+      main_project_id: mainProjectId
+    });
+
+    // Stop animation
+    setIsGenerateIdeasAnimating(false);
+
+    if (response.data && response.data.idea_parameters) {
+      // Find the selected document's name for project title
+      const selectedDoc = documents.find(doc => doc.id.toString() === selectedDocuments[0]);
+      const documentName = selectedDoc ? selectedDoc.filename : "Document";
       
-      toast.info("Extracting idea parameters from document...", {
-        autoClose: 3000
-      });
-  
-      // Call the backend API to extract parameters from the first selected document
-      const response = await documentService.generateIdeaContext({
-        document_id: selectedDocuments[0],
+      // Create a default project name from document
+      const projectName = `Ideas from ${documentName}`;
+      
+      // Create a new project first
+      const projectResponse = await ideaService.createProject({
+        name: projectName,
         main_project_id: mainProjectId
       });
-  
-      // Stop animation
-      setIsGenerateIdeasAnimating(false);
-  
-      if (response.data && response.data.idea_parameters) {
-        // Use the suggested project name from the backend
-        const projectName = response.data.suggested_project_name || 
-                          `Ideas from ${response.data.document_name_no_ext || response.data.document_name}`;
+      
+      if (projectResponse.data && projectResponse.data.success) {
+        // Now navigate to the regular IdeaForm route with the new project ID
+        const newProjectId = projectResponse.data.project.id;
         
-        // Create a new project first
-        const projectResponse = await ideaService.createProject({
-          name: projectName,
-          main_project_id: mainProjectId
+        // Navigate to the form endpoint for this new project
+        navigate(`/idea-generation/${mainProjectId}/form`, {
+          state: {
+            fromDocQA: true,
+            document_id: response.data.document_id,
+            document_name: response.data.document_name,
+            idea_parameters: response.data.idea_parameters,
+            main_project_id: mainProjectId,
+            newProject: {
+              id: newProjectId,
+              name: projectName
+            },
+            projectName: mainProjectName
+          }
         });
         
-        if (projectResponse.data && projectResponse.data.success) {
-          // Now navigate to the regular IdeaForm route with the new project ID
-          const newProjectId = projectResponse.data.project.id;
-          
-          // Navigate to the form endpoint for this new project
-          navigate(`/idea-generation/${mainProjectId}/form`, {
-            state: {
-              fromDocQA: true,
-              document_id: response.data.document_id,
-              document_name: response.data.document_name,
-              idea_parameters: response.data.idea_parameters,
-              main_project_id: mainProjectId,
-              newProject: {
-                id: newProjectId,
-                name: projectName
-              },
-              projectName: mainProjectName
-            }
-          });
-          
-          toast.success("New project created! Loading Idea Generator...");
-        } else {
-          throw new Error("Failed to create a new project");
-        }
+        toast.success("New project created! Loading Idea Generator...");
       } else {
-        // More detailed error message
-        const errorMessage = response.data && response.data.error 
-          ? `Error: ${response.data.error}` 
-          : "Failed to extract idea parameters from the document.";
-        
-        console.error("API response error:", response);
-        toast.error(errorMessage);
+        throw new Error("Failed to create a new project");
       }
-    } catch (error) {
-      // Stop animation on error
-      setIsGenerateIdeasAnimating(false);
-      console.error("Error generating idea context:", error);
-      
-      // More detailed error message from the exception
-      const errorMessage = error.response && error.response.data && error.response.data.error
-        ? `Error: ${error.response.data.error}`
-        : "Failed to extract idea parameters. Please try again.";
-      
-      toast.error(errorMessage);
+    } else {
+      toast.error("Failed to extract idea parameters from the document.");
     }
-  };
+  } catch (error) {
+    // Stop animation on error
+    setIsGenerateIdeasAnimating(false);
+    console.error("Error generating idea context:", error);
+    toast.error("Failed to extract idea parameters. Please try again.");
+  }
+};
   const handleResetSearch = () => {
     setDocumentSearchTerm('');
   };
@@ -857,8 +917,8 @@ const activeConversation = activeConversationId ?
             </div>
           )}
 
-           {/* Generate Ideas Button - Positioned for maximum visibility and accessibility */}
-           {isOpen && (
+           {/* Generate Ideas Button - Only shown if user has access to the idea-generator module */}
+           {isOpen && isModuleAvailable('idea-generator') && (
             <div className="mb-4 relative">
               <button
                 onClick={handleGenerateIdeas}
@@ -1266,41 +1326,7 @@ const activeConversation = activeConversationId ?
           )}
         </div>
   
-        {/* Footer Options (previous implementation remains the same) */}
-          {isOpen && (
-            <div className=" border-gray-600 p-0 flex items-center justify-center">
-              <div className="space-y-2">
-              <ChatDownloadMenu
-  isOpen={isOpen}
-  activeConversation={activeConversation}
-  mainProjectId={mainProjectId}
-  className="w-full text-sm p-1.5 rounded-lg flex items-center justify-center  mb-1"
-/>
-                {/* <button
-                  className="
-                    text-white w-full text-left flex 
-                    items-center gap-3 p-2 
-                    rounded-lg hover:bg-gray-700 
-                    hover:shadow-md transition-all active:scale-95 
-                  "
-                >
-                  <Settings size={20} className="text-blue-400" />
-                  Settings
-                </button> */}
-                {/* <button
-                  className="
-                    text-white w-full text-left flex 
-                    items-center gap-3 p-2 
-                    rounded-lg hover:bg-gray-700 active:scale-95 
-                    hover:shadow-md transition-all
-                  "
-                >
-                  <CircleHelp size={20} className="text-green-400" />
-                  Help
-                </button> */}
-              </div>
-            </div>
-          )}
+      
         </aside>
     
         {/* Custom Scrollbar Styles */}

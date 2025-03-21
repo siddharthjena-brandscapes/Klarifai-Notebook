@@ -1,260 +1,431 @@
 
-import React, { useState, useEffect } from 'react';
-import { Pencil, Check, X, RotateCcw, ChevronLeft, ChevronRight, Clock, History } from 'lucide-react';
-import PropTypes from 'prop-types';
+
+// import React, { useState, useRef, useEffect } from 'react';
+// import { Edit, Check, X, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+
+// const EditableMessage = ({ 
+//   message, 
+//   messageIndex, 
+//   onUpdate,
+//   messageVersions = {},
+//   currentVersionIndex = {},
+//   onRestoreVersion,
+//   onOpenHistoryModal
+// }) => {
+//   const [isEditing, setIsEditing] = useState(false);
+//   const [editedContent, setEditedContent] = useState(message.content);
+//   const textareaRef = useRef(null);
+  
+//   // Get version information
+//   const versions = messageVersions[messageIndex] || [];
+//   const hasHistory = versions.length > 0;
+//   const currentVersion = currentVersionIndex[messageIndex] || 0;
+  
+//   // Reset content when message changes
+//   useEffect(() => {
+//     setEditedContent(message.content);
+//   }, [message.content]);
+
+//   useEffect(() => {
+//     if (isEditing && textareaRef.current) {
+//       textareaRef.current.focus();
+//       textareaRef.current.style.height = 'auto';
+//       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+//     }
+//   }, [isEditing]);
+
+//   // Add keyboard navigation for version browsing
+//   useEffect(() => {
+//     if (hasHistory && !isEditing) {
+//       const handleKeyDown = (e) => {
+//         if (e.altKey && e.key === 'ArrowLeft') {
+//           navigateVersion('prev');
+//         } else if (e.altKey && e.key === 'ArrowRight') {
+//           navigateVersion('next');
+//         }
+//       };
+
+//       document.addEventListener('keydown', handleKeyDown);
+//       return () => {
+//         document.removeEventListener('keydown', handleKeyDown);
+//       };
+//     }
+//   }, [currentVersion, hasHistory, isEditing, versions.length]);
+
+//   const handleEdit = () => {
+//     setIsEditing(true);
+//     setEditedContent(message.content);
+//   };
+
+//   const handleCancel = () => {
+//     setIsEditing(false);
+//     setEditedContent(message.content);
+//   };
+
+//   const handleSave = () => {
+//     if (editedContent.trim() !== message.content.trim()) {
+//       onUpdate(messageIndex, editedContent);
+//     }
+//     setIsEditing(false);
+//   };
+
+//   const handleTextareaChange = (e) => {
+//     setEditedContent(e.target.value);
+    
+//     // Auto-resize the textarea
+//     e.target.style.height = 'auto';
+//     e.target.style.height = `${e.target.scrollHeight}px`;
+//   };
+
+//   const handleKeyDown = (e) => {
+//     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+//       handleSave();
+//     } else if (e.key === 'Escape') {
+//       handleCancel();
+//     }
+//   };
+
+//   const navigateVersion = (direction) => {
+//     if (!hasHistory) return;
+    
+//     let newVersion;
+    
+//     if (direction === 'prev' && currentVersion > 0) {
+//       newVersion = currentVersion - 1;
+//     } else if (direction === 'next' && currentVersion < versions.length - 1) {
+//       newVersion = currentVersion + 1;
+//     } else {
+//       return; // Invalid navigation
+//     }
+    
+//     // Call the restore function with message index and version index
+//     if (onRestoreVersion) {
+//       onRestoreVersion(messageIndex, newVersion);
+//     }
+//   };
+
+//   return (
+//     <div className="relative group pb-8">
+//       {message.role === 'user' && !isEditing && (
+//         <>
+//           <div className="absolute right-0 bottom-0">
+//             <button
+//               onClick={handleEdit}
+//               className="p-2 rounded-lg"
+//               title="Edit message"
+//             >
+//               <Edit className="h-4 w-4 text-gray-300 hover:text-white" />
+//             </button>
+//           </div>
+
+//           {/* Version history controls */}
+//           {(hasHistory || message.edited) && (
+//             <div className="absolute bottom-[-30px] right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+//               <div className="flex items-center bg-gray-800/80 rounded-lg px-2 py-1 shadow-md">
+//                 {/* Navigation controls */}
+//                 <div className="flex items-center space-x-1">
+//                   <button
+//                     onClick={() => navigateVersion('prev')}
+//                     disabled={currentVersion === 0}
+//                     className={`p-1 rounded-full hover:bg-gray-700 ${currentVersion === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+//                     title="Previous version (Alt+←)"
+//                   >
+//                     <ChevronLeft className="h-3 w-3" />
+//                   </button>
+                  
+//                   <button 
+//                     onClick={() => onOpenHistoryModal && onOpenHistoryModal(messageIndex)}
+//                     className="p-1 rounded-full hover:bg-gray-700"
+//                     title="View full version history"
+//                   >
+//                     <Clock className="h-3 w-3" />
+//                   </button>
+                  
+//                   <button
+//                     onClick={() => navigateVersion('next')}
+//                     disabled={!hasHistory || currentVersion === versions.length - 1}
+//                     className={`p-1 rounded-full hover:bg-gray-700 ${!hasHistory || currentVersion === versions.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+//                     title="Next version (Alt+→)"
+//                   >
+//                     <ChevronRight className="h-3 w-3" />
+//                   </button>
+//                 </div>
+                
+//                 {/* Version indicator */}
+//                 {hasHistory && (
+//                   <span className="text-xs ml-2 text-gray-300">
+//                     {currentVersion === 0 && versions[0]?.isOriginal ? 'Original' : `v${currentVersion}`}
+//                   </span>
+//                 )}
+//               </div>
+//             </div>
+//           )}
+//         </>
+//       )}
+
+//       {isEditing ? (
+//         <div className="border border-blue-500/50 rounded-lg p-2 bg-gray-900/50">
+//           <textarea
+//             ref={textareaRef}
+//             value={editedContent}
+//             onChange={handleTextareaChange}
+//             onKeyDown={handleKeyDown}
+//             className="w-full bg-transparent text-white p-2 resize-none focus:outline-none min-h-[100px]"
+//           />
+//           <div className="flex justify-end space-x-2 mt-1">
+//             <button
+//               onClick={handleCancel}
+//               className="p-1 rounded-md hover:bg-gray-700"
+//               title="Cancel (Esc)"
+//             >
+//               <X className="h-4 w-4 text-gray-400" />
+//             </button>
+//             <button
+//               onClick={handleSave}
+//               className="p-1 rounded-md bg-blue-600/70 hover:bg-blue-600"
+//               title="Save changes (Ctrl+Enter)"
+//             >
+//               <Check className="h-4 w-4 text-white" />
+//             </button>
+//           </div>
+//           <div className="text-gray-400 text-xs mt-1">
+//             Press Ctrl+Enter to save, Esc to cancel
+//           </div>
+//         </div>
+//       ) : (
+//         <div className="message-content">
+//           {/* Version indicator badge */}
+//           {hasHistory && currentVersion < versions.length - 1 && (
+//             <div className="inline-flex items-center bg-amber-500/20 border border-amber-500/30 rounded-full px-2 py-0.5 mb-2">
+//               <span className="text-amber-400 text-xs">
+//                 {currentVersion === 0 && versions[0]?.isOriginal ? 'Original Version' : `Version ${currentVersion}/${versions.length - 1}`}
+//               </span>
+//               <ChevronRight className="h-3 w-3 text-amber-400 ml-1" title="Use Alt+→ to view newer versions" />
+//             </div>
+//           )}
+//           {message.content}
+//         </div>
+//       )}
+//     </div>
+//   );
+// };
+
+// export default EditableMessage;
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Edit, Check, X, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
 const EditableMessage = ({ 
-  content, 
-  isEditing, 
-  setIsEditing, 
-  onSave, 
-  onRevert,
-  disabled,
-  messageIndex,
-  messageHistory
+  message, 
+  messageIndex, 
+  onUpdate,
+  messageVersions = {},
+  currentVersionIndex = {},
+  onRestoreVersion,
+  onOpenHistoryModal
 }) => {
-  const [editedContent, setEditedContent] = useState(content);
-  const [originalContent] = useState(content);
-  const [hasBeenEdited, setHasBeenEdited] = useState(false);
-  const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
-  const [versions, setVersions] = useState([]);
-
-  // Initialize versions on component mount
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(message.content);
+  const textareaRef = useRef(null);
+  
+  // Get version information
+  const versions = messageVersions[messageIndex] || [];
+  const hasHistory = versions.length > 0;
+  const currentVersion = currentVersionIndex[messageIndex] || (versions.length > 0 ? versions.length - 1 : 0);
+  
+  console.log(`Message ${messageIndex} - Versions:`, versions.length, 
+              "Current:", currentVersion,
+              "Has history:", hasHistory);
+  
+  // Reset content when message changes
   useEffect(() => {
-    if (messageHistory && messageHistory[messageIndex]) {
-      const allVersions = [
-        {
-          content: messageHistory[messageIndex].message,
-          timestamp: messageHistory[messageIndex].timestamp || new Date().toISOString(),
-          type: 'original'
-        },
-        ...(messageHistory[messageIndex].versions || []).map(version => ({
-          ...version,
-          type: 'edit'
-        }))
-      ];
-      setVersions(allVersions);
-      const currentIndex = allVersions.findIndex(v => v.content === content);
-      setCurrentVersionIndex(currentIndex >= 0 ? currentIndex : allVersions.length - 1);
-    }
-  }, [messageHistory, messageIndex, content]);
+    setEditedContent(message.content);
+  }, [message.content]);
 
   useEffect(() => {
-    setEditedContent(content);
-  }, [content]);
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [isEditing]);
 
+  // Add keyboard navigation for version browsing
   useEffect(() => {
-    setHasBeenEdited(content !== originalContent);
-  }, [content, originalContent]);
-
-  const navigateVersion = (direction) => {
-    const newIndex = direction === 'next' 
-      ? Math.min(currentVersionIndex + 1, versions.length - 1)
-      : Math.max(currentVersionIndex - 1, 0);
-    
-    if (newIndex !== currentVersionIndex) {
-      setCurrentVersionIndex(newIndex);
-      const version = versions[newIndex];
-      onSave(version.content, version.type === 'original');
-    }
-  };
-
-  const handleRevert = () => {
-    if (messageHistory && messageHistory[messageIndex]) {
-      const { message, response, subsequentMessages } = messageHistory[messageIndex];
-      onRevert(message, response, subsequentMessages);
-      setCurrentVersionIndex(0);
-    }
-    setIsEditing(false);
-  };
-
-  const handleSave = () => {
-    if (editedContent.trim() !== content) {
-      const newVersion = {
-        content: editedContent,
-        timestamp: new Date().toISOString(),
-        type: 'edit'
+    if (hasHistory && !isEditing) {
+      const handleKeyDown = (e) => {
+        if (e.altKey && e.key === 'ArrowLeft') {
+          navigateVersion('prev');
+        } else if (e.altKey && e.key === 'ArrowRight') {
+          navigateVersion('next');
+        }
       };
-      
-      const updatedVersions = [...versions, newVersion];
-      setVersions(updatedVersions);
-      setCurrentVersionIndex(updatedVersions.length - 1);
-      
-      onSave(editedContent);
-      setHasBeenEdited(true);
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
     }
-    setIsEditing(false);
+  }, [currentVersion, hasHistory, isEditing, versions.length]);
+
+  const handleEdit = () => {
+    setIsEditing(true);
+    setEditedContent(message.content);
   };
 
   const handleCancel = () => {
-    setEditedContent(content);
+    setIsEditing(false);
+    setEditedContent(message.content);
+  };
+
+  const handleSave = () => {
+    if (editedContent.trim() !== message.content.trim()) {
+      onUpdate(messageIndex, editedContent);
+    }
     setIsEditing(false);
   };
 
-  if (isEditing) {
-    return (
-      <div className="flex flex-col space-y-4 min-w-[300px]">
-        <textarea
-          value={editedContent}
-          onChange={(e) => setEditedContent(e.target.value)}
-          className="w-full bg-gray-900/50 text-white rounded-lg p-4 min-h-[120px] 
-            border border-blue-500/50 focus:border-blue-500/70 
-            focus:ring-2 focus:ring-blue-500/30 
-            focus:outline-none resize-none
-            shadow-lg"
-          placeholder="Edit your message..."
-          autoFocus
-        />
-        <div className="flex justify-end items-center space-x-2">
-          {messageHistory && messageHistory[messageIndex] && (
-            <button
-              onClick={handleRevert}
-              className="flex items-center px-3 py-1.5 text-sm 
-                bg-gray-800 hover:bg-gray-700
-                text-gray-200 hover:text-white
-                rounded-lg transition-all duration-200
-                border border-gray-600 hover:border-gray-500
-                shadow-md hover:shadow-lg"
-            >
-              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-              Revert
-            </button>
-          )}
-          <button
-            onClick={handleCancel}
-            className="flex items-center px-3 py-1.5 text-sm 
-              bg-gray-800 hover:bg-gray-700
-              text-gray-200 hover:text-white
-              rounded-lg transition-all duration-200
-              border border-gray-600 hover:border-gray-500
-              shadow-md hover:shadow-lg"
-          >
-            <X className="w-3.5 h-3.5 mr-1.5" />
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={editedContent.trim() === content}
-            className={`flex items-center px-3 py-1.5 text-sm
-              ${editedContent.trim() === content 
-                ? 'bg-gray-700 text-gray-400 cursor-not-allowed border-gray-600' 
-                : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500 hover:border-blue-400'}
-              rounded-lg transition-all duration-200
-              border shadow-md hover:shadow-lg`}
-          >
-            <Check className="w-3.5 h-3.5 mr-1.5" />
-            Save
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const handleTextareaChange = (e) => {
+    setEditedContent(e.target.value);
+    
+    // Auto-resize the textarea
+    e.target.style.height = 'auto';
+    e.target.style.height = `${e.target.scrollHeight}px`;
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      handleCancel();
+    }
+  };
+
+  const navigateVersion = (direction) => {
+    if (!hasHistory) return;
+    
+    let newVersion;
+    
+    if (direction === 'prev' && currentVersion > 0) {
+      newVersion = currentVersion - 1;
+    } else if (direction === 'next' && currentVersion < versions.length - 1) {
+      newVersion = currentVersion + 1;
+    } else {
+      return; // Invalid navigation
+    }
+    
+    // Call the restore function with message index and version index
+    if (onRestoreVersion) {
+      onRestoreVersion(messageIndex, newVersion);
+    }
+  };
 
   return (
-    <div className="relative group">
-      <div className="flex flex-col space-y-2">
-        <div className="pr-16">
-          <p className="text-sm">{content}</p>
-          {hasBeenEdited && (
-            <div className="flex items-center space-x-3 mt-1.5">
-              <span className="text-xs text-gray-400 flex items-center">
-                <Clock className="w-3 h-3 mr-1" />
-                Edited
-              </span>
-              {versions.length > 1 && (
-                <span className="text-xs text-gray-400 flex items-center">
-                  <History className="w-3 h-3 mr-1" />
-                  Version {currentVersionIndex + 1} of {versions.length}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        {!disabled && (
-          <div className="absolute top-0 right-0 flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            {versions.length > 1 && (
-              <>
-                <button
-                  onClick={() => navigateVersion('prev')}
-                  disabled={currentVersionIndex === 0}
-                  className={`flex items-center justify-center
-                    w-6 h-6 rounded-md
-                    ${currentVersionIndex === 0 
-                      ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
-                      : 'text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700'}
-                    transition-all duration-200
-                    border border-gray-600 hover:border-gray-500
-                    shadow-md hover:shadow-lg`}
-                  title="Previous version"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => navigateVersion('next')}
-                  disabled={currentVersionIndex === versions.length - 1}
-                  className={`flex items-center justify-center
-                    w-6 h-6 rounded-md
-                    ${currentVersionIndex === versions.length - 1 
-                      ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
-                      : 'text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700'}
-                    transition-all duration-200
-                    border border-gray-600 hover:border-gray-500
-                    shadow-md hover:shadow-lg`}
-                  title="Next version"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </>
-            )}
-            {messageHistory && messageHistory[messageIndex] && (
-              <button
-                onClick={handleRevert}
-                className="flex items-center justify-center
-                  w-6 h-6 rounded-md
-                  text-gray-300 hover:text-white
-                  bg-gray-800 hover:bg-gray-700
-                  transition-all duration-200
-                  border border-gray-600 hover:border-gray-500
-                  shadow-md hover:shadow-lg"
-                title="Revert to original"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            )}
+    <div className="relative group pb-8">
+      {message.role === 'user' && !isEditing && (
+        <>
+          <div className="absolute right-0 bottom-0">
             <button
-              onClick={() => setIsEditing(true)}
-              className="flex items-center justify-center
-                w-6 h-6 rounded-md
-                text-gray-300 hover:text-white
-                bg-gray-800 hover:bg-gray-700
-                transition-all duration-200
-                border border-gray-600 hover:border-gray-500
-                shadow-md hover:shadow-lg"
+              onClick={handleEdit}
+              className="p-2 rounded-lg"
               title="Edit message"
             >
-              <Pencil className="w-3.5 h-3.5" />
+              <Edit className="h-4 w-4 text-gray-300 hover:text-white" />
             </button>
           </div>
-        )}
-      </div>
+
+          {/* Version history controls */}
+          {(hasHistory || message.edited) && (
+            <div className="absolute bottom-[-30px] right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center bg-gray-800/80 rounded-lg px-2 py-1 shadow-md">
+                {/* Navigation controls */}
+                <div className="flex items-center space-x-1">
+                  {/* <button
+                    onClick={() => navigateVersion('prev')}
+                    disabled={currentVersion === 0}
+                    className={`p-1 rounded-full hover:bg-gray-700 ${currentVersion === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Previous version (Alt+←)"
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                  </button> */}
+                  
+                  <button 
+                    onClick={() => onOpenHistoryModal && onOpenHistoryModal(messageIndex)}
+                    className="p-1 rounded-full hover:bg-gray-700"
+                    title="View full version history"
+                  >
+                    <Clock className="h-3 w-3" />
+                  </button>
+                  
+                  {/* <button
+                    onClick={() => navigateVersion('next')}
+                    disabled={!hasHistory || currentVersion === versions.length - 1}
+                    className={`p-1 rounded-full hover:bg-gray-700 ${!hasHistory || currentVersion === versions.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Next version (Alt+→)"
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                  </button> */}
+                </div>
+                
+                {/* Version indicator */}
+                {hasHistory && (
+                  <span className="text-xs ml-2 text-gray-300">
+                    {currentVersion === 0 && versions[0]?.isOriginal ? 'Original' : `v${currentVersion}`}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {isEditing ? (
+        <div className="border border-blue-500/50 rounded-lg p-2 bg-gray-900/50">
+          <textarea
+            ref={textareaRef}
+            value={editedContent}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-transparent text-white p-2 resize-none focus:outline-none min-h-[100px]"
+          />
+          <div className="flex justify-end space-x-2 mt-1">
+            <button
+              onClick={handleCancel}
+              className="p-1 rounded-md hover:bg-gray-700"
+              title="Cancel (Esc)"
+            >
+              <X className="h-4 w-4 text-gray-400" />
+            </button>
+            <button
+              onClick={handleSave}
+              className="p-1 rounded-md bg-blue-600/70 hover:bg-blue-600"
+              title="Save changes (Ctrl+Enter)"
+            >
+              <Check className="h-4 w-4 text-white" />
+            </button>
+          </div>
+          <div className="text-gray-400 text-xs mt-1">
+            Press Ctrl+Enter to save, Esc to cancel
+          </div>
+        </div>
+      ) : (
+        <div className="message-content">
+          {/* Version indicator badge - Only show when viewing a non-current version */}
+          {hasHistory && currentVersion !== versions.length - 1 && (
+            <div className="inline-flex items-center bg-amber-500/20 border border-amber-500/30 rounded-full px-2 py-0.5 mb-2">
+              <span className="text-amber-400 text-xs">
+                {currentVersion === 0 && versions[0]?.isOriginal 
+                  ? 'Original Version' 
+                  : `Version ${currentVersion}/${versions.length - 1}`}
+              </span>
+              <ChevronRight className="h-3 w-3 text-amber-400 ml-1" title="Use Alt+→ to view newer versions" />
+            </div>
+          )}
+          {message.content}
+        </div>
+      )}
     </div>
   );
-};
-
-EditableMessage.propTypes = {
-  content: PropTypes.string.isRequired,
-  isEditing: PropTypes.bool.isRequired,
-  setIsEditing: PropTypes.func.isRequired,
-  onSave: PropTypes.func.isRequired,
-  onRevert: PropTypes.func.isRequired,
-  disabled: PropTypes.bool,
-  messageIndex: PropTypes.number,
-  messageHistory: PropTypes.object
-};
-
-EditableMessage.defaultProps = {
-  disabled: false,
-  messageHistory: null
 };
 
 export default EditableMessage;

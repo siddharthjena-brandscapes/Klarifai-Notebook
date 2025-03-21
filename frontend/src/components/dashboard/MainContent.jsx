@@ -15,9 +15,9 @@ import {
   ScrollText,
   MessageCircle,
   Copy,
-  Edit,
   Layers,
   Mic,
+  Check
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentService, chatService } from "../../utils/axiosConfig";
@@ -36,6 +36,8 @@ import {
   SummaryFormatter,
   summaryStyles,
 } from "./EnhancedSummaryFormatter";
+
+import MessageVersionHistory from "./MessageVersionHistory";
 
 const MainContent = ({
   selectedChat,
@@ -79,6 +81,15 @@ const MainContent = ({
 
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [messageHistory, setMessageHistory] = useState({});
+  const [viewingHistoryState, setViewingHistoryState] = useState({});
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [activeHistoryMessageIndex, setActiveHistoryMessageIndex] = useState(null);
+
+  const [messageVersions, setMessageVersions] = useState({});
+  const [currentVersionIndex, setCurrentVersionIndex] = useState({});
+    
+  
+
   const [activeDocumentForSummary, setActiveDocumentForSummary] =
     useState(null);
 
@@ -96,6 +107,11 @@ const MainContent = ({
 
   // Add a new Citation component for inline citations
   const recognitionRef = useRef(null);
+
+  // Add this in your MainContent component
+useEffect(() => {
+  console.log("Current message versions:", messageVersions);
+}, [messageVersions]);
 
   const handleMicInput = (event) => {
     event.preventDefault(); // Prevent zooming when clicking
@@ -144,19 +160,7 @@ const MainContent = ({
     }
   };
 
-  // const WebSearchToggle = ({ useWebKnowledge }) => {
-  //  // Only render the indicator when web knowledge is enabled
-  //   if (!useWebKnowledge) return null;
-    
-  //   return (
-  //     <div className="web-knowledge-indicator fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-fadeIn">
-  //       <div className="flex items-center gap-2 bg-blue-900/30 backdrop-blur-sm px-3 py-1.5 rounded-full text-blue-300 text-xs border border-blue-500/20">
-  //         <Globe className="h-3 w-3" />
-  //         <span>Web search enabled</span>
-  //       </div>
-  //     </div>
-  //   );
-  // };
+ 
 
   const InlineCitation = ({ citation, index }) => {
     const [isHovered, setIsHovered] = useState(false);
@@ -974,102 +978,210 @@ const MainContent = ({
     return uniqueMessages;
   };
 
-  // Add this method to handle message updates
-  const handleMessageUpdate = async (messageIndex, newContent) => {
-    if (newContent === conversation[messageIndex].content) {
-      setEditingMessageId(null);
-      return;
+  
+
+// Replace the existing handleMessageUpdate function with this simpler implementation
+const handleMessageUpdate = async (messageIndex, newContent) => {
+  // Ignore if content hasn't changed
+  if (newContent === conversation[messageIndex].content) {
+    setEditingMessageId(null);
+    return;
+  }
+
+  setIsLoading(true);
+
+  try {
+    // Get current message content and create a version entry
+    const originalContent = conversation[messageIndex].content;
+    
+    // Store the original version if this is the first edit
+    if (!messageVersions[messageIndex]) {
+      // First time editing - store original content WITH its response
+      // Get the original response that comes after this message
+      const originalResponse = conversation[messageIndex + 1];
+      
+      setMessageVersions(prev => ({
+        ...prev,
+        [messageIndex]: [{
+          content: originalContent,
+          response: originalResponse, // Store the full response object
+          timestamp: new Date().toISOString(),
+          isOriginal: true
+        }]
+      }));
+      
+      // Set current version to 0 (original)
+      setCurrentVersionIndex(prev => ({
+        ...prev,
+        [messageIndex]: 0
+      }));
+      
+      console.log("Stored original message and response:", {
+        message: originalContent,
+        response: originalResponse
+      });
     }
+    
+    // Update the edited message in the conversation
+    const updatedMessage = {
+      ...conversation[messageIndex],
+      content: newContent,
+      edited: true,
+      editedAt: new Date().toISOString(),
+    };
 
-    setIsLoading(true);
+    // Create conversation array up to the edited message
+    const conversationUpToEdit = [...conversation.slice(0, messageIndex), updatedMessage];
+    
+    // Update conversation state immediately for better UX
+    setConversation(conversationUpToEdit);
 
-    try {
-      // Store the original message and its response if not already stored
-      if (!messageHistory[messageIndex]) {
-        const originalMessage = conversation[messageIndex];
+    // Prepare request data for the API
+    const requestData = {
+      message: newContent,
+      conversation_id: conversationId,
+      selected_documents: localSelectedDocuments,
+      main_project_id: mainProjectId,
+      context: conversationUpToEdit,
+    };
+
+    // Send to API and get new response
+    const response = await chatService.sendMessage(requestData);
+
+    // Add the new assistant response
+    const assistantMessage = {
+      role: "assistant",
+      content: response.data.response || response.data.content || "No response received",
+      citations: response.data.citations || [],
+      follow_up_questions: response.data.follow_up_questions || [],
+      use_web_knowledge: response.data.use_web_knowledge || false,
+    };
+
+    const finalConversation = [...conversationUpToEdit, assistantMessage];
+
+    // Update conversation with the new response
+    setConversation(finalConversation);
+    
+    // Store the new version with its response
+    setMessageVersions(prev => {
+      const versions = [...(prev[messageIndex] || [])];
+      
+      // If this is the first edit and we don't have the original stored yet,
+      // store the original first before adding the new version
+      if (versions.length === 0) {
+        // Get the original message and response
+        const originalMessage = conversation[messageIndex].content;
         const originalResponse = conversation[messageIndex + 1];
-        const subsequentMessages = conversation.slice(messageIndex + 2);
-        storeMessageHistory(
-          messageIndex,
-          originalMessage.content,
-          originalResponse,
-          subsequentMessages
-        );
+        
+        versions.push({
+          content: originalMessage,
+          response: originalResponse,
+          timestamp: originalResponse?.created_at || new Date().toISOString(),
+          isOriginal: true
+        });
+        
+        console.log("Added original message and response to versions:", {
+          content: originalMessage,
+          response: originalResponse
+        });
       }
-
-      // Create a new conversation array up to the edited message
-      const conversationUpToEdit = conversation.slice(0, messageIndex + 1);
-
-      // Update the edited message
-      const updatedMessage = {
-        ...conversationUpToEdit[messageIndex],
+      
+      // Add the new version
+      versions.push({
         content: newContent,
-        edited: true,
-        editedAt: new Date().toISOString(),
+        response: assistantMessage,
+        timestamp: new Date().toISOString(),
+        isOriginal: false, // Explicitly mark as not original
+        isEdited: true // Add an explicit edited flag
+      });
+      
+      console.log("Added new edited version to history:", {
+        content: newContent,
+        response: assistantMessage
+      });
+      
+      return {
+        ...prev,
+        [messageIndex]: versions
       };
-
-      conversationUpToEdit[messageIndex] = updatedMessage;
-
-      // Update conversation state immediately for better UX
-      setConversation(conversationUpToEdit);
-
-      // Prepare request data for the API
-      const requestData = {
-        message: newContent,
-        conversation_id: conversationId,
-        selected_documents: localSelectedDocuments,
-        context: conversationUpToEdit,
+    });
+    
+    // Update current version to the latest
+    setCurrentVersionIndex(prev => {
+      const versions = messageVersions[messageIndex] || [];
+      return {
+        ...prev,
+        [messageIndex]: versions.length // Point to the new version
       };
+    });
+    
+    setEditingMessageId(null);
 
-      const response = await chatService.sendMessage(requestData);
-
-      // Add the new assistant response
-      const assistantMessage = {
-        role: "assistant",
-        content: response.response || "No response received",
-        citations: response.citations || [],
-        follow_up_questions: response.follow_up_questions || [],
-      };
-
-      const finalConversation = [...conversationUpToEdit, assistantMessage];
-
-      setConversation(finalConversation);
-      setEditingMessageId(null);
-
-      // Update follow-up questions if available
-      if (response.follow_up_questions?.length > 0) {
-        setCurrentFollowUpQuestions(response.follow_up_questions);
-        setFollowUpQuestions(response.follow_up_questions);
-      }
-    } catch (error) {
-      console.error("Failed to update message:", error);
-      toast.error(
-        error.response?.data?.error ||
-          "Failed to update message. Please try again."
-      );
-      // Restore the original conversation state
-      setConversation(conversation);
-    } finally {
-      setIsLoading(false);
+    // Update follow-up questions if available
+    if (response.data.follow_up_questions?.length > 0) {
+      setCurrentFollowUpQuestions(response.data.follow_up_questions);
+      setFollowUpQuestions(response.data.follow_up_questions);
     }
-  };
-  // Add this method to your component
-  const storeMessageHistory = (
-    messageIndex,
-    originalMessage,
-    originalResponse,
-    subsequentMessages
-  ) => {
-    setMessageHistory((prev) => ({
-      ...prev,
-      [messageIndex]: {
-        message: originalMessage,
-        response: originalResponse,
-        subsequentMessages: subsequentMessages,
-      },
-    }));
-  };
+  } catch (error) {
+    console.error("Failed to update message:", error);
+    toast.error(
+      error.response?.data?.error ||
+        "Failed to update message. Please try again."
+    );
+    // Restore the original conversation state
+    setConversation(conversation);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
+// Replace the previous handleRestoreVersion with this simpler version
+const handleRestoreVersion = (messageIndex, versionIndex) => {
+  // Get versions for this message
+  const versions = messageVersions[messageIndex] || [];
+  
+  if (versions.length === 0 || versionIndex >= versions.length) {
+    console.error("Cannot restore version - invalid version index or no versions");
+    return;
+  }
+  
+  // Get the version to restore
+  const versionToRestore = versions[versionIndex];
+  
+  console.log(`Restoring message at index ${messageIndex} to version ${versionIndex}:`, versionToRestore);
+  
+  // Update the conversation with the selected version
+  const updatedConversation = [...conversation];
+  
+  // Update the message content
+  updatedConversation[messageIndex] = {
+    ...updatedConversation[messageIndex],
+    content: versionToRestore.content,
+    currentVersionIndex: versionIndex
+  };
+  
+  // If we have a response for this version, update it too
+  if (versionToRestore.response) {
+    updatedConversation[messageIndex + 1] = {
+      ...updatedConversation[messageIndex + 1],
+      content: versionToRestore.response.content,
+      citations: versionToRestore.response.citations || []
+    };
+    
+    console.log("Also restoring response:", versionToRestore.response);
+  } else {
+    console.warn("No response found for this version");
+  }
+  
+  // Update the conversation
+  setConversation(updatedConversation);
+  
+  // Update the current version index
+  setCurrentVersionIndex(prev => ({
+    ...prev,
+    [messageIndex]: versionIndex
+  }));
+};
   // Add a useEffect to further clean up conversation on initial load
   useEffect(() => {
     if (conversation.length > 0) {
@@ -1133,145 +1245,188 @@ const MainContent = ({
             
           "
           >
-            {/* Chat Messages */}
+   {/* Chat Messages */}
+<div
+  ref={chatContainerRef}
+  className={`flex-1 overflow-y-auto p-2 sm:p-4 backdrop-blur-lg
+            sm:space-y-4
+            custom-scrollbar
+            pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
+            ${
+              !isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"
+            }`}
+>
+  {/* Rest of the chat messages rendering code */}
+  {conversation.map((msg, index) => (
+    <React.Fragment key={index}>
+      <div
+        className={`flex ${
+          msg.role === "user"
+            ? "justify-end mt-16"
+            : "justify-start"
+        }`}
+      >
+        <div
+          className={`
+            p-4
+            rounded-lg
+            backdrop-blur-md
+            border
+            shadow-lg
+            ${
+              msg.role === "user"
+                ? "bg-gradient-to-r from-blue-600/30 to-emerald-600/30 text-white max-w-[70%] border-emerald-500/20"
+                : "bg-gray-900 text-gray-300 max-w-full border-blue-500/20"
+            }
+            transition-all
+            duration-300
+            hover:shadow-xl
+            hover:border-opacity-50
+          `}
+        >
+          <div className="flex items-center mb-2">
+            {msg.role === "user" ? (
+              <User className="mr-2 h-5 w-5" />
+            ) : (
+              <img src={BotIcon} alt="Klarifai" className="mr-2 h-5 w-5" />
+            )}
+            <span className="font-bold">
+              {msg.role === "user" ? "You" : "Klarifai"}
+            </span>
+            
+            {/* Add edited indicator if message was edited */}
+            {msg.edited && (
+              <span className="ml-2 text-xs text-blue-400">(edited)</span>
+            )}
+            
+            {/* Add historical view indicator if viewing a previous version */}
+            {msg.isHistoricalView && (
+              <span className="ml-2 text-xs text-amber-400">(historical view)</span>
+            )}
+            
+            {/* Add web knowledge mode indicator */}
+            {msg.role === "assistant" && msg.use_web_knowledge && (
+              <div className="ml-2 web-knowledge-badge">
+                <span className="web-knowledge-badge-pulse"></span>
+                <Globe className="h-3 w-3" />
+                <span>Web-Enhanced</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Use EditableMessage component for user messages */}
+          {msg.role === "user" ? (
+            <EditableMessage
+            message={msg}
+            messageIndex={index}
+            onUpdate={handleMessageUpdate}
+            messageVersions={messageVersions}  // Replace messageHistory
+            currentVersionIndex={currentVersionIndex}  // New prop
+            onRestoreVersion={handleRestoreVersion}
+            onOpenHistoryModal={() => {
+              setActiveHistoryMessageIndex(index);
+              setIsHistoryModalOpen(true);
+            }}
+          />
+          ) : (
             <div
-              ref={chatContainerRef}
-              className={`flex-1 overflow-y-auto p-2 sm:p-4 backdrop-blur-lg
-                        sm:space-y-4
-                        custom-scrollbar
-                        pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
-                        ${
-                          !isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"
-                        }`}
-            >
-              {/* Rest of the chat messages rendering code */}
-              {conversation.map((msg, index) => (
-                <React.Fragment key={index}>
-                  <div
-                    className={`flex ${
-                      msg.role === "user"
-                        ? "justify-end mt-16"
-                        : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`
-                        p-4
-                        rounded-lg
-                        backdrop-blur-md
-                        border
-                        shadow-lg
-                        ${
-                          msg.role === "user"
-                            ? "bg-gradient-to-r from-blue-600/30 to-emerald-600/30 text-white max-w-[70%] border-emerald-500/20"
-                            : "bg-gray-900 text-gray-300 max-w-full border-blue-500/20"
-                        }
-                        transition-all
-                        duration-300
-                        hover:shadow-xl
-                        hover:border-opacity-50
-                      `}
-                    >
-                      <div className="flex items-center mb-2">
-                        {msg.role === "user" ? (
-                          <User className="mr-2 h-5 w-5" />
-                        ) : (
-                         <img src={BotIcon} alt="Klarifai" className="mr-2 h-5 w-5" />
-                        )}
-                        <span className="font-bold">
-                          {msg.role === "user" ? "You" : "Klarifai"}
-                        </span>
-                        
-                        {/* Add web knowledge mode indicator */}
-                        {msg.role === "assistant" && msg.use_web_knowledge && (
-                          <div className="ml-2 web-knowledge-badge">
-                            <span className="web-knowledge-badge-pulse"></span>
-                            <Globe className="h-3 w-3" />
-                            <span>Web-Enhanced</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div
-                        className="message-content"
-                        dangerouslySetInnerHTML={{
-                          __html: msg.content
-                            .replace(/<p>/g, '<p class="mb-4">')
-                            .replace(/<b>/g, '<b class="block mb-2 mt-2">')
-                            .replace(
-                              /<ul>/g,
-                              '<ul class="list-disc pl-6 mb-4">'
-                            )
-                            .replace(
-                              /<ol>/g,
-                              '<ol class="list-decimal pl-6 mb-4">'
-                            )
-                            .replace(/<li>/g, '<li class="mb-2">')
-                            // Add proper styling for tables
-                            .replace(
-                              /<table>/g,
-                              '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
-                            )
-                            .replace(
-                              /<th>/g,
-                              '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
-                            )
-                            .replace(
-                              /<td>/g,
-                              '<td class="border border-gray-500 p-2">'
-                            )
-                            // Ensure proper spacing for tables
-                            .replace(
-                              /<\/table>\s*<p>/g,
-                              '</table><p class="mt-4">'
-                            )
-                            // Remove excess newlines
-                            .replace(/\n{3,}/g, "\n\n")
-                            // Ensure one line break after headers
-                            .replace(/<\/b>\s*\n+/g, "</b>\n"),
-                        }}
-                      />
+              className="message-content"
+              dangerouslySetInnerHTML={{
+                __html: msg.content
+                  .replace(/<p>/g, '<p class="mb-4">')
+                  .replace(/<b>/g, '<b class="block mb-2 mt-2">')
+                  .replace(
+                    /<ul>/g,
+                    '<ul class="list-disc pl-6 mb-4">'
+                  )
+                  .replace(
+                    /<ol>/g,
+                    '<ol class="list-decimal pl-6 mb-4">'
+                  )
+                  .replace(/<li>/g, '<li class="mb-2">')
+                  // Add proper styling for tables
+                  .replace(
+                    /<table>/g,
+                    '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
+                  )
+                  .replace(
+                    /<th>/g,
+                    '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
+                  )
+                  .replace(
+                    /<td>/g,
+                    '<td class="border border-gray-500 p-2">'
+                  )
+                  // Ensure proper spacing for tables
+                  .replace(
+                    /<\/table>\s*<p>/g,
+                    '</table><p class="mt-4">'
+                  )
+                  // Remove excess newlines
+                  .replace(/\n{3,}/g, "\n\n")
+                  // Ensure one line break after headers
+                  .replace(/<\/b>\s*\n+/g, "</b>\n"),
+              }}
+            />
+          )}
 
-                      {/* Add Copy option for Klarifai messages only */}
-                      {msg.role !== "user" && (
-  <div className="flex justify-end mt-4 text-gray-400 text-sm">
-    {/* Move Info icon and text to the left side */}
-    <div className="flex items-center mr-auto">
-      {msg.use_web_knowledge && (
-        <>
-          <Info className="h-3 w-3 mr-1" />
-          <span>This response includes information from both your documents and general knowledge.</span>
-        </>
-      )}
-    </div>
+          {/* Add Copy option for Klarifai messages only */}
+          {msg.role !== "user" && (
+            <div className="flex justify-end mt-4 text-gray-400 text-sm">
+              {/* Move Info icon and text to the left side */}
+              <div className="flex items-center mr-auto">
+                {msg.use_web_knowledge && (
+                  <>
+                    <Info className="h-3 w-3 mr-1" />
+                    <span>This response includes information from both your documents and general knowledge.</span>
+                  </>
+                )}
+              </div>
 
-    {/* Copy button remains on the right side */}
-    <button
-      onClick={() => handleCopyMessage(msg.content, index)}
-      className="flex items-center px-3 py-1 rounded hover:text-blue-400 hover:bg-blue-900/30 active:scale-95 transition-all duration-150"
-    >
-      {copyMessageIndex === index ? (
-        <span className="text-green-400 ml-2">Copied!</span>
-      ) : (
-        <>
-          <Copy className="h-4 w-4 ml-2" /> Copy
-        </>
-      )}
-    </button>
-  </div>
-)}
-                    </div>
-                  </div>
-                </React.Fragment>
-              ))}
-
-              {isLoading && (
-                <div className="text-center text-white">
-                  Generating response...
-                </div>
-              )}
-              <div ref={chatEndRef} />
+              {/* Copy button remains on the right side */}
+              <button
+                onClick={() => handleCopyMessage(msg.content, index)}
+                className="flex items-center px-3 py-1 rounded hover:text-blue-400 hover:bg-blue-900/30 active:scale-95 transition-all duration-150"
+              >
+                {copyMessageIndex === index ? (
+                  <span className="text-green-400 ml-2">Copied!</span>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 ml-2" /> Copy
+                  </>
+                )}
+              </button>
             </div>
+          )}
+        </div>
+      </div>
+    </React.Fragment>
+  ))}
+
+  {isLoading && (
+    <div className="text-center text-white">
+      Generating response...
+    </div>
+  )}
+  <div ref={chatEndRef} />
+</div>
+
+{/* Add the Version History Modal */}
+{isHistoryModalOpen && activeHistoryMessageIndex !== null && (
+  <MessageVersionHistory
+    messageVersions={messageVersions}  // Replace messageHistory
+    messageIndex={activeHistoryMessageIndex}
+    onRestoreVersion={handleRestoreVersion}
+    conversation={conversation} 
+    onClose={() => {
+      setIsHistoryModalOpen(false);
+      setActiveHistoryMessageIndex(null);
+    }}
+  />
+)}
+
+
+
 {/* Follow-up Questions and Input Area */}
 <div className="w-full fixed-bottom-0 z-20 pointer-events-none">
   <div
@@ -1388,20 +1543,22 @@ const MainContent = ({
             {/* Mic button with recording indicator */}
             {!message && (
               <button
-                onClick={handleMicInput}
-                className={`text-gray-400 transition-colors p-1 rounded-full ${
-                  isRecording ? "text-red-500 bg-red-500/10" : "hover:text-white"
-                }`}
-                title="Voice input"
-              >
-                <Mic className={`h-4 w-4 ${isRecording ? "animate-pulse" : ""}`} />
-                {isRecording && (
-                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                  </span>
-                )}
-              </button>
+              onClick={handleMicInput}
+              className={`relative text-gray-400 transition-colors p-1 rounded-full ${
+                isRecording ? "text-red-500 bg-red-500/10" : "hover:text-white"
+              }`}
+              title="Voice input"
+            >
+              <Mic className={`h-4 w-4 ${isRecording ? "animate-pulse" : ""}`} />
+            
+              {isRecording && (
+                <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+              )}
+            </button>
+            
             )}
 
              {/* View toggle button */}

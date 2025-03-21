@@ -813,6 +813,11 @@ export const documentService = {
       }
     },
 
+    getDocumentViewUrl: (documentId, mainProjectId) => {
+      // This function only returns the URL path, the authentication is handled by the interceptor
+      return `/api/documents/view/${documentId}/?main_project_id=${mainProjectId || ''}`;
+    },
+    
   getChatHistory: () => {
     return axiosInstance.get('/chat-history/', {
       params: {
@@ -1157,6 +1162,18 @@ updateProject: (projectId, projectData) => {
     throw error; // Rethrow so the component can handle it
   });
 },
+// Add new method to get current user profile with module permissions
+getCurrentUser: () => {
+  return axiosInstance.get('/user/profile/')
+    .then(response => {
+      console.log("Current user profile:", response.data);
+      return response.data;
+    })
+    .catch(error => {
+      console.error("Failed to fetch current user:", error.response?.data || error.message);
+      throw error;
+    });
+}
 };
 
 
@@ -1201,6 +1218,7 @@ export const adminService = {
         console.error("Admin service - update tokens error:", error);
         throw error;
       });
+
   },
  
   // Delete a user (admin only)
@@ -1212,6 +1230,19 @@ export const adminService = {
       })
       .catch(error => {
         console.error("Admin service - delete user error:", error);
+        throw error;
+      });
+  },
+
+  // Add new method for updating module permissions
+  updateUserModulePermissions: (userId, permissionsData) => {
+    return axiosInstance.patch(`/admin/users/${userId}/modules/`, permissionsData)
+      .then(response => {
+        console.log("Admin service - update module permissions response:", response.data);
+        return response.data;
+      })
+      .catch(error => {
+        console.error("Admin service - update module permissions error:", error);
         throw error;
       });
   }
