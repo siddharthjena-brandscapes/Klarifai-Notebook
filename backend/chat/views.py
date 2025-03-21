@@ -49,6 +49,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import update_session_auth_hash
+from llama_parse import LlamaParse
 
 
 load_dotenv()
@@ -970,6 +971,94 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             print(f"Error detecting images in PDF: {e}")
             return False
     
+    # Add LlamaParse integration from Streamlit code
+    def process_complex_document_with_llamaparse(self, file_path, file_name):
+        """
+        Process complex document using LlamaParse from Streamlit implementation.
+        """
+        import tempfile
+        import uuid
+        import numpy as np
+        import faiss
+        import pickle
+        import os
+        from llama_parse import LlamaParse
+        
+        try:
+            parser = LlamaParse(
+                api_key="llx-CvudFEEwgpMhVunqW7NkoUBAwtoXwPPpojw2TKO539T81YbV",
+                result_type="markdown",
+                verbose=True,
+                images=True,
+                premium_mode=True
+            )
+            
+            parsed_documents = parser.load_data(file_path)
+            full_text = '\n'.join([doc.text for doc in parsed_documents])
+            
+            # Save markdown (adapted from Streamlit implementation)
+            base_name = os.path.splitext(file_name)[0]
+            safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
+            md_path = os.path.join("markdown_files", f"{safe_name}.md")
+            os.makedirs("markdown_files", exist_ok=True)
+            with open(md_path, "w", encoding='utf-8') as f:
+                f.write(full_text)
+            
+            # Create FAISS index
+            text_embedding_dim = 1536  # OpenAI embedding dimension
+            faiss_index = faiss.IndexFlatL2(text_embedding_dim)
+            metadata_store = []
+            
+            # Create chunks with overlap for better retrieval (from Streamlit implementation)
+            chunked_texts = []
+            for doc in parsed_documents:
+                # Original document as a chunk
+                chunked_texts.append(doc.text)
+                metadata_store.append({
+                    "content": doc.text,
+                    "source_file": file_name
+                })
+                
+                # Create additional smaller chunks for better retrieval
+                words = doc.text.split()
+                chunk_size = 200  # Smaller chunk size as in Streamlit
+                stride = 100      # With overlap
+                
+                if len(words) > chunk_size:
+                    for i in range(0, len(words) - chunk_size, stride):
+                        chunk = " ".join(words[i:i+chunk_size])
+                        if len(chunk.split()) > 50:  # Ensure chunk has substantial content
+                            chunked_texts.append(chunk)
+                            metadata_store.append({
+                                "content": chunk,
+                                "source_file": file_name
+                            })
+            
+            # Process in batches to avoid API limitations
+            if chunked_texts:
+                batch_size = 50  # Adjust based on API limits
+                for i in range(0, len(chunked_texts), batch_size):
+                    batch = chunked_texts[i:i+batch_size]
+                    embeddings = self.get_embeddings(batch)
+                    
+                    if embeddings:
+                        faiss_index.add(np.array(embeddings).astype('float32'))
+                    else:
+                        print(f"Failed to generate embeddings for a batch in {file_name}. Continuing with next batch...")
+            
+            # Save index and metadata
+            session_id = uuid.uuid4().hex
+            index_file, pickle_file = self.save_faiss_index(faiss_index, metadata_store, session_id)
+            
+            return {
+                'index_path': index_file,
+                'metadata_path': pickle_file,
+                'full_text': full_text
+            }
+            
+        except Exception as e:
+            print(f"Error in complex document processing: {str(e)}")
+            raise
     
     def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
         """
@@ -1002,6 +1091,61 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             start = end - chunk_overlap if end < text_length else text_length
         return chunks
     
+    # Extract text function from Streamlit implementation
+    def extract_text_from_file(self, file_path):
+        """Extract text from various file types."""
+        import os
+        import re
+        from docx import Document
+        import fitz  # PyMuPDF for PDFs
+        import csv
+        import io
+        
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        try:
+            if file_ext == '.pdf':
+                pdf_document = fitz.open(file_path)
+                text = ""
+                for page_num in range(len(pdf_document)):
+                    page = pdf_document[page_num]
+                    text += page.get_text()
+                return text
+                
+            elif file_ext == '.docx':
+                doc = Document(file_path)
+                return ' '.join([paragraph.text for paragraph in doc.paragraphs])
+                
+            elif file_ext == '.txt':
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    return file.read()
+                    
+            elif file_ext == '.csv':
+                text = []
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    csv_reader = csv.reader(file)
+                    headers = next(csv_reader, None)
+                    if headers:
+                        text.append(','.join(headers))
+                    for row in csv_reader:
+                        text.append(','.join(row))
+                return '\n'.join(text)
+                
+            else:
+                return f"Unsupported file type: {file_ext}"
+                
+        except Exception as e:
+            print(f"Error extracting text: {str(e)}")
+            return f"Error extracting text: {str(e)}"
+    
+    # Clean text function (from Streamlit)
+    def clean_text(self, text):
+        """Clean extracted text by removing extra whitespace and special characters."""
+        # Remove extra whitespace
+        cleaned = re.sub(r'\s+', ' ', text)
+        # Remove special characters that might cause issues
+        cleaned = re.sub(r'[^\w\s.,;:!?"\'\-()]', ' ', cleaned)
+        return cleaned.strip()
    
     def get_embeddings(self, texts):
         """
@@ -1059,17 +1203,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             return None, []
 
     # -------------------------------
-    # Hierarchical summarization from Streamlit
-    # ------------------------------
-
-    # -------------------------------
     # Process documents function that integrates with Django database
     # -------------------------------
     def process_document(self, file):
         """
         Process documents: extraction, chunking, embeddings, FAISS creation
         While maintaining compatibility with the Django database structure.
-        Keeps original complexity checking functionality but uses streamlit functions for processing.
+        Now integrates complex document handling with LlamaParse.
         """
         import tempfile
         import os
@@ -1084,15 +1224,17 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 file_path = tmp_file.name
                 
             try:
-                # # Check document complexity (keep this from original code)
-                # is_complex = self.detect_document_complexity(file_path)
+                # Check document complexity (keep this from original code)
+                is_complex = self.detect_document_complexity(file_path)
 
-                # # Process document based on complexity
-                # if is_complex:
-                #     extracted_text = self.extract_text_from_file(file_path)
-                # else:
-                extracted_text = self.extract_text_from_file(file_path)
-                
+                # Process document based on complexity
+                if is_complex:
+                    # Now using the LlamaParse approach for complex documents
+                    print(f"Complex document detected: {file.name}. Using LlamaParse...")
+                    return self.process_complex_document_with_llamaparse(file_path, file.name)
+                else:
+                    # Original simple document processing
+                    extracted_text = self.extract_text_from_file(file_path)
                 
                 if not extracted_text:
                     raise ValueError("No content could be extracted from the document")
@@ -1131,16 +1273,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 # Save the index and chunks
                 index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
                 
-                
-                # # Generate summary for all document types using the hierarchical approach
-                # summary = self.hierarchical_summary(all_chunks)
-                # follow_up_questions = []
-                
                 return {
                     'index_path': index_file,
                     'metadata_path': pickle_file,
-                    # 'summary': summary,
-                    # 'follow_up_questions': follow_up_questions,
                     'full_text': doc['text']
                 }
                 
@@ -1152,17 +1287,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error in process_document: {str(e)}")
             raise
-            
-    # This is a backwards compatibility function to maintain the save_index_and_metadata
-    # signature from the original code, but use the new Streamlit-based implementation
-    def save_index_and_metadata(self, index, metadata, filename):
-        """
-        Adapts between the original function signature and the new save_faiss_index function
-        """
-        import uuid
-        session_id = uuid.uuid4().hex
-        index_file, pickle_file = self.save_faiss_index(index, metadata, session_id)
-        return index_file, pickle_file
     
 
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
@@ -1406,6 +1530,18 @@ def post_process_response(response_text):
         return response_text  # Return original if any error occurs
 
 
+import uuid
+import os
+import pickle
+import numpy as np
+import faiss
+import re
+from datetime import datetime
+import logging
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+logger = logging.getLogger(__name__)
+
 class ChatView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1423,7 +1559,7 @@ class ChatView(APIView):
             # Extract web_mode flag from request
             use_web_knowledge = request.data.get('use_web_knowledge', False)
             
-            # NEW: Extract general_chat_mode flag
+            # Extract general_chat_mode flag
             general_chat_mode = request.data.get('general_chat_mode', False)
 
             if not main_project_id:
@@ -1440,7 +1576,7 @@ class ChatView(APIView):
 
             user = request.user
             
-            # MODIFIED: Skip document validation if in general chat mode
+            # Skip document validation if in general chat mode
             if not general_chat_mode:
                 # First, check for active document in session
                 active_document_id = request.session.get('active_document_id')
@@ -1464,7 +1600,7 @@ class ChatView(APIView):
                 all_chunks = []  # No document chunks in general mode
                 combined_text = ""
             else:
-                # Process with documents as before
+                # Process with documents
                 try:
                     processed_docs = ProcessedIndex.objects.filter(
                         document_id__in=selected_documents, 
@@ -1482,9 +1618,13 @@ class ChatView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-                # Process all documents and get answer
-                combined_text = ""
+                # Use the Streamlit retrieval approach here
                 all_chunks = []
+                content_sources = []
+                
+                # Create a merged FAISS index and metadata store from all selected documents
+                # (Similar to the Streamlit approach of merging indices)
+                all_metadata_store = []
                 
                 # Load FAISS indices and chunks for all selected documents
                 for proc_doc in processed_docs:
@@ -1494,34 +1634,38 @@ class ChatView(APIView):
                     if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
                         continue
                     
-                    # Load FAISS index
+                    # Load FAISS index and metadata
                     try:
-                        index = faiss.read_index(proc_doc.faiss_index)
                         with open(proc_doc.metadata, 'rb') as f:
                             chunks = pickle.load(f)
                         
-                        # Get relevant chunks using search_faiss_index
-                        relevant_chunks = self.search_faiss_index(index, chunks, message)
-                        
-                        # Add document name to each chunk
-                        for chunk in relevant_chunks:
-                            chunk['source'] = proc_doc.document.filename
-                        
-                        # Add to all chunks
-                        all_chunks.extend(relevant_chunks)
-                        
-                        # Update combined text
-                        doc_text = f"\n\n--- Document: {proc_doc.document.filename} ---\n\n"
-                        if hasattr(proc_doc.document, 'full_text') and proc_doc.document.full_text:
-                            doc_text += proc_doc.document.full_text
-                        combined_text += doc_text
+                        # Add document source information to each chunk
+                        for chunk in chunks:
+                            if isinstance(chunk, dict) and 'source_file' not in chunk:
+                                chunk['source_file'] = proc_doc.document.filename
+                            
+                        # Add to all metadata store
+                        all_metadata_store.extend(chunks)
                         
                     except Exception as e:
-                        logger.error(f"Error processing document {proc_doc.document.filename}: {str(e)}")
+                        logger.error(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
                         continue
                 
-                # Get answer using the documents
-                answer = self.get_answer(message, index, all_chunks, combined_text, use_web_knowledge=use_web_knowledge)
+                # Now search using the Streamlit approach
+                if all_metadata_store:
+                    # Combine all indices into a single query
+                    similar_contents, content_sources = self.search_similar_content(
+                        message, 
+                        processed_docs,
+                        all_metadata_store
+                    )
+                    
+                    # Generate answer using Streamlit's generate_response
+                    answer = self.generate_response(message, similar_contents, content_sources)
+                    all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
+                else:
+                    answer = "I couldn't find any relevant information in the documents."
+                    all_chunks = []
             
             # Extract main response and citation info (if any)
             if "\n\n*Sources:" in answer:
@@ -1536,8 +1680,15 @@ class ChatView(APIView):
             if general_chat_mode:
                 follow_up_questions = self.generate_general_follow_up_questions(message, clean_response)
             else:
-                context_texts = [chunk.get('text', '') for chunk in all_chunks[:3]]
-                follow_up_questions = self.generate_follow_up_questions(context_texts)
+                if all_chunks:
+                    context_texts = [chunk.get('text', '') for chunk in all_chunks[:3]]
+                    follow_up_questions = self.generate_follow_up_questions(context_texts)
+                else:
+                    follow_up_questions = [
+                        "What else would you like to know about this document?",
+                        "Would you like me to elaborate on any specific point?",
+                        "Do you have any other questions I can help with?"
+                    ]
             
             # Create citations from chunks (empty in general chat mode)
             citations = []
@@ -1567,7 +1718,6 @@ class ChatView(APIView):
                     'follow_up_questions': follow_up_questions,
                 }
             )
-
 
             # Create user message
             user_message = ChatMessage.objects.create(
@@ -1605,7 +1755,7 @@ class ChatView(APIView):
                 'active_document_id': request.session.get('active_document_id') if not general_chat_mode else None,
                 'sources_info': source_info,
                 'use_web_knowledge': use_web_knowledge,
-                'general_chat_mode': general_chat_mode  # NEW: Return general chat mode flag
+                'general_chat_mode': general_chat_mode
             }
 
             # Print detailed chat response information
@@ -1628,7 +1778,7 @@ class ChatView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    # NEW: General chat answer function
+    # Keep general chat answer function as is
     def get_general_chat_answer(self, question, use_web_knowledge=False):
         try:
             # Choose the appropriate prompt based on whether web knowledge is enabled
@@ -1675,7 +1825,145 @@ class ChatView(APIView):
             logger.error(f"Error getting general chat answer: {str(e)}")
             return "Sorry, an error occurred while processing your question."
     
-    # NEW: Generate follow-up questions for general chat
+    # Implement Streamlit's generate_response function
+    def generate_response(self, query, context, sources):
+        """Generate a response using OpenAI's chat completion API - ported from Streamlit"""
+        if not context:
+            return "I cannot answer this question based on the provided documents."
+        
+        # Limit number of tokens by selecting most relevant chunks
+        # while ensuring they're comprehensive and diverse
+        selected_context = []
+        selected_sources = []
+        seen_content_hashes = set()
+        
+        # Take first 8 chunks (most relevant ones)
+        initial_count = min(8, len(context))
+        for i in range(initial_count):
+            selected_context.append(context[i])
+            selected_sources.append(sources[i])
+            # Add a content hash to avoid repetition
+            seen_content_hashes.add(context[i][:100])
+        
+        # Add more diverse chunks from the remaining context
+        for i in range(initial_count, len(context)):
+            content_hash = context[i][:100]
+            # Check if content is sufficiently different from what we've seen
+            if content_hash not in seen_content_hashes:
+                selected_context.append(context[i])
+                selected_sources.append(sources[i])
+                seen_content_hashes.add(content_hash)
+                # Limit to 15 total pieces of context for token limit reasons
+                if len(selected_context) >= 15:
+                    break
+        
+        # Create context with source information
+        contextualized_content = []
+        for content, source in zip(selected_context, selected_sources):
+            contextualized_content.append(f"From document '{source}':\n{content}")
+        full_context = "\n\n".join(contextualized_content)
+        
+        # Define the user prompt (from Streamlit)
+        user_prompt = f"""
+        Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+     
+        RESPONSE GENERATION GUIDELINES:
+        - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
+        - Include ALL relevant information from the context in your response.
+        - Prioritize completeness over brevity - make sure to include details.
+        - If multiple perspectives or data points exist, include all of them.
+        - When appropriate, organize information with clear sections and structure as well as in tabular formats where applicable.
+        - In case of data where we have trends, comparisons and / or segments and patterns, represent the data in as many table as necessary.
+        - Maintain a natural, conversational tone.
+        - Ensure the response is directly derived from the provided document context.
+        - If the document does NOT contain relevant information, explicitly state that and summarize related available content instead.
+     
+        DOCUMENT CONTEXT:
+        {full_context}
+     
+        USER QUERY: {query}
+     
+        RESPONSE FORMAT REQUIREMENTS:
+        1. Begin with a comprehensive summary of all key information related to the query
+        2. Follow with detailed elaboration on each aspect of the question
+        3. Include specific details, examples, and supporting evidence from the documents
+        4. When appropriate, organize information into logical sections
+        5. Conclude with any additional relevant information from the context
+        6. Use <b> tags for key section headings
+        7. Use <p> tags for detailed explanations
+        8. Use <ul> and <li> for list-based information
+        9. Use <table> and <tr>, <td> for tabular information
+     
+        CRITICAL CONSTRAINTS:
+        - Use ONLY information from the provided document.
+        - DO NOT generate speculative or external information.
+        - Ensure clarity, accuracy, and comprehensive coverage of all relevant details.
+        - Avoid summarizing or condensing important information - include all relevant details.
+        """
+        
+        # Define system message
+        system_message = "You are a document analysis expert. Provide a comprehensive and detailed answer using only available information."
+        
+        try:
+            # Call the OpenAI chat completion API (using o3-mini as in Streamlit)
+            completion = client.chat.completions.create(
+                model="o3-mini",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+            
+            # Extract the answer from the response
+            answer = completion.choices[0].message.content
+            
+            # If answer seems too short, try to generate a more detailed one
+            if len(answer.split()) < 100:  # If less than ~100 words
+                enhanced_system_message = "You are a document analysis expert. The previous response was too brief. Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context."
+                
+                completion = client.chat.completions.create(
+                    model="o3-mini",
+                    messages=[
+                        {"role": "system", "content": enhanced_system_message},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                )
+                
+                answer = completion.choices[0].message.content
+                
+        except Exception as e:
+            # If there's an error (e.g., token limit), try with fewer context chunks
+            reduced_context = "\n\n".join(contextualized_content[:8])
+            fallback_prompt = f"""
+            Based ONLY on the following context, provide a comprehensive answer to the question: {query}
+            
+            CONTEXT:
+            {reduced_context}
+            
+            Ensure the response is detailed and covers all relevant information from the context.
+            """
+            
+            try:
+                fallback_completion = client.chat.completions.create(
+                    model="o3-mini",
+                    messages=[
+                        {"role": "system", "content": "You are a document analysis expert."},
+                        {"role": "user", "content": fallback_prompt}
+                    ],
+                    temperature=0.5
+                )
+                
+                answer = fallback_completion.choices[0].message.content
+            except Exception as nested_e:
+                # Last resort fallback
+                answer = f"An error occurred while generating the response: {str(e)}. Please try a more specific question or with fewer documents."
+
+        # Add source information
+        source_list = list(set(sources))
+        source_info = ", ".join(source_list)
+        return f"{answer}\n\n*Sources: {source_info}*"
+    
+    # Keep follow-up question generation as is
     def generate_general_follow_up_questions(self, question, answer):
         prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
@@ -1699,9 +1987,7 @@ class ChatView(APIView):
                 "Do you have any other questions I can help with?"
             ]
 
-    # -------------------------------
-    # Get embeddings function from Streamlit code
-    # -------------------------------
+    # Get embeddings (same as in DocumentUploadView)
     def get_embeddings(self, texts):
         """
         Gets embeddings using OpenAI's text-embedding-3-small model.
@@ -1715,124 +2001,105 @@ class ChatView(APIView):
         except Exception as e:
             logger.error(f"Error getting embeddings: {str(e)}")
             return []
-
-    # -------------------------------
-    # FAISS search function from Streamlit code
-    # -------------------------------
-    def search_faiss_index(self, index, chunks, query, k=8):
-        """
-        Search the FAISS index for relevant chunks based on query
-        """
+            
+    # Implement Streamlit's search_similar_content function
+    def search_similar_content(self, query, processed_docs, metadata_store, k=40):
+        """Search for similar content using the Streamlit approach"""
+        # Get embeddings for the query
         query_embedding = self.get_embeddings([query])
         if not query_embedding:
-            logger.error("Failed to generate query embedding")
-            return []
+            return [], []
         
-        query_embedding_np = np.array([query_embedding[0]]).astype('float32')
-        distances, indices = index.search(query_embedding_np, k)
+        # Need to search each document's FAISS index separately
+        all_results = []
+        all_distances = []
+        all_sources = []
         
-        results = [chunks[idx] for idx in indices[0] if idx < len(chunks)]
-        return results
-
-    # -------------------------------
-    # Get answer function directly from Streamlit code (unchanged)
-    # -------------------------------
-    def get_answer(self, question, index, chunks, all_text, use_web_knowledge=False):
-        try:
-            relevant_chunks = chunks  # We already filtered chunks in the post method
-            context = "\n\n".join([chunk.get('text', '') for chunk in relevant_chunks])
-            sources = set(chunk.get('source', '') for chunk in relevant_chunks)
-            source_info = "Sources: " + ", ".join(sources)
-            
-            # Choose the appropriate prompt based on mode
-            if use_web_knowledge:
-                print("####################################################################################################")
-                user_prompt = f"""
-                RESPONSE GENERATION GUIDELINES WITH WEB KNOWLEDGE:
-                - Provide a clear and informative answer using the context and your Knowledge Base.
-                - When using information from documents, clearly attribute it
-                - When using your general knowledge, distinguish it clearly (e.g., "Based on general knowledge...")
-                - Use semantic HTML tags for structure: <b>, <p>, <ul>, <li>
-                - Maintain a natural, conversational tone
-                - Prioritize answering using the provided document context when sufficient information is available.
-                - For facts not in the documents but in your knowledge base, state this clearly
-
-                DOCUMENT CONTEXT:
-                {context}
-
-                USER QUERY: {question}
-
-                RESPONSE FORMAT REQUIREMENTS:
-                1. Begin with a brief introductory paragraph
-                2. First address what's found in the provided documents
-                3. Then supplement with relevant information from your knowledge base
-                4. Use <b> tags for key section headings
-                5. Use <p> tags for detailed explanations
-                6. Use <ul> and <li> for list-based information
-                7. Clearly differentiate between document information and web knowledge
-
-                CRITICAL CONSTRAINTS:
-                - Prioritize document information when directly relevant
-                - Use your knowledge base to enhance, explain, and provide context
-                - Clearly indicate when you're relying on general knowledge versus document context
-                - Maintain clarity and readability
-                """
+        for proc_doc in processed_docs:
+            if not proc_doc.faiss_index or not os.path.exists(proc_doc.faiss_index):
+                continue
                 
-                # Use a system message that permits using outside knowledge
-                system_message = "You are a document analysis expert with access to both provided documents and general knowledge. Provide comprehensive answers using both sources, clearly distinguishing between them."
-            else:
-                # Original context-only prompt
-                user_prompt = f"""
-                RESPONSE GENERATION GUIDELINES:
-                - Provide a clear and informative answer.
-                - Use semantic HTML tags for structure: <b>, <p>, <ul>, <li>.
-                - Maintain a natural, conversational tone.
-                - Ensure the response is directly derived from the provided document context.
-                - If the document does NOT contain relevant information, explicitly state that the document does not mention the topic and summarize related available content instead.
-
-                DOCUMENT CONTEXT:
-                {context}
-
-                USER QUERY: {question}
-
-                RESPONSE FORMAT REQUIREMENTS:
-                1. If the document contains relevant information, answer using the provided details.
-                2. If the document does NOT mention the topic, state: "The document does not contain any information about [user query topic]. However, it includes details on the following:" and summarize related topics.
-                3. Use <b> tags for key section headings.
-                4. Use <p> tags for detailed explanations.
-                5. Use <ul> and <li> for list-based information.
-                6. Ensure the response flows naturally and is easy to read.
-
-                CRITICAL CONSTRAINTS:
-                - Use ONLY information from the provided document.
-                - DO NOT generate speculative or external information.
-                - Ensure clarity, accuracy, and readability.
-                """
-                system_message = "You are a document analysis expert. Provide a comprehensive answer using all available document context."
-            
-            completion = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.2,
-                max_tokens=2000
-            )
-            
-            answer_text = completion.choices[0].message.content
-            usage = completion.usage
-            token_info = f"(Tokens used: prompt {usage.prompt_tokens}, completion {usage.completion_tokens}, total {usage.prompt_tokens + usage.completion_tokens})"
-            
-            return f"{answer_text}\n\n*Sources: {source_info}*\n{token_info}"
+            # Load the FAISS index
+            try:
+                index = faiss.read_index(proc_doc.faiss_index)
+                # Search this index
+                distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
                 
-        except Exception as e:
-            logger.error(f"Error getting answer: {str(e)}")
-            return "Sorry, an error occurred while processing your question."
-
-    # -------------------------------
-    # Original follow-up question generator (unchanged)
-    # -------------------------------
+                # Extract results for this document
+                doc_metadata = [md for md in metadata_store if md.get('source_file') == proc_doc.document.filename]
+                
+                for i, idx in enumerate(indices[0]):
+                    if idx < len(doc_metadata):
+                        metadata_item = doc_metadata[idx]
+                        # Check if 'content' exists (complex docs) or use 'text' (simple docs)
+                        content = metadata_item.get('content', metadata_item.get('text', ''))
+                        source = metadata_item.get('source_file', metadata_item.get('source', proc_doc.document.filename))
+                        
+                        all_results.append(content)
+                        all_distances.append(distances[0][i])
+                        all_sources.append(source)
+                        
+            except Exception as e:
+                logger.error(f"Error searching index for {proc_doc.document.filename}: {str(e)}")
+                continue
+        
+        # Combine and sort results by similarity score
+        combined_results = list(zip(all_results, all_sources, all_distances))
+        sorted_results = sorted(combined_results, key=lambda x: x[2])  # Sort by distance (smaller is better)
+        
+        # Use TF-IDF for better ranking as in Streamlit implementation
+        results = [res[0] for res in sorted_results]
+        sources = [res[1] for res in sorted_results]
+        
+        # Apply TF-IDF if we have results
+        if results:
+            try:
+                from sklearn.feature_extraction.text import TfidfVectorizer
+                
+                # Create a TF-IDF vectorizer
+                vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+                tfidf_matrix = vectorizer.fit_transform([query] + results)
+                
+                # Calculate similarity scores
+                tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
+                
+                # Calculate combined scores (70% TF-IDF, 30% embedding similarity)
+                similarity_scores = [1 / (1 + dist) for dist in all_distances]
+                combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
+                
+                # Re-sort results by combined score
+                combined_results = list(zip(results, sources, combined_scores))
+                sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
+                
+                # Extract sorted content and sources
+                results = [res[0] for res in sorted_results]
+                sources = [res[1] for res in sorted_results]
+                
+                # Remove duplicates while preserving order
+                seen_content = set()
+                filtered_results = []
+                filtered_sources = []
+                
+                for content, source in zip(results, sources):
+                    # Use first 100 chars as a content signature
+                    content_hash = content[:100] if content else ""
+                    if content_hash and content_hash not in seen_content:
+                        seen_content.add(content_hash)
+                        filtered_results.append(content)
+                        filtered_sources.append(source)
+                
+                # Limit results to top matches
+                return filtered_results[:min(len(filtered_results), 15)], filtered_sources[:min(len(filtered_sources), 15)]
+                
+            except Exception as e:
+                logger.error(f"Error applying TF-IDF ranking: {str(e)}")
+                # Fall back to distance-based ranking
+                results = [res[0] for res in sorted_results[:15]]
+                sources = [res[1] for res in sorted_results[:15]]
+                return results, sources
+        
+        return results[:min(len(results), 15)], sources[:min(len(sources), 15)]
+    
     def generate_follow_up_questions(self, context):
         context_sample = "\n".join(context[:3]) if context else ""
         prompt = f"""
