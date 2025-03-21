@@ -6,8 +6,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import IsAuthenticated, AllowAny  # Combined imports
-# from rest_framework_simplejwt.tokens import RefreshToken  # Added only once
+from rest_framework.permissions import IsAuthenticated, AllowAny  
 import faiss
 import numpy as np
 import os
@@ -17,14 +16,8 @@ import re
 from datetime import datetime
 from django.core.files.storage import default_storage
 from django.conf import settings
-# from nltk.tokenize import word_tokenize
-# from nltk.corpus import stopwords
-# from nltk.util import ngrams
 from collections import Counter
-import google.generativeai as genai  # Merged single instance
-# from sklearn.feature_extraction.text import TfidfVectorizer
-# from sklearn.decomposition import LatentDirichletAllocation
-# from llama_parse import LlamaParse
+import google.generativeai as genai  
 from .models import (
     ChatHistory,
     ChatMessage,
@@ -32,6 +25,7 @@ from .models import (
     ProcessedIndex,
     UserAPITokens,
     ConversationMemoryBuffer,
+    UserModulePermissions
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -49,7 +43,8 @@ import json
 import csv
 from io import StringIO, BytesIO
 import pytz
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse, Http404
+import mimetypes
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.shortcuts import get_object_or_404
@@ -205,6 +200,16 @@ class UserProfileView(APIView):
                 profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
         except UserProfile.DoesNotExist:
             profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
+
+
+         # Get module permissions data
+        try:
+            module_permissions = user.module_permissions.disabled_modules
+        except (AttributeError, UserModulePermissions.DoesNotExist):
+            # Create module permissions if they don't exist
+            module_permissions = {}
+            UserModulePermissions.objects.create(user=user, disabled_modules={})
+
         
         return Response({
             'username': user.username,
@@ -213,6 +218,7 @@ class UserProfileView(APIView):
             'last_name': user.last_name,
             'profile_picture': profile_picture,
             'date_joined': user.date_joined,
+             'disabled_modules': module_permissions
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -2771,11 +2777,20 @@ class AdminUserManagementView(APIView):
                     api_tokens = user.api_tokens
                 except UserAPITokens.DoesNotExist:
                     pass
+
+                # Get disabled modules
+                try:
+                    module_permissions = user.module_permissions.disabled_modules
+                except (AttributeError, UserModulePermissions.DoesNotExist):
+                    module_permissions = {}
+                    # Create module permissions if they don't exist
+                    UserModulePermissions.objects.create(user=user, disabled_modules={})
                
                 user_info = {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
+                    'disabled_modules': module_permissions,
                     'api_tokens': {
                         'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
                         'gemini_token': api_tokens.gemini_token if api_tokens else None
@@ -2940,5 +2955,118 @@ class AdminUserManagementView(APIView):
             print(f"Error in AdminUserManagementView.delete: {str(e)}")
             return Response(
                 {'error': f'Failed to delete user: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class AdminUserModuleView(APIView):
+    def patch(self, request, user_id):
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can update module permissions'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get the user
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'User not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+            # Extract disabled_modules from request data
+            disabled_modules = request.data.get('disabled_modules', {})
+            
+            # Get or create module permissions
+            module_permissions, created = UserModulePermissions.objects.get_or_create(user=user)
+            module_permissions.disabled_modules = disabled_modules
+            module_permissions.save()
+            
+            # Get API tokens if they exist
+            api_tokens = None
+            try:
+                api_tokens = user.api_tokens  # Assuming this relation exists
+            except AttributeError:
+                pass
+            
+            # Return updated user data
+            return Response({
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'disabled_modules': module_permissions.disabled_modules,
+                'api_tokens': {
+                    'huggingface_token': getattr(api_tokens, 'huggingface_token', None) if api_tokens else None,
+                    'gemini_token': getattr(api_tokens, 'gemini_token', None) if api_tokens else None
+                }
+            }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            print(f"Error in AdminUserModuleView.patch: {str(e)}")
+            return Response(
+                {'error': f'Failed to update module permissions: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DocumentViewEndpoint(APIView):
+    """
+    Endpoint to view/download original documents
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, document_id):
+        try:
+            # Get main_project_id from query parameters
+            main_project_id = request.query_params.get('main_project_id')
+            
+            logger.info(f"Viewing document: {document_id} for project: {main_project_id}")
+            
+            # Get the document, ensuring it belongs to the requesting user
+            document = Document.objects.get(
+                id=document_id, 
+                user=request.user,
+                main_project_id=main_project_id
+            )
+            
+            # Get the file path
+            file_path = document.file.path
+            
+            # Verify the file exists
+            if not os.path.exists(file_path):
+                return HttpResponse(
+                    "File not found on server.", 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+            # Determine content type based on file extension
+            content_type, _ = mimetypes.guess_type(file_path)
+            if not content_type:
+                content_type = 'application/octet-stream'  # Default binary file type
+            
+            # Create a response with the file content
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type=content_type
+            )
+            
+            # Set content disposition header to display the file in browser
+            filename = os.path.basename(file_path)
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            
+            # Set content length
+            response['Content-Length'] = os.path.getsize(file_path)
+            
+            return response
+            
+        except Document.DoesNotExist:
+            return HttpResponse(
+                "Document not found or you don't have permission to access it.",
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return HttpResponse(
+                f"Error accessing document: {str(e)}",
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

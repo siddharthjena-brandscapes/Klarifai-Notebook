@@ -15,6 +15,8 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
     ConsolidatedSummaryView,
     ChatDownloadView,
     AdminUserManagementView,
+    AdminUserModuleView,
+    DocumentViewEndpoint
 
     
 )
@@ -51,4 +53,6 @@ urlpatterns = [
     path('consolidated_summary/', ConsolidatedSummaryView.as_view(), name='consolidated_summary'),
     path('download-chats/', ChatDownloadView.as_view(), name='download_chats'),
     path('api/admin/users/', AdminUserManagementView.as_view(), name='admin-user-management'),
+    path('admin/users/<int:user_id>/modules/', AdminUserModuleView.as_view(), name='admin-user-module-permissions'),
+    path('documents/view/<int:document_id>/', DocumentViewEndpoint.as_view(), name='document-view'),
 ]   
