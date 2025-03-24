@@ -57,7 +57,7 @@ urlpatterns = [
     path('api/admin/users/', AdminUserManagementView.as_view(), name='admin-user-management'),
     path('admin/users/<int:user_id>/modules/', AdminUserModuleView.as_view(), name='admin-user-module-permissions'),
 
-      path('documents/<int:document_id>/original/', OriginalDocumentView.as_view(), name='get_original_document'),
+    path('documents/<int:document_id>/original/', OriginalDocumentView.as_view(), name='get_original_document'),
     path('documents/<int:document_id>/view-log/', DocumentViewLogView.as_view(), name='log_document_view'),
     
 ]   
