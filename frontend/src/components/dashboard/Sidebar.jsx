@@ -17,7 +17,9 @@ import {
   Filter, 
   Calendar, 
   Tag,
-  Lightbulb, Sparkles
+  Lightbulb, Sparkles,
+  Eye, 
+  ExternalLink 
 } from 'lucide-react';
 import { documentService, chatService } from '../../utils/axiosConfig';
 import { toast } from 'react-toastify';
@@ -25,6 +27,7 @@ import DeleteModal from './DeleteModal';
 import DeleteChatModal  from './DeleteChatModal';
 import ChatDownloadMenu from './ChatDownload/ChatDownloadMenu';
 import { ideaService, coreService } from '../../utils/axiosConfig';
+import DocumentViewer from './DocumentViewer'; 
 const Sidebar = ({ 
   isOpen, 
   isMobile,
@@ -61,6 +64,8 @@ const Sidebar = ({
 
   const [disabledModules, setDisabledModules] = useState({});
   const [projectModules, setProjectModules] = useState([]);
+
+  const [viewingDocument, setViewingDocument] = useState(null);
 
   // Add navigate for redirection
   const navigate = useNavigate();
@@ -878,6 +883,136 @@ const activeConversation = activeConversationId ?
   chatHistory.find(chat => chat.conversation_id === activeConversationId) : 
   null; 
   
+
+  // Add a new method to handle viewing the original document
+  const handleViewOriginalDocument = (doc) => {
+    // Track document view (optional)
+    documentService.trackDocumentView(doc.id)
+      .catch(error => console.error('Failed to track document view:', error));
+    
+    setViewingDocument(doc);
+  };
+
+  // Add this function to close the document viewer
+  const closeDocumentViewer = () => {
+    setViewingDocument(null);
+  };
+
+  const renderDocumentItem = (doc) => (
+    <div
+      key={doc.id}
+      data-doc-id={doc.id}
+      className={`
+        flex items-center gap-2 
+        p-2 rounded-lg 
+        cursor-pointer 
+        transition-all 
+        ${selectedDocuments.includes(doc.id.toString())
+          ? ' bg-gradient-to-b from-blue-300/20 border border-[#5ff2b6]/50 text-white' 
+          : 'hover:bg-gray-700'}
+        ${activeDocumentId === doc.id ? 'border border-yellow-400' : ''}
+        group relative
+      `}
+      onClick={() => handleDocumentClick(doc.id)}
+    >
+      <input
+        type="checkbox"
+        checked={selectedDocuments.includes(doc.id.toString())}
+        readOnly
+        className="mr-2 form-checkbox 
+          h-3 w-3 
+          text-blue-600 
+          border-[#5ff2b6]
+          rounded-xl
+          focus:ring-[#5ff2b6]"
+      />
+      <FileText size={16} className="text-blue-400 flex-shrink-0" />
+      <div className="flex-grow flex items-center justify-between overflow-hidden">
+        <div className="flex flex-col flex-grow overflow-hidden">
+          <span className="truncate text-sm">{doc.filename}</span>
+          <span className="text-xs text-gray-400">
+            {formatRelativeDate(doc.created_at || doc.uploaded_at)}
+          </span>
+        </div>
+        
+        {/* Document actions menu */}
+        <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition-opacity">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleViewOriginalDocument(doc);
+            }}
+            className="text-blue-400 hover:text-blue-300 p-1 rounded-full
+              transition-colors duration-300
+              focus:outline-none
+              hover:bg-blue-500/10"
+            title="View Original Document"
+          >
+            <Eye size={16} />
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteConfirmation(doc);
+            }}
+            className="text-red-400 hover:text-red-300 p-1 rounded-full
+              transition-colors duration-300
+              focus:outline-none
+              hover:bg-red-500/10"
+            title="Delete Document"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Replace the existing documents rendering with this updated version
+  const renderDocumentsList = () => (
+    <>
+      {/* Select All Checkbox with Descriptive Text */}
+      {filteredDocuments.length > 0 && (
+        <div className="sticky top-0 z-10 flex items-center p-2 bg-gray-800/30 to-blue-900/20 rounded-lg backdrop-blur-md mb-2 ">
+          <input
+            type="checkbox"
+            id="select-all-documents"
+            checked={isSelectAllChecked}
+            onChange={handleSelectAllDocuments}
+            className="mr-2 form-checkbox 
+                h-3 w-3 
+                text-blue-600 
+                border-gray-300 
+                rounded-xl
+                focus:ring-blue-500
+                backdrop-blur-md "
+          />
+          <label 
+            htmlFor="select-all-documents" 
+            className="text-sm text-gray-300 flex-grow cursor-pointer"
+          >
+            Select All
+          </label>
+          {selectedDocuments.length > 0 && (
+            <span className="text-xs text-blue-400">
+              {selectedDocuments.length} selected
+            </span>
+          )}
+        </div>
+      )}
+      
+      {filteredDocuments.length === 0 ? (
+        <div className="text-gray-400 text-center py-4">
+          {documentSearchTerm 
+            ? `No documents match "${documentSearchTerm}"` 
+            : 'No documents available'}
+        </div>
+      ) : (
+        filteredDocuments.map(doc => renderDocumentItem(doc))
+      )}
+    </>
+  );
+
   return (
     <div className="flex h-screen relative">
         {/* Sidebar */}
@@ -1041,97 +1176,7 @@ const activeConversation = activeConversationId ?
                       </div>
                     </div>
                   ) : (
-                    <>
-                      {/* Select All Checkbox with Descriptive Text */}
-                      {filteredDocuments.length > 0 && (
-                        <div className="sticky top-0 z-10 flex items-center p-2 bg-gray-800/30 to-blue-900/20 rounded-lg backdrop-blur-md mb-2 ">
-                          <input
-                            type="checkbox"
-                            id="select-all-documents"
-                            checked={isSelectAllChecked}
-                            onChange={handleSelectAllDocuments}
-                            className="mr-2 form-checkbox 
-                                h-3 w-3 
-                                text-blue-600 
-                                border-gray-300 
-                                rounded-xl
-                                focus:ring-blue-500
-                                backdrop-blur-md "
-                          />
-                          <label 
-                            htmlFor="select-all-documents" 
-                            className="text-sm text-gray-300 flex-grow cursor-pointer"
-                          >
-                            Select All
-                          </label>
-                          {selectedDocuments.length > 0 && (
-                            <span className="text-xs text-blue-400">
-                              {selectedDocuments.length} selected
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      
-                      {filteredDocuments.length === 0 ? (
-                        <div className="text-gray-400 text-center py-4">
-                          {documentSearchTerm 
-                            ? `No documents match "${documentSearchTerm}"` 
-                            : 'No documents available'}
-                        </div>
-                      ) : (
-                        filteredDocuments.map((doc) => (
-                          <div
-                            key={doc.id}
-                            data-doc-id={doc.id}
-                            className={`
-                              flex items-center gap-2 
-                              p-2 rounded-lg 
-                              cursor-pointer 
-                              transition-all 
-                              ${selectedDocuments.includes(doc.id.toString())
-                                ? ' bg-gradient-to-b from-blue-300/20 border border-[#5ff2b6]/50  text-white' 
-                                : 'hover:bg-gray-700'}
-                              ${activeDocumentId === doc.id ? 'border border-yellow-400' : ''}
-                            `}
-                            onClick={() => handleDocumentClick(doc.id)}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedDocuments.includes(doc.id.toString())}
-                              readOnly
-                              className="mr-2 form-checkbox 
-                                h-3 w-3 
-                                text-blue-600 
-                                border-[#5ff2b6]
-                                rounded-xl
-                                focus:ring-[#5ff2b6]"
-                            />
-                            <FileText size={16} className="text-blue-400 flex-shrink-0" />
-                            <div className="flex-grow flex items-center justify-between overflow-hidden">
-                              <div className="flex flex-col flex-grow overflow-hidden">
-                                <span className="truncate text-sm">{doc.filename}</span>
-                                <span className="text-xs text-gray-400">
-                                  {formatRelativeDate(doc.created_at || doc.uploaded_at)}
-                                </span>
-                              </div>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteConfirmation(doc);
-                                }}
-                                className="text-red-400 hover:text-red-300 p-1 rounded-full
-                                transition-colors duration-300
-                                focus:outline-none
-                                hover:bg-red-500/10 right-0"
-                                title="Delete Document"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </>
+                    renderDocumentsList()
                   )}
                 </div>
               )}
@@ -1398,6 +1443,14 @@ const activeConversation = activeConversationId ?
             animation: float 3s ease-in-out infinite;
           }
         `}</style>
+
+{viewingDocument && (
+        <DocumentViewer
+          documentId={viewingDocument.id}
+          filename={viewingDocument.filename}
+          onClose={closeDocumentViewer}
+        />
+      )}
         <DeleteModal
   isOpen={isDeleteModalOpen}
   onClose={() => setIsDeleteModalOpen(false)}

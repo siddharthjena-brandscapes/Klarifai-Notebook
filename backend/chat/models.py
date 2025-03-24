@@ -37,6 +37,9 @@ class Document(models.Model):
     filename = models.CharField(max_length=255)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     main_project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='chat_documents', null=True)
+     # Add these new fields
+    view_count = models.PositiveIntegerField(default=0)
+    last_viewed_at = models.DateTimeField(null=True, blank=True)
     def __str__(self):
         return self.filename
     class Meta:

@@ -813,10 +813,18 @@ export const documentService = {
       }
     },
 
-    getDocumentViewUrl: (documentId, mainProjectId) => {
-      // This function only returns the URL path, the authentication is handled by the interceptor
-      return `/api/documents/view/${documentId}/?main_project_id=${mainProjectId || ''}`;
+    getOriginalDocument: (documentId) => {
+      return axiosInstance.get(`/documents/${documentId}/original/`, {
+        responseType: 'blob', // Important for handling binary files
+      });
     },
+  
+    trackDocumentView: (documentId, mainProjectId) => {
+      return axiosInstance.post(`/documents/${documentId}/view-log/`, {
+        main_project_id: mainProjectId
+      });
+    },
+  
     
   getChatHistory: () => {
     return axiosInstance.get('/chat-history/', {

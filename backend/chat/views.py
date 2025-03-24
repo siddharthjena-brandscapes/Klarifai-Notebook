@@ -1,7 +1,6 @@
 #views.py original
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
-from django.contrib.auth.hashers import check_password
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,12 +10,10 @@ import faiss
 import numpy as np
 import os
 import pickle
-import tempfile
 import re
 from datetime import datetime
 from django.core.files.storage import default_storage
 from django.conf import settings
-from collections import Counter
 import google.generativeai as genai  
 from .models import (
     ChatHistory,
@@ -34,17 +31,13 @@ import logging
 from .models import UserProfile
 logger = logging.getLogger(__name__)
 from core.models import Project
-import openai
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-import tiktoken
 import json
 import csv
 from io import StringIO, BytesIO
-import pytz
-from django.http import HttpResponse, FileResponse, Http404
-import mimetypes
+from django.http import HttpResponse, FileResponse
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.shortcuts import get_object_or_404
@@ -3276,64 +3269,126 @@ class AdminUserModuleView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+# Add this to your views.py
 
-class DocumentViewEndpoint(APIView):
-    """
-    Endpoint to view/download original documents
-    """
+class OriginalDocumentView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request, document_id):
         try:
-            # Get main_project_id from query parameters
-            main_project_id = request.query_params.get('main_project_id')
-            
-            logger.info(f"Viewing document: {document_id} for project: {main_project_id}")
-            
-            # Get the document, ensuring it belongs to the requesting user
-            document = Document.objects.get(
-                id=document_id, 
-                user=request.user,
-                main_project_id=main_project_id
-            )
+            # Get the document making sure it belongs to the user
+            document = get_object_or_404(Document, id=document_id, user=request.user)
             
             # Get the file path
             file_path = document.file.path
             
-            # Verify the file exists
+            # Check if file exists
             if not os.path.exists(file_path):
-                return HttpResponse(
-                    "File not found on server.", 
+                return Response(
+                    {'error': 'Document file not found'},
                     status=status.HTTP_404_NOT_FOUND
                 )
                 
             # Determine content type based on file extension
-            content_type, _ = mimetypes.guess_type(file_path)
-            if not content_type:
-                content_type = 'application/octet-stream'  # Default binary file type
+            content_type = self.get_content_type(file_path)
             
-            # Create a response with the file content
+            # Create a file response
             response = FileResponse(
                 open(file_path, 'rb'),
                 content_type=content_type
             )
             
-            # Set content disposition header to display the file in browser
-            filename = os.path.basename(file_path)
-            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            # Set content disposition to attachment with the original filename
+            response['Content-Disposition'] = f'inline; filename="{document.filename}"'
             
-            # Set content length
-            response['Content-Length'] = os.path.getsize(file_path)
+            # Log the file access
+            self.log_document_view(request.user, document)
             
             return response
             
-        except Document.DoesNotExist:
-            return HttpResponse(
-                "Document not found or you don't have permission to access it.",
-                status=status.HTTP_404_NOT_FOUND
-            )
         except Exception as e:
-            return HttpResponse(
-                f"Error accessing document: {str(e)}",
+            print(f"Error serving original document: {str(e)}")
+            return Response(
+                {'error': f'Failed to retrieve document: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    def get_content_type(self, file_path):
+        """Determine content type based on file extension"""
+        extension = os.path.splitext(file_path)[1].lower()
+        
+        content_types = {
+            '.pdf': 'application/pdf',
+            '.doc': 'application/msword',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.xls': 'application/vnd.ms-excel',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.ppt': 'application/vnd.ms-powerpoint',
+            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            '.txt': 'text/plain',
+            '.csv': 'text/csv',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif'
+        }
+        
+        return content_types.get(extension, 'application/octet-stream')
+    
+    def log_document_view(self, user, document):
+        """Log document view for analytics (optional)"""
+        try:
+            # You can create a DocumentViewLog model to track this
+            # For now, we'll just log it
+            logger.info(f"User {user.username} viewed document {document.id}: {document.filename}")
+            
+            # If you want to track view counts, you could add this to your Document model:
+            # document.view_count = F('view_count') + 1
+            # document.last_viewed_at = timezone.now()
+            # document.save(update_fields=['view_count', 'last_viewed_at'])
+        except Exception as e:
+            logger.error(f"Error logging document view: {str(e)}")
+            # Don't raise the exception - this is a non-critical feature
+
+class DocumentViewLogView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, document_id):
+        """Log when a user views a document"""
+        try:
+            # Get the document ensuring it belongs to the user
+            document = get_object_or_404(Document, id=document_id, user=request.user)
+            
+            # You could create a model to track this if needed
+            # For example:
+            # DocumentViewLog.objects.create(
+            #     user=request.user,
+            #     document=document,
+            #     view_date=timezone.now()
+            # )
+            
+            # For simplicity, just update the document's view count
+            document.view_count = F('view_count') + 1  # This requires adding view_count field to Document model
+            document.last_viewed_at = timezone.now()  # This requires adding last_viewed_at field to Document model
+            document.save(update_fields=['view_count', 'last_viewed_at'])
+            
+            return Response({
+                'success': True,
+                'message': 'Document view logged successfully'
+            }, status=status.HTTP_200_OK)
+            
+        except Document.DoesNotExist:
+            return Response({
+                'error': 'Document not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        except Exception as e:
+            print(f"Error logging document view: {str(e)}")
+            # Return success anyway - this is a non-critical feature
+            return Response({
+                'success': True,
+                'message': 'Continued without logging view'
+            }, status=status.HTTP_200_OK)
+
+
+
