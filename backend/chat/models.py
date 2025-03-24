@@ -1,7 +1,7 @@
 
 
 
-# models.py
+#chat\ models.py
 from django.db import models
 from django.contrib.auth.models import User
 import uuid
@@ -27,6 +27,7 @@ class UserAPITokens(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='api_tokens')
     huggingface_token = models.CharField(max_length=255, blank=True, null=True)
     gemini_token = models.CharField(max_length=255, blank=True, null=True)
+    llama_token = models.CharField(max_length=255, blank=True, null=True)
     
     def __str__(self):
         return f"{self.user.username}'s API Tokens"

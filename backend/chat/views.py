@@ -85,6 +85,7 @@ class SignupView(APIView):
         password = request.data.get('password')
         huggingface_token = request.data.get('huggingface_token', '')
         gemini_token = request.data.get('gemini_token', '')
+        llama_token = request.data.get('llama_token', '')  # New field for Llama API token
 
         # Validate input
         if not username or not email or not password:
@@ -110,7 +111,8 @@ class SignupView(APIView):
             UserAPITokens.objects.create(
                 user=user,
                 huggingface_token=huggingface_token,
-                gemini_token=gemini_token
+                gemini_token=gemini_token,
+                llama_token=llama_token  # Save the Llama API token
             )
             
             # Generate token for the new user
@@ -842,7 +844,6 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
 
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
-
     def post(self, request):
         files = request.FILES.getlist('files')
         user = request.user
@@ -852,7 +853,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             main_project = Project.objects.get(id=main_project_id, user=user)
             uploaded_docs = []
             last_processed_doc_id = None
-        #     processed_data = None  # Initialize processed_data outside the loop
+            processed_data = None  # Initialize processed_data outside the loop
 
             for file in files:
                 # Check for existing document
@@ -874,14 +875,15 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         
                     except ProcessedIndex.DoesNotExist:
                         # Process the document if no existing index
-                        processed_data = self.process_document(file)
+                        processed_data = self.process_document(file, user)  # Pass user to process_document
                         
-                        # Create ProcessedIndex
+                        # Create ProcessedIndex with markdown_path if available
                         ProcessedIndex.objects.create(
                             document=existing_doc,
                             faiss_index=processed_data['index_path'],
                             metadata=processed_data['metadata_path'],
-                            summary=""
+                            summary="",
+                            markdown_path=processed_data.get('markdown_path', '')  # Use empty string if not available
                         )
 
                         uploaded_docs.append({
@@ -900,14 +902,15 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     )
                     
                     # Then process it
-                    processed_data = self.process_document(file)
+                    processed_data = self.process_document(file, user)  # Pass user to process_document
                     
-                    # Create ProcessedIndex
+                    # Create ProcessedIndex with markdown_path if available
                     ProcessedIndex.objects.create(
                         document=document,
                         faiss_index=processed_data['index_path'],
                         metadata=processed_data['metadata_path'],
-                        summary=""
+                        summary="",
+                        markdown_path=processed_data.get('markdown_path', '')  # Use empty string if not available
                     )
 
                     uploaded_docs.append({
@@ -946,7 +949,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 'error': str(e),
                 'detail': 'An error occurred while processing the document'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     # -------------------------------
     # Keep the complexity detection from original code
     # -------------------------------
@@ -965,9 +967,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             return False
     
     # Add LlamaParse integration from Streamlit code
-    def process_complex_document_with_llamaparse(self, file_path, file_name):
+    def process_complex_document_with_llamaparse(self, file_path, file_name, user):
         """
-        Process complex document using LlamaParse from Streamlit implementation.
+        Process complex document using LlamaParse with user's API token.
         """
         import tempfile
         import uuid
@@ -978,8 +980,23 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         from llama_parse import LlamaParse
         
         try:
+            # Get the user's Llama API token
+            try:
+                user_api_tokens = UserAPITokens.objects.get(user=user)
+                llama_api_key = user_api_tokens.llama_token
+                
+                # If no token is saved for the user, use a fallback mechanism or raise an error
+                if not llama_api_key:
+                    logger.warning(f"No Llama API token found for user {user.username}")
+                    # Optional: You could implement a fallback or raise an error
+                    raise ValueError("Llama API token is required for processing complex documents")
+                    
+            except UserAPITokens.DoesNotExist:
+                logger.error(f"No API tokens record found for user {user.username}")
+                raise ValueError("User API tokens not configured")
+            
             parser = LlamaParse(
-                api_key="llx-CvudFEEwgpMhVunqW7NkoUBAwtoXwPPpojw2TKO539T81YbV",
+                api_key=llama_api_key,  # Use the user's Llama API token
                 result_type="markdown",
                 verbose=True,
                 images=True,
@@ -1046,13 +1063,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             return {
                 'index_path': index_file,
                 'metadata_path': pickle_file,
-                'full_text': full_text
+                'full_text': full_text,
+                'markdown_path': md_path  # Include the markdown path
             }
             
         except Exception as e:
             print(f"Error in complex document processing: {str(e)}")
             raise
-    
     def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
         """
         Splits text into chunks while attempting to preserve sentence and paragraph structure.
@@ -1198,11 +1215,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     # -------------------------------
     # Process documents function that integrates with Django database
     # -------------------------------
-    def process_document(self, file):
+    def process_document(self, file, user):
         """
         Process documents: extraction, chunking, embeddings, FAISS creation
         While maintaining compatibility with the Django database structure.
-        Now integrates complex document handling with LlamaParse.
+        Now integrates complex document handling with LlamaParse and user-specific API tokens.
         """
         import tempfile
         import os
@@ -1224,7 +1241,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 if is_complex:
                     # Now using the LlamaParse approach for complex documents
                     print(f"Complex document detected: {file.name}. Using LlamaParse...")
-                    return self.process_complex_document_with_llamaparse(file_path, file.name)
+                    return self.process_complex_document_with_llamaparse(file_path, file.name, user)
                 else:
                     # Original simple document processing
                     extracted_text = self.extract_text_from_file(file_path)
@@ -1280,7 +1297,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error in process_document: {str(e)}")
             raise
-    
+        
 
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
     def post(self, request):
@@ -3053,7 +3070,8 @@ class AdminUserManagementView(APIView):
                     'disabled_modules': module_permissions,
                     'api_tokens': {
                         'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
-                        'gemini_token': api_tokens.gemini_token if api_tokens else None
+                        'gemini_token': api_tokens.gemini_token if api_tokens else None,
+                        'llama_token': api_tokens.llama_token if api_tokens else None  # Include Llama token
                     }
                 }
                 user_data.append(user_info)
@@ -3082,6 +3100,7 @@ class AdminUserManagementView(APIView):
             password = request.data.get('password')
             huggingface_token = request.data.get('huggingface_token')
             gemini_token = request.data.get('gemini_token')
+            llama_token = request.data.get('llama_token')  # Get Llama token
            
             # Validate required fields
             if not all([username, email, password]):
@@ -3106,7 +3125,8 @@ class AdminUserManagementView(APIView):
             UserAPITokens.objects.create(
                 user=user,
                 huggingface_token=huggingface_token,
-                gemini_token=gemini_token
+                gemini_token=gemini_token,
+                llama_token=llama_token  # Save Llama token
             )
            
             return Response({
@@ -3135,6 +3155,7 @@ class AdminUserManagementView(APIView):
             user_id = request.data.get('user_id')
             huggingface_token = request.data.get('huggingface_token')
             gemini_token = request.data.get('gemini_token')
+            llama_token = request.data.get('llama_token')  # Get Llama token
            
             if not user_id:
                 return Response({
@@ -3157,6 +3178,9 @@ class AdminUserManagementView(APIView):
            
             if gemini_token is not None:
                 api_tokens.gemini_token = gemini_token
+                
+            if llama_token is not None:
+                api_tokens.llama_token = llama_token  # Update Llama token
            
             api_tokens.save()
            
@@ -3258,7 +3282,8 @@ class AdminUserModuleView(APIView):
                 'disabled_modules': module_permissions.disabled_modules,
                 'api_tokens': {
                     'huggingface_token': getattr(api_tokens, 'huggingface_token', None) if api_tokens else None,
-                    'gemini_token': getattr(api_tokens, 'gemini_token', None) if api_tokens else None
+                    'gemini_token': getattr(api_tokens, 'gemini_token', None) if api_tokens else None,
+		            'llama_token': getattr(api_tokens, 'llama_token', None) if api_tokens else None
                 }
             }, status=status.HTTP_200_OK)
                 

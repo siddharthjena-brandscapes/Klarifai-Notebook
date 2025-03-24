@@ -9,6 +9,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
     const [password, setPassword] = useState('');
     const [huggingfaceToken, setHuggingfaceToken] = useState('');
     const [geminiToken, setGeminiToken] = useState('');
+    const [llamaToken, setLlamaToken] = useState('');  // New state for Llama token
     const [error, setError] = useState('');
 
     const handleSubmit = async (e) => {
@@ -22,7 +23,8 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                 email,
                 password,
                 huggingface_token: huggingfaceToken,
-                gemini_token: geminiToken
+                gemini_token: geminiToken,
+                llama_token: llamaToken  // Include Llama token
             });
 
             // If signup is successful, automatically log in
@@ -122,6 +124,17 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
               
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-600">Llama API Token</label>
+                <input
+                    type="text" 
+                    placeholder="Llama API Token" 
+                    value={llamaToken} 
+                    onChange={(e) => setLlamaToken(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                />
             </div>
 
             <button
