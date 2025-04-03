@@ -17,7 +17,8 @@ import {
   Copy,
   Layers,
   Mic,
-  Check
+  Check,
+  Loader
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentService, chatService } from "../../utils/axiosConfig";
@@ -38,6 +39,7 @@ import {
 } from "./EnhancedSummaryFormatter";
 
 import MessageVersionHistory from "./MessageVersionHistory";
+import DocumentProcessingLoader from "./DocumentUpload/DocumentProcessingLoader";
 
 const MainContent = ({
   selectedChat,
@@ -107,6 +109,132 @@ const MainContent = ({
 
   // Add a new Citation component for inline citations
   const recognitionRef = useRef(null);
+
+  const [processingDocuments, setProcessingDocuments] = useState([]);
+  //for response length
+  const [responseLength, setResponseLength] = useState("short");
+  const [responseFormat, setResponseFormat] = useState("auto-detect");
+
+  // Updated Response Length Toggle Component
+const ResponseLengthToggle = ({ responseLength, setResponseLength }) => {
+  return (
+    <div className="relative">
+      <select
+        value={responseLength}
+        onChange={(e) => {
+          setResponseLength(e.target.value);
+          toast.info(`Response mode: ${e.target.value === 'short' ? 'Short & Concise' : 'Detailed & Comprehensive'}`);
+        }}
+        className="
+          appearance-none
+          bg-gray-900/80
+          hover:bg-gray-800/90
+          text-gray-300
+          text-xs
+          rounded-lg
+          px-2
+          py-1
+          pl-6
+          pr-7
+          focus:outline-none
+          focus:ring-1
+          focus:ring-blue-500
+          cursor-pointer
+          transition-colors
+          border border-blue-500/20
+        "
+      >
+        <option value="short">Short</option>
+        <option value="comprehensive">Comprehensive</option>
+      </select>
+      <span className="absolute inset-y-0 left-1 flex items-center pointer-events-none">
+        <Layers className="h-3 w-3 text-blue-400" />
+      </span>
+      <span className="absolute inset-y-0 right-1 flex items-center pointer-events-none">
+        <ChevronDown className="h-3 w-3 text-blue-400" />
+      </span>
+    </div>
+  );
+};
+
+// Updated Response Format Toggle Component
+const ResponseFormatToggle = ({ responseFormat, setResponseFormat }) => {
+  return (
+    <div className="relative">
+      <select
+        value={responseFormat}
+        onChange={(e) => {
+          setResponseFormat(e.target.value);
+          toast.info(`Format mode: ${getFormatDisplayName(e.target.value)}`);
+        }}
+        className="
+          appearance-none
+          bg-gray-900/80
+          hover:bg-gray-800/90
+          text-gray-300
+          text-xs
+          rounded-lg
+          px-2
+          py-1
+          pl-6
+          pr-7
+          focus:outline-none
+          focus:ring-1
+          focus:ring-blue-500
+          cursor-pointer
+          transition-colors
+          border border-blue-500/20
+        "
+      >
+        <option value="auto_detect">Auto-Detect</option>
+        <option value="natural">Natural</option>
+        <option value="executive_summary">Executive Summary</option>
+        <option value="detailed_analysis">Detailed Analysis</option>
+        <option value="strategic_recommendation">Strategic Recommendation</option>
+        <option value="comparative_analysis">Comparative Analysis</option>
+        <option value="market_insights">Market Insights</option>
+        <option value="factual_brief">Factual Brief</option>
+        <option value="technical_deep_dive">Technical Deep Dive</option>
+      </select>
+      <span className="absolute inset-y-0 left-1 flex items-center pointer-events-none">
+        <ScrollText className="h-3 w-3 text-blue-400" />
+      </span>
+      <span className="absolute inset-y-0 right-1 flex items-center pointer-events-none">
+        <ChevronDown className="h-3 w-3 text-blue-400" />
+      </span>
+    </div>
+  );
+};
+
+// Add ResponseLengthToggle PropTypes
+ResponseLengthToggle.propTypes = {
+  responseLength: PropTypes.string.isRequired,
+  setResponseLength: PropTypes.func.isRequired
+};
+
+// Add the PropTypes for ResponseFormatToggle
+ResponseFormatToggle.propTypes = {
+  responseFormat: PropTypes.string.isRequired,
+  setResponseFormat: PropTypes.func.isRequired
+};
+
+// Helper function to get display names for the toast notification
+const getFormatDisplayName = (formatKey) => {
+  const formatNames = {
+    auto_detect: "Auto-Detect",
+    natural: "Natural Response",
+    executive_summary: "Executive Summary",
+    detailed_analysis: "Detailed Analysis",
+    strategic_recommendation: "Strategic Recommendation",
+    comparative_analysis: "Comparative Analysis",
+    market_insights: "Market Insights",
+    factual_brief: "Factual Brief",
+    technical_deep_dive: "Technical Deep Dive"
+  };
+  
+  return formatNames[formatKey] || formatKey;
+};
+
 
   // Add this in your MainContent component
 useEffect(() => {
@@ -430,11 +558,11 @@ useEffect(() => {
                     ? "Consolidated Document Summary"
                     : "Document Summary"}
                 </h2>
-                {currentDocument && !isConsolidatedView && (
+                {/* {currentDocument && !isConsolidatedView && (
                   <p className="text-sm text-blue-400 mt-1">
                     File: {currentDocument.filename}
                   </p>
-                )}
+                )} */}
 
                 {isConsolidatedView && (
                   <ConsolidatedViewBadge
@@ -548,6 +676,7 @@ useEffect(() => {
   useEffect(() => {
     fetchUserDocuments();
   }, []);
+  
 
   useEffect(() => {
     if (selectedChat) {
@@ -708,164 +837,156 @@ useEffect(() => {
   const handleFileChange = async (event) => {
     const selectedFiles = Array.from(event.target.files);
     if (!selectedFiles.length) return;
-
+  
     setIsDocumentProcessing(true);
     setProcessingProgress(0);
-
+    
+    // Track document names and statuses for display
+    const processingDocuments = selectedFiles.map(file => ({
+      filename: file.name,
+      status: 'waiting',
+      progress: 0,
+      message: 'Waiting to upload'
+    }));
+    setProcessingDocuments(processingDocuments);
+    
     try {
       const formData = new FormData();
       selectedFiles.forEach((file) => {
         formData.append("files", file);
       });
       formData.append("main_project_id", mainProjectId);
-
-      const simulateProgress = setInterval(() => {
-        setProcessingProgress((prev) => {
-          if (prev < 90) {
-            return prev + Math.random() * 10;
-          }
-          clearInterval(simulateProgress);
-          return 90;
-        });
-      }, 500);
-
-      const response = await documentService.uploadDocument(
-        formData,
-        mainProjectId,
-        {
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            );
-            setProcessingProgress(Math.min(percentCompleted, 90));
-          },
+      
+      // Calculate total upload size for progress tracking
+      const totalUploadSize = selectedFiles.reduce((total, file) => total + file.size, 0);
+      
+      // Setup internal tracking variables
+      let uploadStage = 0; // 0: starting, 1: uploading, 2: processing, 3: completed
+      
+      // Make the upload request with progress tracking
+      const response = await documentService.uploadDocument(formData, mainProjectId, {
+        onUploadProgress: (progressEvent) => {
+          // Calculate upload progress (0-70%)
+          const uploadPercentage = Math.round((progressEvent.loaded * 100) / totalUploadSize);
+          const scaledProgress = Math.floor(uploadPercentage * 0.7); // Scale to 0-70%
+          
+          uploadStage = 1; // mark as uploading
+          setProcessingProgress(scaledProgress);
+          
+          // Update document statuses
+          setProcessingDocuments(prevDocs => {
+            return prevDocs.map((doc, index) => {
+              // Stagger the upload progress for multiple files
+              const fileProgress = Math.min(100, 
+                uploadPercentage - (index * 10) // Stagger by 10% per file
+              );
+              
+              return {
+                ...doc,
+                status: fileProgress > 0 ? 'uploading' : 'waiting',
+                progress: Math.max(0, fileProgress),
+                message: fileProgress > 0 ? `Uploading: ${Math.min(100, fileProgress)}%` : 'Waiting to upload'
+              };
+            });
+          });
         }
-      );
-
-      clearInterval(simulateProgress);
-
+      });
+      
+      // Upload is complete, now show processing stage (70-90%)
+      uploadStage = 2;
+      setProcessingProgress(75);
+      
+      // Update document statuses to reflect the transition to processing
+      setProcessingDocuments(prevDocs => {
+        return prevDocs.map(doc => ({
+          ...doc,
+          status: 'processing',
+          progress: 75,
+          message: 'Processing document'
+        }));
+      });
+      
+      // Process the response
       const documents = response.data.documents || [];
-
+      const uploadResults = response.data.upload_results || [];
+      
+      // Update document statuses with results from the server
+      if (uploadResults.length > 0) {
+        setProcessingDocuments(prevDocs => {
+          const updatedDocs = [...prevDocs];
+          
+          // Match results to documents by filename
+          uploadResults.forEach(result => {
+            const docIndex = updatedDocs.findIndex(doc => doc.filename === result.filename);
+            if (docIndex !== -1) {
+              updatedDocs[docIndex] = {
+                ...updatedDocs[docIndex],
+                id: result.id,
+                status: result.status,
+                progress: result.progress,
+                message: result.message
+              };
+            }
+          });
+          
+          return updatedDocs;
+        });
+      }
+      
+      // Gradually increase progress to 100% to show processing completion
+      for (let progress = 80; progress <= 100; progress += 5) {
+        setProcessingProgress(progress);
+        await new Promise(resolve => setTimeout(resolve, 300)); // Short delay between updates
+      }
+      
+      uploadStage = 3; // mark as completed
+      
       if (documents.length > 0) {
         // Automatically select all uploaded documents
         const newSelectedDocuments = documents.map((doc) => doc.id.toString());
         setLocalSelectedDocuments(newSelectedDocuments);
-
+        
         if (setSelectedDocuments) {
           setSelectedDocuments(newSelectedDocuments);
         }
-
+        
         setCurrentView("chat");
-        setProcessingProgress(100);
-
+        
         // Update documents list
         setDocuments((prevDocs) => {
           const newDocs = documents.filter(
-            (newDoc) =>
-              !prevDocs.some((existingDoc) => existingDoc.id === newDoc.id)
+            (newDoc) => !prevDocs.some((existingDoc) => existingDoc.id === newDoc.id)
           );
           return [...prevDocs, ...newDocs];
         });
-
-        toast.success(
-          `${documents.length} document(s) uploaded successfully! Click "Generate Summary" to analyze the content.`
-        );
+        
+        // Show success message and close dialog
+        setTimeout(() => {
+          toast.success(
+            `${documents.length} document${documents.length > 1 ? 's' : ''} uploaded successfully!`
+          );
+          setIsDocumentProcessing(false);
+        }, 1000);
       }
     } catch (error) {
       console.error("Upload Error:", error);
       toast.error("Upload failed. Please try again.");
-    } finally {
       setIsDocumentProcessing(false);
+      
+      // Update document statuses to error
+      setProcessingDocuments(prevDocs => {
+        return prevDocs.map(doc => ({
+          ...doc,
+          status: 'error',
+          progress: 0,
+          message: 'Upload failed'
+        }));
+      });
     }
   };
-  // Add a processing loader component
-  const DocumentProcessingLoader = ({ progress }) => {
-    const safeProgress =
-      typeof progress === "number" ? Math.max(0, Math.min(100, progress)) : 0;
-    return (
-      <div
-        className="
-        fixed 
-        inset-0 
-        z-[1000] 
-        bg-black/80 
-        backdrop-blur-sm 
-        flex 
-        flex-col 
-        items-center 
-        justify-center 
-        space-y-6
-      "
-      >
-        <div
-          className="
-          w-64 
-          h-2 
-          bg-gray-700 
-          rounded-full 
-          overflow-hidden
-        "
-        >
-          <div
-            className="
-            h-full 
-            bg-gradient-to-r 
-            from-blue-500 
-            to-green-500 
-            transition-all 
-            duration-300 
-            ease-out
-          "
-            style={{ width: `${safeProgress}%` }}
-          />
-        </div>
-
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-white mb-2">
-            Processing Document
-          </h2>
-          <p className="text-gray-300">Analyzing and extracting insights...</p>
-          <p className="text-sm text-gray-400 mt-2">
-            {/* Use optional chaining and fallback */}
-            {typeof safeProgress === "number"
-              ? `${safeProgress.toFixed(0)}% complete`
-              : "0% complete"}
-          </p>
-        </div>
-
-        <div className="animate-pulse">
-          <ScrollText
-            className="
-            h-16 
-            w-16 
-            text-blue-400 
-            opacity-70
-          "
-          />
-        </div>
-      </div>
-    );
-  };
-
-  // Comprehensive PropTypes validation
-  DocumentProcessingLoader.propTypes = {
-    progress: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
-      .isRequired,
-  };
-
-  // Default props to prevent errors
-  DocumentProcessingLoader.defaultProps = {
-    progress: 0,
-  };
-
+  
   const handleSendMessage = async (message) => {
     if (!message.trim()) return;
-
-    // Check if any documents are selected
-    // if (!localSelectedDocuments || localSelectedDocuments.length === 0) {
-    //   toast.warning("Please select at least one document for your query.");
-    //   return;
-    // }
 
     // Add user message to conversation
     const newConversation = [
@@ -885,6 +1006,8 @@ useEffect(() => {
         mainProjectId: mainProjectId,
         messages: newConversation, // Include the full conversation history
         use_web_knowledge: useWebKnowledge, // Include the mode flag
+        response_length: responseLength,
+        response_format: responseFormat // Include response format setting
       };
 
       console.log("Sending message with data:", messageData);
@@ -898,6 +1021,8 @@ useEffect(() => {
           citations: response.data.citations || [],
           follow_up_questions: response.data.follow_up_questions || [],
           use_web_knowledge: response.data.use_web_knowledge || false, // Store the mode used for this message
+          response_length: response.data.response_length || responseLength, // Store the response length
+          response_format: response.data.response_format || responseFormat // Store the response format
         };
 
         // Update conversation with the new assistant message
@@ -978,7 +1103,22 @@ useEffect(() => {
     return uniqueMessages;
   };
 
-  
+  // Add this useEffect in MainContent.jsx to handle null selectedChat
+useEffect(() => {
+  // If selectedChat becomes null (e.g., when a chat is deleted),
+  // reset the conversation state
+  if (selectedChat === null) {
+    setConversation([]);
+    setConversationId(null);
+    setMessage('');
+    setCurrentFollowUpQuestions([]);
+    
+    // Reset any other chat-specific states as needed
+    // For example, you might want to keep document selections
+    
+    console.log('Chat reset due to null selectedChat');
+  }
+}, [selectedChat]);
 
 // Replace the existing handleMessageUpdate function with this simpler implementation
 const handleMessageUpdate = async (messageIndex, newContent) => {
@@ -1036,6 +1176,10 @@ const handleMessageUpdate = async (messageIndex, newContent) => {
     // Update conversation state immediately for better UX
     setConversation(conversationUpToEdit);
 
+    // Get current response format and length
+    const currentResponseFormat = responseFormat;
+    const currentResponseLength = responseLength;
+
     // Prepare request data for the API
     const requestData = {
       message: newContent,
@@ -1043,6 +1187,9 @@ const handleMessageUpdate = async (messageIndex, newContent) => {
       selected_documents: localSelectedDocuments,
       main_project_id: mainProjectId,
       context: conversationUpToEdit,
+      use_web_knowledge: useWebKnowledge,
+      response_length: currentResponseLength,
+      response_format: currentResponseFormat
     };
 
     // Send to API and get new response
@@ -1055,6 +1202,8 @@ const handleMessageUpdate = async (messageIndex, newContent) => {
       citations: response.data.citations || [],
       follow_up_questions: response.data.follow_up_questions || [],
       use_web_knowledge: response.data.use_web_knowledge || false,
+      response_length: response.data.response_length || currentResponseLength,
+      response_format: response.data.response_format || currentResponseFormat
     };
 
     const finalConversation = [...conversationUpToEdit, assistantMessage];
@@ -1218,571 +1367,643 @@ const handleRestoreVersion = (messageIndex, versionIndex) => {
   };
 
   return (
-    <div
-      className="flex-1 h-screen w-full overflow-hidden backdrop-blur-lg relative
-        transition-all 
-        duration-300 
-        ease-in-out
-        
-        "
-    >
-       
-      {/* Conditional Rendering based on current view */}
-      <div className="absolute inset-0 top-16 overflow-hidden">
-        {/* Conditional rendering of the WebSearchToggle only when documents are selected
-    {localSelectedDocuments.length > 0 && (
-      <WebSearchToggle 
-        useWebKnowledge={useWebKnowledge} 
-        toggleWebKnowledge={toggleWebKnowledge} 
-      />
-    )} */}
-        {currentView === "chat" ? (
-          <div
-            className="flex flex-col h-full w-full backdrop-blur-xl 
-            top-16
-            rounded-t-3xl 
-            overflow-hidden 
-            
-          "
-          >
-   {/* Chat Messages */}
-<div
-  ref={chatContainerRef}
-  className={`flex-1 overflow-y-auto p-2 sm:p-4 backdrop-blur-lg
-            sm:space-y-4
-            custom-scrollbar
-            pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
-            ${
-              !isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"
-            }`}
->
-  {/* Rest of the chat messages rendering code */}
-  {conversation.map((msg, index) => (
-    <React.Fragment key={index}>
       <div
-        className={`flex ${
-          msg.role === "user"
-            ? "justify-end mt-16"
-            : "justify-start"
-        }`}
+        className="flex-1 h-screen w-full overflow-hidden backdrop-blur-lg relative
+          transition-all 
+          duration-300 
+          ease-in-out
+          
+          "
       >
+         
+        {/* Conditional Rendering based on current view */}
+        <div className="absolute inset-0 top-16 overflow-hidden">
+          {/* Conditional rendering of the WebSearchToggle only when documents are selected
+      {localSelectedDocuments.length > 0 && (
+        <WebSearchToggle 
+          useWebKnowledge={useWebKnowledge} 
+          toggleWebKnowledge={toggleWebKnowledge} 
+        />
+      )} */}
+          {currentView === "chat" ? (
+            <div
+              className="flex flex-col h-full w-full backdrop-blur-xl 
+              top-16
+              rounded-t-3xl 
+              overflow-hidden 
+              
+            "
+            >
+     {/* Chat Messages */}
+  <div
+    ref={chatContainerRef}
+    className={`flex-1 overflow-y-auto p-2 sm:p-4 backdrop-blur-lg
+              sm:space-y-4
+              custom-scrollbar
+              pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
+              ${
+                !isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"
+              }`}
+  >
+    {/* Rest of the chat messages rendering code */}
+    {conversation.map((msg, index) => (
+      <React.Fragment key={index}>
         <div
-          className={`
-            p-4
-            rounded-lg
-            backdrop-blur-md
-            border
-            shadow-lg
-            ${
-              msg.role === "user"
-                ? "bg-gradient-to-r from-blue-600/30 to-emerald-600/30 text-white max-w-[70%] border-emerald-500/20"
-                : "bg-gray-900 text-gray-300 max-w-full border-blue-500/20"
-            }
-            transition-all
-            duration-300
-            hover:shadow-xl
-            hover:border-opacity-50
-          `}
+          className={`flex ${
+            msg.role === "user"
+              ? "justify-end mt-16"
+              : "justify-start"
+          }`}
         >
-          <div className="flex items-center mb-2">
-            {msg.role === "user" ? (
-              <User className="mr-2 h-5 w-5" />
-            ) : (
-              <img src={BotIcon} alt="Klarifai" className="mr-2 h-5 w-5" />
-            )}
-            <span className="font-bold">
-              {msg.role === "user" ? "You" : "Klarifai"}
-            </span>
-            
-            {/* Add edited indicator if message was edited */}
-            {msg.edited && (
-              <span className="ml-2 text-xs text-blue-400">(edited)</span>
-            )}
-            
-            {/* Add historical view indicator if viewing a previous version */}
-            {msg.isHistoricalView && (
-              <span className="ml-2 text-xs text-amber-400">(historical view)</span>
-            )}
-            
-            {/* Add web knowledge mode indicator */}
-            {msg.role === "assistant" && msg.use_web_knowledge && (
-              <div className="ml-2 web-knowledge-badge">
-                <span className="web-knowledge-badge-pulse"></span>
-                <Globe className="h-3 w-3" />
-                <span>Web-Enhanced</span>
+          <div
+            className={`
+              p-4
+              rounded-lg
+              backdrop-blur-md
+              border
+              shadow-lg
+              ${
+                msg.role === "user"
+                  ? "bg-gradient-to-r from-blue-600/30 to-emerald-600/30 text-white max-w-[70%] border-emerald-500/20"
+                  : "bg-gray-900 text-gray-300 max-w-full border-blue-500/20"
+              }
+              transition-all
+              duration-300
+              hover:shadow-xl
+              hover:border-opacity-50
+            `}
+          >
+            <div className="flex items-center mb-2">
+              {msg.role === "user" ? (
+                <User className="mr-2 h-5 w-5" />
+              ) : (
+                <img src={BotIcon} alt="Klarifai" className="mr-2 h-5 w-5" />
+              )}
+              <span className="font-bold">
+                {msg.role === "user" ? "You" : "Klarifai"}
+              </span>
+              
+              {/* Add edited indicator if message was edited */}
+              {msg.edited && (
+                <span className="ml-2 text-xs text-blue-400">(edited)</span>
+              )}
+              
+              {/* Add historical view indicator if viewing a previous version */}
+              {msg.isHistoricalView && (
+                <span className="ml-2 text-xs text-amber-400">(historical view)</span>
+              )}
+              
+            {/* All badges for assistant messages */}
+            {msg.role === "assistant" && (
+              <div className="flex flex-wrap items-center ml-2 gap-1.5">
+                {/* Web Knowledge Badge */}
+                {msg.use_web_knowledge ? (
+                  <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    <Globe className="h-3 w-3 mr-0.5" />
+                    <span>Web</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                    <Database className="h-3 w-3 mr-0.5" />
+                    <span>Context</span>
+                  </div>
+                )}
+                
+                {/* Response Length Badge */}
+                {msg.response_length && (
+                  <div className={`
+                    inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs
+                    ${msg.response_length === 'short' 
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                      : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}
+                  `}>
+                    <Layers className="h-3 w-3 mr-0.5" />
+                    <span>{msg.response_length === 'short' ? 'Short' : 'Comprehensive'}</span>
+                  </div>
+                )}
+                          
+                {/* Format Badge - Show ALL formats including "natural" */}
+                <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-pink-500/10 text-pink-400 border border-pink-500/20">
+                  <ScrollText className="h-3 w-3 mr-0.5" />
+                  <span>
+                    {(() => {
+                      // Format display names mapping
+                      const formatNames = {
+                        natural: "Natural",
+                        executive_summary: "Summary",
+                        detailed_analysis: "Analysis",
+                        strategic_recommendation: "Recommendation",
+                        comparative_analysis: "Comparison",
+                        market_insights: "Market",
+                        factual_brief: "Factual",
+                        technical_deep_dive: "Technical",
+                        auto_detect: "Auto-Detect"
+                      };
+                      return formatNames[msg.response_format || 'natural'] || 'Natural';
+                    })()}
+                  </span>
+                </div>
               </div>
             )}
           </div>
-          
-          {/* Use EditableMessage component for user messages */}
-          {msg.role === "user" ? (
-            <EditableMessage
-            message={msg}
-            messageIndex={index}
-            onUpdate={handleMessageUpdate}
-            messageVersions={messageVersions}  // Replace messageHistory
-            currentVersionIndex={currentVersionIndex}  // New prop
-            onRestoreVersion={handleRestoreVersion}
-            onOpenHistoryModal={() => {
-              setActiveHistoryMessageIndex(index);
-              setIsHistoryModalOpen(true);
-            }}
-          />
-          ) : (
-            <div
-              className="message-content"
-              dangerouslySetInnerHTML={{
-                __html: msg.content
-                  .replace(/<p>/g, '<p class="mb-4">')
-                  .replace(/<b>/g, '<b class="block mb-2 mt-2">')
-                  .replace(
-                    /<ul>/g,
-                    '<ul class="list-disc pl-6 mb-4">'
-                  )
-                  .replace(
-                    /<ol>/g,
-                    '<ol class="list-decimal pl-6 mb-4">'
-                  )
-                  .replace(/<li>/g, '<li class="mb-2">')
-                  // Add proper styling for tables
-                  .replace(
-                    /<table>/g,
-                    '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
-                  )
-                  .replace(
-                    /<th>/g,
-                    '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
-                  )
-                  .replace(
-                    /<td>/g,
-                    '<td class="border border-gray-500 p-2">'
-                  )
-                  // Ensure proper spacing for tables
-                  .replace(
-                    /<\/table>\s*<p>/g,
-                    '</table><p class="mt-4">'
-                  )
-                  // Remove excess newlines
-                  .replace(/\n{3,}/g, "\n\n")
-                  // Ensure one line break after headers
-                  .replace(/<\/b>\s*\n+/g, "</b>\n"),
+            
+            {/* Use EditableMessage component for user messages */}
+            {msg.role === "user" ? (
+              <EditableMessage
+              message={msg}
+              messageIndex={index}
+              onUpdate={handleMessageUpdate}
+              messageVersions={messageVersions}  // Replace messageHistory
+              currentVersionIndex={currentVersionIndex}  // New prop
+              onRestoreVersion={handleRestoreVersion}
+              onOpenHistoryModal={() => {
+                setActiveHistoryMessageIndex(index);
+                setIsHistoryModalOpen(true);
               }}
             />
-          )}
-
-          {/* Add Copy option for Klarifai messages only */}
-          {msg.role !== "user" && (
-            <div className="flex justify-end mt-4 text-gray-400 text-sm">
-              {/* Move Info icon and text to the left side */}
-              <div className="flex items-center mr-auto">
-                {msg.use_web_knowledge && (
-                  <>
-                    <Info className="h-3 w-3 mr-1" />
-                    <span>This response includes information from both your documents and general knowledge.</span>
-                  </>
-                )}
+            ) : (
+              <div
+                className="message-content"
+                dangerouslySetInnerHTML={{
+                  __html: msg.content
+                    .replace(/<p>/g, '<p class="mb-4">')
+                    .replace(/<b>/g, '<b class="block mb-2 mt-2">')
+                    .replace(/<h3>/g, '<h3 class="text-lg font-semibold mt-4 mb-2">')
+                    .replace(
+                      /<ul>/g,
+                      '<ul class="list-disc pl-6 mb-4">'
+                    )
+                    .replace(
+                      /<ol>/g,
+                      '<ol class="list-decimal pl-6 mb-4">'
+                    )
+                    .replace(/<li>/g, '<li class="mb-2">')
+                    // Add proper styling for tables
+                    .replace(
+                      /<table>/g,
+                      '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
+                    )
+                    .replace(
+                      /<th>/g,
+                      '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
+                    )
+                    .replace(
+                      /<td>/g,
+                      '<td class="border border-gray-500 p-2">'
+                    )
+                    // Ensure proper spacing for tables
+                    .replace(
+                      /<\/table>\s*<p>/g,
+                      '</table><p class="mt-4">'
+                    )
+                    // Remove excess newlines
+                    .replace(/\n{3,}/g, "\n\n")
+                    // Ensure one line break after headers
+                    .replace(/<\/b>\s*\n+/g, "</b>\n"),
+                }}
+              />
+            )}
+  
+            {/* Add Copy option for Klarifai messages only */}
+            {msg.role !== "user" && (
+              <div className="flex justify-end mt-4 text-gray-400 text-sm">
+                {/* Move Info icon and text to the left side */}
+                <div className="flex items-center mr-auto">
+                  {msg.use_web_knowledge && (
+                    <>
+                      <Info className="h-3 w-3 mr-1" />
+                      <span>This response includes information from both your documents and general knowledge.</span>
+                    </>
+                  )}
+                </div>
+  
+                {/* Copy button remains on the right side */}
+                <button
+                  onClick={() => handleCopyMessage(msg.content, index)}
+                  className="flex items-center px-3 py-1 rounded hover:text-blue-400 hover:bg-blue-900/30 active:scale-95 transition-all duration-150"
+                >
+                  {copyMessageIndex === index ? (
+                    <span className="text-green-400 ml-2">Copied!</span>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 ml-2" /> Copy
+                    </>
+                  )}
+                </button>
               </div>
-
-              {/* Copy button remains on the right side */}
-              <button
-                onClick={() => handleCopyMessage(msg.content, index)}
-                className="flex items-center px-3 py-1 rounded hover:text-blue-400 hover:bg-blue-900/30 active:scale-95 transition-all duration-150"
-              >
-                {copyMessageIndex === index ? (
-                  <span className="text-green-400 ml-2">Copied!</span>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 ml-2" /> Copy
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-    </React.Fragment>
-  ))}
-
-  {isLoading && (
-    <div className="text-center text-white">
-      Generating response...
+      </React.Fragment>
+    ))}
+  
+    {isLoading && (
+      <div className="flex items-center justify-center py-4 text-blue-400">
+      <Loader className="h-5 w-5 mr-2 animate-spin" />
+      <span>Generating response...</span>
     </div>
+    )}
+    <div ref={chatEndRef} />
+  </div>
+  
+  {/* Add the Version History Modal */}
+  {isHistoryModalOpen && activeHistoryMessageIndex !== null && (
+    <MessageVersionHistory
+      messageVersions={messageVersions}  // Replace messageHistory
+      messageIndex={activeHistoryMessageIndex}
+      onRestoreVersion={handleRestoreVersion}
+      conversation={conversation} 
+      onClose={() => {
+        setIsHistoryModalOpen(false);
+        setActiveHistoryMessageIndex(null);
+      }}
+    />
   )}
-  <div ref={chatEndRef} />
-</div>
-
-{/* Add the Version History Modal */}
-{isHistoryModalOpen && activeHistoryMessageIndex !== null && (
-  <MessageVersionHistory
-    messageVersions={messageVersions}  // Replace messageHistory
-    messageIndex={activeHistoryMessageIndex}
-    onRestoreVersion={handleRestoreVersion}
-    conversation={conversation} 
-    onClose={() => {
-      setIsHistoryModalOpen(false);
-      setActiveHistoryMessageIndex(null);
-    }}
-  />
-)}
-
-
-
-{/* Follow-up Questions and Input Area */}
-<div className="w-full fixed-bottom-0 z-20 pointer-events-none">
-  <div
-    className="w-full px-2 pb-2 bottom-20
-      transition-all duration-300 ease-in-out
-      transform ${isFollowUpQuestionsMinimized ? 'translate-y-full' : 'translate-y-0'}
-      z-20
-      pointer-events-auto
-    "
-  >
+  
+  
+  
+  {/* Follow-up Questions and Input Area */}
+  <div className="w-full fixed-bottom-0 z-20 pointer-events-none">
     <div
-      className="
-        bg-gradient-to-b 
-        from-gray-900/80 
-        via-gray-800/80 
-        to-gray-900/80
-        backdrop-blur-xl 
-        rounded-t-2xl 
-        sm:rounded-t-3xl 
-        shadow-2xl 
-        overflow-hidden
-        relative 
-        border-t 
-        border-blue-500/20
+      className="w-full px-2 pb-2 bottom-20
+        transition-all duration-300 ease-in-out
+        transform ${isFollowUpQuestionsMinimized ? 'translate-y-full' : 'translate-y-0'}
+        z-20
+        pointer-events-auto
       "
     >
-      <div className="flex justify-center">
-        <button
-          onClick={toggleFollowUpQuestions}
-          className="text-white p-0.5 transition-colors"
-        >
-          {isFollowUpQuestionsMinimized ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-      {!isFollowUpQuestionsMinimized &&
-        currentFollowUpQuestions.length > 0 && (
-        <div className="w-full px-2">
-          <div className="flex gap-1 overflow-x-auto">
-            {currentFollowUpQuestions.map((question, index) => (
-              <Card
-                key={index}
-                onClick={() => {
-                  // Remove numbering like "1. ", "2. ", etc. at the start of the question
-                  const cleanedQuestion = question
-                    .replace(/^(\d+\.\s*)/, "")
-                    .trim();
-                  setMessage(cleanedQuestion); // Only sets the message, doesn't send
-                }}
-                className="flex-shrink-0 mt-1 py-1 px-2 text-xs"
-              >
-                {question}
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-    {/* Input Area */}
-    <div className="bg-gray-900/90 backdrop-blur-xl rounded-b-2xl sm:rounded-b-3xl shadow-2xl p-2 relative border-t border-blue-500/10">
-      <div className="flex flex-col w-full">
-        {/* Input field */}
-        <div className="w-full relative bg-gray-900/90 rounded-xl transition-colors overflow-hidden mb-2">
-          {/* Textarea - Auto-resizing with reduced min-height */}
-          <textarea
-            value={message}
-            onChange={(e) => {
-              setMessage(e.target.value);
-              // Auto-resize logic
-              e.target.style.height = "inherit";
-              const scrollHeight = e.target.scrollHeight;
-              const maxHeight = 100; // Reduced maximum height in pixels
-              e.target.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
-            }}
-            onKeyPress={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(message);
-              }
-            }}
-            placeholder={`${localSelectedDocuments.length === 0 
-              ? "Ask me anything..." 
-              : "Ask a question about your documents..."}`}
-            className="w-full bg-transparent text-white py-2 px-3 text-sm focus:outline-none resize-none overflow-y-auto min-h-[36px] max-h-[100px] custom-scrollbar custom-textarea"
-            disabled={isLoading}
-            style={{ scrollbarWidth: "thin" }}
-          />
-          
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            multiple
-            className="hidden"
-            accept=".pdf,.docx,.txt,.pptx"
-          />
-        </div>
-        
-        {/* Icons and buttons row below textarea - with reduced sizing */}
-        <div className="flex items-center justify-between w-full">
-          {/* Left-side actions */}
-          <div className="flex items-center space-x-2">
-            <button
-              title="Upload documents"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
-            >
-              <Paperclip className="h-4 w-4" />
-            </button>
-            
-            {/* Mic button with recording indicator */}
-            {!message && (
-              <button
-              onClick={handleMicInput}
-              className={`relative text-gray-400 transition-colors p-1 rounded-full ${
-                isRecording ? "text-red-500 bg-red-500/10" : "hover:text-white"
-              }`}
-              title="Voice input"
-            >
-              <Mic className={`h-4 w-4 ${isRecording ? "animate-pulse" : ""}`} />
-            
-              {isRecording && (
-                <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-              )}
-            </button>
-            
+      <div
+        className="
+          bg-gradient-to-b 
+          from-gray-900/80 
+          via-gray-800/80 
+          to-gray-900/80
+          backdrop-blur-xl 
+          rounded-t-2xl 
+          sm:rounded-t-3xl 
+          shadow-2xl 
+          overflow-hidden
+          relative 
+          border-t 
+          border-blue-500/20
+        "
+      >
+        <div className="flex justify-center">
+          <button
+            onClick={toggleFollowUpQuestions}
+            className="text-white p-0.5 transition-colors"
+          >
+            {isFollowUpQuestionsMinimized ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
             )}
-
-             {/* View toggle button */}
-             <button
-              title={currentView === "chat" ? "View Summary" : "View Chat"}
-              onClick={() => toggleView(currentView === "chat" ? "summary" : "chat")}
-              className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
-            >
-              {currentView === "chat" ? (
-                <ScrollText className="h-4 w-4" />
-              ) : (
-                <MessageCircle className="h-4 w-4" />
-              )}
-            </button>
-            
-            {/* Context/Web knowledge toggle - reduced size */}
-            {localSelectedDocuments.length > 0 && (
-              <button
-                onClick={toggleWebKnowledge}
-                title={
-                  useWebKnowledge
-                    ? "Answers from documents and web knowledge"
-                    : "Answers from documents only"
+          </button>
+        </div>
+        {!isFollowUpQuestionsMinimized &&
+          currentFollowUpQuestions.length > 0 && (
+          <div className="w-full px-2">
+            <div className="flex gap-1 overflow-x-auto">
+              {currentFollowUpQuestions.map((question, index) => (
+                <Card
+                  key={index}
+                  onClick={() => {
+                    // Remove numbering like "1. ", "2. ", etc. at the start of the question
+                    const cleanedQuestion = question
+                      .replace(/^(\d+\.\s*)/, "")
+                      .trim();
+                    setMessage(cleanedQuestion); // Only sets the message, doesn't send
+                  }}
+                  className="flex-shrink-0 mt-1 py-1 px-2 text-xs"
+                >
+                  {question}
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Input Area */}
+      <div className="bg-gray-900/90 backdrop-blur-xl rounded-b-2xl sm:rounded-b-3xl shadow-2xl p-2 relative border-t border-blue-500/10">
+        <div className="flex flex-col w-full">
+          {/* Input field */}
+          <div className="w-full relative bg-gray-900/90 rounded-xl transition-colors overflow-hidden mb-2">
+            {/* Textarea - Auto-resizing with reduced min-height */}
+            <textarea
+              value={message}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                // Auto-resize logic
+                e.target.style.height = "inherit";
+                const scrollHeight = e.target.scrollHeight;
+                const maxHeight = 100; // Reduced maximum height in pixels
+                e.target.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+              }}
+              onKeyPress={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(message);
                 }
-                className={`
-                  flex items-center justify-center gap-1
-                  px-2 py-1
-                  rounded-lg 
-                  transition-all 
-                  duration-300
-                  text-xs
-                  ${useWebKnowledge
-                    ? "bg-gradient-to-r from-purple-600/70 to-blue-500/70 text-white"
-                    : "bg-gray-800/50 text-gray-300 hover:bg-gray-700/50"}
-                `}
+              }}
+              placeholder={`${localSelectedDocuments.length === 0 
+                ? "Ask me anything..." 
+                : "Ask a question about your documents..."}`}
+              className="w-full bg-transparent text-white py-2 px-3 text-sm focus:outline-none resize-none overflow-y-auto min-h-[36px] max-h-[100px] custom-scrollbar custom-textarea"
+              disabled={isLoading}
+              style={{ scrollbarWidth: "thin" }}
+            />
+            
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              multiple
+              className="hidden"
+              accept=".pdf,.docx,.txt,.pptx,.xlsx"
+            />
+          </div>
+          
+          {/* Icons and buttons row below textarea - with reduced sizing */}
+          <div className="flex items-center justify-between w-full">
+            {/* Left-side actions */}
+            <div className="flex items-center space-x-2">
+              <button
+                title="Upload documents"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
               >
-                {useWebKnowledge ? (
-                  <>
-                    <Globe className="h-3 w-3" />
-                    <span className="hidden sm:inline text-xs">Web</span>
-                  </>
-                ) : (
-                  <>
-                    <Database className="h-3 w-3" />
-                    <span className="hidden sm:inline text-xs">Context-only</span>
-                  </>
+                <Paperclip className="h-4 w-4" />
+              </button>
+              
+              {/* Mic button with recording indicator */}
+              {!message && (
+                <button
+                onClick={handleMicInput}
+                className={`relative text-gray-400 transition-colors p-1 rounded-full ${
+                  isRecording ? "text-red-500 bg-red-500/10" : "hover:text-white"
+                }`}
+                title="Voice input"
+              >
+                <Mic className={`h-4 w-4 ${isRecording ? "animate-pulse" : ""}`} />
+              
+                {isRecording && (
+                  <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                  </span>
                 )}
               </button>
-            )}
+              
+              )}
+  
+               {/* View toggle button */}
+               <button
+                title={currentView === "chat" ? "View Summary" : "View Chat"}
+                onClick={() => toggleView(currentView === "chat" ? "summary" : "chat")}
+                className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
+              >
+                {currentView === "chat" ? (
+                  <ScrollText className="h-4 w-4" />
+                ) : (
+                  <MessageCircle className="h-4 w-4" />
+                )}
+              </button>
+              
+              {/* Context/Web knowledge toggle - reduced size */}
+              {localSelectedDocuments.length > 0 && (
+                <button
+                  onClick={toggleWebKnowledge}
+                  title={
+                    useWebKnowledge
+                      ? "Answers from documents and web knowledge"
+                      : "Answers from documents only"
+                  }
+                  className={`
+                    flex items-center justify-center gap-1
+                    px-2 py-1
+                    rounded-lg 
+                    transition-all 
+                    duration-300
+                    text-xs
+                    ${useWebKnowledge
+                      ? "bg-gradient-to-r from-purple-600/70 to-blue-500/70 text-white"
+                      : "appearance-none bg-gray-900/80 text-gray-300 hover:bg-gray-800/90  border border-blue-500/20"}
+                  `}
+                  
+                >
+                  {useWebKnowledge ? (
+                    <>
+                      <Globe className="h-3 w-3" />
+                      <span className="hidden sm:inline text-xs">Web</span>
+                    </>
+                  ) : (
+                    <>
+                      <Database className="h-3 w-3 text-blue-400" />
+                      <span className="hidden sm:inline text-xs">Context-only</span>
+                    </>
+                  )}
+                </button>
+              )}
+  
+                  {/* ADD RESPONSE LENGTH TOGGLE HERE */}
+                  <ResponseLengthToggle 
+                    responseLength={responseLength}
+                    setResponseLength={setResponseLength}
+                  />
+  
+                  {/* ADD RESPONSE FORMAT TOGGLE HERE */}
+                  <ResponseFormatToggle 
+                  responseFormat={responseFormat}
+                  setResponseFormat={setResponseFormat}
+                  />
+                        
+             
+            </div>
             
-           
-          </div>
-          
-          {/* Send button - reduced size */}
-          <button
-            onClick={() => handleSendMessage(message)}
-            disabled={isLoading}
-            className="bg-gradient-to-r from-blue-600/90 to-emerald-600/80 hover:from-blue-500/80 hover:to-emerald-500/70 text-white p-2 rounded-lg transition-all disabled:opacity-50"
-            title="Send message"
-          >
-            <Send className="h-4 w-4" />
-          </button>
-          </div>
+            {/* Send button - reduced size */}
+            <button
+              onClick={() => handleSendMessage(message)}
+              disabled={isLoading}
+              className="bg-gradient-to-r from-blue-600/90 to-emerald-600/80 hover:from-blue-500/80 hover:to-emerald-500/70 text-white p-2 rounded-lg transition-all disabled:opacity-50"
+              title="Send message"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+            </div>
+        </div>
       </div>
     </div>
   </div>
-</div>
-</div>
+  </div>
+      
+          ) : (
+            renderSummaryView()
+          )}
+        </div>
+        {/* Document Processing Loader - Add this at the top level */}
+        {isDocumentProcessing && (
+  <DocumentProcessingLoader 
+    progress={processingProgress}
+    documents={processingDocuments}
+    onComplete={() => {
+      setIsDocumentProcessing(false);
+      setProcessingDocuments([]);
+    }}
+    onCancel={() => {
+      setIsDocumentProcessing(false);
+      setProcessingDocuments([]);
+      toast.info("Document processing cancelled");
+    }}
+  />
+)}
+  
+        {/* Custom Scrollbar Styles */}
+        <style>{`
+  
+                @keyframes bounce {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-10px); }
+                }
+  
+                .animate-bounce {
+                  animation: bounce 1s ease-in-out;
+                }
+  
+                @keyframes pulse {
+                  0% { transform: scale(1); }
+                  50% { transform: scale(1.05); }
+                  100% { transform: scale(1); }
+                }
+  
+                .animate-pulse {
+                  animation: pulse 1.5s ease-in-out infinite;
+                }
+              .custom-tooltip {
+                background-color: #1f2937 !important; /* dark gray background */
+                color: #ffffff !important;
+                padding: 12px !important;
+                border-radius: 8px !important;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+                max-width: 300px !important;
+                width: 300px !important;
+                z-index: 1000 !important;
+                animation: fadeIn 0.3s ease-out !important;
+              }
+              @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -10px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
     
-        ) : (
-          renderSummaryView()
-        )}
-      </div>
-      {/* Document Processing Loader - Add this at the top level */}
-      {isDocumentProcessing && (
-        <DocumentProcessingLoader progress={processingProgress} />
-      )}
-
-      {/* Custom Scrollbar Styles */}
-      <style>{`
-
-              @keyframes bounce {
-                0%, 100% { transform: translateY(0); }
-                50% { transform: translateY(-10px); }
+              
+              .animate-fade-in {
+                animation: fadeIn 0.3s ease-out;
               }
-
-              .animate-bounce {
-                animation: bounce 1s ease-in-out;
+              
+              .citation-inline-wrapper {
+                position: relative;
+                display: inline-block;
               }
-
-              @keyframes pulse {
-                0% { transform: scale(1); }
-                50% { transform: scale(1.05); }
-                100% { transform: scale(1); }
+              
+              .citation-tooltip {
+                display: none;
               }
-
-              .animate-pulse {
-                animation: pulse 1.5s ease-in-out infinite;
+  
+              .citation-inline-wrapper:hover .citation-tooltip {
+                display: block;
               }
-            .custom-tooltip {
-              background-color: #1f2937 !important; /* dark gray background */
-              color: #ffffff !important;
-              padding: 12px !important;
-              border-radius: 8px !important;
-              box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-              max-width: 300px !important;
-              width: 300px !important;
-              z-index: 1000 !important;
-              animation: fadeIn 0.3s ease-out !important;
+              .custom-scrollbar::-webkit-scrollbar {
+                  width: 6px;
+              }
+              .custom-scrollbar::-webkit-scrollbar-track {
+                  background: rgba(16, 185, 129, 0.1);
+                  border-radius: 10px;
+              }
+              .custom-scrollbar::-webkit-scrollbar-thumb {
+                  background: rgba(16, 185, 129, 0.2);
+                  border-radius: 10px;
+              }
+              .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                   background: rgba(16, 185, 129, 0.3);
+              }
+              .group:hover .opacity-0 {
+                opacity: 1;
+              }
+  
+              .transition-opacity {
+                transition: opacity 0.2s ease-in-out;
+              }
+  
+  
+           .web-knowledge-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      border-radius: 9999px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.65rem;
+      color: #a5b4fc;
+      background-color: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      margin-left: 0.5rem;
+    }
+  
+            .web-knowledge-badge svg {
+              margin-right: 0.25rem;
             }
-            @keyframes fadeIn {
-    from { opacity: 0; transform: translate(-50%, -10px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
-  }
+  
+            .mode-toggle-btn::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: -100%;
+              width: 100%;
+              height: 100%;
+              
+              transition: all 0.6s ease;
+            }
+  
+            .mode-toggle-btn:hover::before {
+              left: 100%;
+            }
   
             
-            .animate-fade-in {
-              animation: fadeIn 0.3s ease-out;
-            }
-            
-            .citation-inline-wrapper {
-              position: relative;
-              display: inline-block;
-            }
-            
-            .citation-tooltip {
-              display: none;
-            }
-
-            .citation-inline-wrapper:hover .citation-tooltip {
-              display: block;
-            }
-            .custom-scrollbar::-webkit-scrollbar {
-                width: 6px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-track {
-                background: rgba(16, 185, 129, 0.1);
-                border-radius: 10px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb {
-                background: rgba(16, 185, 129, 0.2);
-                border-radius: 10px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                 background: rgba(16, 185, 129, 0.3);
-            }
-            .group:hover .opacity-0 {
-              opacity: 1;
-            }
-
-            .transition-opacity {
-              transition: opacity 0.2s ease-in-out;
-            }
-
-
-         .web-knowledge-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    border-radius: 9999px;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.65rem;
-    color: #a5b4fc;
-    background-color: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    margin-left: 0.5rem;
-  }
-
-          .web-knowledge-badge svg {
-            margin-right: 0.25rem;
-          }
-
-          .mode-toggle-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            
-            transition: all 0.6s ease;
-          }
-
-          .mode-toggle-btn:hover::before {
-            left: 100%;
-          }
-
-          
-        `}</style>
-    </div>
-  );
-};
-
-MainContent.propTypes = {
-  mainProjectId: PropTypes.string.isRequired,
-  selectedChat: PropTypes.shape({
-    conversation_id: PropTypes.string,
-    messages: PropTypes.arrayOf(
-      PropTypes.shape({
-        role: PropTypes.string,
-        content: PropTypes.string,
-        citations: PropTypes.array,
-      })
-    ),
+          `}</style>
+      </div>
+    );
+  };
+  
+  MainContent.propTypes = {
+    mainProjectId: PropTypes.string.isRequired,
+    selectedChat: PropTypes.shape({
+      conversation_id: PropTypes.string,
+      messages: PropTypes.arrayOf(
+        PropTypes.shape({
+          role: PropTypes.string,
+          content: PropTypes.string,
+          citations: PropTypes.array,
+        })
+      ),
+      summary: PropTypes.string,
+      follow_up_questions: PropTypes.arrayOf(PropTypes.string),
+      // conversation_id: PropTypes.string,
+      selected_documents: PropTypes.arrayOf(
+        PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+      ),
+    }),
+  
     summary: PropTypes.string,
-    follow_up_questions: PropTypes.arrayOf(PropTypes.string),
-    // conversation_id: PropTypes.string,
-    selected_documents: PropTypes.arrayOf(
-      PropTypes.oneOfType([PropTypes.string, PropTypes.number])
-    ),
-  }),
-
-  summary: PropTypes.string,
-  followUpQuestions: PropTypes.array,
-  isSummaryPopupOpen: PropTypes.bool.isRequired,
-  onCloseSummary: PropTypes.func.isRequired,
-  setSummary: PropTypes.func.isRequired,
-  setFollowUpQuestions: PropTypes.func.isRequired,
-  setIsSummaryPopupOpen: PropTypes.func.isRequired,
-  selectedDocuments: PropTypes.arrayOf(PropTypes.string),
-  setSelectedDocuments: PropTypes.func,
-  updateSelectedDocuments: PropTypes.func,
-  isDocumentProcessing: PropTypes.bool,
-  processingProgress: PropTypes.number,
-};
-
-export default MainContent;
+    followUpQuestions: PropTypes.array,
+    isSummaryPopupOpen: PropTypes.bool.isRequired,
+    onCloseSummary: PropTypes.func.isRequired,
+    setSummary: PropTypes.func.isRequired,
+    setFollowUpQuestions: PropTypes.func.isRequired,
+    setIsSummaryPopupOpen: PropTypes.func.isRequired,
+    selectedDocuments: PropTypes.arrayOf(PropTypes.string),
+    setSelectedDocuments: PropTypes.func,
+    updateSelectedDocuments: PropTypes.func,
+    isDocumentProcessing: PropTypes.bool,
+    processingProgress: PropTypes.number,
+  };
+  
+  export default MainContent;
+  

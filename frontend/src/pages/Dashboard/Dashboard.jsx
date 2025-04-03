@@ -10,6 +10,7 @@ import Header from '../../components/dashboard/Header';
 import Sidebar from '../../components/dashboard/Sidebar';
 import MainContent from '../../components/dashboard/MainContent';
 import backgroundImage from '../../assets/bg-main.jpg';
+import FaqButton from '../../components/faq/FaqButton';
 
 
 const Dashboard = () => {
@@ -240,6 +241,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+      <FaqButton />
     </div>
   );
 };

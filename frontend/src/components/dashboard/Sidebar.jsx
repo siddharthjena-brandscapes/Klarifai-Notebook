@@ -19,15 +19,18 @@ import {
   Tag,
   Lightbulb, Sparkles,
   Eye, 
-  ExternalLink 
+  Download
 } from 'lucide-react';
 import { documentService, chatService } from '../../utils/axiosConfig';
 import { toast } from 'react-toastify';
 import DeleteModal from './DeleteModal';
 import DeleteChatModal  from './DeleteChatModal';
-import ChatDownloadMenu from './ChatDownload/ChatDownloadMenu';
 import { ideaService, coreService } from '../../utils/axiosConfig';
 import DocumentViewer from './DocumentViewer'; 
+import DocumentSearchModal from './DocumentSearchModal'; 
+import ChatDownloadFeature from './ChatDownloadFeature';
+import BulkDeleteModal from './BulkDeleteModal';
+
 const Sidebar = ({ 
   isOpen, 
   isMobile,
@@ -72,6 +75,71 @@ const Sidebar = ({
   
   // Add this state for tracking the generate ideas button animation
   const [isGenerateIdeasAnimating, setIsGenerateIdeasAnimating] = useState(false);
+
+  const [isDocumentSearchModalOpen, setIsDocumentSearchModalOpen] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const toggleBulkDeleteMode = () => {
+    // If turning off bulk delete mode, clear any document selections
+    if (bulkDeleteMode) {
+      setSelectedDocuments([]);
+      setIsSelectAllChecked(false);
+    }
+    setBulkDeleteMode(!bulkDeleteMode);
+  };
+  
+  // Function to handle bulk deletion confirmation
+  const handleBulkDeleteConfirmation = () => {
+    if (selectedDocuments.length > 0) {
+      setIsBulkDeleteModalOpen(true);
+    } else {
+      toast.warning("Please select at least one document to delete");
+    }
+  };
+  
+  // Function to perform bulk delete operation
+  const handleBulkDelete = async () => {
+    try {
+      // Show a loading toast
+      const loadingToastId = toast.loading(`Deleting ${selectedDocuments.length} documents...`);
+      
+      // Create an array of promises for each document delete operation
+      const deletePromises = selectedDocuments.map(docId => 
+        documentService.deleteDocument(parseInt(docId), mainProjectId)
+      );
+      
+      // Wait for all delete operations to complete
+      await Promise.all(deletePromises);
+      
+      // Update the documents list by filtering out deleted documents
+      setDocuments(prevDocs => 
+        prevDocs.filter(doc => !selectedDocuments.includes(doc.id.toString()))
+      );
+      
+      // Clear selections
+      setSelectedDocuments([]);
+      setIsSelectAllChecked(false);
+      
+      // Close the modal
+      setIsBulkDeleteModalOpen(false);
+      
+      // Exit bulk delete mode
+      setBulkDeleteMode(false);
+      
+      // Update the toast notification
+      toast.update(loadingToastId, {
+        render: `Successfully deleted ${selectedDocuments.length} documents`,
+        type: "success",
+        isLoading: false,
+        autoClose: 3000
+      });
+    } catch (error) {
+      console.error('Failed to delete documents', error);
+      toast.error('Failed to delete some documents. Please try again.');
+      setIsBulkDeleteModalOpen(false);
+    }
+  };
 
 
    // Check for disabled modules and project modules on mount
@@ -185,7 +253,8 @@ const handleGenerateIdeas = async () => {
       const documentName = selectedDoc ? selectedDoc.filename : "Document";
       
       // Create a default project name from document
-      const projectName = `Ideas from ${documentName}`;
+      const projectName = response.data.suggested_project_name || 
+      		`Ideas from ${response.data.document_name_no_ext || response.data.document_name}`;
       
       // Create a new project first
       const projectResponse = await ideaService.createProject({
@@ -768,24 +837,39 @@ const scrollToSelectedDocument = (documentId) => {
     }
   };
   
-  // You can add a method to archive/soft delete a conversation
+ 
+  // Replace the existing handleDeleteConversation function with this updated version
   const handleDeleteConversation = async (conversationId) => {
     try {
       await chatService.deleteConversation(conversationId);
+      
+      // Remove from chat history state
       setChatHistory(prevHistory => 
         prevHistory.filter(chat => chat.conversation_id !== conversationId)
       );
       
+      // If the deleted chat was active, reset the view
       if (activeConversationId === conversationId) {
+        // Clear the active conversation ID
         setActiveConversationId(null);
+        
+        // Call the onNewChat callback properly
         if (onNewChat) {
+          // Call with no parameter to avoid preventDefault errors
           onNewChat();
+          
+          // Add a toast notification for better UX
+          toast.success('Started new conversation');
         }
       }
       
+      // Close the modal
       setIsDeleteChatModalOpen(false);
       setChatToDelete(null);
+      
+      // Show success message
       toast.success('Conversation deleted');
+      
     } catch (error) {
       console.error('Failed to delete conversation', error);
       toast.error('Failed to delete conversation');
@@ -910,23 +994,23 @@ const activeConversation = activeConversationId ?
         ${selectedDocuments.includes(doc.id.toString())
           ? ' bg-gradient-to-b from-blue-300/20 border border-[#5ff2b6]/50 text-white' 
           : 'hover:bg-gray-700'}
-        ${activeDocumentId === doc.id ? 'border border-yellow-400' : ''}
+        ${activeDocumentId === doc.id && !bulkDeleteMode ? 'border border-yellow-400' : ''}
+        ${bulkDeleteMode ? 'hover:bg-red-900/20' : ''}
         group relative
       `}
-      onClick={() => handleDocumentClick(doc.id)}
+      onClick={() => bulkDeleteMode ? handleDocumentToggle(doc.id) : handleDocumentClick(doc.id)}
     >
       <input
         type="checkbox"
         checked={selectedDocuments.includes(doc.id.toString())}
         readOnly
-        className="mr-2 form-checkbox 
+        className={`mr-2 form-checkbox 
           h-3 w-3 
-          text-blue-600 
-          border-[#5ff2b6]
+          ${bulkDeleteMode ? 'text-red-600 border-red-400' : 'text-blue-600 border-[#5ff2b6]'}
           rounded-xl
-          focus:ring-[#5ff2b6]"
+          focus:ring-[#5ff2b6]`}
       />
-      <FileText size={16} className="text-blue-400 flex-shrink-0" />
+      <FileText size={16} className={bulkDeleteMode ? "text-red-400 flex-shrink-0" : "text-blue-400 flex-shrink-0"} />
       <div className="flex-grow flex items-center justify-between overflow-hidden">
         <div className="flex flex-col flex-grow overflow-hidden">
           <span className="truncate text-sm">{doc.filename}</span>
@@ -935,69 +1019,90 @@ const activeConversation = activeConversationId ?
           </span>
         </div>
         
-        {/* Document actions menu */}
-        <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition-opacity">
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              handleViewOriginalDocument(doc);
-            }}
-            className="text-blue-400 hover:text-blue-300 p-1 rounded-full
-              transition-colors duration-300
-              focus:outline-none
-              hover:bg-blue-500/10"
-            title="View Original Document"
-          >
-            <Eye size={16} />
-          </button>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDeleteConfirmation(doc);
-            }}
-            className="text-red-400 hover:text-red-300 p-1 rounded-full
-              transition-colors duration-300
-              focus:outline-none
-              hover:bg-red-500/10"
-            title="Delete Document"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        {/* Document actions menu - only show when not in bulk delete mode */}
+        {!bulkDeleteMode && (
+          <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition-opacity">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleViewOriginalDocument(doc);
+              }}
+              className="text-blue-400 hover:text-blue-300 p-1 rounded-full
+                transition-colors duration-300
+                focus:outline-none
+                hover:bg-blue-500/10"
+              title="View Original Document"
+            >
+              <Eye size={16} />
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteConfirmation(doc);
+              }}
+              className="text-red-400 hover:text-red-300 p-1 rounded-full
+                transition-colors duration-300
+                focus:outline-none
+                hover:bg-red-500/10"
+              title="Delete Document"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
-
-  // Replace the existing documents rendering with this updated version
+  
+  // Modified documents list rendering with bulk delete option
   const renderDocumentsList = () => (
     <>
-      {/* Select All Checkbox with Descriptive Text */}
+      {/* Documents actions header */}
       {filteredDocuments.length > 0 && (
-        <div className="sticky top-0 z-10 flex items-center p-2 bg-gray-800/30 to-blue-900/20 rounded-lg backdrop-blur-md mb-2 ">
-          <input
-            type="checkbox"
-            id="select-all-documents"
-            checked={isSelectAllChecked}
-            onChange={handleSelectAllDocuments}
-            className="mr-2 form-checkbox 
-                h-3 w-3 
-                text-blue-600 
-                border-gray-300 
-                rounded-xl
-                focus:ring-blue-500
-                backdrop-blur-md "
-          />
-          <label 
-            htmlFor="select-all-documents" 
-            className="text-sm text-gray-300 flex-grow cursor-pointer"
-          >
-            Select All
-          </label>
-          {selectedDocuments.length > 0 && (
-            <span className="text-xs text-blue-400">
-              {selectedDocuments.length} selected
-            </span>
-          )}
+        <div className="sticky top-0 z-10 flex items-center p-2 bg-gray-800/30 to-blue-900/20 rounded-lg backdrop-blur-md mb-2 justify-between">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="select-all-documents"
+              checked={isSelectAllChecked}
+              onChange={handleSelectAllDocuments}
+              className={`mr-2 form-checkbox 
+                  h-3 w-3 
+                  ${bulkDeleteMode ? 'text-red-600 border-red-400' : 'text-blue-600 border-gray-300'}
+                  rounded-xl
+                  focus:ring-blue-500
+                  backdrop-blur-md`}
+            />
+            <label 
+              htmlFor="select-all-documents" 
+              className="text-sm text-gray-300 cursor-pointer"
+            >
+              Select All
+            </label>
+            
+            {selectedDocuments.length > 0 && (
+              <span className="text-xs text-red-400 ml-2">
+                {selectedDocuments.length} selected
+              </span>
+            )}
+          </div>
+          
+          <div className="flex items-center">
+            {/* Delete button that opens modal directly */}
+            <button
+              onClick={() => {
+                if (selectedDocuments.length > 0) {
+                  setIsBulkDeleteModalOpen(true);
+                } else {
+                  toast.info("Select documents to delete", { autoClose: 2000 });
+                }
+              }}
+              className="p-1.5 rounded-lg transition-colors text-red-400 hover:text-red-300 hover:bg-red-700/30"
+              title="Delete Selected Documents"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         </div>
       )}
       
@@ -1012,6 +1117,15 @@ const activeConversation = activeConversationId ?
       )}
     </>
   );
+  
+  // Add this before the return statement in your Sidebar component
+const formattedActiveConversation = activeConversation ? {
+  ...activeConversation,
+  conversation_id: activeConversation.conversation_id || activeConversationId,
+  title: activeConversation.title || 'Untitled Conversation',
+  created_at: activeConversation.created_at || new Date().toISOString(),
+  messages: activeConversation.messages || []
+} : null;
 
   return (
     <div className="flex h-screen relative">
@@ -1118,13 +1232,18 @@ const activeConversation = activeConversationId ?
         Documents
       </span>
       <div className="flex items-center gap-2">
-        <button 
-          onClick={() => setShowDocumentSearch(!showDocumentSearch)}
-          className="p-1.5 text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-gray-700/30"
-          title='Search Documents'
-        >
-          <Search size={16} />
-        </button>
+      <button 
+    onClick={() => setIsDocumentSearchModalOpen(true)}
+    className="p-1.5 text-gray-300 hover:text-white transition-colors 
+      rounded-lg hover:bg-gray-700/30 relative group"
+    title='Advanced Document Search'
+  >
+    <Search size={16} />
+    <span className="hidden group-hover:block absolute -top-8 left-1/2 transform -translate-x-1/2 
+      bg-gray-900 text-xs text-white py-1 px-2 rounded whitespace-nowrap">
+      Search in content
+    </span>
+  </button>
         <button
           onClick={() => setIsDocumentsVisible(!isDocumentsVisible)}
           className="p-1.5 text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-gray-700/30"
@@ -1371,7 +1490,24 @@ const activeConversation = activeConversationId ?
           )}
         </div>
   
+       {/* Sidebar Footer with Download Feature */}
+{isOpen && (
+  <div className="sidebar-footer mt-auto border-t border-gray-700/30 pt-3 px-4 pb-4">
+    <div className="flex items-center justify-between">
+      <div className="flex-grow">
+        <ChatDownloadFeature
+          currentChatData={formattedActiveConversation}
+          mainProjectId={mainProjectId}
+          chatHistory={chatHistory}
+          activeConversationId={activeConversationId}
+          className="download-button"
+        />
+      </div>
       
+     
+    </div>
+  </div>
+)}
         </aside>
     
         {/* Custom Scrollbar Styles */}
@@ -1442,6 +1578,18 @@ const activeConversation = activeConversationId ?
           .float-animation {
             animation: float 3s ease-in-out infinite;
           }
+
+          .sidebar-footer .download-button {
+  height: 40px;
+  background: rgba(44, 62, 149, 0.5);
+  border: 1px solid rgba(95, 242, 182, 0.2);
+  transition: all 0.2s ease;
+}
+
+.sidebar-footer .download-button:hover {
+  background: rgba(44, 62, 149, 0.7);
+  border-color: rgba(95, 242, 182, 0.5);
+}
         `}</style>
 
 {viewingDocument && (
@@ -1457,7 +1605,15 @@ const activeConversation = activeConversationId ?
   onConfirm={handleConfirmDelete}
   documentName={documentToDelete?.filename || ''}
 />
-
+<DocumentSearchModal
+    isOpen={isDocumentSearchModalOpen}
+    onClose={() => setIsDocumentSearchModalOpen(false)}
+    documents={documents}
+    mainProjectId={mainProjectId}
+    onDocumentSelect={handleDocumentSelect}
+    setSelectedDocuments={setSelectedDocuments}
+    selectedDocuments={selectedDocuments}
+  />
 
 <DeleteChatModal
   isOpen={isDeleteChatModalOpen}
@@ -1465,6 +1621,14 @@ const activeConversation = activeConversationId ?
   onConfirm={() => handleDeleteConversation(chatToDelete?.conversation_id)}
   chatTitle={chatToDelete?.title || 'Untitled Conversation'}
 />
+<BulkDeleteModal
+      isOpen={isBulkDeleteModalOpen}
+      onClose={() => setIsBulkDeleteModalOpen(false)}
+      onConfirm={handleBulkDelete}
+      selectedCount={selectedDocuments.length}
+      selectedDocuments={selectedDocuments}
+      documents={documents}
+    />
       </div>
       
       

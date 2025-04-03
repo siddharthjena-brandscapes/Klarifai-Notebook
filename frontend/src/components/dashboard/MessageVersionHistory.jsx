@@ -381,7 +381,7 @@ const MessageVersionHistory = ({
               className={`p-1 rounded-full hover:bg-gray-700 ${selectedVersionIndex === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               aria-label="Previous version"
             >
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronLeft className="h-5 w-5 text-white"/>
             </button>
             
             <span className="mx-3 text-gray-300">
@@ -394,7 +394,7 @@ const MessageVersionHistory = ({
               className={`p-1 rounded-full hover:bg-gray-700 ${selectedVersionIndex === versions.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
               aria-label="Next version"
             >
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="h-5 w-5 text-white" />
             </button>
           </div>
           

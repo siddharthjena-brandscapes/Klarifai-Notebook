@@ -1,7 +1,4 @@
-
-
-
-# models.py
+#chat\ models.py
 from django.db import models
 from django.contrib.auth.models import User
 import uuid
@@ -27,6 +24,7 @@ class UserAPITokens(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='api_tokens')
     huggingface_token = models.CharField(max_length=255, blank=True, null=True)
     gemini_token = models.CharField(max_length=255, blank=True, null=True)
+    llama_token = models.CharField(max_length=255, blank=True, null=True)
     
     def __str__(self):
         return f"{self.user.username}'s API Tokens"
@@ -67,17 +65,22 @@ class ChatMessage(models.Model):
         ('assistant', 'Assistant'),
         ('system', 'System')
     )
-
+    
     chat_history = models.ForeignKey('ChatHistory', related_name='messages', on_delete=models.CASCADE)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     citations = models.JSONField(blank=True, null=True)
-
+    
+    # New fields for message properties
+    use_web_knowledge = models.BooleanField(default=False)
+    response_length = models.CharField(max_length=20, default="comprehensive", null=True, blank=True)
+    response_format = models.CharField(max_length=50, default="natural", null=True, blank=True)
+    
     class Meta:
         ordering = ['created_at']
         app_label = 'chat'
-
+    
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"
 

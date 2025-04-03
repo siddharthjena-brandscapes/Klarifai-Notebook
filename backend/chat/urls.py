@@ -13,11 +13,11 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
     ChangePasswordView,
     GenerateDocumentSummaryView,
     ConsolidatedSummaryView,
-    ChatDownloadView,
     AdminUserManagementView,
     AdminUserModuleView,
     OriginalDocumentView,
-    DocumentViewLogView
+    DocumentViewLogView,
+    DocumentContentSearchView
     
 
     
@@ -53,11 +53,12 @@ urlpatterns = [
          name='update_conversation'),
 
     path('consolidated_summary/', ConsolidatedSummaryView.as_view(), name='consolidated_summary'),
-    path('download-chats/', ChatDownloadView.as_view(), name='download_chats'),
     path('api/admin/users/', AdminUserManagementView.as_view(), name='admin-user-management'),
     path('admin/users/<int:user_id>/modules/', AdminUserModuleView.as_view(), name='admin-user-module-permissions'),
 
-      path('documents/<int:document_id>/original/', OriginalDocumentView.as_view(), name='get_original_document'),
+     path('documents/<int:document_id>/original/', OriginalDocumentView.as_view(), name='get_original_document'),
     path('documents/<int:document_id>/view-log/', DocumentViewLogView.as_view(), name='log_document_view'),
+
+     path('search-document-content/', DocumentContentSearchView.as_view(), name='search-document-content'),
     
 ]   

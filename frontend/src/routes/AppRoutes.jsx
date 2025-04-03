@@ -9,6 +9,7 @@ import ResetPasswordForm from '../components/auth/ResetPasswordForm';
 import IdeaForm from '../components/IdeaForm';
 import ProjectsIdeaGen from '../components/ProjectsIdeaGen';
 import AdminPanel from '../components/AdminPanel'; // Import the AdminPanel component
+import FaqPage from '../components/faq/FaqPage';
  
 const AppRoutes = () => {
   return (
@@ -46,6 +47,9 @@ const AppRoutes = () => {
             <AdminPanel />
           </PrivateRoute>
         } />
+
+        {/* FAQ Page - Note: Not wrapped in PrivateRoute to make it publicly accessible */}
+        <Route path="/faq" element={<FaqPage />} />
        
         {/* Default Route */}
         <Route path="/" element={<Navigate to="/auth" replace />} />

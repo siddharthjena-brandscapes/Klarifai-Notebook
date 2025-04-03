@@ -43,6 +43,13 @@ from django.utils.html import strip_tags
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import update_session_auth_hash
 from llama_parse import LlamaParse
+import requests
+from bs4 import BeautifulSoup
+import time
+import re
+import openai
+from duckduckgo_search import DDGS
+from urllib.parse import urlparse
 
 
 load_dotenv()
@@ -85,6 +92,7 @@ class SignupView(APIView):
         password = request.data.get('password')
         huggingface_token = request.data.get('huggingface_token', '')
         gemini_token = request.data.get('gemini_token', '')
+        llama_token = request.data.get('llama_token', '')  # New field for Llama API token
 
         # Validate input
         if not username or not email or not password:
@@ -110,7 +118,8 @@ class SignupView(APIView):
             UserAPITokens.objects.create(
                 user=user,
                 huggingface_token=huggingface_token,
-                gemini_token=gemini_token
+                gemini_token=gemini_token,
+                llama_token=llama_token  # Save the Llama API token
             )
             
             # Generate token for the new user
@@ -842,7 +851,6 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
 
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
-
     def post(self, request):
         files = request.FILES.getlist('files')
         user = request.user
@@ -852,7 +860,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             main_project = Project.objects.get(id=main_project_id, user=user)
             uploaded_docs = []
             last_processed_doc_id = None
-        #     processed_data = None  # Initialize processed_data outside the loop
+            processed_data = None  # Initialize processed_data outside the loop
 
             for file in files:
                 # Check for existing document
@@ -874,14 +882,15 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         
                     except ProcessedIndex.DoesNotExist:
                         # Process the document if no existing index
-                        processed_data = self.process_document(file)
+                        processed_data = self.process_document(file, user)  # Pass user to process_document
                         
-                        # Create ProcessedIndex
+                        # Create ProcessedIndex with markdown_path if available
                         ProcessedIndex.objects.create(
                             document=existing_doc,
                             faiss_index=processed_data['index_path'],
                             metadata=processed_data['metadata_path'],
-                            summary=""
+                            summary="",
+                            markdown_path=processed_data.get('markdown_path', '')  # Use empty string if not available
                         )
 
                         uploaded_docs.append({
@@ -900,14 +909,15 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     )
                     
                     # Then process it
-                    processed_data = self.process_document(file)
+                    processed_data = self.process_document(file, user)  # Pass user to process_document
                     
-                    # Create ProcessedIndex
+                    # Create ProcessedIndex with markdown_path if available
                     ProcessedIndex.objects.create(
                         document=document,
                         faiss_index=processed_data['index_path'],
                         metadata=processed_data['metadata_path'],
-                        summary=""
+                        summary="",
+                        markdown_path=processed_data.get('markdown_path', '')  # Use empty string if not available
                     )
 
                     uploaded_docs.append({
@@ -946,7 +956,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 'error': str(e),
                 'detail': 'An error occurred while processing the document'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     # -------------------------------
     # Keep the complexity detection from original code
     # -------------------------------
@@ -965,9 +974,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             return False
     
     # Add LlamaParse integration from Streamlit code
-    def process_complex_document_with_llamaparse(self, file_path, file_name):
+    def process_complex_document_with_llamaparse(self, file_path, file_name, user):
         """
-        Process complex document using LlamaParse from Streamlit implementation.
+        Process complex document using LlamaParse with user's API token.
         """
         import tempfile
         import uuid
@@ -978,8 +987,23 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         from llama_parse import LlamaParse
         
         try:
+            # Get the user's Llama API token
+            try:
+                user_api_tokens = UserAPITokens.objects.get(user=user)
+                llama_api_key = user_api_tokens.llama_token
+                
+                # If no token is saved for the user, use a fallback mechanism or raise an error
+                if not llama_api_key:
+                    logger.warning(f"No Llama API token found for user {user.username}")
+                    # Optional: You could implement a fallback or raise an error
+                    raise ValueError("Llama API token is required for processing complex documents")
+                    
+            except UserAPITokens.DoesNotExist:
+                logger.error(f"No API tokens record found for user {user.username}")
+                raise ValueError("User API tokens not configured")
+            
             parser = LlamaParse(
-                api_key="llx-CvudFEEwgpMhVunqW7NkoUBAwtoXwPPpojw2TKO539T81YbV",
+                api_key=llama_api_key,  # Use the user's Llama API token
                 result_type="markdown",
                 verbose=True,
                 images=True,
@@ -1046,13 +1070,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             return {
                 'index_path': index_file,
                 'metadata_path': pickle_file,
-                'full_text': full_text
+                'full_text': full_text,
+                'markdown_path': md_path  # Include the markdown path
             }
             
         except Exception as e:
             print(f"Error in complex document processing: {str(e)}")
             raise
-    
     def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
         """
         Splits text into chunks while attempting to preserve sentence and paragraph structure.
@@ -1198,11 +1222,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     # -------------------------------
     # Process documents function that integrates with Django database
     # -------------------------------
-    def process_document(self, file):
+    def process_document(self, file, user):
         """
         Process documents: extraction, chunking, embeddings, FAISS creation
         While maintaining compatibility with the Django database structure.
-        Now integrates complex document handling with LlamaParse.
+        Now integrates complex document handling with LlamaParse and user-specific API tokens.
         """
         import tempfile
         import os
@@ -1224,7 +1248,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 if is_complex:
                     # Now using the LlamaParse approach for complex documents
                     print(f"Complex document detected: {file.name}. Using LlamaParse...")
-                    return self.process_complex_document_with_llamaparse(file_path, file.name)
+                    return self.process_complex_document_with_llamaparse(file_path, file.name, user)
                 else:
                     # Original simple document processing
                     extracted_text = self.extract_text_from_file(file_path)
@@ -1280,7 +1304,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error in process_document: {str(e)}")
             raise
-    
+        
 
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
     def post(self, request):
@@ -1532,6 +1556,9 @@ import re
 from datetime import datetime
 import logging
 from sklearn.feature_extraction.text import TfidfVectorizer
+from agno.agent import Agent
+from agno.models.openai import OpenAIChat
+from agno.tools.duckduckgo import DuckDuckGoTools
 
 logger = logging.getLogger(__name__)
 
@@ -1540,6 +1567,17 @@ class ChatView(APIView):
 
     def __init__(self, post_process_func=post_process_response):
         self.post_process_func = post_process_func
+        self.agent = Agent(
+                model=OpenAIChat(id="gpt-4o"),
+                description="""You are a helpful, friendly AI assistant providing informative and thoughtful responses.
+                Use semantic HTML tags for structure (<b>, <p>, <ul>, <li>) to enhance readability.
+                Maintain a natural, conversational tone.
+                Provide comprehensive and clear explanations, breaking down complex topics into easily understandable sections.
+                When using web search, prioritize recent, reliable, and relevant information to support your responses.""",
+                tools=[DuckDuckGoTools()],
+                show_tool_calls=True,
+                markdown=True
+            )
 
     def post(self, request):
         try:
@@ -1554,6 +1592,12 @@ class ChatView(APIView):
             
             # Extract general_chat_mode flag
             general_chat_mode = request.data.get('general_chat_mode', False)
+
+            # Extract response_length preference (new parameter)
+            response_length = request.data.get('response_length', 'comprehensive')
+            
+            # Extract response_format parameter or default to 'natural'
+            response_format = request.data.get('response_format', 'natural')
 
             if not main_project_id:
                 return Response({
@@ -1586,14 +1630,11 @@ class ChatView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-            # Get answer based on mode
-            if general_chat_mode:
-                # Process request in general chat mode (no documents needed)
-                answer = self.get_general_chat_answer(message, use_web_knowledge)
-                all_chunks = []  # No document chunks in general mode
-                combined_text = ""
-            else:
-                # Process with documents
+            # Process document search early to get context for format detection
+            all_chunks = []
+            content_sources = []
+            
+            if not general_chat_mode:
                 try:
                     processed_docs = ProcessedIndex.objects.filter(
                         document_id__in=selected_documents, 
@@ -1611,12 +1652,7 @@ class ChatView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-                # Use the Streamlit retrieval approach here
-                all_chunks = []
-                content_sources = []
-                
-                # Create a merged FAISS index and metadata store from all selected documents
-                # (Similar to the Streamlit approach of merging indices)
+                # Create a merged metadata store from all selected documents
                 all_metadata_store = []
                 
                 # Load FAISS indices and chunks for all selected documents
@@ -1627,7 +1663,7 @@ class ChatView(APIView):
                     if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
                         continue
                     
-                    # Load FAISS index and metadata
+                    # Load metadata
                     try:
                         with open(proc_doc.metadata, 'rb') as f:
                             chunks = pickle.load(f)
@@ -1644,21 +1680,72 @@ class ChatView(APIView):
                         logger.error(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
                         continue
                 
-                # Now search using the Streamlit approach
+                # Now search using the improved Streamlit approach
                 if all_metadata_store:
-                    # Combine all indices into a single query
+                    # Get relevant content based on query
                     similar_contents, content_sources = self.search_similar_content(
                         message, 
                         processed_docs,
                         all_metadata_store
                     )
-                    
-                    # Generate answer using Streamlit's generate_response
-                    answer = self.generate_response(message, similar_contents, content_sources)
                     all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
                 else:
-                    answer = "I couldn't find any relevant information in the documents."
                     all_chunks = []
+            
+            # Check if we should auto-detect the response format
+            if response_format == 'auto_detect':
+                context_snippets = [chunk.get('text', '') for chunk in all_chunks[:5]] if all_chunks else []
+                detected_format, secondary_format, confidence = self.detect_question_format(message, context_snippets)
+                
+                # Use the detected format if confidence is reasonable, otherwise default to 'natural'
+                if confidence >= 5.0:
+                    response_format = detected_format
+                    print(f"Auto-detected format: {response_format} (confidence: {confidence})")
+                else:
+                    response_format = 'natural'
+                    print(f"Low confidence in format detection ({confidence}), defaulting to 'natural'")
+            
+            # Get answer based on mode
+            web_knowledge_response = None
+            web_sources = []
+            
+            if use_web_knowledge:
+                # Implement web search here instead of pass
+                web_knowledge_response, web_sources = self.get_web_knowledge_response(message)
+            
+            # Get answer based on mode
+            if general_chat_mode:
+                # Process request in general chat mode (no documents needed)
+                answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format)
+            else:
+                # Process with documents
+                if all_chunks:
+                    # Generate document-based answer based on requested response length
+                    if response_length == 'short':
+                        document_answer = self.generate_short_response(message, similar_contents, content_sources, False, response_format)
+                    else:  # Default to comprehensive
+                        document_answer = self.generate_response(message, similar_contents, content_sources, False, response_format)
+                    
+                    # If web knowledge is also requested, combine the responses
+                    if use_web_knowledge and web_knowledge_response:
+                        # Combined answer
+                        answer = self.combine_document_and_web_responses(
+                            message, 
+                            document_answer, 
+                            web_knowledge_response, 
+                            content_sources, 
+                            web_sources,
+                            response_format
+                        )
+                    else:
+                        # Just use document answer
+                        answer = document_answer
+                else:
+                    if use_web_knowledge and web_knowledge_response:
+                        # Only web knowledge available
+                        answer = web_knowledge_response
+                    else:
+                        answer = "I couldn't find any relevant information in the documents."
             
             # Extract main response and citation info (if any)
             if "\n\n*Sources:" in answer:
@@ -1667,7 +1754,7 @@ class ChatView(APIView):
                 source_info = parts[1].split('*\n')[0] if len(parts) > 1 else ""
             else:
                 clean_response = answer
-                source_info = ""
+                source_info = "Web search results" if use_web_knowledge else ""
             
             # Generate follow-up questions (either from documents or general chat)
             if general_chat_mode:
@@ -1695,6 +1782,18 @@ class ChatView(APIView):
                         'snippet': chunk_text[:200] + "..." if len(chunk_text) > 200 else chunk_text,
                         'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
                     })
+                
+                # Add web citations if applicable
+                if use_web_knowledge and web_sources:
+                    for idx, source in enumerate(web_sources):
+                        citations.append({
+                            'source_file': source.get('title', 'Web Source'),
+                            'page_number': 'Web',
+                            'section_title': 'Web Search Result',
+                            'snippet': source.get('snippet', '')[:200] + "..." if source.get('snippet', '') else "Web content",
+                            'document_id': f"web_{idx}",
+                            'url': source.get('url', '')
+                        })
 
             # Prepare conversation details
             conversation_id = conversation_id or str(uuid.uuid4())
@@ -1724,7 +1823,10 @@ class ChatView(APIView):
                 chat_history=conversation,
                 role='assistant',
                 content=clean_response,
-                citations=citations
+                citations=citations,
+                use_web_knowledge=use_web_knowledge,
+                response_length=response_length,
+                response_format=response_format
             )
 
             # Add selected documents to the conversation (skip if general chat mode)
@@ -1748,14 +1850,17 @@ class ChatView(APIView):
                 'active_document_id': request.session.get('active_document_id') if not general_chat_mode else None,
                 'sources_info': source_info,
                 'use_web_knowledge': use_web_knowledge,
-                'general_chat_mode': general_chat_mode
+                'general_chat_mode': general_chat_mode,
+                'response_length': response_length,  # Include in response for tracking
+                'response_format': response_format   # Include detected/used format in response
             }
 
             # Print detailed chat response information
             print("\n--- Chat Interaction Logged ---")
             print(f"User Question: {message}")
-            print(f"Mode: {'General Chat' if general_chat_mode else 'Document Chat'}")
-            print(f"Web Knowledge: {'On' if use_web_knowledge else 'Off'}")
+            print(f"Mode: {'Web Knowledge' if use_web_knowledge else 'General Chat' if general_chat_mode else 'Document Chat'}")
+            print(f"Format: {response_format}")
+            print(f"Length: {response_length}")
             print(f"Assistant Response: {clean_response[:500]}...")  # First 500 chars
             print("Follow-up Questions:")
             for i, q in enumerate(follow_up_questions, 1):
@@ -1770,103 +1875,576 @@ class ChatView(APIView):
                 {'error': f'An unexpected error occurred: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-    # Keep general chat answer function as is
-    def get_general_chat_answer(self, question, use_web_knowledge=False):
+    
+    def get_web_knowledge_response(self, query):
+        """
+        Search the web for information and generate a response.
+        
+        Args:
+            query (str): The user's query
+            
+        Returns:
+            tuple: (response, sources)
+        """
         try:
-            # Choose the appropriate prompt based on whether web knowledge is enabled
-            if use_web_knowledge:
-                system_message = """You are a helpful, friendly AI assistant. Provide informative, thoughtful responses 
-                using your knowledge base. Use semantic HTML tags for structure (<b>, <p>, <ul>, <li>) and maintain 
-                a natural, conversational tone. Format your response to be clear and readable."""
-            else:
-                system_message = """You are a helpful, friendly AI assistant. Provide informative, thoughtful responses 
-                using your knowledge base. Use semantic HTML tags for structure (<b>, <p>, <ul>, <li>) and maintain 
-                a natural, conversational tone. Format your response to be clear and readable."""
+            # Step 1: Search the web using DuckDuckGo
+            web_results = self.search_web(query, max_results=5)
             
-            # Simple user prompt for general chat
-            user_prompt = f"""
-            Please provide a helpful response to the following query:
+            if not web_results:
+                return "I couldn't find relevant information on the web for your query.", []
             
-            USER QUERY: {question}
+            # Step 2: Scrape content from the top search results
+            scraped_contents = []
+            web_sources = []
             
-            RESPONSE FORMAT REQUIREMENTS:
-            1. Begin with a brief introductory paragraph
-            2. Use <b> tags for key section headings when applicable
-            3. Use <p> tags for detailed explanations
-            4. Use <ul> and <li> for list-based information when applicable
-            5. Ensure the response flows naturally and is easy to read
+            for result in web_results:
+                try:
+                    # Extract content from the webpage
+                    scraped_content = self.scrape_webpage(result['href'])
+                    
+                    if scraped_content and scraped_content.get('content'):
+                        scraped_contents.append(scraped_content)
+                        
+                        # Store source information
+                        web_sources.append({
+                            'title': scraped_content.get('title', result.get('title', 'Unknown')),
+                            'url': result.get('href', ''),
+                            'snippet': result.get('body', '')[:300]  # First 300 chars of snippet
+                        })
+                except Exception as e:
+                    logger.error(f"Error scraping {result.get('href')}: {str(e)}")
+                    continue
+            
+            if not scraped_contents:
+                return "I found search results but couldn't extract useful content from the webpages.", []
+            
+            # Step 3: Generate a response using the scraped content
+            # Prepare context from scraped contents
+            context = ""
+            for i, item in enumerate(scraped_contents, 1):
+                context += f"Source {i} ({self.extract_domain(item['url'])}):\n"
+                context += f"Title: {item['title']}\n"
+                context += f"Content: {item['content'][:2500]}...\n\n"  # Limit each source content
+            
+            # Create the prompt for OpenAI
+            prompt = f"""
+            You are a web research assistant. Based on the following information from multiple web sources, 
+            provide a comprehensive, accurate, and well-structured answer to the question.
+
+            Question: {query}
+
+            Information from web sources:
+            {context}
+
+            Please format your answer with proper HTML tags (<p>, <ul>, <li>, <b>, etc.) where appropriate, 
+            and make sure to synthesize information from different sources. If the information is insufficient or 
+            contradictory, acknowledge this in your response. If the question asks about time-sensitive information, 
+            indicate when the data was retrieved.
             """
             
-            completion = client.chat.completions.create(
+            # Generate response using OpenAI
+            response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "system", "content": "You are a helpful assistant that provides comprehensive answers based on web search results."},
+                    {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,
+                temperature=0.3,
                 max_tokens=2000
             )
             
-            answer_text = completion.choices[0].message.content
-            usage = completion.usage
-            #token_info = f"(Tokens used: prompt {usage.prompt_tokens}, completion {usage.completion_tokens}, total {usage.prompt_tokens + usage.completion_tokens})"
+            web_response = response.choices[0].message.content
             
-            return f"{answer_text}"
-                
+            # Add source information
+            source_domains = [self.extract_domain(source['url']) for source in web_sources]
+            source_info = ", ".join(source_domains)
+            
+            return f"{web_response}\n\n*Sources: {source_info}*", web_sources
+            
         except Exception as e:
-            logger.error(f"Error getting general chat answer: {str(e)}")
-            return "Sorry, an error occurred while processing your question."
+            logger.error(f"Error in web knowledge search: {str(e)}", exc_info=True)
+            return f"An error occurred while searching the web: {str(e)}", []
     
-    # Implement Streamlit's generate_response function
-    def generate_response(self, query, context, sources):
-        """Generate a response using OpenAI's chat completion API - ported from Streamlit"""
-        if not context:
+    def search_web(self, query, max_results=5):
+        """Search the web using DuckDuckGo and return results"""
+        try:
+            results = DDGS().text(query, max_results=max_results)
+            if not results:
+                logger.warning("No search results found for query: " + query)
+                return []
+            return list(results)
+        except Exception as e:
+            logger.error(f"Error searching the web: {str(e)}")
+            return []
+    
+    def scrape_webpage(self, url):
+        """Scrape content from a webpage"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove script and style elements
+            for script_or_style in soup(['script', 'style', 'header', 'footer', 'nav']):
+                script_or_style.decompose()
+                
+            # Extract title
+            title = soup.title.string if soup.title else "No title found"
+            
+            # Extract main content - focus on article, main, or div with content
+            content_elements = soup.select('article, main, .content, #content, .post, .entry')
+            
+            if not content_elements:
+                # If no specific content elements, get all paragraphs
+                paragraphs = soup.find_all('p')
+                content = ' '.join([p.get_text() for p in paragraphs])
+            else:
+                # Use the first content element found
+                content = content_elements[0].get_text()
+            
+            # Clean the content
+            content = re.sub(r'\s+', ' ', content).strip()
+            
+            return {
+                'title': title,
+                'content': content[:15000],  # Limit content length
+                'url': url
+            }
+        except Exception as e:
+            logger.error(f"Error scraping webpage {url}: {str(e)}")
+            return {
+                'title': 'Error scraping page',
+                'content': f"Could not retrieve content: {str(e)}",
+                'url': url
+            }
+    
+    def extract_domain(self, url):
+        """Extract a readable domain name from URL"""
+        try:
+            domain = urlparse(url).netloc
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            return domain
+        except:
+            return url
+    
+    def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format):
+        """
+        Combine document-based response and web-based response into a single coherent answer.
+        
+        Args:
+            query (str): The original user query
+            document_response (str): Response generated from document context
+            web_response (str): Response generated from web search
+            doc_sources (list): Document sources
+            web_sources (list): Web sources
+            
+        Returns:
+            str: Combined response
+        """
+        # Clean up responses by removing source sections
+        if "\n\n*Sources:" in document_response:
+            document_response = document_response.split("\n\n*Sources:")[0]
+            
+        if "\n\n*Sources:" in web_response:
+            web_response = web_response.split("\n\n*Sources:")[0]
+        
+        # Create a combined prompt for OpenAI
+        prompt = f"""
+        You have two responses to the user's query: one based on their documents and one based on web search.
+        Your task is to combine these into a single coherent response that prioritizes the document information
+        (since that is more specific to the user) but supplements with web information when valuable.
+        
+        The response format should be: {response_format.replace('_', ' ').title()}
+        
+        User query: {query}
+        
+        RESPONSE FROM DOCUMENTS:
+        {document_response}
+        
+        RESPONSE FROM WEB SEARCH:
+        {web_response}
+        
+        GUIDELINES FOR COMBINATION:
+       1. When information appears in both sources, prioritize the document information.
+
+        2. Clearly distinguish when you're providing information from the web vs. from documents.
+
+        3. Add web information that complements, updates, or expands on document information.
+
+        4. Maintain a natural tone and logical flow between document and web information.
+
+        5. If there are contradictions, note them and explain the different perspectives.
+
+        6. Use HTML tags for structure: <p>, <ul>, <li>, <b>, etc.
+
+        7. Structure your response with proper headings and sections for readability.
+
+        8. Use <h3> tags for different sources:
+
+            - <h3>Information from Documents</h3> for document-based information.
+
+            - <h3>Information from the Web</h3> for web-based information.
+        
+        Create a single, coherent, well-structured response that combines both sources of information.
+        """
+        
+        try:
+            # Generate the combined response
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert at synthesizing information from multiple sources."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2500
+            )
+            
+            combined_response = completion.choices[0].message.content
+            
+            # Add all sources
+            all_doc_sources = list(set(doc_sources))
+            all_web_domains = [self.extract_domain(source.get('url', '')) for source in web_sources]
+            all_sources = all_doc_sources + all_web_domains
+            all_sources_str = ", ".join(all_sources)
+            
+            return f"{combined_response}\n\n*Sources: {all_sources_str}*"
+            
+        except Exception as e:
+            logger.error(f"Error combining responses: {str(e)}", exc_info=True)
+            
+            # Fallback: Simply concatenate the responses with a divider
+            fallback_response = f"""
+            <h3>Information from Your Documents:</h3>
+            <div>
+            {document_response}
+            </div>
+            
+            <h3>Additional Information from Web Search:</h3>
+            <div>
+            {web_response}
+            </div>
+            """
+            
+            # Add sources
+            all_doc_sources = list(set(doc_sources))
+            all_web_domains = [self.extract_domain(source.get('url', '')) for source in web_sources]
+            all_sources = all_doc_sources + all_web_domains
+            all_sources_str = ", ".join(all_sources)
+            
+            return f"{fallback_response}\n\n*Sources: {all_sources_str}*"
+
+    def detect_question_format(self, query, context_snippets=None):
+        """
+        Analyzes the question and detects the most appropriate response format
+        based on the query content and any available document context.
+        
+        Args:
+            query (str): The user's question
+            context_snippets (list): Optional list of document context snippets
+            
+        Returns:
+            tuple: (primary_format, secondary_format, confidence)
+        """
+        # Implementation remains the same as in your original code
+        print("###########################################################")
+        
+        # Normalize query for keyword matching
+        query_lower = query.lower()
+        
+        # Format detection keywords dictionary
+        format_keywords = {
+            "executive_summary": [
+                "summarize", "summary", "overview", "high level", "highlights", "key points", 
+                "brief overview", "executive summary", "main points", "takeaways", "tldr",
+                "in a nutshell", "brief summary", "key highlights", "summarise", "recap",
+                "give me the gist", "summarization", "outline the main", "key takeaways",
+                "bullet points of", "boil down", "distill", "condense"
+            ],
+            "comparative_analysis": [
+                "compare", "comparison", "versus", "vs", "difference", "differences", 
+                "similarities", "similarity", "better", "worse", "advantage", "disadvantage",
+                "pros and cons", "strengths and weaknesses", "contrast", "choose between",
+                "which is better", "how does", "stack up", "relative to", "compared to",
+                "weighing", "juxtapose", "differentiate between", "distinction", "compare and contrast",
+                "side by side", "match up against", "measure against"
+            ],
+            "detailed_analysis": [
+                "analyze", "analysis", "deep dive", "in-depth", "detailed", "breakdown",
+                "examine", "investigate", "elaborate on", "explain in detail", "thorough",
+                "comprehensive", "drill down", "what factors", "analyze in detail",
+                "dissect", "unpack", "scrutinize", "evaluate", "assessment", "diagnosis",
+                "root cause", "deconstructing", "implications of", "examine carefully", 
+                "look closely at", "study"
+            ],
+            "strategic_recommendation": [
+                "recommend", "recommendation", "suggest", "advice", "should", "best course",
+                "action plan", "strategic", "next steps", "how should", "what would you advise",
+                "strategy", "approach", "what should", "best way to", "how to best",
+                "action items", "propose", "guidance", "direction", "advise on",
+                "what's the right approach", "strategic guidance", "roadmap", "plan for",
+                "steps to take", "best practice", "optimal strategy"
+            ],
+            "market_insights": [
+                "market trends", "industry", "segment", "consumer behavior", "market data", 
+                "competitive landscape", "market share", "industry trend", "consumer preference",
+                "market analysis", "market research", "market performance", "market outlook",
+                "sector analysis", "competitors", "customer demographics", "forecast",
+                "target audience", "customer segment", "market growth", "consumer insights",
+                "purchase behavior", "audience analysis", "industry position"
+            ],
+            "factual_brief": [
+                "what is", "when was", "where is", "who is", "facts about", "define", 
+                "information on", "tell me about", "data on", "evidence of", "statistics on",
+                "key facts", "figures on", "numbers for", "metrics on", "how many",
+                "percentage of", "rate of", "frequency of", "occurrence of", "incidents of",
+                "quantity of", "value of", "amount of", "total number", "statistics for",
+                "list the", "enumerate", "identify", "reference"
+            ],
+            "technical_deep_dive": [
+                "how does it work", "technical", "technology", "mechanism", "process", "methodology",
+                "framework", "system", "architecture", "technical details", "underlying", "step by step",
+                "explain the process", "technical explanation", "in technical terms",
+                "inner workings", "components", "operation", "workflow", "algorithm",
+                "explain technically", "implementation", "procedure", "specification",
+                "design", "function", "operation of", "engineering behind"
+            ]
+        }
+        
+        # Check for format-specific keywords
+        matched_formats = []
+        for format_key, keywords in format_keywords.items():
+            # Count matches and weight longer phrases higher
+            match_score = 0
+            for keyword in keywords:
+                if keyword in query_lower:
+                    # Weight multi-word phrases higher
+                    words_in_keyword = len(keyword.split())
+                    match_score += words_in_keyword  
+            
+            if match_score > 0:
+                matched_formats.append((format_key, match_score))
+        
+        # Sort by match score (higher score = stronger signal)
+        matched_formats.sort(key=lambda x: x[1], reverse=True)
+        
+        # If we have keyword matches, use the best match
+        if matched_formats and matched_formats[0][1] >= 1:
+            primary_format = matched_formats[0][0]
+            # Set confidence based on match score
+            base_confidence = 5.0
+            # Boost confidence based on match score
+            match_bonus = min(matched_formats[0][1], 4.0)  # Cap the bonus
+            confidence = base_confidence + match_bonus
+            
+            # Get secondary format if available
+            secondary_format = matched_formats[1][0] if len(matched_formats) > 1 else None
+            
+            return primary_format, secondary_format, confidence
+        
+        # If no keyword matches, we can try using LLM for classification
+        # This would integrate with your existing classify_question_intent function
+        # but we'll keep it simple for now
+        
+        # Default to natural if no clear classification
+        return "natural", None, 4.0
+
+
+    # Add this helper method to get format-specific guidance
+    def _get_format_guidance(self, response_format, length_preference):
+        """
+        Get format-specific guidance based on response format and length preference.
+        
+        Args:
+            response_format (str): The requested response format
+            length_preference (str): 'short' or 'comprehensive'
+            
+        Returns:
+            str: Format-specific guidance text
+        """
+        # Format guidance dictionary
+        format_guidance = {
+            "executive_summary": {
+
+                 """
+    This is an EXECUTIVE SUMMARY request. Provide a concise, high-level overview of the key points and implications. Specifically:
+
+    1. Begin with a brief 1-2 sentence overview of the main finding or takeaway
+    2. Structure your summary with clear sections for different key points
+    3. Prioritize only the most important findings and insights (quality over quantity)
+    4. Include critical data points and evidence that support the key messages
+    5. Ensure every statement adds value and nothing is redundant
+    6. Conclude with the most important implications or next steps
+    7. Keep the entire summary focused and concise - aim for brevity while maintaining completeness
+
+    Your summary should give the reader a clear understanding of the essential points without needing to read a longer document.
+    """
+            },
+            "detailed_analysis": {
+
+                 """
+    This is a DETAILED ANALYSIS request. Provide a comprehensive analysis with in-depth examination of the information and its implications. Specifically:
+
+    1. Begin with an executive summary of your key findings
+    2. Include a rigorous analysis of the data, breaking it down into logical sections
+    3. Examine patterns, trends, anomalies, and relationships in the data
+    4. Support your analysis with specific evidence and examples from the documents
+    5. Consider multiple perspectives and interpretations of the information
+    6. Discuss implications of your findings for decision-making
+    7. Include relevant charts or tables to visualize key data points
+    8. Conclude with synthesis of the most important insights
+
+    Your analysis should be thorough and demonstrate critical thinking throughout.
+    """
+            },
+            "strategic_recommendation": {
+
+               """
+    This is a STRATEGIC RECOMMENDATION request. Provide actionable, prioritized recommendations with clear strategic direction. Specifically:
+
+    1. Begin with a brief overview of the current situation or challenge
+    2. Present 3-5 specific, actionable recommendations in priority order
+    3. For each recommendation:
+    - Clearly state what should be done
+    - Explain why this approach is recommended (with evidence)
+    - Outline expected outcomes or benefits
+    - Address potential implementation challenges
+    4. Include a high-level implementation timeline or roadmap if appropriate
+    5. Conclude with the critical success factors for implementation
+
+    Your recommendations should be practical, evidence-based, and strategically sound.
+    """
+            },
+            "comparative_analysis": {
+                """
+    This is a COMPARATIVE question. Organize your response around comparing different options, approaches, or entities mentioned in the query. Specifically:
+
+    1. Begin with a brief introduction of the items being compared
+    2. Use a structure that clearly contrasts the different options (side-by-side format where possible)
+    3. Create comparison tables that directly align comparable attributes
+    4. Identify key differentiating factors between the options
+    5. Discuss relative advantages and disadvantages of each
+    6. Include direct quantitative comparisons where data is available
+    7. Conclude with insights about the relative positioning of the compared items
+
+    When presenting comparative data, use tables with this format when appropriate:
+
+    | Attribute | Option A | Option B | Key Difference |
+    |-----------|----------|----------|---------------|
+    | Feature 1 | Value    | Value    | Insight       |
+    """
+            },
+            "market_insights": {
+
+               """
+    This is a MARKET INSIGHTS request. Focus on market trends, consumer behavior, and competitive dynamics. Specifically:
+
+    1. Begin with an overview of the key market dynamics or trends
+    2. Analyze market segments, sizes, and growth rates with supporting data
+    3. Examine competitive landscape and relative positioning of key players
+    4. Discuss consumer behavior patterns, preferences, and changing demands
+    5. Identify market opportunities and potential threats
+    6. Present relevant market statistics in tabular format where appropriate
+    7. Conclude with strategic implications of these market insights
+
+    Your response should combine data-driven market analysis with strategic interpretation.
+    """
+            },
+            "factual_brief": {
+
+             """
+    This is a FACTUAL INQUIRY. Provide direct, fact-based answers with supporting evidence. Specifically:
+
+    1. Begin with a clear, direct answer to the question asked
+    2. Present the key facts in a structured, logical order
+    3. Support each fact with specific evidence from the documents
+    4. Include relevant numbers, statistics, or data points
+    5. Use bullet points or numbered lists where appropriate to improve readability
+    6. Avoid speculation or unsupported assertions
+    7. Clearly indicate if certain requested information is not available in the documents
+
+    Your response should be factual, concise, and directly address the query.
+    """
+            },
+            "technical_deep_dive": {
+
+             """
+    This is a TECHNICAL question. Include detailed explanations of processes, methodologies, or procedures. Specifically:
+
+    1. Begin with a high-level overview of the technical concept or process
+    2. Break down the technical components or steps in a logical sequence
+    3. Explain how each component works or contributes to the whole
+    4. Include relevant technical specifications, parameters, or metrics
+    5. Use clear examples to illustrate technical concepts
+    6. Consider including diagrams or technical illustrations where helpful
+    7. Address limitations, constraints, or technical considerations
+    8. Conclude with practical applications or implications
+
+    Your explanation should be technically accurate while remaining accessible to a business audience.
+    """
+            },
+            "natural": {
+                "short": "Structure your response in a natural way that best addresses the query, while keeping it concise and to-the-point.",
+                "comprehensive": "Structure your response in the most natural way that best addresses the query, with appropriate depth and detail."
+            }
+        }
+        
+        # Return the appropriate guidance based on format and length preference
+        if response_format in format_guidance and length_preference in format_guidance[response_format]:
+            return format_guidance[response_format][length_preference]
+        
+        # Default fallback
+        return "Provide a helpful response to the query based on the document context."
+
+
+
+    def generate_response(self, query, context, sources, use_web_knowledge=False, response_format='natural'):
+        """
+        Generate a response using the provided context and sources with web search capability.
+        
+        Args:
+            query (str): User's original query
+            context (list): List of context chunks
+            sources (list): List of source documents for each context chunk
+            use_web_knowledge (bool): Whether to use web search in addition to documents
+            
+        Returns:
+            str: Generated response based on the context and/or web search
+        """
+        if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents."
         
-        # Limit number of tokens by selecting most relevant chunks
-        # while ensuring they're comprehensive and diverse
-        selected_context = []
-        selected_sources = []
-        seen_content_hashes = set()
-        
-        # Take first 8 chunks (most relevant ones)
-        initial_count = min(8, len(context))
-        for i in range(initial_count):
-            selected_context.append(context[i])
-            selected_sources.append(sources[i])
-            # Add a content hash to avoid repetition
-            seen_content_hashes.add(context[i][:100])
-        
-        # Add more diverse chunks from the remaining context
-        for i in range(initial_count, len(context)):
-            content_hash = context[i][:100]
-            # Check if content is sufficiently different from what we've seen
-            if content_hash not in seen_content_hashes:
-                selected_context.append(context[i])
-                selected_sources.append(sources[i])
-                seen_content_hashes.add(content_hash)
-                # Limit to 15 total pieces of context for token limit reasons
-                if len(selected_context) >= 15:
-                    break
+        # Standard document-based response (no web search)
+        selected_context, selected_sources = self._prepare_context(context, sources)
         
         # Create context with source information
         contextualized_content = []
         for content, source in zip(selected_context, selected_sources):
             contextualized_content.append(f"From document '{source}':\n{content}")
         full_context = "\n\n".join(contextualized_content)
+
+        # Get format-specific guidance
+        format_guidance = self._get_format_guidance(response_format, 'comprehensive')
         
-        # Define the user prompt (from Streamlit)
+        # Define the user prompt (consistent with existing implementation)
         user_prompt = f"""
         Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
-     
+
+        RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
+    
+        {format_guidance}
+
         RESPONSE GENERATION GUIDELINES:
         - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
         - Include ALL relevant information from the context in your response.
         - Prioritize completeness over brevity - make sure to include details.
         - If multiple perspectives or data points exist, include all of them.
-        - When appropriate, organize information with clear sections and structure as well as in tabular formats where applicable.
-        - In case of data where we have trends, comparisons and / or segments and patterns, represent the data in as many table as necessary.
+        - When appropriate, organize information with clear sections and structure.
         - Maintain a natural, conversational tone.
         - Ensure the response is directly derived from the provided document context.
         - If the document does NOT contain relevant information, explicitly state that and summarize related available content instead.
@@ -1898,7 +2476,7 @@ class ChatView(APIView):
         system_message = "You are a document analysis expert. Provide a comprehensive and detailed answer using only available information."
         
         try:
-            # Call the OpenAI chat completion API (using o3-mini as in Streamlit)
+            # Call the OpenAI chat completion API
             completion = client.chat.completions.create(
                 model="o3-mini",
                 messages=[
@@ -1942,8 +2520,7 @@ class ChatView(APIView):
                     messages=[
                         {"role": "system", "content": "You are a document analysis expert."},
                         {"role": "user", "content": fallback_prompt}
-                    ],
-                    temperature=0.5
+                    ]
                 )
                 
                 answer = fallback_completion.choices[0].message.content
@@ -1952,11 +2529,336 @@ class ChatView(APIView):
                 answer = f"An error occurred while generating the response: {str(e)}. Please try a more specific question or with fewer documents."
 
         # Add source information
-        source_list = list(set(sources))
+        source_list = list(set(selected_sources))
+        source_info = ", ".join(source_list)
+        return f"{answer}\n\n*Sources: {source_info}*"
+
+    def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural'):
+        """
+        Generate a shorter, concise response using the provided context with web search capability.
+        
+        Args:
+            query (str): User's original query
+            context (list): List of context chunks
+            sources (list): List of source documents for each context chunk
+            use_web_knowledge (bool): Whether to use web search in addition to documents
+            
+        Returns:
+            str: Generated response based on the context and/or web search
+        """
+        if not context and not use_web_knowledge:
+            return "I cannot answer this question based on the provided documents."
+        
+        # Standard document-based response (no web search) - mostly the same as original
+        selected_context, selected_sources = self._prepare_context(context, sources)
+        
+        # Create context with source information
+        contextualized_content = []
+        for content, source in zip(selected_context, selected_sources):
+            contextualized_content.append(f"From document '{source}':\n{content}")
+        full_context = "\n\n".join(contextualized_content)
+
+        # Get format-specific guidance for short responses
+        format_guidance = self._get_format_guidance(response_format, 'short')
+        
+        # Define the user prompt for short response
+        user_prompt = f"""
+        Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+
+        RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
+    
+        {format_guidance}
+     
+        RESPONSE GENERATION GUIDELINES:
+        - Provide a CONCISE yet THOROUGH answer.
+        - Focus on the most relevant information from the context.
+        - Prioritize clarity and directness over excessive detail.
+        - When appropriate, organize information with clear sections and structure.
+        - Maintain a natural, conversational tone.
+        - Ensure the response is directly derived from the provided document context.
+        - If the document does NOT contain relevant information, explicitly state that.
+     
+        DOCUMENT CONTEXT:
+        {full_context}
+     
+        USER QUERY: {query}
+     
+        RESPONSE FORMAT REQUIREMENTS:
+        1. Begin with a direct answer to the query
+        2. Include only the most relevant details and evidence from the documents
+        3. When appropriate, use concise bullet points or short paragraphs
+        4. Be selective about what information to include - focus on what matters most
+        5. Use <b> tags for key points
+        6. Use <p> tags for explanations
+        7. Use <ul> and <li> for list-based information
+        8. Use <table> and <tr>, <td> for tabular information if absolutely necessary
+     
+        CRITICAL CONSTRAINTS:
+        - Use ONLY information from the provided document.
+        - DO NOT generate speculative or external information.
+        - Ensure clarity and accuracy while being concise.
+        - Keep the response focused and to-the-point.
+        """
+        
+        # Define system message for short response
+        system_message = "You are a document analysis expert. Provide a concise, to-the-point answer using only available information and use the appropriate html tags for formatting."
+        
+        try:
+            # Call the OpenAI chat completion API for short response
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.4,
+            )
+            
+            answer = completion.choices[0].message.content
+                
+        except Exception as e:
+            # If there's an error, try with even fewer context chunks
+            reduced_context = "\n\n".join(contextualized_content[:5])
+            fallback_prompt = f"""
+            Based ONLY on the following context, provide a brief answer to the question: {query}
+            
+            CONTEXT:
+            {reduced_context}
+            """
+            
+            try:
+                fallback_completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a document analysis expert. Be brief."},
+                        {"role": "user", "content": fallback_prompt}
+                    ],
+                    temperature=0.4,
+                    max_tokens=1024
+                )
+                
+                answer = fallback_completion.choices[0].message.content
+            except Exception as nested_e:
+                # Last resort fallback
+                answer = f"An error occurred while generating the response. Please try a more specific question."
+
+        # Add source information
+        source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{answer}\n\n*Sources: {source_info}*"
     
-    # Keep follow-up question generation as is
+
+    # Get general chat answer with response length parameter
+    def get_general_chat_answer(self, question, use_web_knowledge=False, response_length='comprehensive'):
+        try:
+            # Choose the appropriate prompt based on whether web knowledge is enabled and response length
+            if use_web_knowledge:
+                system_message = """You are a helpful, friendly AI assistant. Provide informative, thoughtful responses 
+                using your knowledge base. Use semantic HTML tags for structure (<b>, <p>, <ul>, <li>) and maintain 
+                a natural, conversational tone. Format your response to be clear and readable."""
+            else:
+                system_message = """You are a helpful, friendly AI assistant. Provide informative, thoughtful responses 
+                using your knowledge base. Use semantic HTML tags for structure (<b>, <p>, <ul>, <li>) and maintain 
+                a natural, conversational tone. Format your response to be clear and readable."""
+            
+            # Adjust user prompt based on response length
+            if response_length == 'short':
+                user_prompt = f"""
+                Please provide a concise and to-the-point response to the following query:
+                
+                USER QUERY: {question}
+                
+                RESPONSE REQUIREMENTS:
+                1. Be brief and direct - aim for 2-3 sentences when possible
+                2. Focus on the most important information only
+                3. Avoid unnecessary explanations or background information
+                4. Use simple language and be straight to the point
+                5. If a list is needed, keep it very short
+                6. Use <b> tags sparingly for only the most crucial points
+                """
+            else:  # Default to comprehensive
+                user_prompt = f"""
+                Please provide a helpful response to the following query:
+                
+                USER QUERY: {question}
+                
+                RESPONSE FORMAT REQUIREMENTS:
+                1. Begin with a brief introductory paragraph
+                2. Use <b> tags for key section headings when applicable
+                3. Use <p> tags for detailed explanations
+                4. Use <ul> and <li> for list-based information when applicable
+                5. Ensure the response flows naturally and is easy to read
+                """
+            
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.2,
+                max_tokens=2000 if response_length == 'comprehensive' else 500  # Limit tokens for short responses
+            )
+            
+            answer_text = completion.choices[0].message.content
+            
+            return f"{answer_text}"
+                
+        except Exception as e:
+            logger.error(f"Error getting general chat answer: {str(e)}")
+            return "Sorry, an error occurred while processing your question."
+
+    # Enhanced embeddings function from Streamlit version
+    def get_embeddings(self, texts):
+        """
+        Gets embeddings using OpenAI's text-embedding-3-small model.
+        """
+        try:
+            response = client.embeddings.create(
+                input=texts,
+                model="text-embedding-3-small"
+            )
+            return [data.embedding for data in response.data]
+        except Exception as e:
+            logger.error(f"Error getting embeddings: {str(e)}")
+            return []
+    
+    # Improved search_similar_content with TF-IDF ranking from Streamlit
+    def search_similar_content(self, query, processed_docs, metadata_store, k=40):
+        """
+        Enhanced search function using TF-IDF ranking like in the more effective Streamlit app approach
+        """
+        # Get embeddings for the query
+        query_embedding = self.get_embeddings([query])
+        if not query_embedding:
+            return [], []
+        
+        # Search each document's FAISS index separately
+        all_results = []
+        all_distances = []
+        all_sources = []
+        
+        for proc_doc in processed_docs:
+            if not proc_doc.faiss_index or not os.path.exists(proc_doc.faiss_index):
+                continue
+                
+            # Load the FAISS index
+            try:
+                index = faiss.read_index(proc_doc.faiss_index)
+                # Search this index with increased k for better diversity
+                distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
+                
+                # Extract results for this document
+                doc_metadata = [md for md in metadata_store if md.get('source_file') == proc_doc.document.filename]
+                
+                for i, idx in enumerate(indices[0]):
+                    if idx < len(doc_metadata):
+                        content = doc_metadata[idx].get('content', '')
+                        # Only add non-empty content
+                        if content.strip():
+                            all_results.append(content)
+                            all_distances.append(distances[0][i])
+                            all_sources.append(proc_doc.document.filename)
+            except Exception as e:
+                logger.error(f"Error searching index for {proc_doc.document.filename}: {str(e)}")
+                continue
+        
+        # Combine and sort results by similarity score
+        if not all_results:
+            return [], []
+            
+        # Apply TF-IDF ranking using the Streamlit approach
+        try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            
+            # Create a TF-IDF vectorizer with increased max_features as in Streamlit
+            vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+            tfidf_matrix = vectorizer.fit_transform([query] + all_results)
+            
+            # Calculate similarity scores
+            tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
+            
+            # Convert embedding distances to similarity scores (same as Streamlit)
+            similarity_scores = [1 / (1 + dist) for dist in all_distances]
+            
+            # Combine scores with same weighting as Streamlit (70% TF-IDF, 30% embedding)
+            combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
+            
+            # Re-sort results by combined score (note: reverse=True as in Streamlit for descending order)
+            combined_results = list(zip(all_results, all_sources, combined_scores))
+            sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
+            
+            # Extract sorted content and sources
+            results = [res[0] for res in sorted_results]
+            sources = [res[1] for res in sorted_results]
+            
+            # Remove duplicates while preserving order exactly as in Streamlit
+            seen_content = set()
+            filtered_results = []
+            filtered_sources = []
+            
+            for content, source in zip(results, sources):
+                # Use first 100 chars as a content signature (identical to Streamlit)
+                content_hash = content[:100] if content else ""
+                if content_hash and content_hash not in seen_content:
+                    seen_content.add(content_hash)
+                    filtered_results.append(content)
+                    filtered_sources.append(source)
+            
+            # Return top matches (limit to 15 most relevant)
+            return filtered_results[:min(len(filtered_results), 15)], filtered_sources[:min(len(filtered_sources), 15)]
+                
+        except Exception as e:
+            logger.error(f"Error applying TF-IDF ranking: {str(e)}")
+            # Fall back to basic distance-based ranking as a last resort
+            combined_results = list(zip(all_results, all_sources, all_distances))
+            # Note: In the fallback, we sort by distance (smaller is better) so no reverse=True
+            sorted_results = sorted(combined_results, key=lambda x: x[2])
+            
+            results = [res[0] for res in sorted_results[:15]]
+            sources = [res[1] for res in sorted_results[:15]]
+            return results, sources
+    
+    # Helper method to prepare context for response generation
+    def _prepare_context(self, context, sources):
+        """
+        Helper method to prepare context for response generation
+        
+        Args:
+            context (list): List of context chunks
+            sources (list): List of source documents for each context chunk
+            
+        Returns:
+            tuple: (selected_context, selected_sources)
+        """
+        # Limit number of tokens by selecting most relevant chunks
+        selected_context = []
+        selected_sources = []
+        seen_content_hashes = set()
+        
+        # Take first 8 chunks (most relevant ones)
+        initial_count = min(8, len(context))
+        for i in range(initial_count):
+            selected_context.append(context[i])
+            selected_sources.append(sources[i])
+            # Add a content hash to avoid repetition
+            seen_content_hashes.add(context[i][:100])
+        
+        # Add more diverse chunks from the remaining context
+        for i in range(initial_count, len(context)):
+            content_hash = context[i][:100]
+            # Check if content is sufficiently different from what we've seen
+            if content_hash not in seen_content_hashes:
+                selected_context.append(context[i])
+                selected_sources.append(sources[i])
+                seen_content_hashes.add(content_hash)
+                # Limit to 15 total pieces of context for token limit reasons
+                if len(selected_context) >= 15:
+                    break
+        
+        return selected_context, selected_sources
+            
+    # Keep general follow-up question generation as is
     def generate_general_follow_up_questions(self, question, answer):
         prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
@@ -1979,120 +2881,8 @@ class ChatView(APIView):
                 "Would you like me to elaborate on any specific point?",
                 "Do you have any other questions I can help with?"
             ]
-
-    # Get embeddings (same as in DocumentUploadView)
-    def get_embeddings(self, texts):
-        """
-        Gets embeddings using OpenAI's text-embedding-3-small model.
-        """
-        try:
-            response = client.embeddings.create(
-                input=texts,
-                model="text-embedding-3-small"
-            )
-            return [data.embedding for data in response.data]
-        except Exception as e:
-            logger.error(f"Error getting embeddings: {str(e)}")
-            return []
             
-    # Implement Streamlit's search_similar_content function
-    def search_similar_content(self, query, processed_docs, metadata_store, k=40):
-        """Search for similar content using the Streamlit approach"""
-        # Get embeddings for the query
-        query_embedding = self.get_embeddings([query])
-        if not query_embedding:
-            return [], []
-        
-        # Need to search each document's FAISS index separately
-        all_results = []
-        all_distances = []
-        all_sources = []
-        
-        for proc_doc in processed_docs:
-            if not proc_doc.faiss_index or not os.path.exists(proc_doc.faiss_index):
-                continue
-                
-            # Load the FAISS index
-            try:
-                index = faiss.read_index(proc_doc.faiss_index)
-                # Search this index
-                distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
-                
-                # Extract results for this document
-                doc_metadata = [md for md in metadata_store if md.get('source_file') == proc_doc.document.filename]
-                
-                for i, idx in enumerate(indices[0]):
-                    if idx < len(doc_metadata):
-                        metadata_item = doc_metadata[idx]
-                        # Check if 'content' exists (complex docs) or use 'text' (simple docs)
-                        content = metadata_item.get('content', metadata_item.get('text', ''))
-                        source = metadata_item.get('source_file', metadata_item.get('source', proc_doc.document.filename))
-                        
-                        all_results.append(content)
-                        all_distances.append(distances[0][i])
-                        all_sources.append(source)
-                        
-            except Exception as e:
-                logger.error(f"Error searching index for {proc_doc.document.filename}: {str(e)}")
-                continue
-        
-        # Combine and sort results by similarity score
-        combined_results = list(zip(all_results, all_sources, all_distances))
-        sorted_results = sorted(combined_results, key=lambda x: x[2])  # Sort by distance (smaller is better)
-        
-        # Use TF-IDF for better ranking as in Streamlit implementation
-        results = [res[0] for res in sorted_results]
-        sources = [res[1] for res in sorted_results]
-        
-        # Apply TF-IDF if we have results
-        if results:
-            try:
-                from sklearn.feature_extraction.text import TfidfVectorizer
-                
-                # Create a TF-IDF vectorizer
-                vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-                tfidf_matrix = vectorizer.fit_transform([query] + results)
-                
-                # Calculate similarity scores
-                tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
-                
-                # Calculate combined scores (70% TF-IDF, 30% embedding similarity)
-                similarity_scores = [1 / (1 + dist) for dist in all_distances]
-                combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
-                
-                # Re-sort results by combined score
-                combined_results = list(zip(results, sources, combined_scores))
-                sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
-                
-                # Extract sorted content and sources
-                results = [res[0] for res in sorted_results]
-                sources = [res[1] for res in sorted_results]
-                
-                # Remove duplicates while preserving order
-                seen_content = set()
-                filtered_results = []
-                filtered_sources = []
-                
-                for content, source in zip(results, sources):
-                    # Use first 100 chars as a content signature
-                    content_hash = content[:100] if content else ""
-                    if content_hash and content_hash not in seen_content:
-                        seen_content.add(content_hash)
-                        filtered_results.append(content)
-                        filtered_sources.append(source)
-                
-                # Limit results to top matches
-                return filtered_results[:min(len(filtered_results), 15)], filtered_sources[:min(len(filtered_sources), 15)]
-                
-            except Exception as e:
-                logger.error(f"Error applying TF-IDF ranking: {str(e)}")
-                # Fall back to distance-based ranking
-                results = [res[0] for res in sorted_results[:15]]
-                sources = [res[1] for res in sorted_results[:15]]
-                return results, sources
-        
-        return results[:min(len(results), 15)], sources[:min(len(sources), 15)]
-    
+    # Keep document follow-up questions as is
     def generate_follow_up_questions(self, context):
         context_sample = "\n".join(context[:3]) if context else ""
         prompt = f"""
@@ -2131,15 +2921,24 @@ class GetConversationView(APIView):
                     # Retrieve all messages for this conversation
                     messages = conversation.messages.all().order_by('created_at')
                     
-                    # Prepare message list
-                    message_list = [
-                        {
+                    # Prepare message list - UPDATED to include all badge properties
+                    message_list = []
+                    for message in messages:
+                        message_data = {
                             'role': message.role,
                             'content': message.content,
                             'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
                             'citations': message.citations or []
-                        } for message in messages
-                    ]
+                        }
+                        
+                        # Add badge properties for assistant messages
+                        if message.role == 'assistant':
+                            # Add these fields with defaults if they don't exist yet
+                            message_data['use_web_knowledge'] = getattr(message, 'use_web_knowledge', False)
+                            message_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
+                            message_data['response_format'] = getattr(message, 'response_format', 'natural')
+                        
+                        message_list.append(message_data)
                     
                     return Response({
                         'conversation_id': str(conversation.conversation_id),
@@ -2190,6 +2989,7 @@ class GetConversationView(APIView):
                 {'error': f'Failed to fetch conversations: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
     # Add PATCH method to handle title updates
     def patch(self, request, conversation_id):
         try:
@@ -2276,460 +3076,6 @@ class DeleteConversationView(APIView):
                 {'error': f'Failed to delete conversation: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-class ChatDownloadView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def clean_html_content(self, content):
-        """Strip HTML tags and normalize whitespace for better readability"""
-        # Replace <p>, <div>, etc. with newlines before stripping tags
-        content = re.sub(r'</(p|div|h\d|li)>', '\n', content)
-        content = re.sub(r'<br\s*/?>', '\n', content)
-        
-        # Replace list tags with bullets and newlines
-        content = re.sub(r'<li>', '• ', content)
-        content = re.sub(r'<ul>', '\n', content)
-        content = re.sub(r'</ul>', '\n', content)
-        
-        # Convert <b> or <strong> to uppercase or add asterisks
-        bold_content = re.findall(r'<(b|strong)>(.*?)</\1>', content)
-        for tag, text in bold_content:
-            content = content.replace(f'<{tag}>{text}</{tag}>', f'*{text}*')
-        
-        # Strip remaining HTML tags
-        cleaned_content = strip_tags(content)
-        
-        # Normalize whitespace
-        cleaned_content = re.sub(r'\n\s*\n', '\n\n', cleaned_content)
-        cleaned_content = re.sub(r' {2,}', ' ', cleaned_content)
-        
-        return cleaned_content.strip()
-    
-    # Update this method in the ChatDownloadView class to improve text formatting
-
-    def format_messages_for_download(self, messages, format_type='txt'):
-        """
-        Format messages for download in specified format
-        """
-        if format_type == 'json':
-            # For JSON, we just need to structure the data
-            return messages
-        
-        # For text format, create a readable conversation
-        formatted_text = ""
-        for msg in messages:
-            role = "You" if msg['role'] == 'user' else "Assistant"
-            timestamp = datetime.fromisoformat(msg['created_at'].replace(' ', 'T'))
-            formatted_date = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-            
-            # Clean the content if it has HTML formatting
-            content = self.clean_html_content(msg['content'])
-            
-            formatted_text += f"[{formatted_date}] {role}:\n"
-            formatted_text += f"{content}\n\n"
-            
-            # Add citations if they exist
-            if msg.get('citations') and len(msg['citations']) > 0:
-                formatted_text += "Sources:\n"
-                for i, citation in enumerate(msg['citations'], 1):
-                    formatted_text += f"  {i}. {citation.get('source_file', 'Unknown')}"
-                    if citation.get('page_number'):
-                        formatted_text += f", Page: {citation['page_number']}"
-                    formatted_text += "\n"
-                formatted_text += "\n"
-                
-        return formatted_text
-        
-    def generate_filename(self, conversation=None, date_range=None):
-            """Generate appropriate filename based on download type"""
-            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
-            
-            if conversation:
-                # Single conversation download
-                title = conversation.title or f"Chat_{conversation.conversation_id[:8]}"
-                # Replace spaces and special chars for filename safety
-                safe_title = "".join([c if c.isalnum() else "_" for c in title])
-                return f"{safe_title}_{timestamp}"
-            
-            if date_range:
-                # Date range download
-                start_date = date_range.get('start_date', 'all')
-                end_date = date_range.get('end_date', 'now')
-                return f"Chats_{start_date}_to_{end_date}_{timestamp}"
-            
-            # Default filename if neither is provided
-            return f"Chat_export_{timestamp}"
-        
-        # Update this method in the ChatDownloadView class to fix the PDF generation
-
-    def create_pdf(self, content, title="Chat Export"):
-        """
-        Create a PDF file from the provided content with improved handling of user messages
-        """
-        try:
-            from reportlab.lib.pagesizes import letter, A4
-            from reportlab.lib import colors
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-            from reportlab.lib.units import inch
-            
-            buffer = BytesIO()
-            
-            # Create the PDF document
-            doc = SimpleDocTemplate(
-                buffer,
-                pagesize=A4,
-                rightMargin=72,
-                leftMargin=72,
-                topMargin=72,
-                bottomMargin=72
-            )
-            
-            # Define styles
-            styles = getSampleStyleSheet()
-            styleN = styles["BodyText"]
-            styleH = styles["Heading1"]
-            styleH2 = styles["Heading2"]
-            styleH3 = styles["Heading3"]
-            
-            # Create a custom style for user messages
-            user_style = ParagraphStyle(
-                name='UserStyle',
-                parent=styles['BodyText'],
-                fontName='Helvetica-Bold',
-                fontSize=10,
-                textColor=colors.blue
-            )
-            
-            # Create a custom style for assistant messages
-            assistant_style = ParagraphStyle(
-                name='AssistantStyle',
-                parent=styles['BodyText'],
-                fontSize=10
-            )
-            
-            # Create a custom style for citations
-            citation_style = ParagraphStyle(
-                name='CitationStyle',
-                parent=styles['BodyText'],
-                fontSize=8,
-                textColor=colors.gray
-            )
-            
-            # Create the content elements
-            elements = []
-            
-            # Add title
-            elements.append(Paragraph(title, styleH))
-            elements.append(Spacer(1, 0.25*inch))
-            
-            # Process content by parsing our text formatting
-            if isinstance(content, list):
-                # Handle multiple conversations
-                for conversation in content:
-                    elements.append(Paragraph(f"Conversation: {conversation['title']}", styleH2))
-                    elements.append(Paragraph(f"Date: {conversation['created_at']}", styleN))
-                    elements.append(Spacer(1, 0.1*inch))
-                    
-                    for message in conversation['messages']:
-                        # Message header
-                        role = "You" if message['role'] == 'user' else "Assistant"
-                        elements.append(Paragraph(f"[{message['created_at']}] {role}:", styleH3))
-                        
-                        # Choose style based on role
-                        current_style = user_style if message['role'] == 'user' else assistant_style
-                        
-                        # Message content - split paragraphs
-                        paragraphs = self.clean_html_content(message['content']).split('\n\n')
-                        for para in paragraphs:
-                            if para.strip():
-                                elements.append(Paragraph(para, current_style))
-                                elements.append(Spacer(1, 0.05*inch))
-                        
-                        # Add citations if they exist
-                        if message.get('citations') and len(message['citations']) > 0:
-                            citation_text = "Sources: "
-                            citations = []
-                            for i, citation in enumerate(message['citations'], 1):
-                                source = citation.get('source_file', 'Unknown')
-                                page = citation.get('page_number', '')
-                                if page:
-                                    citations.append(f"{i}. {source}, Page: {page}")
-                                else:
-                                    citations.append(f"{i}. {source}")
-                            
-                            elements.append(Paragraph(", ".join(citations), citation_style))
-                        
-                        elements.append(Spacer(1, 0.2*inch))
-                    
-                    elements.append(Spacer(1, 0.5*inch))
-            else:
-                # Single conversation as formatted text - parse line by line for better control
-                lines = content.split('\n')
-                i = 0
-                while i < len(lines):
-                    line = lines[i].strip()
-                    
-                    if not line:
-                        i += 1
-                        continue
-                    
-                    # Check if this line is a message header
-                    header_match = re.match(r'\[(.*?)\] (You|Assistant):', line)
-                    if header_match:
-                        timestamp, role = header_match.groups()
-                        elements.append(Paragraph(f"[{timestamp}] {role}:", styleH3))
-                        
-                        # Set current style based on role
-                        current_style = user_style if role == "You" else assistant_style
-                        
-                        # Move to next line to start collecting message content
-                        i += 1
-                        message_content = []
-                        
-                        # Collect all lines until next header or sources
-                        while i < len(lines) and not re.match(r'\[(.*?)\] (You|Assistant):', lines[i]) and not lines[i].startswith("Sources:"):
-                            if lines[i].strip():
-                                message_content.append(lines[i])
-                            i += 1
-                        
-                        # Join message content and split into paragraphs
-                        if message_content:
-                            para_text = "\n".join(message_content)
-                            paragraphs = para_text.split('\n\n')
-                            for para in paragraphs:
-                                if para.strip():
-                                    elements.append(Paragraph(para, current_style))
-                                    elements.append(Spacer(1, 0.05*inch))
-                        
-                        # Check if next line is Sources
-                        if i < len(lines) and lines[i].startswith("Sources:"):
-                            elements.append(Paragraph(lines[i], citation_style))
-                            i += 1
-                            # Include additional source lines
-                            while i < len(lines) and lines[i].strip() and not re.match(r'\[(.*?)\] (You|Assistant):', lines[i]):
-                                elements.append(Paragraph(lines[i], citation_style))
-                                i += 1
-                    else:
-                        # For any other type of line, just add it as regular text
-                        elements.append(Paragraph(line, styleN))
-                        i += 1
-                
-            # Build the PDF
-            doc.build(elements)
-            
-            # Get the value of the BytesIO buffer
-            pdf = buffer.getvalue()
-            buffer.close()
-            
-            return pdf
-            
-        except Exception as e:
-            print(f"Error creating PDF: {str(e)}")
-            # Return a simple error PDF
-            try:
-                buffer = BytesIO()
-                doc = SimpleDocTemplate(buffer, pagesize=letter)
-                styles = getSampleStyleSheet()
-                elements = []
-                elements.append(Paragraph(f"Error creating PDF: {str(e)}", styles["Heading1"]))
-                doc.build(elements)
-                pdf = buffer.getvalue()
-                buffer.close()
-                return pdf
-            except:
-                # If even the error PDF fails, return a placeholder
-                return b"PDF generation failed"
-    
-    def post(self, request):
-        user = request.user
-        conversation_id = request.data.get('conversation_id')
-        date_range = request.data.get('date_range')
-        format_type = request.data.get('format', 'txt').lower()
-        main_project_id = request.data.get('main_project_id')
-        
-        if not main_project_id:
-            return Response({
-                'error': 'Main project ID is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Validate format type
-        if format_type not in ['txt', 'json', 'csv', 'pdf']:
-            return Response({
-                'error': 'Invalid format. Supported formats: txt, json, csv, pdf'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            if conversation_id:
-                # Download a single conversation
-                try:
-                    conversation = ChatHistory.objects.get(
-                        conversation_id=conversation_id,
-                        user=user,
-                        main_project_id=main_project_id
-                    )
-                except ChatHistory.DoesNotExist:
-                    return Response({
-                        'error': 'Conversation not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                
-                # Get all messages for this conversation
-                messages = conversation.messages.all().order_by('created_at')
-                
-                # Format messages for download
-                message_list = [
-                    {
-                        'role': message.role,
-                        'content': message.content,
-                        'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
-                        'citations': message.citations or []
-                    } for message in messages
-                ]
-                
-                filename = self.generate_filename(conversation)
-                title = conversation.title or f"Chat {conversation.conversation_id[:8]}"
-                
-            elif date_range:
-                # Download conversations within date range
-                start_date = date_range.get('start_date')
-                end_date = date_range.get('end_date')
-                
-                # Build query for conversations within date range
-                query = {
-                    'user': user,
-                    'main_project_id': main_project_id
-                }
-                
-                if start_date:
-                    query['created_at__gte'] = start_date
-                
-                if end_date:
-                    query['created_at__lte'] = end_date
-                
-                # Get conversations matching the criteria
-                conversations = ChatHistory.objects.filter(**query).order_by('-created_at')
-                
-                if not conversations.exists():
-                    return Response({
-                        'error': 'No conversations found within specified date range'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                
-                # Initialize data structure for all conversations
-                all_conversations = []
-                
-                # Get messages for each conversation
-                for conv in conversations:
-                    messages = conv.messages.all().order_by('created_at')
-                    
-                    message_list = [
-                        {
-                            'role': message.role,
-                            'content': message.content,
-                            'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
-                            'citations': message.citations or []
-                        } for message in messages
-                    ]
-                    
-                    all_conversations.append({
-                        'conversation_id': str(conv.conversation_id),
-                        'title': conv.title or f"Chat from {conv.created_at.strftime('%Y-%m-%d %H:%M')}",
-                        'created_at': conv.created_at.strftime('%Y-%m-%d %H:%M'),
-                        'messages': message_list
-                    })
-                
-                filename = self.generate_filename(date_range=date_range)
-                message_list = all_conversations  # Use the full conversation structure
-                title = f"Chats from {start_date or 'all time'} to {end_date or 'present'}"
-                
-            else:
-                return Response({
-                    'error': 'Either conversation_id or date_range must be provided'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Generate download file based on requested format
-            if format_type == 'json':
-                # JSON format
-                json_data = json.dumps(message_list, indent=2)
-                response = HttpResponse(json_data, content_type='application/json')
-                response['Content-Disposition'] = f'attachment; filename="{filename}.json"'
-                
-            elif format_type == 'csv':
-                # CSV format
-                csv_buffer = StringIO()
-                csv_writer = csv.writer(csv_buffer)
-                
-                if conversation_id:
-                    # Single conversation CSV format
-                    csv_writer.writerow(['Timestamp', 'Role', 'Content', 'Citations'])
-                    
-                    for msg in message_list:
-                        # Clean HTML from content
-                        clean_content = self.clean_html_content(msg['content'])
-                        citations = ', '.join([f"{c.get('source_file', 'Unknown')}" for c in msg.get('citations', [])])
-                        csv_writer.writerow([
-                            msg['created_at'],
-                            'You' if msg['role'] == 'user' else 'Assistant',
-                            clean_content,
-                            citations
-                        ])
-                else:
-                    # Multiple conversations CSV format
-                    csv_writer.writerow(['Conversation', 'Timestamp', 'Role', 'Content', 'Citations'])
-                    
-                    for conv in message_list:
-                        for msg in conv['messages']:
-                            # Clean HTML from content
-                            clean_content = self.clean_html_content(msg['content'])
-                            citations = ', '.join([f"{c.get('source_file', 'Unknown')}" for c in msg.get('citations', [])])
-                            csv_writer.writerow([
-                                conv['title'],
-                                msg['created_at'],
-                                'You' if msg['role'] == 'user' else 'Assistant',
-                                clean_content,
-                                citations
-                            ])
-                
-                response = HttpResponse(csv_buffer.getvalue(), content_type='text/csv')
-                response['Content-Disposition'] = f'attachment; filename="{filename}.csv"'
-            
-            elif format_type == 'pdf':
-                # PDF format
-                if conversation_id:
-                    # Single conversation
-                    formatted_text = self.format_messages_for_download(message_list, 'txt')
-                    pdf_content = self.create_pdf(formatted_text, title)
-                else:
-                    # Multiple conversations
-                    pdf_content = self.create_pdf(message_list, title)
-                
-                response = HttpResponse(pdf_content, content_type='application/pdf')
-                response['Content-Disposition'] = f'attachment; filename="{filename}.pdf"'
-                
-            else:
-                # Default: TXT format
-                if conversation_id:
-                    # Single conversation
-                    formatted_text = self.format_messages_for_download(message_list, format_type)
-                else:
-                    # Multiple conversations
-                    formatted_text = ""
-                    for conv in message_list:
-                        formatted_text += f"=== {conv['title']} ===\n"
-                        formatted_text += f"Date: {conv['created_at']}\n\n"
-                        formatted_text += self.format_messages_for_download(conv['messages'], format_type)
-                        formatted_text += "\n\n" + "="*50 + "\n\n"
-                
-                response = HttpResponse(formatted_text, content_type='text/plain')
-                response['Content-Disposition'] = f'attachment; filename="{filename}.txt"'
-            
-            return response
-            
-        except Exception as e:
-            print(f"Error downloading chat: {str(e)}")
-            return Response({
-                'error': f'Failed to download chat: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
 
 class GenerateIdeaContextView(APIView):
     """
@@ -3053,7 +3399,8 @@ class AdminUserManagementView(APIView):
                     'disabled_modules': module_permissions,
                     'api_tokens': {
                         'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
-                        'gemini_token': api_tokens.gemini_token if api_tokens else None
+                        'gemini_token': api_tokens.gemini_token if api_tokens else None,
+                        'llama_token': api_tokens.llama_token if api_tokens else None  # Include Llama token
                     }
                 }
                 user_data.append(user_info)
@@ -3082,6 +3429,7 @@ class AdminUserManagementView(APIView):
             password = request.data.get('password')
             huggingface_token = request.data.get('huggingface_token')
             gemini_token = request.data.get('gemini_token')
+            llama_token = request.data.get('llama_token')  # Get Llama token
            
             # Validate required fields
             if not all([username, email, password]):
@@ -3106,7 +3454,8 @@ class AdminUserManagementView(APIView):
             UserAPITokens.objects.create(
                 user=user,
                 huggingface_token=huggingface_token,
-                gemini_token=gemini_token
+                gemini_token=gemini_token,
+                llama_token=llama_token  # Save Llama token
             )
            
             return Response({
@@ -3135,6 +3484,7 @@ class AdminUserManagementView(APIView):
             user_id = request.data.get('user_id')
             huggingface_token = request.data.get('huggingface_token')
             gemini_token = request.data.get('gemini_token')
+            llama_token = request.data.get('llama_token')  # Get Llama token
            
             if not user_id:
                 return Response({
@@ -3157,6 +3507,9 @@ class AdminUserManagementView(APIView):
            
             if gemini_token is not None:
                 api_tokens.gemini_token = gemini_token
+                
+            if llama_token is not None:
+                api_tokens.llama_token = llama_token  # Update Llama token
            
             api_tokens.save()
            
@@ -3258,7 +3611,8 @@ class AdminUserModuleView(APIView):
                 'disabled_modules': module_permissions.disabled_modules,
                 'api_tokens': {
                     'huggingface_token': getattr(api_tokens, 'huggingface_token', None) if api_tokens else None,
-                    'gemini_token': getattr(api_tokens, 'gemini_token', None) if api_tokens else None
+                    'gemini_token': getattr(api_tokens, 'gemini_token', None) if api_tokens else None,
+		            'llama_token': getattr(api_tokens, 'llama_token', None) if api_tokens else None
                 }
             }, status=status.HTTP_200_OK)
                 
@@ -3390,5 +3744,85 @@ class DocumentViewLogView(APIView):
                 'message': 'Continued without logging view'
             }, status=status.HTTP_200_OK)
 
+
+# Add this to views.py
+
+class DocumentContentSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            user = request.user
+            query = request.data.get('query')
+            main_project_id = request.data.get('main_project_id')
+            
+            if not query or not main_project_id:
+                return Response({
+                    'error': 'Query and project ID are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get all documents for this user and project
+            documents = Document.objects.filter(
+                user=user, 
+                main_project_id=main_project_id
+            )
+            
+            search_results = []
+            
+            # For each document, search for query in the content
+            for doc in documents:
+                try:
+                    # Get the processed index for this document
+                    processed_index = ProcessedIndex.objects.get(document=doc)
+                    
+                    # Check if we have the FAISS index and metadata path
+                    if processed_index.faiss_index and processed_index.metadata:
+                        # Load the metadata (chunks)
+                        if os.path.exists(processed_index.metadata):
+                            with open(processed_index.metadata, 'rb') as f:
+                                chunks = pickle.load(f)
+                            
+                            # Convert query to lowercase for case-insensitive search
+                            query_lower = query.lower()
+                            matches = []
+                            
+                            # Search in each chunk
+                            for chunk in chunks:
+                                chunk_text = chunk.get('text', '')
+                                if chunk_text and query_lower in chunk_text.lower():
+                                    # Found a match, add the context
+                                    matches.append(chunk_text)
+                            
+                            # If we found matches, add to results
+                            if matches:
+                                # Use the first match for preview, but count all matches
+                                search_results.append({
+                                    'id': doc.id,
+                                    'filename': doc.filename,
+                                    'match_count': len(matches),
+                                    'match_context': matches[0] if matches else "",
+                                    'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
+                                })
+                                
+                except ProcessedIndex.DoesNotExist:
+                    # Skip documents that haven't been processed
+                    continue
+                except Exception as e:
+                    logger.error(f"Error searching document {doc.id}: {str(e)}")
+                    continue
+            
+            # Sort results by number of matches (most relevant first)
+            search_results.sort(key=lambda x: x['match_count'], reverse=True)
+            
+            return Response({
+                'results': search_results,
+                'total_count': len(search_results)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in document content search: {str(e)}")
+            return Response({
+                'error': f'An error occurred: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
