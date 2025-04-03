@@ -1,21 +1,21 @@
-
-
 import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import pptxgen from 'pptxgenjs';
 import { format } from 'date-fns';
 import { ideaService } from '../utils/axiosConfig';
+// Import the logo directly
+import logoImage from '../assets/Logo1.png';
 
 const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} }) => {
   const [isExporting, setIsExporting] = useState(false);
 
   const THEME = {
     colors: {
-      background: '1A2333',    // Dark background
-      primary: '4A90E2',      // Bright blue
-      secondary: '2D5A9E',    // Darker blue
-      text: 'FFFFFF',         // White text
-      textLight: 'B0BEC5',    // Light gray text
+      background: '1A2333',    
+      primary: '4A90E2',      
+      secondary: '2D5A9E',    
+      text: 'FFFFFF',        
+      textLight: 'B0BEC5',    
       accent: '64B5F6',        // Light blue accent
       version:'21f359'
     },
@@ -59,35 +59,16 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
     }
   };
 
-  // Function to encode the logo as base64
-  const getLogoBase64 = async () => {
+  const addLogoToSlide = (slide) => {
     try {
-      const response = await fetch('/src/assets/Logo1.png');
-      const blob = await response.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
+      slide.addImage({
+        path: logoImage, // Use the imported logo directly
+        x: '1%',
+        y: '1%',
+        w: '10%',
+        h: '6%',
+        sizing: { type: 'contain' }
       });
-    } catch (error) {
-      console.error('Error loading logo:', error);
-      return null;
-    }
-  };
-
-  const addLogoToSlide = async (slide) => {
-    try {
-      const logoBase64 = await getLogoBase64();
-      if (logoBase64) {
-        slide.addImage({
-          data: logoBase64,
-          x: '1%',
-          y: '1%',
-          w: '10%',
-          h: '6%',
-          sizing: { type: 'contain' }
-        });
-      }
     } catch (error) {
       console.error('Error adding logo to slide:', error);
     }
@@ -97,7 +78,8 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
     const slide = pptx.addSlide();
     slide.background = { color: THEME.colors.background };
     
-    await addLogoToSlide(slide);
+    // Add logo to the title slide
+    addLogoToSlide(slide);
     
     // Main title
     slide.addText('Product Ideas Presentation', {
@@ -148,7 +130,7 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
         slide.background = { color: '1A2333' };  // Dark blue background
         
         // Add logo to slide
-        await addLogoToSlide(slide);
+        addLogoToSlide(slide);
         
         // Add title
         slide.addText(idea.product_name || 'Untitled Product', {
@@ -289,4 +271,3 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
 };
 
 export default PowerPointExport;
-
