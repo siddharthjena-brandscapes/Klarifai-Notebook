@@ -11,11 +11,11 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
 
   const THEME = {
     colors: {
-      background: '1A2333',    // Dark background
-      primary: '4A90E2',      // Bright blue
-      secondary: '2D5A9E',    // Darker blue
-      text: 'FFFFFF',         // White text
-      textLight: 'B0BEC5',    // Light gray text
+      background: '1A2333',    
+      primary: '4A90E2',      
+      secondary: '2D5A9E',    
+      text: 'FFFFFF',        
+      textLight: 'B0BEC5',    
       accent: '64B5F6',        // Light blue accent
       version:'21f359'
     },
