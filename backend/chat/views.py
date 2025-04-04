@@ -2648,65 +2648,160 @@ class ChatView(APIView):
         return f"{answer}\n\n*Sources: {source_info}*"
     
 
-    # Get general chat answer with response length parameter
-    def get_general_chat_answer(self, question, use_web_knowledge=False, response_length='comprehensive'):
-        try:
-            # Choose the appropriate prompt based on whether web knowledge is enabled and response length
+    def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural'):
+            """
+            Generate an answer for general chat mode, optionally using web knowledge.
+           
+            Args:
+                query (str): The user's query
+                use_web_knowledge (bool): Whether to use web search
+                response_length (str): 'short' or 'comprehensive'
+                response_format (str): The format to use for the response
+               
+            Returns:
+                str: Generated response
+            """
+            # If web knowledge is enabled, implement the full web search flow
             if use_web_knowledge:
-                system_message = """You are a helpful, friendly AI assistant. Provide informative, thoughtful responses 
-                using your knowledge base. Use semantic HTML tags for structure (<b>, <p>, <ul>, <li>) and maintain 
-                a natural, conversational tone. Format your response to be clear and readable."""
+                try:
+                    # Step 1: Search the web using DuckDuckGo
+                    print(f"Searching web for: {query}")
+                    web_results = self.search_web(query, max_results=5)
+                   
+                    if not web_results:
+                        return "I couldn't find relevant information on the web for your query."
+                   
+                    # Step 2: Scrape content from the top search results
+                    print(f"Found {len(web_results)} search results, scraping content...")
+                    scraped_contents = []
+                    web_sources = []
+                   
+                    for result in web_results:
+                        try:
+                            # Extract content from the webpage
+                            scraped_content = self.scrape_webpage(result['href'])
+                           
+                            if scraped_content and scraped_content.get('content'):
+                                scraped_contents.append(scraped_content)
+                               
+                                # Store source information
+                                web_sources.append({
+                                    'title': scraped_content.get('title', result.get('title', 'Unknown')),
+                                    'url': result.get('href', ''),
+                                    'snippet': result.get('body', '')[:300]  # First 300 chars of snippet
+                                })
+                        except Exception as e:
+                            logger.error(f"Error scraping {result.get('href')}: {str(e)}")
+                            continue
+                   
+                    if not scraped_contents:
+                        return "I found search results but couldn't extract useful content from the webpages."
+                   
+                    # Step 3: Generate a response using the scraped content
+                    print(f"Generating response from {len(scraped_contents)} scraped sources...")
+                   
+                    # Prepare context from scraped contents
+                    context = ""
+                    for i, item in enumerate(scraped_contents, 1):
+                        domain = self.extract_domain(item['url'])
+                        context += f"Source {i} ({domain}):\n"
+                        context += f"Title: {item['title']}\n"
+                        # Limit content based on response length
+                        content_limit = 2000 if response_length == 'comprehensive' else 1000
+                        context += f"Content: {item['content'][:content_limit]}...\n\n"
+                   
+                    # Get format-specific guidance
+                    format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
+                   
+                    # Create the prompt for OpenAI
+                    prompt = f"""
+                    You are a web research assistant. Based on the following information from multiple web sources,
+                    provide a {response_length} answer to the question.
+ 
+                    RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
+                   
+                    {format_guidance}
+ 
+                    Question: {query}
+ 
+                    Information from web sources:
+                    {context}
+ 
+                    Please format your answer with proper HTML tags (<p>, <ul>, <li>, <b>, etc.) where appropriate,
+                    and make sure to synthesize information from different sources. If the information is insufficient or
+                    contradictory, acknowledge this in your response. If the question asks about time-sensitive information,
+                    indicate when the data was retrieved.
+                   
+                    RESPONSE LENGTH: {'Provide a focused, concise response prioritizing the most important information.' if response_length == 'short' else 'Provide a comprehensive, detailed response that thoroughly covers the topic.'}
+                    """
+                   
+                    # Generate response using OpenAI
+                    temperature = 0.3 if response_format in ['factual_brief', 'technical_deep_dive'] else 0.5
+                    max_tokens = 800 if response_length == 'short' else 2000
+                   
+                    print(f"Calling OpenAI API with temperature={temperature}, max_tokens={max_tokens}")
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant that provides well-structured answers based on web search results."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=temperature,
+                        max_tokens=max_tokens
+                    )
+                   
+                    web_response = response.choices[0].message.content
+                   
+                    # Add source information
+                    source_domains = [self.extract_domain(source['url']) for source in web_sources]
+                    source_info = ", ".join(source_domains)
+                   
+                    return f"{web_response}\n\n*Sources: {source_info}*"
+                   
+                except Exception as e:
+                    logger.error(f"Error in web knowledge general chat: {str(e)}", exc_info=True)
+                    return f"I encountered an error while searching the web: {str(e)}. Please try a different question or try again later."
+           
+            # If no web knowledge requested, use standard chat completion
             else:
-                system_message = """You are a helpful, friendly AI assistant. Provide informative, thoughtful responses 
-                using your knowledge base. Use semantic HTML tags for structure (<b>, <p>, <ul>, <li>) and maintain 
-                a natural, conversational tone. Format your response to be clear and readable."""
-            
-            # Adjust user prompt based on response length
-            if response_length == 'short':
-                user_prompt = f"""
-                Please provide a concise and to-the-point response to the following query:
-                
-                USER QUERY: {question}
-                
-                RESPONSE REQUIREMENTS:
-                1. Be brief and direct - aim for 2-3 sentences when possible
-                2. Focus on the most important information only
-                3. Avoid unnecessary explanations or background information
-                4. Use simple language and be straight to the point
-                5. If a list is needed, keep it very short
-                6. Use <b> tags sparingly for only the most crucial points
+                # Format-specific guidance
+                format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
+               
+                # Configure conciseness based on response length
+                conciseness = "Be concise and to-the-point." if response_length == 'short' else "Provide a comprehensive and detailed response."
+               
+                # Create a prompt for the general chat
+                prompt = f"""
+                Please answer the following question in a helpful, informative way.
+               
+                RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
+               
+                {format_guidance}
+               
+                {conciseness}
+               
+                Use HTML tags for structure (<b>, <p>, <ul>, <li>) to enhance readability.
+               
+                USER QUERY: {query}
                 """
-            else:  # Default to comprehensive
-                user_prompt = f"""
-                Please provide a helpful response to the following query:
-                
-                USER QUERY: {question}
-                
-                RESPONSE FORMAT REQUIREMENTS:
-                1. Begin with a brief introductory paragraph
-                2. Use <b> tags for key section headings when applicable
-                3. Use <p> tags for detailed explanations
-                4. Use <ul> and <li> for list-based information when applicable
-                5. Ensure the response flows naturally and is easy to read
-                """
-            
-            completion = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.2,
-                max_tokens=2000 if response_length == 'comprehensive' else 500  # Limit tokens for short responses
-            )
-            
-            answer_text = completion.choices[0].message.content
-            
-            return f"{answer_text}"
-                
-        except Exception as e:
-            logger.error(f"Error getting general chat answer: {str(e)}")
-            return "Sorry, an error occurred while processing your question."
+               
+                try:
+                    # Use the OpenAI API
+                    completion = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "You are a helpful, friendly AI assistant providing informative and thoughtful responses."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.5,
+                        max_tokens=2000 if response_length == 'comprehensive' else 800
+                    )
+                   
+                    return completion.choices[0].message.content
+                   
+                except Exception as e:
+                    logger.error(f"Error in general chat: {str(e)}", exc_info=True)
+                    return f"I'm sorry, I encountered an error while processing your request. Please try again or rephrase your question."
 
     # Enhanced embeddings function from Streamlit version
     def get_embeddings(self, texts):
@@ -3077,6 +3172,289 @@ class DeleteConversationView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+# class GenerateIdeaContextView(APIView):
+#     """
+#     API endpoint to extract structured idea generation parameters
+#     from documents or query results.
+#     """
+   
+#     def post(self, request):
+#         user = request.user
+#         document_id = request.data.get('document_id')
+#         query = request.data.get('query')
+#         main_project_id = request.data.get('main_project_id')
+       
+#         # Validate input - need either document_id or query
+#         if not document_id and not query:
+#             return Response({
+#                 'error': 'Either document_id or query parameter is required'
+#             }, status=status.HTTP_400_BAD_REQUEST)
+           
+#         try:
+#             # Case 1: Using Document ID - fetch existing parameters or extract new ones
+#             if document_id:
+#                 document = get_object_or_404(Document, id=document_id, user=user)
+                
+#                 # Get document name without extension
+#                 document_name_no_ext = self.remove_file_extension(document.filename)
+                
+#                 # Generate a unique project name - handle the case when main_project_id is None
+#                 suggested_project_name = f"Ideas from {document_name_no_ext}"
+#                 if main_project_id:
+#                     try:
+#                         suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
+#                     except Exception as e:
+#                         # Log the error but continue with the default name
+#                         print(f"Error generating unique project name: {str(e)}")
+               
+#                 try:
+#                     # Check if we already have parameters stored
+#                     processed_index = ProcessedIndex.objects.get(document=document)
+                   
+#                     # If parameters exist, return them
+#                     if processed_index.idea_parameters:
+#                         return Response({
+#                             'document_id': document_id,
+#                             'document_name': document.filename,
+#                             'document_name_no_ext': document_name_no_ext,
+#                             'idea_parameters': processed_index.idea_parameters,
+#                             'suggested_project_name': suggested_project_name
+#                         })
+                   
+#                     # If no parameters yet, extract them from the document
+#                     index_file = processed_index.faiss_index
+#                     metadata_file = processed_index.metadata
+                   
+#                     # Load index and metadata
+#                     index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
+                   
+#                     # Extract parameters from document content
+#                     full_text = " ".join([chunk['text'] for chunk in chunks])
+#                     idea_params = self.extract_idea_parameters(full_text, chunks)
+                   
+#                     # Save the parameters for future use
+#                     processed_index.idea_parameters = idea_params
+#                     processed_index.save()
+                   
+#                     return Response({
+#                         'document_id': document_id,
+#                         'document_name': document.filename,
+#                         'document_name_no_ext': document_name_no_ext,
+#                         'idea_parameters': idea_params,
+#                         'suggested_project_name': suggested_project_name
+#                     })
+                   
+#                 except ProcessedIndex.DoesNotExist:
+#                     return Response({
+#                         'error': 'Document has not been processed yet'
+#                     }, status=status.HTTP_404_NOT_FOUND)
+           
+#             # Case 2: Using Query - search across documents and extract from relevant chunks
+#             else:
+#                 # Get active/selected document
+#                 active_doc_id = request.session.get('active_document_id')
+#                 if not active_doc_id:
+#                     return Response({
+#                         'error': 'No active document selected'
+#                     }, status=status.HTTP_400_BAD_REQUEST)
+               
+#                 document = get_object_or_404(Document, id=active_doc_id, user=user)
+#                 processed_index = get_object_or_404(ProcessedIndex, document=document)
+                
+#                 # Get document name without extension
+#                 document_name_no_ext = self.remove_file_extension(document.filename)
+                
+#                 # Generate a unique project name - handle the case when main_project_id is None
+#                 suggested_project_name = f"Ideas from {document_name_no_ext}"
+#                 if main_project_id:
+#                     try:
+#                         suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
+#                     except Exception as e:
+#                         # Log the error but continue with the default name
+#                         print(f"Error generating unique project name: {str(e)}")
+               
+#                 # Load index and metadata
+#                 index_file = processed_index.faiss_index
+#                 metadata_file = processed_index.metadata
+#                 index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
+               
+#                 # Get embedding for query
+#                 query_embedding = self.get_query_embedding(query)
+               
+#                 # Search for relevant chunks
+#                 relevant_chunks = self.search_faiss_index(index, chunks, query_embedding, k=5)
+               
+#                 # Extract parameters from relevant chunks
+#                 idea_params = self.extract_idea_parameters(query, relevant_chunks)
+               
+#                 return Response({
+#                     'document_id': active_doc_id,
+#                     'document_name': document.filename,
+#                     'document_name_no_ext': document_name_no_ext,
+#                     'query': query,
+#                     'idea_parameters': idea_params,
+#                     'suggested_project_name': suggested_project_name
+#                 })
+               
+#         except Exception as e:
+#             print(f"Error generating idea context: {str(e)}")
+#             return Response({
+#                 'error': str(e),
+#                 'detail': 'An error occurred while generating idea context'
+#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+#     def remove_file_extension(self, filename):
+#         """
+#         Remove file extension from filename
+#         """
+#         import os
+#         return os.path.splitext(filename)[0]
+    
+#     def generate_unique_project_name(self, document_name, main_project_id):
+#         """
+#         Generate a unique project name based on document name,
+#         adding (1), (2), etc. if needed to avoid duplicates
+#         """
+#         from ideaGen.models import Project
+        
+#         base_name = f"Ideas from {document_name}"
+#         project_name = base_name
+#         counter = 1
+        
+#         # Check for existing projects with this name in the main project
+#         while Project.objects.filter(
+#             name=project_name,
+#             main_project_id=main_project_id
+#         ).exists():
+#             # Increment counter and update name
+#             project_name = f"{base_name} ({counter})"
+#             counter += 1
+            
+#         return project_name
+   
+#     def load_faiss_index_from_paths(self, index_file, metadata_file):
+#         """Load FAISS index and metadata from file paths"""
+#         import faiss
+#         import pickle
+       
+#         try:
+#             index = faiss.read_index(index_file)
+#             with open(metadata_file, "rb") as f:
+#                 chunks = pickle.load(f)
+#             return index, chunks
+#         except Exception as e:
+#             print(f"Error loading FAISS index: {str(e)}")
+#             return None, []
+   
+#     def get_query_embedding(self, query):
+#         """Get embedding for the query"""
+#         from openai import OpenAI
+#         client = OpenAI()  # Initialize the client
+       
+#         try:
+#             response = client.embeddings.create(
+#                 input=[query],
+#                 model="text-embedding-3-small"
+#             )
+#             return response.data[0].embedding
+#         except Exception as e:
+#             print(f"Error getting embedding for query: {str(e)}")
+#             raise
+   
+#     def search_faiss_index(self, index, chunks, query_embedding, k=5):
+#         """Search FAISS index for relevant chunks"""
+#         import numpy as np
+       
+#         # Convert embedding to numpy array
+#         query_vector = np.array([query_embedding]).astype('float32')
+       
+#         # Search index
+#         distances, indices = index.search(query_vector, k=k)
+       
+#         # Get relevant chunks
+#         results = []
+#         for i in indices[0]:
+#             if i < len(chunks):
+#                 results.append(chunks[i])
+       
+#         return results
+   
+#     def extract_idea_parameters(self, context, relevant_chunks=None):
+#         """
+#         Extract structured parameters for the Idea Generator
+       
+#         Args:
+#             context (str): Either full document content or query
+#             relevant_chunks (list, optional): List of relevant chunks from search
+           
+#         Returns:
+#             dict: Structured parameters for idea generation
+#         """
+#         from openai import OpenAI
+#         client = OpenAI()  # Initialize the client
+#         import json
+       
+#         try:
+#             # If relevant chunks are provided, use them for extraction context
+#             if relevant_chunks and len(relevant_chunks) > 0:
+#                 extraction_context = "\n\n".join([chunk['text'] for chunk in relevant_chunks])
+#             else:
+#                 # If no chunks available, use the context directly
+#                 extraction_context = context
+               
+#             # Create extraction prompt
+#             extraction_prompt = f"""
+#             Extract the following key parameters from the provided context.
+#             If a parameter isn't explicitly mentioned, infer it from context or leave it blank.
+           
+#             Context:
+#             {extraction_context}
+           
+#             Extract these parameters:
+#             - Brand_Name: The company or product brand mentioned
+#             - Category: The product category or market area
+#             - Concept: The main idea, campaign, or product concept
+#             - Benefits: Key benefits or value propositions (list up to 3)
+#             - RTB: Reason to Believe - evidence supporting the benefits (list up to 3)
+#             - Ingredients: Key ingredients or components (if applicable)
+#             - Features: Notable product/service features (list up to 3)
+#             - Theme: Overall theme or tone
+#             - Demographics: Target audience demographics
+           
+#             Format the response as a valid JSON object with these fields.
+#             """
+           
+#             # Call LLM to extract parameters
+#             response = client.chat.completions.create(
+#                 model="gpt-4o",  
+#                 messages=[
+#                     {"role": "system", "content": "You are a specialist in extracting structured information from documents."},
+#                     {"role": "user", "content": extraction_prompt}
+#                 ],
+#                 response_format={"type": "json_object"}
+#             )
+           
+#             # Parse JSON response
+#             extracted_params = json.loads(response.choices[0].message.content)
+           
+#             return extracted_params
+       
+#         except Exception as e:
+#             print(f"Error extracting idea parameters: {str(e)}")
+#             # Return empty structure if extraction fails
+#             return {
+#                 "Brand_Name": "",
+#                 "Category": "",
+#                 "Concept": "",
+#                 "Benefits": "",
+#                 "RTB": "",
+#                 "Ingredients": "",
+#                 "Features": "",
+#                 "Theme": "",
+#                 "Demographics": ""
+#             }
+
+
 class GenerateIdeaContextView(APIView):
     """
     API endpoint to extract structured idea generation parameters
@@ -3129,12 +3507,42 @@ class GenerateIdeaContextView(APIView):
                     # If no parameters yet, extract them from the document
                     index_file = processed_index.faiss_index
                     metadata_file = processed_index.metadata
+                    
+                    # First check if the document has a markdown path (LlamaParse document)
+                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                        # This is a LlamaParse document, read the markdown content directly
+                        try:
+                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                                full_text = f.read()
+                                
+                            # Extract parameters from markdown content
+                            idea_params = self.extract_idea_parameters(full_text)
+                            
+                            # Save the parameters for future use
+                            processed_index.idea_parameters = idea_params
+                            processed_index.save()
+                            
+                            return Response({
+                                'document_id': document_id,
+                                'document_name': document.filename,
+                                'document_name_no_ext': document_name_no_ext,
+                                'idea_parameters': idea_params,
+                                'suggested_project_name': suggested_project_name
+                            })
+                        except Exception as e:
+                            print(f"Error reading markdown file: {str(e)}")
+                            # Continue with FAISS approach as fallback
                    
                     # Load index and metadata
                     index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
+                    
+                    if not chunks:
+                        return Response({
+                            'error': 'No content found in the document'
+                        }, status=status.HTTP_400_BAD_REQUEST)
                    
                     # Extract parameters from document content
-                    full_text = " ".join([chunk['text'] for chunk in chunks])
+                    full_text = " ".join([chunk.get('text', '') for chunk in chunks])
                     idea_params = self.extract_idea_parameters(full_text, chunks)
                    
                     # Save the parameters for future use
@@ -3177,8 +3585,30 @@ class GenerateIdeaContextView(APIView):
                     except Exception as e:
                         # Log the error but continue with the default name
                         print(f"Error generating unique project name: {str(e)}")
+                
+                # First check if the document has a markdown path (LlamaParse document)
+                if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                    # This is a LlamaParse document, read the markdown content directly
+                    try:
+                        with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                            full_text = f.read()
+                            
+                        # Extract parameters from markdown content
+                        idea_params = self.extract_idea_parameters(query, None, full_text)
+                        
+                        return Response({
+                            'document_id': active_doc_id,
+                            'document_name': document.filename,
+                            'document_name_no_ext': document_name_no_ext,
+                            'query': query,
+                            'idea_parameters': idea_params,
+                            'suggested_project_name': suggested_project_name
+                        })
+                    except Exception as e:
+                        print(f"Error reading markdown file: {str(e)}")
+                        # Continue with FAISS approach as fallback
                
-                # Load index and metadata
+                # Load index and metadata for FAISS approach
                 index_file = processed_index.faiss_index
                 metadata_file = processed_index.metadata
                 index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
@@ -3270,6 +3700,10 @@ class GenerateIdeaContextView(APIView):
         """Search FAISS index for relevant chunks"""
         import numpy as np
        
+        # Check if index is None
+        if index is None:
+            return []
+            
         # Convert embedding to numpy array
         query_vector = np.array([query_embedding]).astype('float32')
        
@@ -3284,13 +3718,14 @@ class GenerateIdeaContextView(APIView):
        
         return results
    
-    def extract_idea_parameters(self, context, relevant_chunks=None):
+    def extract_idea_parameters(self, context, relevant_chunks=None, full_text=None):
         """
         Extract structured parameters for the Idea Generator
        
         Args:
             context (str): Either full document content or query
             relevant_chunks (list, optional): List of relevant chunks from search
+            full_text (str, optional): For LlamaParse documents, the full markdown text
            
         Returns:
             dict: Structured parameters for idea generation
@@ -3300,9 +3735,13 @@ class GenerateIdeaContextView(APIView):
         import json
        
         try:
-            # If relevant chunks are provided, use them for extraction context
-            if relevant_chunks and len(relevant_chunks) > 0:
-                extraction_context = "\n\n".join([chunk['text'] for chunk in relevant_chunks])
+            # Determine extraction context source
+            if full_text:
+                # If we have full text (e.g., from markdown), use that
+                extraction_context = full_text
+            elif relevant_chunks and len(relevant_chunks) > 0:
+                # If relevant chunks are provided, use them for extraction context
+                extraction_context = "\n\n".join([chunk.get('text', '') for chunk in relevant_chunks])
             else:
                 # If no chunks available, use the context directly
                 extraction_context = context
@@ -3358,7 +3797,6 @@ class GenerateIdeaContextView(APIView):
                 "Theme": "",
                 "Demographics": ""
             }
-#  admin 
 
 from django.db import transaction
 from .models import UserAPITokens
@@ -3747,6 +4185,85 @@ class DocumentViewLogView(APIView):
 
 # Add this to views.py
 
+# class DocumentContentSearchView(APIView):
+#     permission_classes = [IsAuthenticated]
+    
+#     def post(self, request):
+#         try:
+#             user = request.user
+#             query = request.data.get('query')
+#             main_project_id = request.data.get('main_project_id')
+            
+#             if not query or not main_project_id:
+#                 return Response({
+#                     'error': 'Query and project ID are required'
+#                 }, status=status.HTTP_400_BAD_REQUEST)
+            
+#             # Get all documents for this user and project
+#             documents = Document.objects.filter(
+#                 user=user, 
+#                 main_project_id=main_project_id
+#             )
+            
+#             search_results = []
+            
+#             # For each document, search for query in the content
+#             for doc in documents:
+#                 try:
+#                     # Get the processed index for this document
+#                     processed_index = ProcessedIndex.objects.get(document=doc)
+                    
+#                     # Check if we have the FAISS index and metadata path
+#                     if processed_index.faiss_index and processed_index.metadata:
+#                         # Load the metadata (chunks)
+#                         if os.path.exists(processed_index.metadata):
+#                             with open(processed_index.metadata, 'rb') as f:
+#                                 chunks = pickle.load(f)
+                            
+#                             # Convert query to lowercase for case-insensitive search
+#                             query_lower = query.lower()
+#                             matches = []
+                            
+#                             # Search in each chunk
+#                             for chunk in chunks:
+#                                 chunk_text = chunk.get('text', '')
+#                                 if chunk_text and query_lower in chunk_text.lower():
+#                                     # Found a match, add the context
+#                                     matches.append(chunk_text)
+                            
+#                             # If we found matches, add to results
+#                             if matches:
+#                                 # Use the first match for preview, but count all matches
+#                                 search_results.append({
+#                                     'id': doc.id,
+#                                     'filename': doc.filename,
+#                                     'match_count': len(matches),
+#                                     'match_context': matches[0] if matches else "",
+#                                     'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
+#                                 })
+                                
+#                 except ProcessedIndex.DoesNotExist:
+#                     # Skip documents that haven't been processed
+#                     continue
+#                 except Exception as e:
+#                     logger.error(f"Error searching document {doc.id}: {str(e)}")
+#                     continue
+            
+#             # Sort results by number of matches (most relevant first)
+#             search_results.sort(key=lambda x: x['match_count'], reverse=True)
+            
+#             return Response({
+#                 'results': search_results,
+#                 'total_count': len(search_results)
+#             }, status=status.HTTP_200_OK)
+            
+#         except Exception as e:
+#             logger.error(f"Error in document content search: {str(e)}")
+#             return Response({
+#                 'error': f'An error occurred: {str(e)}'
+#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class DocumentContentSearchView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -3775,34 +4292,72 @@ class DocumentContentSearchView(APIView):
                     # Get the processed index for this document
                     processed_index = ProcessedIndex.objects.get(document=doc)
                     
-                    # Check if we have the FAISS index and metadata path
-                    if processed_index.faiss_index and processed_index.metadata:
-                        # Load the metadata (chunks)
-                        if os.path.exists(processed_index.metadata):
-                            with open(processed_index.metadata, 'rb') as f:
-                                chunks = pickle.load(f)
+                    # First, check if this is a LlamaParse document
+                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                        # This is a LlamaParse document, read the markdown content directly
+                        try:
+                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                                markdown_content = f.read()
                             
                             # Convert query to lowercase for case-insensitive search
                             query_lower = query.lower()
-                            matches = []
                             
-                            # Search in each chunk
-                            for chunk in chunks:
-                                chunk_text = chunk.get('text', '')
-                                if chunk_text and query_lower in chunk_text.lower():
-                                    # Found a match, add the context
-                                    matches.append(chunk_text)
-                            
-                            # If we found matches, add to results
-                            if matches:
-                                # Use the first match for preview, but count all matches
+                            # Check if query exists in the markdown content
+                            if query_lower in markdown_content.lower():
+                                # Found a match - get the surrounding context
+                                index = markdown_content.lower().find(query_lower)
+                                start = max(0, index - 100)
+                                end = min(len(markdown_content), index + len(query) + 100)
+                                match_context = markdown_content[start:end]
+                                
+                                # Count occurrences
+                                match_count = markdown_content.lower().count(query_lower)
+                                
                                 search_results.append({
                                     'id': doc.id,
                                     'filename': doc.filename,
-                                    'match_count': len(matches),
-                                    'match_context': matches[0] if matches else "",
+                                    'match_count': match_count,
+                                    'match_context': match_context,
                                     'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
                                 })
+                                
+                                # Continue to the next document
+                                continue
+                        except Exception as e:
+                            logger.error(f"Error searching in markdown file for document {doc.id}: {str(e)}")
+                            # Continue with the FAISS approach as fallback
+                    
+                    # Standard FAISS approach for non-LlamaParse documents
+                    if processed_index.faiss_index and processed_index.metadata:
+                        # Check if the files exist
+                        if not os.path.exists(processed_index.faiss_index) or not os.path.exists(processed_index.metadata):
+                            continue
+                            
+                        # Load the metadata (chunks)
+                        with open(processed_index.metadata, 'rb') as f:
+                            chunks = pickle.load(f)
+                        
+                        # Convert query to lowercase for case-insensitive search
+                        query_lower = query.lower()
+                        matches = []
+                        
+                        # Search in each chunk
+                        for chunk in chunks:
+                            chunk_text = chunk.get('text', '')
+                            if chunk_text and query_lower in chunk_text.lower():
+                                # Found a match, add the context
+                                matches.append(chunk_text)
+                        
+                        # If we found matches, add to results
+                        if matches:
+                            # Use the first match for preview, but count all matches
+                            search_results.append({
+                                'id': doc.id,
+                                'filename': doc.filename,
+                                'match_count': len(matches),
+                                'match_context': matches[0] if matches else "",
+                                'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
+                            })
                                 
                 except ProcessedIndex.DoesNotExist:
                     # Skip documents that haven't been processed
@@ -3824,5 +4379,3 @@ class DocumentContentSearchView(APIView):
             return Response({
                 'error': f'An error occurred: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
