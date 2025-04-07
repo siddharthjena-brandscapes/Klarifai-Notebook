@@ -333,7 +333,9 @@ export const chatService = {
       selected_documents: data.selected_documents,
       main_project_id: data.main_project_id || data.mainProjectId, // Support both naming conventions
       use_web_knowledge: data.use_web_knowledge || false,
-      general_chat_mode: useGeneralChat // Automatically set based on document selection
+      general_chat_mode: useGeneralChat, // Automatically set based on document selection
+      response_length: data.response_length || 'short', // For response length parameter
+      response_format: data.response_format || 'auto_detect' // Add response format parameter
     })
     .then(response => {
       console.log("Chat service response:", response.data);
