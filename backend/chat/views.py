@@ -1270,13 +1270,16 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 chunks = self.split_text_into_chunks(doc['text'])
                 for i, chunk in enumerate(chunks):
                     all_chunks.append({
-                        'text': chunk,
+                        'text': chunk,  # Consistent key name 'text' for all chunks
                         'source': doc['name'],
+                        'source_file': doc['name'],  # Add source_file for consistency with LlamaParse
                         'chunk_id': i
                     })
                 
                 # Get embeddings for all chunks
-                embeddings = self.get_embeddings([chunk['text'] for chunk in all_chunks])
+                text_chunks = [chunk['text'] for chunk in all_chunks]
+                print(f"Getting embeddings for {len(text_chunks)} text chunks")
+                embeddings = self.get_embeddings(text_chunks)
                 
                 if not embeddings:
                     raise ValueError("Failed to generate embeddings for document chunks")
@@ -1289,6 +1292,8 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 
                 # Save the index and chunks
                 index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
+                
+                print(f"Document processed successfully: {len(all_chunks)} chunks created")
                 
                 return {
                     'index_path': index_file,
@@ -1304,7 +1309,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error in process_document: {str(e)}")
             raise
-        
 
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
     def post(self, request):
@@ -1630,6 +1634,15 @@ class ChatView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
+            # Log the inputs for debugging
+            print(f"Chat request received")
+            print(f"Message: {message}")
+            print(f"General chat mode: {general_chat_mode}")
+            print(f"Use web knowledge: {use_web_knowledge}")
+            print(f"Selected documents: {selected_documents}")
+            print(f"Response format: {response_format}")
+            print(f"Response length: {response_length}")
+
             # Process document search early to get context for format detection
             all_chunks = []
             content_sources = []
@@ -1646,7 +1659,17 @@ class ChatView(APIView):
                             {'error': 'No valid documents found'},
                             status=status.HTTP_404_NOT_FOUND
                         )
+                        
+                    # Log the processed docs for debugging
+                    print(f"Found {processed_docs.count()} processed documents")
+                    for doc in processed_docs:
+                        print(f"Document: {doc.document.filename}")
+                        print(f"FAISS index path: {doc.faiss_index}")
+                        print(f"Metadata path: {doc.metadata}")
+                        print(f"Markdown path: {doc.markdown_path}")
+                        
                 except Exception as e:
+                    print(f"Error fetching documents: {str(e)}")
                     return Response(
                         {'error': f'Document retrieval error: {str(e)}'},
                         status=status.HTTP_400_BAD_REQUEST
@@ -1658,38 +1681,75 @@ class ChatView(APIView):
                 # Load FAISS indices and chunks for all selected documents
                 for proc_doc in processed_docs:
                     if not proc_doc.faiss_index or not proc_doc.metadata:
+                        print(f"Missing index or metadata for {proc_doc.document.filename}")
                         continue
                     
                     if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
+                        print(f"Index or metadata file does not exist for {proc_doc.document.filename}")
                         continue
                     
-                    # Load metadata
+                    # Check if this is a LlamaParse document with direct markdown access
+                    if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+                        print(f"Found LlamaParse markdown for {proc_doc.document.filename}")
+                        # Add dummy entry that will be handled by search_similar_content
+                        all_metadata_store.append({
+                            'is_llamaparse': True,
+                            'source_file': proc_doc.document.filename,
+                            'document_id': proc_doc.document.id
+                        })
+                    
+                    # Load metadata - this is needed for both LlamaParse and simple documents
                     try:
                         with open(proc_doc.metadata, 'rb') as f:
                             chunks = pickle.load(f)
                         
+                        # Validate the chunks format
+                        if not isinstance(chunks, list):
+                            print(f"Warning: chunks is not a list for {proc_doc.document.filename}, type: {type(chunks)}")
+                            if chunks:  # If it's a non-empty object, try to adapt it
+                                chunks = [chunks]
+                            else:
+                                chunks = []
+                        
                         # Add document source information to each chunk
                         for chunk in chunks:
-                            if isinstance(chunk, dict) and 'source_file' not in chunk:
-                                chunk['source_file'] = proc_doc.document.filename
-                            
+                            if isinstance(chunk, dict):
+                                if 'source_file' not in chunk:
+                                    chunk['source_file'] = proc_doc.document.filename
+                                
+                                # Ensure 'text' key exists
+                                if 'text' not in chunk:
+                                    for key in ['content', 'document_content', 'chunk_text']:
+                                        if key in chunk:
+                                            chunk['text'] = chunk[key]
+                                            break
+                                            
                         # Add to all metadata store
+                        print(f"Adding {len(chunks)} chunks from {proc_doc.document.filename}")
                         all_metadata_store.extend(chunks)
                         
                     except Exception as e:
-                        logger.error(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
+                        print(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
                         continue
                 
-                # Now search using the improved Streamlit approach
+                # Now search using the improved approach
                 if all_metadata_store:
+                    print(f"Searching in {len(all_metadata_store)} chunks across all documents")
                     # Get relevant content based on query
                     similar_contents, content_sources = self.search_similar_content(
                         message, 
                         processed_docs,
                         all_metadata_store
                     )
-                    all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
+                    
+                    if similar_contents:
+                        print(f"Found {len(similar_contents)} relevant content chunks")
+                        all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
+                    else:
+                        print("No relevant content found in documents")
+                        all_chunks = []
                 else:
+                    print("No metadata found for any document")
                     all_chunks = []
             
             # Check if we should auto-detect the response format
@@ -1712,11 +1772,13 @@ class ChatView(APIView):
             if use_web_knowledge:
                 # Implement web search here instead of pass
                 web_knowledge_response, web_sources = self.get_web_knowledge_response(message)
+                print(f"Web knowledge response received, source count: {len(web_sources)}")
             
             # Get answer based on mode
             if general_chat_mode:
                 # Process request in general chat mode (no documents needed)
                 answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format)
+                print("Generated response using general chat mode")
             else:
                 # Process with documents
                 if all_chunks:
@@ -1725,6 +1787,8 @@ class ChatView(APIView):
                         document_answer = self.generate_short_response(message, similar_contents, content_sources, False, response_format)
                     else:  # Default to comprehensive
                         document_answer = self.generate_response(message, similar_contents, content_sources, False, response_format)
+                    
+                    print(f"Generated document-based answer using {response_length} response length")
                     
                     # If web knowledge is also requested, combine the responses
                     if use_web_knowledge and web_knowledge_response:
@@ -1737,6 +1801,7 @@ class ChatView(APIView):
                             web_sources,
                             response_format
                         )
+                        print("Combined document and web responses")
                     else:
                         # Just use document answer
                         answer = document_answer
@@ -1744,7 +1809,9 @@ class ChatView(APIView):
                     if use_web_knowledge and web_knowledge_response:
                         # Only web knowledge available
                         answer = web_knowledge_response
+                        print("Using web knowledge response as document search returned no results")
                     else:
+                        print("No document content found and web knowledge not enabled")
                         answer = "I couldn't find any relevant information in the documents."
             
             # Extract main response and citation info (if any)
@@ -1862,9 +1929,8 @@ class ChatView(APIView):
             print(f"Format: {response_format}")
             print(f"Length: {response_length}")
             print(f"Assistant Response: {clean_response[:500]}...")  # First 500 chars
-            print("Follow-up Questions:")
-            for i, q in enumerate(follow_up_questions, 1):
-                print(f"{i}. {q}")
+            print(f"Citation count: {len(citations)}")
+            print(f"Follow-up Questions: {len(follow_up_questions)}")
             print("-----------------------------\n")
 
             return Response(response_data, status=status.HTTP_200_OK)
@@ -2821,7 +2887,7 @@ class ChatView(APIView):
     # Improved search_similar_content with TF-IDF ranking from Streamlit
     def search_similar_content(self, query, processed_docs, metadata_store, k=40):
         """
-        Enhanced search function using TF-IDF ranking like in the more effective Streamlit app approach
+        Enhanced search function that handles both LlamaParse and local document parsing
         """
         # Get embeddings for the query
         query_embedding = self.get_embeddings([query])
@@ -2833,86 +2899,172 @@ class ChatView(APIView):
         all_distances = []
         all_sources = []
         
+        # Check if we have any valid documents to search
+        valid_docs_found = False
+        
         for proc_doc in processed_docs:
-            if not proc_doc.faiss_index or not os.path.exists(proc_doc.faiss_index):
+            # Skip documents without FAISS indices
+            if not proc_doc.faiss_index or not proc_doc.metadata:
                 continue
-                
-            # Load the FAISS index
+            
+            # Skip if files don't exist
+            if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
+                continue
+            
+            # First check if this is a LlamaParse document with markdown
+            markdown_content = None
+            if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+                try:
+                    with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+                        markdown_content = f.read()
+                    # If we have markdown content, we'll use it later in our results
+                    valid_docs_found = True
+                except Exception as e:
+                    logger.error(f"Error reading markdown file for {proc_doc.document.filename}: {str(e)}")
+            
+            # Load metadata for both document types
             try:
-                index = faiss.read_index(proc_doc.faiss_index)
-                # Search this index with increased k for better diversity
-                distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
+                with open(proc_doc.metadata, 'rb') as f:
+                    chunks = pickle.load(f)
                 
-                # Extract results for this document
-                doc_metadata = [md for md in metadata_store if md.get('source_file') == proc_doc.document.filename]
+                # Make sure chunks is a list - sometimes it might be empty or None
+                if not chunks:
+                    logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
+                    chunks = []
+                elif not isinstance(chunks, list):
+                    logger.warning(f"Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
+                    chunks = []
                 
-                for i, idx in enumerate(indices[0]):
-                    if idx < len(doc_metadata):
-                        content = doc_metadata[idx].get('content', '')
-                        # Only add non-empty content
-                        if content.strip():
-                            all_results.append(content)
-                            all_distances.append(distances[0][i])
-                            all_sources.append(proc_doc.document.filename)
+                # Add document source information to each chunk if missing
+                for chunk in chunks:
+                    if isinstance(chunk, dict) and 'source_file' not in chunk:
+                        chunk['source_file'] = proc_doc.document.filename
+                    # Ensure 'text' field exists in chunk
+                    if isinstance(chunk, dict) and not chunk.get('text'):
+                        # Try alternate field names
+                        for field in ['content', 'document_content', 'chunk_text']:
+                            if field in chunk:
+                                chunk['text'] = chunk[field]
+                                break
+                
+                # Try vector search with FAISS index
+                valid_docs_found = True
+                try:
+                    index = faiss.read_index(proc_doc.faiss_index)
+                    # Search this index with increased k for better diversity
+                    distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
+                    
+                    # Extract results for this document
+                    for i, idx in enumerate(indices[0]):
+                        if idx < len(chunks):
+                            content = chunks[idx].get('text', '')
+                            # Only add non-empty content
+                            if content and content.strip():
+                                all_results.append(content)
+                                all_distances.append(distances[0][i])
+                                all_sources.append(proc_doc.document.filename)
+                except Exception as e:
+                    logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
+                    
+                    # Fallback to basic text search for simple documents if vector search fails
+                    if chunks:
+                        # Use TF-IDF for matching if FAISS fails
+                        query_lower = query.lower()
+                        matched_chunks = []
+                        
+                        for chunk in chunks:
+                            if isinstance(chunk, dict):
+                                chunk_text = chunk.get('text', '')
+                                if chunk_text and query_lower in chunk_text.lower():
+                                    matched_chunks.append(chunk)
+                        
+                        # Sort by simple text similarity
+                        if matched_chunks:
+                            logger.info(f"Found {len(matched_chunks)} text matches for {proc_doc.document.filename}")
+                            for chunk in matched_chunks[:5]:  # Limit to top 5 matches
+                                all_results.append(chunk.get('text', ''))
+                                all_distances.append(0.5)  # Middle value since we don't have real distances
+                                all_sources.append(proc_doc.document.filename)
+                
+                # If we have markdown content but no vector results, do fallback text search on whole content
+                if markdown_content and not all_results:
+                    query_lower = query.lower()
+                    if query_lower in markdown_content.lower():
+                        # Split into paragraphs and find matching ones
+                        paragraphs = markdown_content.split('\n\n')
+                        for para in paragraphs:
+                            if query_lower in para.lower():
+                                all_results.append(para)
+                                all_distances.append(0.5)  # Middle value since we don't have real distances
+                                all_sources.append(proc_doc.document.filename)
+                    
             except Exception as e:
-                logger.error(f"Error searching index for {proc_doc.document.filename}: {str(e)}")
+                logger.error(f"Error processing metadata for {proc_doc.document.filename}: {str(e)}")
                 continue
         
         # Combine and sort results by similarity score
         if not all_results:
+            if valid_docs_found:
+                logger.warning(f"No matching content found in documents for query: {query}")
+            else:
+                logger.warning(f"No valid documents found to search")
             return [], []
             
         # Apply TF-IDF ranking using the Streamlit approach
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             
-            # Create a TF-IDF vectorizer with increased max_features as in Streamlit
+            # Create a TF-IDF vectorizer with increased max_features
             vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-            tfidf_matrix = vectorizer.fit_transform([query] + all_results)
-            
-            # Calculate similarity scores
-            tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
-            
-            # Convert embedding distances to similarity scores (same as Streamlit)
-            similarity_scores = [1 / (1 + dist) for dist in all_distances]
-            
-            # Combine scores with same weighting as Streamlit (70% TF-IDF, 30% embedding)
-            combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
-            
-            # Re-sort results by combined score (note: reverse=True as in Streamlit for descending order)
-            combined_results = list(zip(all_results, all_sources, combined_scores))
-            sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
-            
-            # Extract sorted content and sources
-            results = [res[0] for res in sorted_results]
-            sources = [res[1] for res in sorted_results]
-            
-            # Remove duplicates while preserving order exactly as in Streamlit
-            seen_content = set()
-            filtered_results = []
-            filtered_sources = []
-            
-            for content, source in zip(results, sources):
-                # Use first 100 chars as a content signature (identical to Streamlit)
-                content_hash = content[:100] if content else ""
-                if content_hash and content_hash not in seen_content:
-                    seen_content.add(content_hash)
-                    filtered_results.append(content)
-                    filtered_sources.append(source)
-            
-            # Return top matches (limit to 15 most relevant)
-            return filtered_results[:min(len(filtered_results), 15)], filtered_sources[:min(len(filtered_sources), 15)]
+            try:
+                tfidf_matrix = vectorizer.fit_transform([query] + all_results)
                 
+                # Calculate similarity scores
+                tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
+                
+                # Convert embedding distances to similarity scores
+                similarity_scores = [1 / (1 + dist) for dist in all_distances]
+                
+                # Combine scores with same weighting (70% TF-IDF, 30% embedding)
+                combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
+                
+                # Re-sort results by combined score
+                combined_results = list(zip(all_results, all_sources, combined_scores))
+                sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
+                
+                # Extract sorted content and sources
+                results = [res[0] for res in sorted_results]
+                sources = [res[1] for res in sorted_results]
+            except Exception as e:
+                logger.error(f"Error in TF-IDF processing: {str(e)}")
+                # Fallback to original results if TF-IDF fails
+                results = all_results
+                sources = all_sources
         except Exception as e:
             logger.error(f"Error applying TF-IDF ranking: {str(e)}")
-            # Fall back to basic distance-based ranking as a last resort
+            # Fall back to basic distance-based ranking
             combined_results = list(zip(all_results, all_sources, all_distances))
             # Note: In the fallback, we sort by distance (smaller is better) so no reverse=True
             sorted_results = sorted(combined_results, key=lambda x: x[2])
             
-            results = [res[0] for res in sorted_results[:15]]
-            sources = [res[1] for res in sorted_results[:15]]
-            return results, sources
+            results = [res[0] for res in sorted_results]
+            sources = [res[1] for res in sorted_results]
+        
+        # Remove duplicates while preserving order
+        seen_content = set()
+        filtered_results = []
+        filtered_sources = []
+        
+        for content, source in zip(results, sources):
+            # Use first 100 chars as a content signature
+            content_hash = content[:100] if content else ""
+            if content_hash and content_hash not in seen_content:
+                seen_content.add(content_hash)
+                filtered_results.append(content)
+                filtered_sources.append(source)
+        
+        # Return top matches (limit to 15 most relevant)
+        return filtered_results[:min(len(filtered_results), 15)], filtered_sources[:min(len(filtered_sources), 15)]
     
     # Helper method to prepare context for response generation
     def _prepare_context(self, context, sources):

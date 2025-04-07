@@ -120,6 +120,9 @@ const MainContent = ({
     // If no documents are selected, force web knowledge mode on
     if (localSelectedDocuments.length === 0) {
       setUseWebKnowledge(true);
+    } else {
+      // When documents are selected, default to context-only mode (web knowledge off)
+      setUseWebKnowledge(false);
     }
   }, [localSelectedDocuments]);
 
@@ -1028,23 +1031,26 @@ const MainContent = ({
       { role: "user", content: message },
     ];
     setConversation(newConversation);
-    setMessage(""); // <== CLEAR INPUT FIELD HERE
+    setMessage("");
     setIsLoading(true);
 
     try {
+      // Force useWebKnowledge to true if no documents are selected
+      // Otherwise use the user's preference (will default to false when docs are selected)
       const useWebMode =
         localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+
       // Prepare request data
       const messageData = {
         message,
         conversation_id: conversationId,
         selected_documents: localSelectedDocuments,
-        mainProjectId: mainProjectId,
-        messages: newConversation, // Include the full conversation history
-        use_web_knowledge: useWebMode, // Include the mode flag
+        main_project_id: mainProjectId,
+        messages: newConversation,
+        use_web_knowledge: useWebMode, // Use the local variable instead of state directly
         response_length: responseLength,
-        response_format: responseFormat, // Include response format setting
-        general_chat_mode: localSelectedDocuments.length === 0,
+        response_format: responseFormat,
+        general_chat_mode: localSelectedDocuments.length === 0, // Add this flag for backend to know it's general chat
       };
 
       console.log("Sending message with data:", messageData);
@@ -1057,10 +1063,9 @@ const MainContent = ({
           content: response.data.response || response.data.content,
           citations: response.data.citations || [],
           follow_up_questions: response.data.follow_up_questions || [],
-          use_web_knowledge: response.data.use_web_knowledge || false, // Store the mode used for this message
-          response_length: response.data.response_length || responseLength, // Store the response length
-          response_format: response.data.response_format || responseFormat, // Store the response format
-          general_chat_mode: localSelectedDocuments.length === 0,
+          use_web_knowledge: response.data.use_web_knowledge || useWebMode,
+          response_length: response.data.response_length || responseLength,
+          response_format: response.data.response_format || responseFormat,
         };
 
         // Update conversation with the new assistant message
@@ -1087,7 +1092,6 @@ const MainContent = ({
       setIsLoading(false);
     }
   };
-
   const toggleFollowUpQuestions = () => {
     setIsFollowUpQuestionsMinimized((prev) => !prev);
   };
@@ -1923,12 +1927,12 @@ const MainContent = ({
                           // When no documents are selected, show a disabled/locked web mode button
                           <button
                             title="Web mode active (no documents selected)"
-                            className="flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-purple-600/70 to-blue-500/70 text-white text-xs cursor-default"
+                            className="flex items-center justify-center gap-1 px-2 py-1 rounded-lg appearance-none bg-gray-900/80 text-gray-300 hover:bg-gray-800/90 border border-blue-500/20 text-xs cursor-default"
                             disabled
                           >
-                            <Globe className="h-3 w-3" />
+                            <Globe className="h-3 w-3 text-blue-400" />
                             <span className="hidden sm:inline text-xs">
-                              Web-only
+                              Web
                             </span>
                           </button>
                         )}

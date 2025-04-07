@@ -602,7 +602,7 @@ const DocumentProcessingLoader = ({
         {/* Overall status text */}
         <div className="flex justify-between text-sm mb-6">
           <span className="text-gray-300">{getCompletionStatus()}</span>
-          <span className="text-gray-300 font-bold">{Math.round(safeProgress)}%</span>
+          {/* <span className="text-gray-300 font-bold">{Math.round(safeProgress)}%</span> */}
         </div>
 
         {/* Status message */}

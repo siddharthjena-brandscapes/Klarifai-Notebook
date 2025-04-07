@@ -34,6 +34,7 @@ This report provides brand metrics on Visa and its competitors: consumer percept
 ### Brands Included
 
 #### Blue Brands
+
 - VISA
 - Mastercard
 - CBE Birr
@@ -45,9 +46,11 @@ This report provides brand metrics on Visa and its competitors: consumer percept
 All questions administered
 
 #### Yellow Brands
+
 - ebirr
-- Yb hz
-- Amole
+- Yb
+- hz
+- AMOLE
 - EthioPay
 
 Funnel metrics administered (BHS not measured)
@@ -90,12 +93,12 @@ Funnel metrics administered (BHS not measured)
 ### Performance against previous wave
 - In 2024, Visa seeks to maintain or improve its brand health scores achieved in year 2023
 - In 2024, we have updated the brand list and hence we could observe some deviation from the past data.
-- Performance of each parameter against previous wave is measured using a statistical comparative analysis of scores. The current wave scores are statistically tested against the 2023 scores to identify whether two measures are statistically different – higher or lower – at the 90% confidence level.
+- Performance of each parameter against previous wave is measured using a statistical comparative analysis of scores. The current wave scores are statistically tested against the 2023 scores to identify whether two measures are statistically different– higher or lower – at the 90% confidence level.
 
 <div style="text-align: right;">©2021 Visa. All rights reserved. Visa Confidential  3</div>
 # Key Highlights
 
-[This slide appears to be a title slide for a section on "Key Highlights" in a presentation. The content is minimal, with just the section title displayed prominently on a blue background.]
+[The rest of the slide appears to be intentionally left blank, likely to be filled with content in a presentation.]
 
 ©2021 Visa. All rights reserved. Visa Confidential    4
 Visa demonstrates strength across key metrics, yet it faces formidable competition from Telebirr, which holds an advantage over Visa in terms of share of wallet.
@@ -199,56 +202,11 @@ Brand Health Score (BHS) is a composite value derived from performance across fo
 Visa's BHS declined across both age cohorts, whereas Mastercard saw significant gains among Trailing Millennials and International Travelers.
 Telebirr is Visa's strongest competitor across segments, except for International Travelers, where CBE Birr leads.
 
-## Gen Z (18-26)
-
-| Brand | FY22 | FY23 | FY24 |
-| - | - | - | - |
-| Visa | NA | 90 | 80 🔻 |
-| Mastercard | NA | 11 | 11 |
-| CBE Birr | NA | NA | 57 |
-| M pesa | NA | NA | 23 |
-| Awash Bank | NA | NA | 19 |
-| Apollo | NA | NA | 17 |
-| Telebirr | NA | NA | 70 |
-
-
-## Trailing Millennials (18-35)
-
-| Brand | FY'22 | FY'23 | FY24 |
-| - | - | - | - |
-| Visa | 95 | 90 | 78 🔻 |
-| Mastercard | 7 | 10 | 18 🔼 |
-| CBE Birr | NA | NA | 59 |
-| M pesa | NA | NA | 24 |
-| Awash Bank | NA | NA | 23 |
-| Apollo | NA | NA | 18 |
-| Telebirr | NA | NA | 69 |
-
-
-## International Traveler
-
-| Brand | FY'22 | FY'23 | FY24 |
-| - | - | - | - |
-| Visa | 94 | 79 🔻 | 79 |
-| Mastercard | 15 | 22 | 30 🔼 |
-| CBE Birr | NA | NA | 60 |
-| M pesa | NA | NA | 11 |
-| Awash Bank | NA | NA | 19 |
-| Apollo | NA | NA | 20 |
-| Telebirr | NA | NA | 74 |
-
-
-## eComm Shoppers
-
-| Brand | FY'22 | FY'23 | FY24 |
-| - | - | - | - |
-| Visa | 95 | 77 🔻 | 79 |
-| Mastercard | 10 | 20 🔼 | 20 |
-| CBE Birr | NA | NA | 56 |
-| M pesa | NA | NA | 31 |
-| Awash Bank | NA | NA | 26 |
-| Apollo | NA | NA | 20 |
-| Telebirr | NA | NA | 73 |
+| Gen Z (18-26) | Trailing Millennials (18-35) |
+| - | - |
+| \`\`\`mermaid graph LR FY22\["FY22"] --> FY23\["FY23 (11)"] FY23 --> FY24\["FY24 (80)"] style FY24 fill:#f9f,stroke:#333,stroke-width:2px \`\`\` NA - Visa: 80 - Mastercard: 11 - CBE Birr: 57 - M pesa: 23 - Awash Bank: 19 - Apollo: 17 - Telebirr: 90 (FY23) → 80 (FY24) | \`\`\`mermaid graph LR FY22\["FY'22 (7)"] --> FY23\["FY'23 (10)"] FY23 --> FY24\["FY24 (18)"] style FY24 fill:#f9f,stroke:#333,stroke-width:2px \`\`\` - Visa: 95 (FY'22) → 90 (FY'23) → 78 (FY24) - Mastercard: 7 → 10 → 18 - CBE Birr: 59 - M pesa: 24 - Awash Bank: 23 - Apollo: 18 - Telebirr: 69 |
+| International Traveler | eComm Shoppers |
+| \`\`\`mermaid graph LR FY22\["FY'22 (15)"] --> FY23\["FY'23 (22)"] FY23 --> FY24\["FY24 (30)"] style FY24 fill:#f9f,stroke:#333,stroke-width:2px \`\`\` - Visa: 94 → 79 → 79 - Mastercard: 15 → 22 → 30 - CBE Birr: 60 - M pesa: 11 - Awash Bank: 19 - Apollo: 20 - Telebirr: 74 | \`\`\`mermaid graph LR FY22\["FY'22 (10)"] --> FY23\["FY'23 (20)"] FY23 --> FY24\["FY24 (20)"] style FY24 fill:#f9f,stroke:#333,stroke-width:2px \`\`\` - Visa: 95 → 77 → 79 - Mastercard: 10 → 20 → 20 - CBE Birr: 56 - M pesa: 31 - Awash Bank: 26 - Apollo: 20 - Telebirr: 73 |
 
 
 Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1); BHS and component scores are statistically tested over previous quarter highlighting Positive / Negative trends at 90%.
@@ -273,6 +231,8 @@ Brand Health Score (BHS) is a composite value derived from performance across fo
 
 Base: All Respondents
 Gen Z: Random + Boosters
+
+©2021 Visa. All rights reserved. Visa Confidential
 # Deep Dive into VISA's BHS components
 ## Visa's Brand Health Components Trends – By Age Group
 
@@ -305,28 +265,18 @@ Prominence, affinity & reputation improved significantly among both.
 
 | International Traveler | | | |
 | - | - | - | - |
-| ```
-                94                      79                      79
-   94     88      97      99   83   69     83      86   98   0     96      96
-            FY22                 FY23                 FY24
-``` | | | |
+| !International Traveler Chart | | | |
+| FY22 | FY23 | FY24 | Legend |
+| 94 88 97 99 | 83 69 83 86 | 98 0 96 96 | |
+| | | | Prominence (T2B) Brand Preferred (Solo) Affinity (T2B) Reputation (T2B) • Brand Health |
 
 
-| eComm Shoppers | | | |
-| - | - | - | - |
-| ```
-                95                      77                      79
-   97     92      97      94   77   67     81      83   97   1     98      97
-            FY22                 FY23                 FY24
-``` | | | |
+| eComm Shoppers | | |
+| - | - | - |
+| !eComm Shoppers Chart | | |
+| FY22 | FY23 | FY24 |
+| 97 92 97 94 | 77 67 81 83 | 97 1 98 97 |
 
-
-Legend:
-- Prominence (T2B)
-- Brand Preferred (Solo)
-- Affinity (T2B)
-- Reputation (T2B)
-- Brand Health (black line)
 
 Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1); BHS and component scores are statistically tested over previous quarter highlighting Positive ↑ / Negative ↓ trends at 90%.
 
@@ -343,20 +293,16 @@ Telebirr is the closest competitor followed by CBE Birr.
 | - | - | - | - | - | - |
 | Awareness (Total) | 100 | 35 | 93 | 58 | 46 |
 | Ownership | 100 | 5 | 66 | 11 | 12 |
-| Usage (p1m) | 80 | 2 | 50 | 6 | 8 |
-| | 81% | 40% | 76% | 59% | 71% |
-| SOW | 22 | 1 | 15 | 1 | 2 |
-| | 27% | 32% | 30% | 22% | 21% |
+| Usage (p1m) | 80 → 81% | 2 → 40% | 50 → 76% | 6 → 59% | 8 → 71% |
+| SOW | 22 → 27% | 1 → 32% | 15 → 30% | 1 → 22% | 2 → 21% |
 
 
 | | | | | | |
 | - | - | - | - | - | - |
 | Awareness (Total) | 47 | 93 | 26 | 28 | 32 |
 | Ownership | 17 | 81 | 6 | 7 | 12 |
-| Usage (p1m) | 13 | 74 | 2 | 3 | 7 |
-| | 80% | 91% | 30% | 37% | 59% |
-| SOW | 3 | 23 | 0 | 0 | 1 |
-| | 25% | 32% | 17% | 10% | 21% |
+| Usage (p1m) | 13 → 80% | 74 → 91% | 2 → 30% | 3 → 37% | 7 → 59% |
+| SOW | 3 → 25% | 23 → 32% | 0 → 17% | 0 → 10% | 1 → 21% |
 
 
 Colors of bars indicate competitive standing in the market: Lead, Above Average, Average or Below Average
@@ -384,18 +330,17 @@ Visa excels in 'brand pride and connect,' and 'reliability,' but is relatively w
 
 Base: Brand Aware
 
+Values indicate observed associations minus expected associations. The relative strength threshold is basis the standard deviation.
+
 Relative Strength of the Brand (>7)
 Relative Weakness of the Brand (<-7)
-
-Values indicate observed associations minus expected associations
-The relative strength threshold is basis the standard deviation.
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Key Imagery Performance (Absolutes) – Overall and Gen Z
 
 Telebirr leads in key attributes, with Visa following.
 
-| | Overall\<br/>VISA | Overall\<br/>Gen Z\<br/>Mastercard | Overall\<br/>Gen Z\<br/>Telebirr | Gen Z\<br/>VISA | Mastercard | Telebirr |
+| VISA | Overall\<br/> | Overall\<br/>Gen Z\<br/> | Overall\<br/>Gen Z\<br/>VISA | Gen Z\<br/> | | |
 | - | - | - | - | - | - | - |
 | Base | 416 | 148 | 387 | 199 | 61 | 185 |
 | I'm proud to be seen using this brand | 69 | 7 | 76 | 70 | 3 | 83 |
@@ -488,7 +433,7 @@ Base: Brand owned
 
 Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
 
-©2021 Visa. All rights reserved. Visa Confidential 19
+©2021 Visa. All rights reserved. Visa Confidential
 # Premium Cards – Visa vs. MasterCard
 
 Strong gains witnessed in awareness and ownership of Visa premium cards, while Mastercard achieved significant gains in awareness.
@@ -556,8 +501,6 @@ Base: All Respondents
 Gen Z: Random + Boosters
 
 Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
-
-©2021 Visa. All rights reserved. Visa Confidential
 # Specific Insights - Ethiopia
 
 ©2023 Visa. All rights reserved. Visa Confidential 22
@@ -639,8 +582,6 @@ Taxi and food delivery apps dominate the market, with Visa being the strongest p
 Base: All Respondents | Base: Cards owned
 
 Scores are statistically tested over Visa highlighting Positive / Negative trends at 90%.
-
-©2021 Visa. All rights reserved. Visa Confidential
 # Brand Visibility at Point of Sale
 
 Wallets led in-store presence; Visa competes for online transactions.
@@ -657,8 +598,6 @@ Wallets led in-store presence; Visa competes for online transactions.
 
 
 Base: All Respondents
-
-<div style="text-align: right; font-size: 0.8em;">©2021 Visa. All rights reserved. Visa Confidential 25</div>
 # Digital Wallets
 
 Visa's leadership in overall card ownership reflects strongly over cards being loaded onto wallet brands.
@@ -676,7 +615,7 @@ Visa's leadership in overall card ownership reflects strongly over cards being l
 
 *The figures above represents those who said that they have loaded Visa/ Mastercard in the wallet brand owned.*
 
-Base: Wallet/ card owned
+**Base: Wallet/ card owned*
 
 ## Likelihood of uploading the current Visa card (T2B Score)
 
@@ -700,8 +639,6 @@ Base: Wallet/ card owned
 
 Interest across events declined, including the most recent one, AFCON.
 Both Visa and Mastercard have significantly declined in being associated across events.
-
-## Interested... vs Brand Association with...
 
 | Events | Last Event date | Interested (% of consumers) | | | | | | | |
 | - | - | - | - | - | - | - | - | - | - |
@@ -729,10 +666,8 @@ you
 ©2023 Visa. All rights reserved. Visa Confidential 29
 # Funnel Measures
 
-| | | |
-| :-: | - | - |
-| !EthioPay logo | | |
-| Measure | Value | Percentage |
+| EthioPay | | |
+| - | - | - |
 | Awareness (Total) | 3 | |
 | Ownership | 0 | |
 | Usage (p1m) | 0 | 0% |
@@ -769,16 +704,16 @@ Mastercard overshadows Visa on 'international purchases' and 'uniqueness'.
 
 | | VISA | Mastercard | Birr | M-PESA | AwashBank | APOLLO | CBE Birr |
 | - | - | - | - | - | - | - | - |
-| Security | | | | | | | |
+| **Security** | | | | | | | |
 | Personal data | 9 | -3 | 4 | 1 | 0 | -6 | -5 |
 | Data | 10 | -5 | 2 | 0 | 1 | -4 | -4 |
 | Secure | 3 | -3 | -1 | 0 | -1 | 0 | 2 |
 | Protection | 4 | -4 | 5 | 0 | 2 | -7 | 0 |
 | Alert | 2 | -6 | 8 | 0 | 1 | -7 | 2 |
-| Convenience | | | | | | | |
 | I travel | 20 | 48 | -14 | -3 | -6 | -16 | -29 |
 | Experience | 11 | 9 | -3 | -1 | 0 | -9 | -7 |
 | Acceptance | 2 | 9 | -1 | 0 | -1 | -7 | -2 |
+| **Convenience** | | | | | | | |
 | Online | -8 | 3 | -1 | 0 | 2 | 1 | 3 |
 | Receive | -3 | -3 | 5 | -1 | 1 | -3 | 4 |
 | Retailer | -9 | -7 | 9 | 0 | -1 | 2 | 5 |
@@ -788,21 +723,25 @@ Mastercard overshadows Visa on 'international purchases' and 'uniqueness'.
 | Wallet | -12 | -5 | 3 | 2 | 2 | 1 | 9 |
 | Everyday payments | -13 | -7 | 11 | -4 | -2 | 2 | 12 |
 | No cost | 1 | -2 | 6 | -1 | 0 | 0 | -4 |
-| Lifestyle | | | | | | | |
+
+
+| | VISA | Mastercard | Birr | M-PESA | AwashBank | APOLLO | CBE Birr |
+| - | - | - | - | - | - | - | - |
+| **Lifestyle** | | | | | | | |
 | Family | -2 | -4 | -2 | 17 | 5 | 5 | -19 |
 | Proud | 12 | -4 | -3 | -2 | 1 | -5 | 2 |
 | Like | 5 | -1 | 3 | 1 | -2 | -3 | -3 |
 | Connected | 9 | -1 | -7 | 0 | -1 | -5 | 4 |
 | Needs | 5 | -4 | -3 | 0 | -2 | -5 | 8 |
-| Well-being | 1 | -3 | 2 | -1 | 0 | 2 | -3 |
+| Well- being | 1 | -3 | 2 | -1 | 0 | 2 | -3 |
 | Progress | -1 | -2 | 0 | -1 | 1 | 4 | -1 |
 | Personalized | 0 | -2 | -1 | 0 | 1 | 3 | 0 |
-| Reliability | | | | | | | |
+| **Reliability** | | | | | | | |
 | Trust | 10 | 0 | -6 | 0 | 0 | -4 | 1 |
 | Brands | 8 | 20 | -14 | 2 | -1 | -4 | -12 |
 | Technology | 3 | 1 | -7 | 1 | -1 | -3 | 5 |
+| **Brand values** | | | | | | | |
 | Everyone | 1 | -6 | -1 | 1 | 0 | 2 | 3 |
-| Brand values | | | | | | | |
 | Action | 3 | 1 | -8 | 0 | -1 | -1 | 5 |
 | Values | -2 | -2 | -4 | 2 | 0 | 5 | 0 |
 | Uplifting | -3 | 6 | -5 | -1 | -1 | 8 | -4 |
@@ -819,6 +758,8 @@ Relative Weakness of the Brand (<-7)
 
 Values indicate observed associations minus expected associations
 The relative strength threshold is basis the standard deviation.
+
+©2021 Visa. All rights reserved. Visa Confidential
 # Brand Image Attributes – Total
 
 Telebirr outperforms all the brands on brand imagery attributes except on 'international purchases' and 'seamless payment experience' where Visa has an edge.
@@ -864,6 +805,8 @@ Telebirr outperforms all the brands on brand imagery attributes except on 'inter
 
 
 Base: Brand Aware
+
+©2021 Visa. All rights reserved. Visa Confidential
 # Brand Image Attributes – Total (Key Competition)
 
 Telebirr outperforms key competition on all brand imagery attributes except on 'international purchases' and 'seamless payment experience' where Visa has an edge.
@@ -922,14 +865,14 @@ Telebirr outperforms Visa across attributes except on 'international purchases'.
 | | Connected | 63 | 7 | 83 |
 | | Needs | 56 | 3 | 78 |
 | | Well-being | 56 | 3 | 74 |
-| | Progress | 56 | 0 | 79 |
+| Reliability | Progress | 56 | 0 | 79 |
 | | Personalized | 52 | 3 | 76 |
-| Reliability | Trust | 65 | 8 | 77 |
+| | Trust | 65 | 8 | 77 |
 | | Brands | 64 | 21 | 67 |
 | | Technology | 63 | 3 | 83 |
 | | Everyone | 56 | 5 | 80 |
-| | Action | 57 | 5 | 81 |
-| Brand values | Values | 48 | 3 | 71 |
+| Brand values | Action | 57 | 5 | 81 |
+| | Values | 48 | 3 | 71 |
 | | Uplifting | 45 | 3 | 69 |
 | | Empower | 45 | 0 | 79 |
 | | Community | 42 | 3 | 68 |
@@ -1116,41 +1059,38 @@ Ethiopia flag
 
 ```mermaid
 graph TD
-    A[Brand Health]
-    A --> B[Prominence]
+    A[Brand Health] --> B[Prominence]
     A --> C[Preference]
     A --> D[Affinity]
     A --> E[Reputation]
-    B --> F[20%]
-    C --> G[30%]
-    D --> H[25%]
-    E --> I[25%]
-    J[Rational] --> B
-    J --> C
-    K[Emotional] --> D
-    K --> E
-    L[Ownership/Usage + External market factors] --> J
-    L --> K
+    
+    B[Prominence<br>First to Mind<br>20%]
+    C[Preference<br>Preferred Brand<br>30%]
+    D[Affinity<br>Love/Hate<br>25%]
+    E[Reputation<br>Great Company<br>25%]
+    
+    B --> F[Rational]
+    C --> F
+    D --> G[Emotional]
+    E --> G
+    
+    F --> H[Ownership/Usage + External market factors]
+    G --> H
 ```
 
-| Metric | Description | Percentage | Category |
-|--------|-------------|------------|----------|
-| Prominence | First to Mind | 20% | Rational |
-| Preference | Preferred Brand | 30% | Rational |
-| Affinity | Love/Hate | 25% | Emotional |
-| Reputation | Great Company | 25% | Emotional |
+The Brand Health Score is composed of four main components:
 
-The Brand Health Score is composed of four main metrics, divided into two categories:
+1. **Prominence** (20%): First to Mind
+2. **Preference** (30%): Preferred Brand
+3. **Affinity** (25%): Love/Hate
+4. **Reputation** (25%): Great Company
 
-1. Rational:
-   - Prominence (First to Mind): 20%
-   - Preference (Preferred Brand): 30%
+These components are further categorized into:
 
-2. Emotional:
-   - Affinity (Love/Hate): 25%
-   - Reputation (Great Company): 25%
+- **Rational**: Prominence and Preference
+- **Emotional**: Affinity and Reputation
 
-These metrics are influenced by Ownership/Usage and External market factors.
+The overall Brand Health Score is influenced by Ownership/Usage and External market factors.
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Calculating Brand Health Score
@@ -1174,6 +1114,8 @@ VISA
 
 Each consumer asked to answer questions below
 
+<div style="text-align: center;">
+
 ## Brand Health Score
 
 - Brand Preference
@@ -1181,58 +1123,41 @@ Each consumer asked to answer questions below
 - Prominence
 - Reputation
 
-```mermaid
-graph TD
-    BHS[Brand Health Score] --> FM[Funnel Measures]
-    BHS --> BA[Brand Attributes]
-    BHS --> AE[Advertising Effectiveness]
-    BHS --> GM[Global & Market KPIs]
-    FM --> BP[Brand Performance]
-    BA --> BP
-    AE --> CP[Campaign Performance]
-    GM --> CP
-```
+</div>
 
-### Funnel Measures
-- Awareness
-- Ownership
-- Usage
-- Share of wallet
-
-### Brand Attributes
-- 20+ brand attributes
-  - Brand Image
-  - Brand Experience
-  - Brand Purpose
-  - Product Experience
-  - Product Benefits
-  - Payment Occasions
-
-### Advertising Effectiveness
-- All media formats
-- Recall
-- Brand Linkage
-- Ad Diagnostics
-- Custom Message Perf.
-- Monthly & Qrtly
-- Rptg: 14 audiences
-
-### Global & Market KPIs
-- Cross Border
+| Funnel Measures | Brand Attributes | Advertising Effectiveness | Global & Market KPIs |
+| - | - | - | - |
+| * Awareness
+* Ownership
+* Usage
+* Share of wallet | - 20+ brand attributes
+- Brand Image
+- Brand Experience
+- Brand Purpose
+- Product Experience
+- Product Benefits
+- Payment Occasions | * All media formats
+* Recall
+* Brand Linkage
+* Ad Diagnostics
+* Custom Message Perf.
+* Monthly & Qrtly
+* Rptg: 14 audiences | - Cross Border
 - eCommerce
 - Contactless
 - SMB
 - Cash Conversion
 - Market-specific KPIs
-- Quarterly Reporting
+- Quarterly Reporting |
 
-<div style="text-align: right; font-size: 0.8em;">©2021 Visa. All rights reserved. Visa Confidential</div>
+
+<div style="display: flex; justify-content: space-between;">
+  <div><strong>Brand Performance</strong></div>
+  <div><strong>Campaign Performance</strong></div>
+</div>
 # CEMEA Coverage & frequency
 
 | Brand Health Study | | |
 | - | - | - |
 | Global Managed & Funded | Regional Managed & Funded (FY21+) | |
 | **Continues/Quarterly** 1. UAE 2. KSA (FY22 & Prior was Annual) **Annual:** 1. Ukraine 2. South Africa 3. Nigeria 4. Saudi Arabia | 1. Belarus, 2. Kazakhstan 3. Serbia 4. Pakistan 5. Qatar, 6. Egypt, 7. Ethiopia, 8. Morocco, 9. Ivory Coast, 10. Kenya, 11. Cameroon, 12. DR Congo | |
-
-
-[A small circular flag icon of Ethiopia is displayed in the top right corner of the image]

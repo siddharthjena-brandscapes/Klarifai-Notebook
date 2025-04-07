@@ -210,11 +210,11 @@ const EnhancedDocumentUpload = ({ mainProjectId, onUploadSuccess, setDocuments }
             ></div>
           </div>
           
-          {/* Overall status text */}
+          {/* Overall status text
           <div className="flex justify-between text-sm mb-4">
             <span className="text-gray-400">{getCompletionStatus()}</span>
-            <span className="text-gray-400">{overallProgress}%</span>
-          </div>
+            {/* <span className="text-gray-400">{overallProgress}%</span> */}
+          </div> */}
 
           {/* Individual file progress */}
           <div className="space-y-3 mt-4 max-h-60 overflow-y-auto custom-scrollbar">
