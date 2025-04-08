@@ -1603,8 +1603,12 @@ const MainContent = ({
                           className="message-content"
                           dangerouslySetInnerHTML={{
                             __html: msg.content
+                              .replace(/```html/g, '')
+                              .replace(/```/g, '')
+                              .replace(/"""html/g, '')
+                              .replace(/"""/g, '')
                               .replace(/<p>/g, '<p class="mb-4">')
-                              .replace(/<b>/g, '<b class="block mb-2 mt-2">')
+                              .replace(/<b>/g, '<b class="font-bold">')
                               .replace(
                                 /<h3>/g,
                                 '<h3 class="text-lg font-semibold mt-4 mb-2">'
@@ -1640,6 +1644,7 @@ const MainContent = ({
                               .replace(/\n{3,}/g, "\n\n")
                               // Ensure one line break after headers
                               .replace(/<\/b>\s*\n+/g, "</b>\n"),
+                              
                           }}
                         />
                       )}
