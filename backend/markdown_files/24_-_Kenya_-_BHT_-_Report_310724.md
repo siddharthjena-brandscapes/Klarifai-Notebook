@@ -81,8 +81,6 @@ Funnel metrics administered (BHS not measured)
 
 [The rest of the slide appears to be blank, with no additional content provided.]
 
-VISA
-
 ©2021 Visa. All rights reserved. Visa Confidential  4
 Visa's places second on BHS with improved scores among key segments of Gen Z and eCommerce shoppers. Conversions to usage and SOW for Visa not as strong as wallet brands.
 
@@ -109,7 +107,6 @@ M-PESA leads on BHS across all BHS components; Visa comes second
 
 
 **Column Descriptions:**
-- Overall Brand Health Score
 - Prominence (T2B): When I think about ways to pay, this brand comes to my mind immediately.
 - Brand Preferred (Solo): Which payment brand do you prefer?
 - Affinity (T2B): How do you feel about each brand?
@@ -117,7 +114,7 @@ M-PESA leads on BHS across all BHS components; Visa comes second
 
 Base: All Respondents
 
-Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1); For the Total Base, brands are tested for significant difference to Visa- an a/b/c, etc.
+Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1); For the Total Base, brands are tested for significant difference to Visa - an a/b/c, etc.
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Brand Health Market Trends
@@ -263,7 +260,7 @@ Gains across components among Gen Z and in prominence and preference among Trail
 | Trailing Millennials (18-35) | Prominence (T2B): 58 | Prominence (T2B): 51 | Prominence (T2B): 62 ↑ |
 | | Brand Preferred (Solo): 0 | Brand Preferred (Solo): 1 | Brand Preferred (Solo): 4 ↑ |
 | | Affinity (T2B): 67 | Affinity (T2B): 66 | Affinity (T2B): 63 |
-| | Reputation (T2B): 76 | Reputation (T2B): 64 ↓ | Reputation (T2B): 66 |
+| | Reputation (T2B): 76 | Reputation (T2B): 64 | Reputation (T2B): 66 |
 | | Brand Health: 47 | Brand Health: 43 ↓ | Brand Health: 48 ↑ |
 
 
@@ -277,33 +274,28 @@ Gen Z: Random + Boosters
 eCommerce shoppers showed a significant gain, driven by increased solo preference.
 Visa's solo preference improved in both segments.
 
-| International Traveler | | | |
-| - | - | - | - |
-| FY22 | FY23 | FY24 | |
-| 68 0 74 77 | 70 1 76 78 | 61 5 62 63 | |
-| 51 | 53 | 49 ↓ | |
+| International Traveler | FY22 | FY22\<br/>FY23 | FY22\<br/>FY23\<br/>FY24 | FY22\<br/>FY23\<br/>FY24 | FY23\<br/>FY24 | FY24 | | | | | | |
+| - | - | - | - | - | - | - | - | - | - | - | - | - |
+| Prominence (T2B) | 68 | 51 | 74 | 77 | 70 | 53 | 76 | 78 | 61 🔻 | 49 🔻 | 62 🔻 | 63 |
+| Brand Preferred (Solo) | 0 | | | | 1 | | | | 5 🔼 | | | |
+| Affinity (T2B) | | | | | | | | | | | | |
+| Reputation (T2B) | | | | | | | | | | | | |
 
 
-| eComm Shoppers | | | |
-| - | - | - | - |
-| FY22 | FY23 | FY24 | |
-| 66 1 75 82 | 63 0 73 75 | 67 5 74 76 | |
-| 52 | 50 ↓ | 57 ↑ | |
+| eComm Shoppers | FY22 | FY22\<br/>FY23 | FY22\<br/>FY23\<br/>FY24 | FY22\<br/>FY23\<br/>FY24 | FY23\<br/>FY24 | FY24 | | | | | | |
+| - | - | - | - | - | - | - | - | - | - | - | - | - |
+| Prominence (T2B) | 66 | 52 | 75 | 82 | 63 | 50 | 73 | 75 | 67 | 57 🔼 | 74 | 76 |
+| Brand Preferred (Solo) | 1 | | | | 0 | | | | 5 🔼 | | | |
+| Affinity (T2B) | | | | | | | | | | | | |
+| Reputation (T2B) | | | | | | | | | | | | |
 
 
-Legend:
-- Blue bar: Prominence (T2B)
-- Light blue bar: Brand Preferred (Solo)
-- Orange bar: Affinity (T2B)
-- Yellow bar: Reputation (T2B)
-- Black line: Brand Health
-
-Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1); BHS and component scores are statistically tested over previous quarter highlighting Positive ↑ / Negative ↓ trends at 90%.
+Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1); BHS and component scores are statistically tested over previous quarter highlighting Positive 🔼 / Negative 🔻 trends at 90%.
 
 Base: All Respondents
 # Key Indicators, Imagery and Prominence
 
-[The content of this slide is simply the title of a section or presentation, displayed on a blue background. At the bottom right corner, there is a Visa logo and copyright information.]
+VISA
 
 ©2021 Visa. All rights reserved. Visa Confidential  13
 # Funnel Measures
@@ -316,11 +308,17 @@ Visa competes strongly on awareness but lags in other measures. Cash ranked seco
 | - | - | - | - | - | - | - |
 | Awareness (Total) | 90 | 78 | 97 | 81 | 74 | 52 |
 | Ownership | 79 | 44 | 95 | 56 | 27 | 11 |
-| Usage (p1m) | 39 (49%) | 24 (54%) | 90 (95%) | 22 (39%) | 10 (37%) | 4 (32%) |
-| SOW | 12 (32%) | 8 (34%) | 50 (56%) | 5 (23%) | 2 (17%) | 1 (23%) |
+| Usage (p1m) | 39 | 24 | 90 | 22 | 10 | 4 |
+| Usage % (p1m) | 49% | 54% | 95% | 39% | 37% | 32% |
+| SOW | 12 | 8 | 50 | 5 | 2 | 1 |
+| SOW % | 32% | 34% | 56% | 23% | 17% | 23% |
 
 
-Colors of bars indicate competitive standing in the market - Lead, Above Average, Average or Below Average
+Colors of bars indicate competitive standing in the market:
+- Lead: Green
+- Above Average: Light Green
+- Average: Yellow
+- Below Average: Red
 
 SOW for the total base also includes Cash (17), Cheque (1), Others (3)
 # Key Imagery Performance - Total
@@ -344,11 +342,11 @@ M-PESA differentiated on attribute 'helping the communities that matter to me,' 
 
 Base: Brand Aware
 
-Relative Strength of the Brand (>11)
-Relative Weakness of the Brand (<-11)
-
 Values indicate observed associations minus expected associations.
 The relative strength threshold is basis the standard deviation.
+
+Relative Strength of the Brand (>11)
+Relative Weakness of the Brand (<-11)
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Key Imagery Performance (Absolutes) – Overall and Gen Z
@@ -448,24 +446,25 @@ T2B Scores: Very Likely + Somewhat likely
 Base: Brand owned
 
 Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
+
+©2021 Visa. All rights reserved. Visa Confidential
 # Premium Cards – Visa vs. MasterCard
 
 Premium card awareness and ownership for both brands – Visa & Mastercard improved vs.FY23.
 
-| Premium Card KPI – Overall (Visa) | Premium Card KPI – Overall (Visa)\<br/>Premium Card KPI – Overall (MasterCard) | Premium Card KPI – Overall (Visa)\<br/>Premium Card KPI – Overall (MasterCard) | Premium Card KPI – Overall (Visa)\<br/>Premium Card KPI – Overall (MasterCard) | Premium Card KPI – Overall (MasterCard) | | | |
+| Premium Card KPI – Overall (Visa)\<br/> | Premium Card KPI – Overall (Visa)\<br/>Premium Card KPI – Overall (MasterCard)\<br/>FY22 | Premium Card KPI – Overall (Visa)\<br/>Premium Card KPI – Overall (MasterCard)\<br/>FY23 | Premium Card KPI – Overall (Visa)\<br/>Premium Card KPI – Overall (MasterCard)\<br/>FY24 | Premium Card KPI – Overall (MasterCard)\<br/> | FY22 | FY23 | FY24 |
 | - | - | - | - | - | - | - | - |
-| | FY22 | FY23 | FY24 | | FY22 | FY23 | FY24 |
 | Awareness NET | 57% | 68% ↑ | 98% ↑ | Awareness NET | 51% | 58% ↑ | 99% ↑ |
 | Ownership NET | 38% | 38% | 44% ↑ | Ownership NET | 29% | 19% ↓ | 30% ↑ |
-| Base: All Respondents | | | | Base: All Respondents | | | |
 
+
+Base: All Respondents
 
 ## Intent to use (among brand holders)
 T2B Scores: Very Likely + Somewhat likely
 
-| Visa | Visa\<br/>MasterCard | Visa\<br/>MasterCard | Visa\<br/>MasterCard | MasterCard | | | |
+| Visa | FY22 | FY23 | FY24 | MasterCard | FY22 | FY23 | FY24 |
 | - | - | - | - | - | - | - | - |
-| | FY22 | FY23 | FY24 | | FY22 | FY23 | FY24 |
 | Platinum | 76% | 69% | 86% ↑ | Platinum | 82% | 81% | 89% |
 | Infinite | Low Base | 92% | 73% ↓ | World | 66% | 76% | 75% |
 | Signature | Low Base | 81% | 79% | World Elite | Low Base | Low Base | Low Base |
@@ -474,21 +473,22 @@ T2B Scores: Very Likely + Somewhat likely
 ## Intent to acquire (among non-brand holders)
 T2B Scores: Very Likely + Somewhat likely
 
-| Visa | Visa\<br/>MasterCard | Visa\<br/>MasterCard | Visa\<br/>MasterCard | MasterCard | | | |
+| Visa | FY22 | FY23 | FY24 | MasterCard | FY22 | FY23 | FY24 |
 | - | - | - | - | - | - | - | - |
-| | FY22 | FY23 | FY24 | | FY22 | FY23 | FY24 |
 | Platinum | 35% | 42% | 41% | Platinum | 45% | 28% ↓ | 48% ↑ |
 | Infinite | 45% | 44% | 59% ↑ | World | 35% | 35% | 30% |
 | Signature | 31% | 35% | 57% ↑ | World Elite | 45% | 38% | 34% |
-| Base: Answering base | | | | Base: Answering base | | | |
 
+
+Base: Answering base
 
 Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Travel Cards – Visa vs. MasterCard
 
-Visa's travel ownership increased significantly driven by both the age cohorts; however, intent to acquire declined. Mastercard grew significantly across segments with again a decline in future acquisition.
+Visa's travel ownership increased significantly driven by both the age cohorts; however, intent to acquire declined.
+Mastercard grew significantly across segments with again a decline in future acquisition.
 
 ## Visa Travel Card Ownership – Overall
 
@@ -501,25 +501,6 @@ Visa's travel ownership increased significantly driven by both the age cohorts; 
 | eComm Shoppers | NA | 56% | 58% |
 
 
-### Intent to use (among brand holders)
-Base: All Respondents, Gen Z: Random + Boosters
-T2B Scores: Very Likely + Somewhat likely
-
-| FY22 | FY23 | FY24 |
-| - | - | - |
-| NA | 87% | 90% |
-
-
-### Intent to acquire (among non-brand holders)
-T2B Scores: Very Likely + Somewhat likely
-
-| FY22 | FY23 | FY24 |
-| - | - | - |
-| NA | 88% | 55% ↓ |
-
-
-Base: Answering base
-
 ## MasterCard Travel Card Ownership – Overall
 
 | Segment | FY22 | FY23 | FY24 |
@@ -531,21 +512,24 @@ Base: Answering base
 | eComm Shoppers | NA | 22% | 36% ↑ |
 
 
-### Intent to use (among brand holders)
-Base: All Respondents, Gen Z: Random + Boosters
+## Intent to use (among brand holders)
+Base: All Respondents
+Gen Z: Random + Boosters
 T2B Scores: Very Likely + Somewhat likely
 
-| FY22 | FY23 | FY24 |
-| - | - | - |
-| NA | 94% | 91% |
+| Brand | FY22 | FY23 | FY24 |
+| - | - | - | - |
+| Visa | NA | 87% | 90% |
+| MasterCard | NA | 94% | 91% |
 
 
-### Intent to acquire (among non-brand holders)
+## Intent to acquire (among non-brand holders)
 T2B Scores: Very Likely + Somewhat likely
 
-| FY22 | FY23 | FY24 |
-| - | - | - |
-| NA | 87% | 45% ↓ |
+| Brand | FY22 | FY23 | FY24 |
+| - | - | - | - |
+| Visa | NA | 88% | 55% ↓ |
+| MasterCard | NA | 87% | 45% ↓ |
 
 
 Base: Answering base
@@ -566,7 +550,7 @@ Intent to use grew significantly for Visa, Mastercard, and PayPal, but M-PESA co
 
 | | FY22 | FY23 | FY24 |
 | - | - | - | - |
-| Overall | 37% | 39% | 63% 🔼 |
+| Overall | 37% | 39% | 63% ↑ |
 | # of times | 19.9 | 9.4 | 11.4 |
 
 
@@ -578,9 +562,9 @@ T2B Scores: Very Likely + Somewhat likely
 
 | | FY22 | FY23 | FY24 |
 | - | - | - | - |
-| Visa | 57% | 51% 🔽 | 65% 🔼 |
-| Mastercard | 32% | 36% | 48% 🔼 |
-| PayPal | 25% | 33% 🔼 | 50% 🔼 |
+| Visa | 57% | 51% ↓ | 65% ↑ |
+| Mastercard | 32% | 36% | 48% ↑ |
+| PayPal | 25% | 33% ↑ | 50% ↑ |
 | M-PESA | 91% | 91% | 89% |
 | Airtel Money | NA | NA | 19% |
 
@@ -591,9 +575,9 @@ Base: Brand Aware
 
 | | FY22 | FY23 | FY24 |
 | - | - | - | - |
-| Gen Z | - | 39% | 65% 🔼 |
-| Trailing Millennial | 35% | 42% 🔼 | 65% 🔼 |
-| International Travelers | 51% | 50% | 64% 🔼 |
+| Gen Z | - | 39% | 65% ↑ |
+| Trailing Millennial | 35% | 42% ↑ | 65% ↑ |
+| International Travelers | 51% | 50% | 64% ↑ |
 
 
 Base: All Respondents
@@ -604,14 +588,14 @@ Gen Z: Random + Boosters
 | | FY22 | FY23 | FY24 |
 | - | - | - | - |
 | Visa | 15% | 15% | 18% |
-| Mastercard | 7% | 5% | 10% 🔼 |
-| PayPal | 3% | 4% | 8% 🔼 |
+| Mastercard | 7% | 5% | 10% ↑ |
+| PayPal | 3% | 4% | 8% ↑ |
 | M-PESA | 40% | 47% | 48% |
 | Airtel Money | NA | NA | 3% |
-| Others | 22% | 16% | 9% 🔽 |
+| Others | 22% | 16% | 9% ↓ |
 
 
-Scores are statistically tested over previous wave highlighting Positive 🔼 / Negative 🔽 trends at 90%.
+Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
 # Merchant Category: App Ownership and Card on File
 
 Taxi, online travel, streaming and eCommerce apps dominate the market.
@@ -638,16 +622,14 @@ While M-PESA lead in-store presence, Visa remains the top card brand for online 
 
 | Brand | Cashier counter / in-store(retail, dining and services, etc.) | When you made a paymentonline (e.g. websites and apps etc.) | Payment via digital wallets\* |
 | - | - | - | - |
-| !VISA logo VISA | 39% | 54% | 45% |
-| !Mastercard logo mastercard | 27% | 36% | 28% |
-| !PayPal logo PayPal | 9% | 30% | NA |
-| !M-PESA logo M-PESA | 81% | 40% | NA |
-| !Airtel Money logo airtel money | 10% | 5% | NA |
+| !VISA logo | 39% | 54% | 45% |
+| !Mastercard logo | 27% | 36% | 28% |
+| !PayPal logo | 9% | 30% | NA |
+| !M-PESA logo | 81% | 40% | NA |
+| !Airtel Money logo | 10% | 5% | NA |
 
 
 Base: All Respondents
-
-©2021 Visa. All rights reserved. Visa Confidential
 # Digital Wallets
 
 Visa's leadership in overall card ownership (vs Mastercard) does not reflect in cards loaded on the wallets.
@@ -718,11 +700,9 @@ Colors of bars indicate competitive standing in the market - Lead, Above Average
 
 Kenya
 
-[UnionPay logo]
+[UnionPay logo is displayed above the data]
 
 ©2021 Visa. All rights reserved. Visa Confidential
-
-[Visa logo]
 # Awareness of Payment Brands
 
 | | Brand | TOM | Unaided | Total |
@@ -760,8 +740,8 @@ Visa is weak on supporting, promoting and enabling transactions with 'small busi
 | | Wallet | -4 | -8 | 14 | -5 | 2 |
 | | Receive | -6 | -4 | 13 | 2 | -5 |
 | | Retailer | -4 | -12 | -11 | 26 | 1 |
-| | No cost | 4 | 1 | 3 | -14 | 7 |
-| | Small business | -14 | -15 | -8 | 26 | 11 |
+| No cost | 4 | 1 | 3 | -14 | 7 | |
+| Small business | -14 | -15 | -8 | 26 | 11 | |
 | Everyday payments | -14 | -13 | -11 | 31 | 6 | |
 
 
@@ -819,6 +799,10 @@ Compared to competition, Visa strongest on 'international travel' and 'gaming' p
 | Other | No cost | 27 | 21 | 19 | 24 | 16 |
 | | Small business | 23 | 18 | 18 | 87 | 25 |
 | | Everyday payments | 20 | 17 | 13 | 87 | 19 |
+
+
+| Category | Attribute | VISA | Mastercard | PayPal | M-PESA | Airtel money |
+| - | - | - | - | - | - | - |
 | Lifestyle | Like | 49 | 42 | 36 | 75 | 17 |
 | | Proud | 49 | 47 | 36 | 71 | 15 |
 | | Well-being | 44 | 39 | 23 | 69 | 12 |
@@ -837,7 +821,7 @@ Compared to competition, Visa strongest on 'international travel' and 'gaming' p
 | | Community | 27 | 30 | 13 | 79 | 17 |
 | | Empower | 25 | 21 | 10 | 86 | 19 |
 | | Support | 24 | 19 | 10 | 86 | 23 |
-| Growth | Growth | 23 | 23 | 11 | 89 | 19 |
+| Other | Growth | 23 | 23 | 11 | 89 | 19 |
 
 
 Base: Brand Aware
@@ -890,49 +874,44 @@ Base: Brand Aware
 
 Even among Gen Z, Visa leads on 'international purchases' and 'gaming purchases' while M-PESA leads on all other attributes.
 
-| Attribute | VISA | Mastercard | M-PESA |
-| - | - | - | - |
-| **Security** | | | |
-| Secure | 44 | 48 | 75 |
-| Data | 42 | 39 | 68 |
-| Protection | 44 | 38 | 76 |
-| Personal data | 43 | 36 | 69 |
-| Alert | 49 | 29 | 61 |
-| **Convenience** | | | |
-| I travel | 73 | 59 | 23 |
-| Online | 47 | 32 | 63 |
-| Gaming | 48 | 28 | 46 |
-| Acceptance | 40 | 33 | 72 |
-| Experience | 31 | 28 | 86 |
-| Budget | 30 | 23 | 73 |
-| Wallet | 42 | 27 | 76 |
-| Receive | 32 | 30 | 67 |
-| Retailer | 19 | 11 | 95 |
-| No cost | 22 | 12 | 31 |
-| Small business | 19 | 12 | 96 |
-| Everyday payments | 12 | 11 | 95 |
-| **Lifestyle** | | | |
-| Like | 36 | 31 | 81 |
-| Proud | 36 | 41 | 77 |
-| Well-being | 35 | 28 | 78 |
-| Personalized | 34 | 21 | 69 |
-| Progress | 34 | 25 | 77 |
-| Family | 36 | 32 | 96 |
-| Connected | 31 | 27 | 79 |
-| Needs | 28 | 23 | 78 |
-| **Reliability** | | | |
-| Trust | 40 | 41 | 82 |
-| Technology | 41 | 39 | 71 |
-| Brands | 25 | 26 | 72 |
-| **Brand values** | | | |
-| Action | 37 | 36 | 83 |
-| Values | 32 | 32 | 79 |
-| Everyone | 22 | 23 | 85 |
-| Uplifting | 22 | 20 | 89 |
-| Community | 17 | 20 | 89 |
-| Empower | 17 | 8 | 92 |
-| Support | 17 | 13 | 92 |
-| Growth | 14 | 13 | 95 |
+| Category | Attribute | VISA | Mastercard | M-PESA |
+| - | - | - | - | - |
+| Security | Secure | 44 | 48 | 75 |
+| | Data | 42 | 39 | 68 |
+| | Protection | 44 | 38 | 76 |
+| | Personal data | 43 | 36 | 69 |
+| | Alert | 49 | 29 | 61 |
+| Convenience | I travel | 73 | 59 | 23 |
+| | Online | 47 | 32 | 63 |
+| | Gaming | 48 | 28 | 46 |
+| | Acceptance | 40 | 33 | 72 |
+| | Experience | 31 | 28 | 86 |
+| | Budget | 30 | 23 | 73 |
+| | Wallet | 42 | 27 | 76 |
+| | Receive | 32 | 30 | 67 |
+| | Retailer | 19 | 11 | 95 |
+| | No cost | 22 | 12 | 31 |
+| Small business | | 19 | 12 | 96 |
+| Everyday payments | | 12 | 11 | 95 |
+| Lifestyle | Like | 36 | 31 | 81 |
+| | Proud | 36 | 41 | 77 |
+| | Well-being | 35 | 28 | 78 |
+| | Personalized | 34 | 21 | 69 |
+| | Progress | 34 | 25 | 77 |
+| | Family | 36 | 32 | 96 |
+| | Connected | 31 | 27 | 79 |
+| | Needs | 28 | 23 | 78 |
+| Reliability | Trust | 40 | 41 | 82 |
+| | Technology | 41 | 39 | 71 |
+| | Brands | 25 | 26 | 72 |
+| Brand values | Action | 37 | 36 | 83 |
+| | Values | 32 | 32 | 79 |
+| | Everyone | 22 | 23 | 85 |
+| | Uplifting | 22 | 20 | 89 |
+| | Community | 17 | 20 | 89 |
+| | Empower | 17 | 8 | 92 |
+| | Support | 17 | 13 | 92 |
+| | Growth | 14 | 13 | 95 |
 
 
 Base: Brand Aware
@@ -957,7 +936,7 @@ Similar trend as seen among key competition.
 | | Wallet | 42 | 27 | 47 | 76 | 10 |
 | | Receive | 32 | 30 | 41 | 67 | 8 |
 | | Retailer | 19 | 11 | 7 | 95 | 11 |
-| Convenience | No cost | 22 | 12 | 21 | 31 | 12 |
+| | No cost | 22 | 12 | 21 | 31 | 12 |
 | | Small business | 19 | 12 | 12 | 96 | 18 |
 | | Everyday payments | 12 | 11 | 9 | 95 | 13 |
 | Lifestyle | Like | 36 | 31 | 36 | 81 | 11 |
@@ -1001,8 +980,8 @@ Gen Z: random + Boosters
 | | Wallet | 44 | 34 | 53 | 77 | 18 |
 | | Receive | 34 | 31 | 42 | 70 | 7 |
 | | Retailer | 24 | 15 | 10 | 91 | 14 |
-| | No cost | 25 | 16 | 18 | 28 | 16 |
-| Other | Small business | 22 | 11 | 13 | 93 | 24 |
+| Convenience | No cost | 25 | 16 | 18 | 28 | 16 |
+| | Small business | 22 | 11 | 13 | 93 | 24 |
 | | Everyday payments | 15 | 13 | 9 | 92 | 14 |
 | Lifestyle | Like | 47 | 37 | 36 | 85 | 17 |
 | | Proud | 43 | 45 | 34 | 82 | 14 |
@@ -1026,8 +1005,6 @@ Gen Z: random + Boosters
 
 
 Base: Brand Aware
-
-©2021 Visa. All rights reserved. Visa Confidential
 # Brand Image Attributes – International Travelers
 
 | Category | Attribute | | | | | |
@@ -1046,12 +1023,12 @@ Base: Brand Aware
 | | Wallet | 45 | 34 | 46 | 66 | 16 |
 | | Receive | 35 | 33 | 38 | 69 | 8 |
 | | Retailer | 33 | 22 | 16 | 82 | 12 |
-| Other | No cost | 30 | 25 | 22 | 27 | 16 |
+| | No cost | 30 | 25 | 22 | 27 | 16 |
 | | Small business | 28 | 22 | 17 | 85 | 21 |
 | | Everyday payments | 23 | 20 | 15 | 84 | 15 |
 | Lifestyle | Like | 45 | 43 | 34 | 72 | 16 |
 | | Proud | 44 | 49 | 33 | 66 | 15 |
-| | Well-being | 42 | 38 | 24 | 66 | 13 |
+| | Well- being | 42 | 38 | 24 | 66 | 13 |
 | | Personalized | 41 | 41 | 27 | 64 | 12 |
 | | Progress | 40 | 37 | 28 | 69 | 14 |
 | | Family | 40 | 43 | 31 | 85 | 23 |
@@ -1127,21 +1104,19 @@ Base: Brand Aware
 | Personal data | Never sells my personal data | Like | Is a brand for someone like me |
 | Protection | Proactively protects my payments | Needs | Understands my needs |
 | Secure | Is a secure way to pay | Personalized | Offers me relevant benefits, privileges, and personalized features |
-| | | Progress | Helps me make progress in life |
-| Convenience | | Proud | I'm proud to be seen using this brand |
-| Acceptance | Is accepted wherever and whenever I need it | Well-being | Helps me build financial well-being |
-| Budget | Helps me feel in control of my spending | | |
+| Convenience | | Progress | Helps me make progress in life |
+| Acceptance | Is accepted wherever and whenever I need it | Proud | I'm proud to be seen using this brand |
+| Budget | Helps me feel in control of my spending | Well-being | Helps me build financial well-being |
 | Everyday | Is best for paying everyday small amounts | Reliability | |
 | Experience | Enables a seamless payment experience | Brands | Is distinct from other payment brands |
 | Gaming | Is easy to make purchases while gaming | Technology | Is always improving the technology behind my payments |
 | I Travel | Is the best way to make purchases while traveling internationally | Trust | Is a brand I trust |
-| No cost | There is no cost to use | | |
-| Online | Is best for online transactions | Brand values | |
-| Receive | Is the best way to get paid | Action | The brands actions match its words |
-| Retailer | Is a brand that retailers prefer I use | Community | Helps the communities that matter to me make progress |
-| Small business | Is best for sending and receiving money between people, small businesses | Empower | Is a brand that empowers small and micro businesses |
-| Wallet | Easy to use with my smartphone or digital wallets | Everyone | Opens doors to opportunities for everyone |
-| | | Growth | Supports small business growth |
+| No cost | There is no cost to use | Brand values | |
+| Online | Is best for online transactions | Action | The brands actions match its words |
+| Receive | Is the best way to get paid | Community | Helps the communities that matter to me make progress |
+| Retailer | Is a brand that retailers prefer I use | Empower | Is a brand that empowers small and micro businesses |
+| Small business | Is best for sending and receiving money between people, small businesses | Everyone | Opens doors to opportunities for everyone |
+| Wallet | Easy to use with my smartphone or digital wallets | Growth | Supports small business growth |
 | | | Support | Is a brand that supports small business |
 | | | Uplifting | Cares about uplifting people |
 | | | Values | Shares values that inspire me |
@@ -1157,28 +1132,40 @@ graph TD
     E[Preference]
     F[Affinity]
     G[Reputation]
+    H[Ownership/Usage + External market factors]
+
     A --> B
     A --> C
-    B --> D[Prominence<br>First to Mind<br>20%]
-    B --> E[Preference<br>Preferred Brand<br>30%]
-    C --> F[Affinity<br>Love/Hate<br>25%]
-    C --> G[Reputation<br>Great Company<br>25%]
+    B --> D
+    B --> E
+    C --> F
+    C --> G
+    A --> H
+
+    D[Prominence<br>First to Mind<br>20%]
+    E[Preference<br>Preferred Brand<br>30%]
+    F[Affinity<br>Love/Hate<br>25%]
+    G[Reputation<br>Great Company<br>25%]
 ```
 
-## Breakdown of Brand Health Components:
+The Brand Health Score is composed of four main components:
 
-| Category | Component | Description | Weight |
-|----------|-----------|-------------|--------|
-| Rational | Prominence | First to Mind | 20% |
-| Rational | Preference | Preferred Brand | 30% |
-| Emotional | Affinity | Love/Hate | 25% |
-| Emotional | Reputation | Great Company | 25% |
+1. **Prominence** (20%): First to Mind
+2. **Preference** (30%): Preferred Brand
+3. **Affinity** (25%): Love/Hate
+4. **Reputation** (25%): Great Company
 
-### Additional Factors:
+These components are further categorized into:
+
+- **Rational**: Prominence and Preference
+- **Emotional**: Affinity and Reputation
+
+The Brand Health Score also takes into account:
+
 - Ownership/Usage
 - External market factors
 
-----
+Kenya
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Calculating Brand Health Score
@@ -1207,24 +1194,24 @@ Each consumer asked to answer questions below
 
 The Brand Health Score is connected to four main components:
 
-| Brand Performance | | Campaign Performance | |
+| Funnel Measures | Brand Attributes | Advertising Effectiveness | Global & Market KPIs |
 | - | - | - | - |
-| **Funnel Measures**- Awareness
-- Ownership
-- Usage
-- Share of wallet | **Brand Attributes**- 20+ brand attributes
+| * Awareness
+* Ownership
+* Usage
+* Share of wallet | - 20+ brand attributes
 - Brand Image
 - Brand Experience
 - Brand Purpose
 - Product Experience
 - Product Benefits
-- Payment Occasions | **Advertising Effectiveness**- All media formats
-- Recall
-- Brand Linkage
-- Ad Diagnostics
-- Custom Message Perf.
-- Monthly & Qrtly
-- Rptg: 14 audiences | **Global & Market KPIs**- Cross Border
+- Payment Occasions | * All media formats
+* Recall
+* Brand Linkage
+* Ad Diagnostics
+* Custom Message Perf.
+* Monthly & Qrtly
+* Rptg: 14 audiences | - Cross Border
 - eCommerce
 - Contactless
 - SMB
@@ -1233,9 +1220,10 @@ The Brand Health Score is connected to four main components:
 - Quarterly Reporting |
 
 
-Kenya
-
-©2021 Visa. All rights reserved. Visa Confidential
+<div style="display: flex; justify-content: space-between; margin-top: 20px;">
+  <div style="background-color: #FFD700; padding: 5px 10px;">Brand Performance</div>
+  <div style="background-color: #4169E1; padding: 5px 10px;">Campaign Performance</div>
+</div>
 # CEMEA Coverage & frequency
 
 <div style="text-align: right;">Kenya</div>

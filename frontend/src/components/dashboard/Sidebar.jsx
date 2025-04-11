@@ -28,7 +28,6 @@ import DeleteChatModal  from './DeleteChatModal';
 import { ideaService, coreService } from '../../utils/axiosConfig';
 import DocumentViewer from './DocumentViewer'; 
 import DocumentSearchModal from './DocumentSearchModal'; 
-import ChatDownloadFeature from './ChatDownloadFeature';
 import BulkDeleteModal from './BulkDeleteModal';
 
 const Sidebar = ({ 
@@ -1491,7 +1490,7 @@ const formattedActiveConversation = activeConversation ? {
         </div>
   
        {/* Sidebar Footer with Download Feature */}
-{isOpen && (
+{/* {isOpen && (
   <div className="sidebar-footer mt-auto border-t border-gray-700/30 pt-3 px-4 pb-4">
     <div className="flex items-center justify-between">
       <div className="flex-grow">
@@ -1507,7 +1506,7 @@ const formattedActiveConversation = activeConversation ? {
      
     </div>
   </div>
-)}
+)} */}
         </aside>
     
         {/* Custom Scrollbar Styles */}

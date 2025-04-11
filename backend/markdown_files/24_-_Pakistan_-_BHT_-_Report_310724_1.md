@@ -1,10 +1,9 @@
-# Visa's Brand Health FY24 Report
+# Visa's Brand Health
+# FY24 Report
 
 PAKISTAN 🇵🇰
 
 JULY 2024
-
-[An illustration on the right side of the image depicts various icons related to finance and technology, including a clock, briefcase, bank building, globe, Bitcoin symbol, smartphone, shopping bag, cloud, and human profiles, all interconnected within an arrow shape.]
 
 ©2023 Visa. All rights reserved. Visa Confidential  1
 # Background & Methodology
@@ -66,42 +65,50 @@ Funnel metrics administered (BHS not measured)
 
 ## Reporting
 
-| Long Term Focus | • Reporting frequency for continuous markets is quarterly to maintain a longer-term focus on brand health; frequency for pulse countries is annual or biannual • Wave on wave testing (see below) identifies increases, decreases, stable trend lines |
-| - | - |
-| Key Measures | • Brand Health is a composite value derived from performance across four metrics – Prominence, Brand Preferred, Affinity, Reputation (Appendix 1) |
-| Strategic Segments | • Results among strategic target segments (e.g., Gen Z, Trailing Millennials, International Travelers, eComm shoppers) are reported unless the base size is too small (<30) |
+### Long Term Focus
+- Reporting frequency for continuous markets is quarterly to maintain a longer-term focus on brand health; frequency for pulse countries is annual or biannual
+- Wave on wave testing (see below) identifies increases, decreases, stable trend lines
 
+### Key Measures
+- Brand Health is a composite value derived from performance across four metrics – Prominence, Brand Preferred, Affinity, Reputation (Appendix 1)
+
+### Strategic Segments
+- Results among strategic target segments (e.g., Gen Z, Trailing Millennials, International Travelers, eComm shoppers) are reported unless the base size is too small (<30)
 
 ## Methodology
 
-| Mobile Friendly | • Survey design is mobile-optimized to be more representative of the population:   • Brand Health components - Reputation, Affinity, Prominence – are scored on 5 – point scales   • Preference is a single choice question.   • The attributes are streamlined and align with the Brand Framework   • Payment brands are prioritized by country to represent key global and local competitive brands |
-| - | - |
-| Affluent Segments | • Affluent definitions are updated annually, if needed, to align with changing country environments |
+### Mobile Friendly
+- Survey design is mobile-optimized to be more representative of the population:
+  - Brand Health components - Reputation, Affinity, Prominence – are scored on 5 – point scales
+  - Preference is a single choice question.
+  - The attributes are streamlined and align with the Brand Framework
+  - Payment brands are prioritized by country to represent key global and local competitive brands
 
+### Affluent Segments
+- Affluent definitions are updated annually, if needed, to align with changing country environments
 
 ## Wave on Wave testing
 
-| Performance against previous wave | • In 2024, Visa seeks to maintain or improve its brand health scores achieved in year 2023 • In 2024, we have updated the brand list and hence we could observe some deviation from the past data. • Performance of each parameter against previous wave is measured using a statistical comparative analysis of scores. The current wave scores are statistically tested against the 2023 scores to identify whether two measures are statistically different – higher or lower – at the 90% confidence level. |
-| - | - |
-
-
-<div style="text-align: right;">©2021 Visa. All rights reserved. Visa Confidential</div>
+### Performance against previous wave
+- In 2024, Visa seeks to maintain or improve its brand health scores achieved in year 2023
+- In 2024, we have updated the brand list and hence we could observe some deviation from the past data.
+- Performance of each parameter against previous wave is measured using a statistical comparative analysis of scores. The current wave scores are statistically tested against the 2023 scores to identify whether two measures are statistically different – higher or lower – at the 90% confidence level.
 # Key Highlights
 
 [The rest of the slide appears to be blank, with no additional content provided.]
-
-VISA
 
 ©2021 Visa. All rights reserved. Visa Confidential  4
 Visa maintains its leadership in brand health metrics across key segments in Pakistan. However, there is a rise in competition from wallet brands.
 
 | BHS | Funnel | Imagery | Card Types |
-|-----|--------|---------|------------|
+| - | - | - | - |
 | Visa continues to dominate, outperforming competitors across all key components. Visa's solo preference saw a decline indicating areas for potential improvement. | Visa's strong performance across funnel highlights its dominance. However, mobile wallets are gaining on conversions to usage. | Visa differentiates on 'brand pride'. It needs to further strengthen its perception related to 'trust' and 'brand actions matching words'. | Strong growth in contactless card ownership, particularly among younger segments. Premium and travel card ownership and intent to use declined. |
 
+
 | eCommerce | CoF & POS | Wallets | Events |
-|-----------|-----------|---------|--------|
+| - | - | - | - |
 | While an increase in eCommerce transactions across segments is seen Visa declines on intent to use. | Visa shows strong presence in various app categories and maintains high visibility for both in-store and online payments. | Jazz Cash and Easy paisa both show a higher likelihood of Mastercard loading, | Visa enjoys highest association with FIFA World Cup. It's also the event which evokes highest interest. |
+
 # Brand Health - Current Position
 
 Despite facing stiff competition, Visa demonstrates category leadership across all key brand health components: Prominence, Preference, Affinity, and Reputation.
@@ -160,7 +167,7 @@ Base: All Respondents
 
 Visa's BHS remained stable across key segments. Most competitors had significantly lower BHS among Gen Z and trailing millennials. PayPal and Union Pay have higher BHS among eCommerce shoppers (vs non-eCommerce shoppers).
 
-| Segment | | | | | | |
+| Segment | VISA | Mastercard | AMERICAN EXPRESS | PayPal | UnionPay | JazzCash |
 | - | - | - | - | - | - | - |
 | TOTAL | 72 | 45 | 2 | 4 | 11 | 52 |
 | Gen Z (GZ) \[Non Trailing Millennials (NGZ)] | 71 | 47 | 0NGZ | 2NGZ | 7NGZ | 47 |
@@ -169,12 +176,12 @@ Visa's BHS remained stable across key segments. Most competitors had significant
 | eComm Shoppers (ES) \[Non-eComm Shoppers (NES)] | 75 | 48 | 2 | 6NES | 15NES | 55 |
 
 
-Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1).; Where segments are shown, scores are tested against the segments in the category- notation next to a segment value (NM, NAF, NIT etc.) indicates that the noted segment value is significantly higher or lower than the segment value shown, so Millennials (ML) are tested against Non-Millennials (NM), Gen Z (GZ) are tested against Non-Gen Z (NGZ), International Travelers (IT) are tested against Non-Travelers (NIT), and eComm Shoppers (ES) are tested against Non-eComm Shoppers.
+Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1). Where segments are shown, scores are tested against the segments in the category - notation next to a segment value (NM, NAF, NIT etc.) indicates that the noted segment value is significantly higher or lower than the segment value shown, so Millennials (ML) are tested against Non-Millennials (NM), Gen Z (GZ) are tested against Non-Gen Z (NGZ), International Travelers (IT) are tested against Non-Travelers (NIT), and eComm Shoppers (ES) are tested against Non-eComm Shoppers.
 
 Base: All Respondents
 Gen Z: Random + Booster
 
-©2021 Visa. All rights reserved. Visa Confidential  8
+©2021 Visa. All rights reserved. Visa Confidential
 # Brand Health Market Trends – By Segments
 
 Visa shows a significant rise in brand health among international travelers, maintaining its dominance across all major segments.
@@ -281,14 +288,14 @@ While Visa's brand health components remain stable, significant declines in pref
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
 | 61 | 23 | 70 | 66 | 86 | 30 | 84 | 86 | 80 | 18 | 85 | 81 | |
 | FY22 | | | | FY23 | | | | FY24 | | | | |
-| Brand Health: 53 (FY22) → 69 (FY23) → 68 (FY24) | | | | | | | | | | | | |
+| 53 | | | | 69 | | | | 68 | | | | |
 
 
 | eComm Shoppers | | | | | | | | | | | |
 | - | - | - | - | - | - | - | - | - | - | - | - |
 | 91 | 26 | 93 | 94 | 90 | 32 | 88 | 90 | 85 | 18 | 87 | 87 |
 | FY22 | | | | FY23 | | | | FY24 | | | |
-| Brand Health: 73 (FY22) → 72 (FY23) → 75 (FY24) | | | | | | | | | | | |
+| 73 | | | | 72 | | | | 75 | | | |
 
 
 Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1; BHS and component scores are statistically tested over previous quarter highlighting Positive / Negative trends at 90%.
@@ -580,8 +587,6 @@ Scores are statistically tested over previous wave highlighting Positive ↑ / N
 ©2021 Visa. All rights reserved. Visa Confidential
 # Specific Insights - Pakistan
 
-[The rest of the page is blank, with only the Visa logo and copyright information at the bottom]
-
 ©2023 Visa. All rights reserved. Visa Confidential 22
 # eCommerce/ Online shopping
 
@@ -676,8 +681,6 @@ Visa enjoys strong in-store and online visibility, with Jazz Cash emerging as a 
 
 Base: All Respondents
 
-*[Small Visa logo]*
-
 ©2021 Visa. All rights reserved. Visa Confidential
 # Digital Wallets
 
@@ -768,8 +771,7 @@ Both, Jazz Cash and Easypaisa show higher awareness and usage, posing a competit
 | Ownership | 3 | 0 | 0 |
 | Usage (p1m) | 1 | 0 | 0 |
 | SOW | 1 | 0 | 0 |
-| Ownership % | 50% | 0% | 0% |
-| SOW % | 38% | 0% | 0% |
+| | 50% ➜ 38% ➜ | 0% ➜ 0% ➜ | 0% ➜ 0% ➜ |
 
 
 | Metric | SADAPAY | QISSTPAY | NAYAPAY |
@@ -778,8 +780,7 @@ Both, Jazz Cash and Easypaisa show higher awareness and usage, posing a competit
 | Ownership | 3 | 0 | 1 |
 | Usage (p1m) | 1 | 0 | 0 |
 | SOW | 0 | 0 | 0 |
-| Ownership % | 36% | 0% | 0% |
-| SOW % | 0% | 0% | 0% |
+| | 36% ➜ 0% ➜ | 0% ➜ 0% ➜ | 0% ➜ 0% ➜ |
 
 
 Pakistan SOW for the total base also includes Cash (40), Cheque (1), Others (2)
@@ -787,8 +788,6 @@ Pakistan SOW for the total base also includes Cash (40), Cheque (1), Others (2)
 Base: All Respondents
 
 Colors of bars indicate competitive standing in the market - Lead, Above Average, Average or Below Average
-
-©2021 Visa. All rights reserved. Visa Confidential
 # Index Equity - Total
 
 Visa stands out on controlled spends, seamless payment brands, opening opportunities for everyone and consumers feeling proud of being associated. Jazz Cash performs better on convenience while Union Pay & PayPal on security related aspects.
@@ -846,44 +845,49 @@ The relative strength threshold is basis the standard deviation.
 
 Visa enjoys strong brand imagery in the competitive landscape, with Jazz Cash and Mastercard being its closest competitor.
 
-| Category | Attribute | VISA | | | | | |
-| - | - | - | - | - | - | - | - |
-| Security | Data | 63 | 34 | 6 | 15 | 20 | 37 |
-| | Personal data | 63 | 33 | 15 | 20 | 15 | 41 |
-| | Secure | 61 | 33 | 15 | 22 | 11 | 44 |
-| | Alert | 59 | 31 | 2 | 13 | 20 | 40 |
-| | Protection | 58 | 32 | 13 | 10 | 12 | 37 |
-| Convenience | Acceptance | 62 | 34 | 9 | 18 | 17 | 40 |
-| | Experience | 62 | 35 | 4 | 10 | 14 | 39 |
-| | Receive | 59 | 32 | 13 | 13 | 16 | 41 |
-| | Retailer | 57 | 27 | 4 | 12 | 14 | 48 |
-| | I travel | 57 | 32 | 11 | 17 | 16 | 24 |
-| | Online | 56 | 35 | 0 | 17 | 19 | 37 |
-| | Wallet | 54 | 31 | 11 | 15 | 14 | 47 |
-| | Budget | 53 | 24 | 6 | 12 | 11 | 37 |
-| | Gaming | 52 | 29 | 4 | 18 | 16 | 33 |
-| | Everyday payments | 50 | 28 | 4 | 10 | 15 | 44 |
-| Small business | | 50 | 28 | 9 | 15 | 14 | 49 |
-| No cost | | 46 | 30 | 11 | 12 | 18 | 34 |
-| Lifestyle | Like | 61 | 33 | 11 | 23 | 15 | 37 |
-| | Proud | 60 | 33 | 11 | 7 | 15 | 37 |
-| | Family | 60 | 30 | 11 | 13 | 12 | 48 |
-| | Needs | 59 | 30 | 11 | 7 | 14 | 43 |
-| | Connected | 59 | 33 | 11 | 17 | 14 | 40 |
-| | Personalized | 59 | 32 | 6 | 17 | 17 | 32 |
-| | Progress | 53 | 29 | 13 | 17 | 12 | 41 |
-| | Well-being | 50 | 31 | 2 | 10 | 11 | 34 |
-| Reliability | Trust | 63 | 34 | 13 | 12 | 16 | 40 |
-| | Technology | 58 | 33 | 4 | 10 | 16 | 39 |
-| | Brands | 54 | 32 | 6 | 15 | 13 | 37 |
-| Brand values | Values | 59 | 31 | 15 | 17 | 16 | 36 |
-| | Everyone | 59 | 30 | 0 | 13 | 16 | 38 |
-| | Action | 58 | 32 | 6 | 10 | 14 | 41 |
-| | Uplifting | 56 | 31 | 9 | 22 | 11 | 41 |
-| | Community | 52 | 28 | 9 | 12 | 12 | 39 |
-| | Empower | 52 | 29 | 13 | 8 | 16 | 42 |
-| | Support | 50 | 30 | 6 | 12 | 10 | 44 |
-| | Growth | 48 | 26 | 4 | 12 | 15 | 47 |
+| Attribute | | | | | | |
+| - | - | - | - | - | - | - |
+| **Security** | | | | | | |
+| Data | 63 | 34 | 6 | 15 | 20 | 37 |
+| Personal data | 63 | 33 | 15 | 20 | 15 | 41 |
+| Secure | 61 | 33 | 15 | 22 | 11 | 44 |
+| Alert | 59 | 31 | 2 | 13 | 20 | 40 |
+| Protection | 58 | 32 | 13 | 10 | 12 | 37 |
+| **Convenience** | | | | | | |
+| Acceptance | 62 | 34 | 9 | 18 | 17 | 40 |
+| Experience | 62 | 35 | 4 | 10 | 14 | 39 |
+| Receive | 59 | 32 | 13 | 13 | 16 | 41 |
+| Retailer | 57 | 27 | 4 | 12 | 14 | 48 |
+| I travel | 57 | 32 | 11 | 17 | 16 | 24 |
+| Online | 56 | 35 | 0 | 17 | 19 | 37 |
+| Wallet | 54 | 31 | 11 | 15 | 14 | 47 |
+| Budget | 53 | 24 | 6 | 12 | 11 | 37 |
+| Gaming | 52 | 29 | 4 | 18 | 16 | 33 |
+| Everyday payments | 50 | 28 | 4 | 10 | 15 | 44 |
+| Small business | 50 | 28 | 9 | 15 | 14 | 49 |
+| No cost | 46 | 30 | 11 | 12 | 18 | 34 |
+| **Lifestyle** | | | | | | |
+| Like | 61 | 33 | 11 | 23 | 15 | 37 |
+| Proud | 60 | 33 | 11 | 7 | 15 | 37 |
+| Family | 60 | 30 | 11 | 13 | 12 | 48 |
+| Needs | 59 | 30 | 11 | 7 | 14 | 43 |
+| Connected | 59 | 33 | 11 | 17 | 14 | 40 |
+| Personalized | 59 | 32 | 6 | 17 | 17 | 32 |
+| Progress | 53 | 29 | 13 | 17 | 12 | 41 |
+| Well-being | 50 | 31 | 2 | 10 | 11 | 34 |
+| **Reliability** | | | | | | |
+| Trust | 63 | 34 | 13 | 12 | 16 | 40 |
+| Technology | 58 | 33 | 4 | 10 | 16 | 39 |
+| Brands | 54 | 32 | 6 | 15 | 13 | 37 |
+| **Brand values** | | | | | | |
+| Values | 59 | 31 | 15 | 17 | 16 | 36 |
+| Everyone | 59 | 30 | 0 | 13 | 16 | 38 |
+| Action | 58 | 32 | 6 | 10 | 14 | 41 |
+| Uplifting | 56 | 31 | 9 | 22 | 11 | 41 |
+| Community | 52 | 28 | 9 | 12 | 12 | 39 |
+| Empower | 52 | 29 | 13 | 8 | 16 | 42 |
+| Support | 50 | 30 | 6 | 12 | 10 | 44 |
+| Growth | 48 | 26 | 4 | 12 | 15 | 47 |
 
 
 Base: Brand Aware
@@ -936,101 +940,100 @@ Base: Brand Aware
 
 Jazz Cash competes with Visa on 'everyday payments' and 'supporting & promoting small businesses,' while Visa leads in all other attributes.
 
-| Attribute | | | |
-| - | - | - | - |
-| **Security** | | | |
-| Data | 62 | 33 | 30 |
-| Personal data | 54 | 37 | 47 |
-| Secure | 58 | 33 | 40 |
-| Alert | 59 | 38 | 37 |
-| Protection | 55 | 36 | 39 |
-| **Convenience** | | | |
-| Acceptance | 59 | 38 | 39 |
-| Experience | 52 | 35 | 39 |
-| Receive | 52 | 41 | 39 |
-| Retailer | 54 | 36 | 42 |
-| I travel | 48 | 35 | 20 |
-| Online | 54 | 35 | 34 |
-| Wallet | 44 | 37 | 51 |
-| Budget | 57 | 25 | 33 |
-| Gaming | 47 | 31 | 26 |
-| Everyday payments | 42 | 35 | 41 |
-| Small business | 44 | 25 | 47 |
-| No cost | 46 | 32 | 36 |
-| **Lifestyle** | | | |
-| Like | 58 | 38 | 33 |
-| Proud | 55 | 35 | 39 |
-| Family | 49 | 40 | 45 |
-| Needs | 52 | 28 | 42 |
-| Connected | 52 | 35 | 40 |
-| Personalized | 57 | 33 | 31 |
-| Progress | 51 | 36 | 43 |
-| Well-being | 49 | 35 | 36 |
-| **Reliability** | | | |
-| Trust | 57 | 36 | 41 |
-| Technology | 50 | 39 | 33 |
-| Brands | 48 | 33 | 28 |
-| **Brand values** | | | |
-| Values | 52 | 38 | 36 |
-| Everyone | 52 | 32 | 42 |
-| Action | 54 | 37 | 36 |
-| Uplifting | 49 | 39 | 36 |
-| Community | 55 | 34 | 35 |
-| Empower | 45 | 32 | 41 |
-| Support | 51 | 32 | 37 |
-| Growth | 45 | 30 | 45 |
+| Category | Attribute | VISA | Mastercard | Jazz Cash |
+| - | - | - | - | - |
+| Security | Data | 62 | 33 | 30 |
+| | Personal data | 54 | 37 | 47 |
+| | Secure | 58 | 33 | 40 |
+| | Alert | 59 | 38 | 37 |
+| | Protection | 55 | 36 | 39 |
+| Convenience | Acceptance | 59 | 38 | 39 |
+| | Experience | 52 | 35 | 39 |
+| | Receive | 52 | 41 | 39 |
+| | Retailer | 54 | 36 | 42 |
+| | I travel | 48 | 35 | 20 |
+| | Online | 54 | 35 | 34 |
+| | Wallet | 44 | 37 | 51 |
+| | Budget | 57 | 25 | 33 |
+| | Gaming | 47 | 31 | 26 |
+| | Everyday payments | 42 | 35 | 41 |
+| | Small business | 44 | 25 | 47 |
+| | No cost | 46 | 32 | 36 |
+| Lifestyle | Like | 58 | 38 | 33 |
+| | Proud | 55 | 35 | 39 |
+| | Family | 49 | 40 | 45 |
+| | Needs | 52 | 28 | 42 |
+| | Connected | 52 | 35 | 40 |
+| | Personalized | 57 | 33 | 31 |
+| | Progress | 51 | 36 | 43 |
+| | Well-being | 49 | 35 | 36 |
+| Reliability | Trust | 57 | 36 | 41 |
+| | Technology | 50 | 39 | 33 |
+| | Brands | 48 | 33 | 28 |
+| Brand values | Values | 52 | 38 | 36 |
+| | Everyone | 52 | 32 | 42 |
+| | Action | 54 | 37 | 36 |
+| | Uplifting | 49 | 39 | 36 |
+| | Community | 55 | 34 | 35 |
+| | Empower | 45 | 32 | 41 |
+| | Support | 51 | 32 | 37 |
+| Growth | 45 | 30 | 45 | |
 
 
 Base: Brand Aware
-Grey = Small base (<30)
 
-©2021 Visa. All rights reserved. Visa Confidential
+Grey = Small base (<30)
 # Brand Image Attributes – Gen Z (18-26)
 
 Jazz Cash competes with Visa on 'everyday payments', 'payments made using smartphones' and 'supporting & promoting small businesses,' while Visa leads in all other attributes.
 
-| | | | | | | | |
-| - | - | - | - | - | - | - | - |
-| Security | Data | 62 | 33 | 6 | 6 | 31 | 30 |
-| | Personal data | 54 | 37 | 12 | 22 | 10 | 47 |
-| | Secure | 58 | 33 | 0 | 11 | 17 | 40 |
-| | Alert | 59 | 38 | 0 | 11 | 21 | 37 |
-| | Protection | 55 | 36 | 12 | 11 | 8 | 39 |
-| Convenience | Acceptance | 59 | 38 | 18 | 6 | 6 | 39 |
-| | Experience | 52 | 35 | 12 | 0 | 17 | 39 |
-| | Receive | 52 | 41 | 18 | 6 | 13 | 39 |
-| | Retailer | 54 | 36 | 0 | 11 | 8 | 42 |
-| | I travel | 48 | 35 | 12 | 11 | 17 | 20 |
-| | Online | 54 | 35 | 0 | 11 | 23 | 34 |
-| | Wallet | 44 | 37 | 12 | 11 | 21 | 51 |
-| | Budget | 57 | 25 | 6 | 17 | 8 | 33 |
-| | Gaming | 47 | 31 | 0 | 6 | 8 | 26 |
-| Everyday payments | | 42 | 35 | 0 | 6 | 23 | 41 |
-| Small business | | 44 | 25 | 6 | 17 | 23 | 47 |
-| No cost | | 46 | 32 | 18 | 11 | 13 | 36 |
+| | | | | | | |
+| - | - | - | - | - | - | - |
+| **Security** | | | | | | |
+| Data | 62 | 33 | 6 | 6 | 31 | 30 |
+| Personal data | 54 | 37 | 12 | 22 | 10 | 47 |
+| Secure | 58 | 33 | 0 | 11 | 17 | 40 |
+| Alert | 59 | 38 | 0 | 11 | 21 | 37 |
+| Protection | 55 | 36 | 12 | 11 | 8 | 39 |
+| **Convenience** | | | | | | |
+| Acceptance | 59 | 38 | 18 | 6 | 6 | 39 |
+| Experience | 52 | 35 | 12 | 0 | 17 | 39 |
+| Receive | 52 | 41 | 18 | 6 | 13 | 39 |
+| Retailer | 54 | 36 | 0 | 11 | 8 | 42 |
+| I travel | 48 | 35 | 12 | 11 | 17 | 20 |
+| Online | 54 | 35 | 0 | 11 | 23 | 34 |
+| Wallet | 44 | 37 | 12 | 11 | 21 | 51 |
+| Budget | 57 | 25 | 6 | 17 | 8 | 33 |
+| Gaming | 47 | 31 | 0 | 6 | 8 | 26 |
+| Everyday payments | 42 | 35 | 0 | 6 | 23 | 41 |
+| Small business | 44 | 25 | 6 | 17 | 23 | 47 |
+| No cost | 46 | 32 | 18 | 11 | 13 | 36 |
 
 
-| | | | | | | | |
-| - | - | - | - | - | - | - | - |
-| Lifestyle | Like | 58 | 38 | 6 | 6 | 15 | 33 |
-| | Proud | 55 | 35 | 6 | 0 | 13 | 39 |
-| | Family | 49 | 40 | 6 | 17 | 13 | 45 |
-| | Needs | 52 | 28 | 24 | 6 | 23 | 42 |
-| | Connected | 52 | 35 | 29 | 11 | 15 | 40 |
-| | Personalized | 57 | 33 | 18 | 6 | 17 | 31 |
-| | Progress | 51 | 36 | 6 | 11 | 15 | 43 |
-| | Well-being | 49 | 35 | 0 | 0 | 19 | 36 |
-| Reliability | Trust | 57 | 36 | 0 | 11 | 25 | 41 |
-| | Technology | 50 | 39 | 0 | 11 | 17 | 33 |
-| | Brands | 48 | 33 | 18 | 11 | 27 | 28 |
-| Brand values | Values | 52 | 38 | 6 | 0 | 15 | 36 |
-| | Everyone | 52 | 32 | 0 | 11 | 17 | 42 |
-| | Action | 54 | 37 | 6 | 11 | 17 | 36 |
-| | Uplifting | 49 | 39 | 12 | 17 | 15 | 36 |
-| | Community | 55 | 34 | 0 | 22 | 13 | 35 |
-| | Empower | 45 | 32 | 18 | 6 | 19 | 41 |
-| | Support | 51 | 32 | 6 | 17 | 10 | 37 |
-| | Growth | 45 | 30 | 12 | 11 | 13 | 45 |
+| | | | | | | |
+| - | - | - | - | - | - | - |
+| **Lifestyle** | | | | | | |
+| Like | 58 | 38 | 6 | 6 | 15 | 33 |
+| Proud | 55 | 35 | 6 | 0 | 13 | 39 |
+| Family | 49 | 40 | 6 | 17 | 13 | 45 |
+| Needs | 52 | 28 | 24 | 6 | 23 | 42 |
+| Connected | 52 | 35 | 29 | 11 | 15 | 40 |
+| Personalized | 57 | 33 | 18 | 6 | 17 | 31 |
+| Progress | 51 | 36 | 6 | 11 | 15 | 43 |
+| Well-being | 49 | 35 | 0 | 0 | 19 | 36 |
+| **Reliability** | | | | | | |
+| Trust | 57 | 36 | 0 | 11 | 25 | 41 |
+| Technology | 50 | 39 | 0 | 11 | 17 | 33 |
+| Brands | 48 | 33 | 18 | 11 | 27 | 28 |
+| **Brand values** | | | | | | |
+| Values | 52 | 38 | 6 | 0 | 15 | 36 |
+| Everyone | 52 | 32 | 0 | 11 | 17 | 42 |
+| Action | 54 | 37 | 6 | 11 | 17 | 36 |
+| Uplifting | 49 | 39 | 12 | 17 | 15 | 36 |
+| Community | 55 | 34 | 0 | 22 | 13 | 35 |
+| Empower | 45 | 32 | 18 | 6 | 19 | 41 |
+| Support | 51 | 32 | 6 | 17 | 10 | 37 |
+| Growth | 45 | 30 | 12 | 11 | 13 | 45 |
 
 
 Base: Brand Aware
@@ -1224,10 +1227,10 @@ graph TD
     A[Brand Health]
     B[Rational]
     C[Emotional]
-    D[Prominence<br>First to Mind<br>20%]
-    E[Preference<br>Preferred Brand<br>30%]
-    F[Affinity<br>Love/Hate<br>25%]
-    G[Reputation<br>Great Company<br>25%]
+    D[Prominence]
+    E[Preference]
+    F[Affinity]
+    G[Reputation]
     H[Ownership/Usage + External market factors]
 
     A --> B
@@ -1237,16 +1240,31 @@ graph TD
     C --> F
     C --> G
     A --> H
+
+    D[Prominence<br>First to Mind<br>20%]
+    E[Preference<br>Preferred Brand<br>30%]
+    F[Affinity<br>Love/Hate<br>25%]
+    G[Reputation<br>Great Company<br>25%]
 ```
 
-Rational | Emotional
----------|----------
-Prominence<br>First to Mind<br>20% | Affinity<br>Love/Hate<br>25%
-Preference<br>Preferred Brand<br>30% | Reputation<br>Great Company<br>25%
+The Brand Health Score is composed of four main components:
 
-Ownership/Usage + External market factors
+1. **Prominence** (20%): First to Mind
+2. **Preference** (30%): Preferred Brand
+3. **Affinity** (25%): Love/Hate
+4. **Reputation** (25%): Great Company
 
-©2021 Visa. All rights reserved. Visa Confidential  41
+These components are further categorized into:
+
+- **Rational**: Prominence and Preference
+- **Emotional**: Affinity and Reputation
+
+The Brand Health Score also takes into account:
+
+- Ownership/Usage
+- External market factors
+
+*©2021 Visa. All rights reserved. Visa Confidential*
 # Calculating Brand Health Score
 
 The Brand Health Score is a composite score of four individual questions.
@@ -1324,3 +1342,6 @@ The components are further categorized into:
 | Global Managed & Funded | Regional Managed & Funded (FY21+) |
 | - | - |
 | **Continues/Quarterly** 1. UAE 2. KSA (FY22 & Prior was Annual) **Annual:** 1. Ukraine 2. South Africa 3. Nigeria 4. Saudi Arabia | 1. Belarus, 2. Kazakhstan 3. Serbia 4. Pakistan 5. Qatar, 6. Egypt, 7. Ethiopia, 8. Morocco, 9. Ivory Coast, 10. Kenya, 11. Cameroon, 12. DR Congo |
+
+
+©2021 Visa. All rights reserved. Visa Confidential

@@ -79,9 +79,7 @@ Funnel metrics administered (BHS not measured)
 
 [The rest of the slide appears to be blank, with no additional content provided.]
 
-<div style="text-align: right; font-size: 0.8em; color: #888;">
 ©2021 Visa. All rights reserved. Visa Confidential  4
-</div>
 Visa remains the market leader on BHS however it has declined significantly over FY'23. Need to watchout for Mastercard which has improved on BHS across segments.
 
 | BHS | Funnel | Imagery | Card Types |
@@ -281,7 +279,7 @@ Brand Health Score (BHS) is a composite value derived from performance across fo
 Base: All Respondents
 # Key Indicators, Imagery and Prominence
 
-[The content of this slide is simply the title of a section or presentation. The slide has a blue background with white text for the main heading. At the bottom right corner, there is a Visa logo and copyright information.]
+VISA
 
 ©2021 Visa. All rights reserved. Visa Confidential  13
 # Funnel Measures
@@ -310,8 +308,9 @@ Morocco SOW for the total base also includes Cash (41), Cheque (3), Others (5)
 
 Visa is perceived as strong in 'reliability' and 'understanding needs,' but it is not seen as effectively 'helping communities that matter to people,' an area where PayPal and CMI have a stronger presence.
 
-| Attribute | VISA(Base: 394) | Mastercard(Base: 355) | PayPal(Base: 321) | CMI(Base: 200) |
+| Attribute | VISA | Mastercard | PayPal | CMI |
 | - | - | - | - | - |
+| Base | 394 | 355 | 321 | 200 |
 | I'm proud to be seen using this brand | 3 | -2 | 4 | -5 |
 | Is a brand for someone like me | -2 | 2 | 2 | -1 |
 | Helps me build financial well-being | 0 | -2 | 4 | -2 |
@@ -329,14 +328,15 @@ Base: Brand Aware
 Relative Strength of the Brand (>4)
 Relative Weakness of the Brand (<-4)
 
-Values indicate observed associations minus expected associations. The relative strength threshold is basis the standard deviation.
+Values indicate observed associations minus expected associations.
+The relative strength threshold is basis the standard deviation.
 
-*©2021 Visa. All rights reserved. Visa Confidential*
+©2021 Visa. All rights reserved. Visa Confidential
 # Key Imagery Performance (Absolutes) – Overall and Gen Z
 
 Visa has the strongest associations across various attributes, but Mastercard competes closely among Gen Z, particularly as a 'brand for someone like me.'
 
-| Attribute\<br/> | Overall\<br/> | Overall\<br/>Gen Z\<br/> | Overall\<br/>Gen Z\<br/> | Gen Z\<br/> | | |
+| | Overall\<br/> | Overall\<br/>Gen Z\<br/> | Overall\<br/>Gen Z\<br/> | Gen Z\<br/> | | |
 | - | - | - | - | - | - | - |
 | Base | 394 | 355 | 200 | 156 | 139 | 60 |
 | I'm proud to be seen using this brand | 53 | 30 | 10 | 49 | 38 | 10 |
@@ -365,21 +365,21 @@ Visa leads in CEPs, outperforming the competition.
 
 ## Brand comes to mind immediately when think of ...
 
-| Category | VISA FY24 | vs. Competition in FY24 | vs. Competition in FY24 | vs. Competition in FY24 |
-| - | - | - | - | - |
-| .. contactless Payments | 63% | 34% ↓ | 13% ↓ | 10% ↓ |
-| ...eComm Payments | 60% | 37% ↓ | 31% ↓ | 3% ↓ |
-| ...XB Travel Payments | 59% | 31% ↓ | 9% ↓ | 5% ↓ |
-| ...everyday spend payments | 59% | 33% ↓ | 15% ↓ | 6% ↓ |
-| ...XB eComm Payments | 57% | 35% ↓ | 40% ↓ | 4% ↓ |
-| ...acquiring new debit or credit Card | 56% | 29% ↓ | 12% ↓ | 6% ↓ |
-| ...relevant benefits & offers on debit / credit cards | 56% | 33% ↓ | 41% ↓ | 6% ↓ |
+| Category | VISA FY24 | vs. Competition in FY24 | | |
+| - | - | - |---|---|
+| .. contactless Payments | 63% | 34% 🔻 \| 13% 🔻 \| 10% 🔻 |
+| ...eComm Payments | 60% | 37% 🔻 \| 31% 🔻 \| 3% 🔻 |
+| ...XB Travel Payments | 59% | 31% 🔻 \| 9% 🔻 \| 5% 🔻 |
+| ...everyday spend payments | 59% | 33% 🔻 \| 15% 🔻 \| 6% 🔻 |
+| ...XB eComm Payments | 57% | 35% 🔻 \| 40% 🔻 \| 4% 🔻 |
+| ...acquiring new debit or credit Card | 56% | 29% 🔻 \| 12% 🔻 \| 6% 🔻 |
+| ...relevant benefits & offers on debit / credit cards | 56% | 33% 🔻 \| 41% 🔻 \| 6% 🔻 |
 
 
 Base: All Respondents
 
-↑ Brand Trending higher than Visa
-↓ Brand Trending lower than Visa
+🔼 Brand Trending higher than Visa
+🔻 Brand Trending lower than Visa
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Visa's standing Vs. competition across different card types
@@ -451,8 +451,8 @@ T2B Scores: Very Likely + Somewhat likely
 | | Visa\<br/>FY22 | Visa\<br/>Mastercard\<br/>FY23 | Visa\<br/>Mastercard\<br/>FY24 | Mastercard\<br/>FY22 | FY23 | FY24 |
 | - | - | - | - | - | - | - |
 | Platinum | Low Base | 84% | 75% ↓ | Low Base | 86% | Low Base |
-| Infinite | Low Base | Low Base | 84% | NA | Low Base | 77% |
-| Signature | Low Base | Low Base | Low Base | NA | NA | Low Base |
+| Infinite/World | Low Base | Low Base | 84% | NA | Low Base | 77% |
+| Signature/World Elite | Low Base | Low Base | Low Base | NA | NA | Low Base |
 
 
 ## Intent to acquire (among non-brand holders)
@@ -461,13 +461,13 @@ T2B Scores: Very Likely + Somewhat likely
 | | Visa\<br/>FY22 | Visa\<br/>Mastercard\<br/>FY23 | Visa\<br/>Mastercard\<br/>FY24 | Mastercard\<br/>FY22 | FY23 | FY24 |
 | - | - | - | - | - | - | - |
 | Platinum | 57% | 62% | 59% | 11% | 39% ↑ | 42% |
-| Infinite | 37% | 39% | 72% ↑ | 13% | 32% ↑ | 52% ↑ |
-| Signature | 21% | 33% ↑ | Low Base | 12% | 20% | 60% ↑ |
+| Infinite/World | 37% | 39% | 72% ↑ | 13% | 32% ↑ | 52% ↑ |
+| Signature/World Elite | 21% | 33% ↑ | Low Base | 12% | 20% | 60% ↑ |
 
 
 Base: Answering base
 
-Scores are statistically tested over previous wave highlighting Positive / Negative trends at 90%.
+Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Travel Cards – Visa vs. MasterCard
@@ -626,14 +626,12 @@ The figures above represents those who said that they have loaded Visa/ Masterca
 Base: Wallet/ card owned
 
 Base: Those wallet owners who currently don't have Visa loaded in their wallet
-
-©2021 Visa. All rights reserved. Visa Confidential
 # Events Interested vs. Sponsorship - Association
 
 Level of interest declined significantly for AFCON, UEFA Champions League and Winter Olympics.
 Visa's association with FIFA World Cup increased.
 
-| Events\<br/> | Last season date\<br/> | Interested(% of consumers)\<br/> | Brand Association with...\<br/> | Brand Association with...\<br/> | Brand Association with...\<br/> | Brand Association with...\<br/> |
+| Events\<br/> | Last season date\<br/> | Interested(% of consumers)\<br/> | Brand Association with...\<br/>VISA | Brand Association with...\<br/>mastercard | Brand Association with...\<br/>PayPal | Brand Association with...\<br/>cmi |
 | - | - | - | - | - | - | - |
 | FIFA World Cup | Nov 2022 | 78% | 47% ↑ | 35% | 19% ↑ | 5% ↓ |
 | The CAF Africa Cup of Nations (AFCON) | Jan 2024 | 67% ↓ | 36% | 27% | 11% | 10% ↓ |
@@ -646,8 +644,6 @@ Visa's association with FIFA World Cup increased.
 Base: All Respondents
 
 Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
-
-©2021 Visa. All rights reserved. Visa Confidential
 VISA
 
 Thank
@@ -692,7 +688,7 @@ Colors of bars indicate competitive standing in the market- Lead, Above Average,
 
 Morocco SOW for the total base also includes Cash (41), Cheque (3), Others (5)
 
-©2021 Visa. All rights reserved. Visa Confidential  31
+© 2021 Visa. All rights reserved. Visa Confidential
 # Index Equity - Total
 
 Visa strengths lies in 'global acceptance', 'everyday payments', 'trust' and 'brand that family & friends use'.
@@ -807,7 +803,7 @@ Base: Brand Aware
 
 At an absolute level, Visa outperforms key competition on brand imagery attributes.
 
-| Category | Attribute | | | |
+| Category | Attribute | VISA | Mastercard | CMI |
 | - | - | - | - | - |
 | Security | Secure | 71 | 47 | 25 |
 | | Data | 64 | 42 | 19 |
@@ -833,7 +829,7 @@ At an absolute level, Visa outperforms key competition on brand imagery attribut
 | | Like | 57 | 39 | 16 |
 | | Proud | 53 | 30 | 10 |
 | | Progress | 53 | 32 | 13 |
-| | Well- being | 47 | 28 | 12 |
+| | Well-being | 47 | 28 | 12 |
 | Reliability | Trust | 72 | 43 | 21 |
 | | Technology | 61 | 43 | 12 |
 | | Brands | 53 | 34 | 11 |
@@ -871,14 +867,18 @@ While Visa leads across most attributes, Mastercard competes, perform better amo
 | Small business | 47 | 47 | 18 | |
 | Gaming | 46 | 44 | 10 | |
 | No cost | 36 | 42 | 12 | |
+
+
+| | !VISA | !mastercard | !cmi | |
+| - | - | - | - | - |
 | Lifestyle | Family | 64 | 52 | 17 |
 | | Needs | 51 | 42 | 13 |
 | | Connected | 46 | 40 | 12 |
 | | Personalized | 51 | 36 | 12 |
 | | Like | 47 | 46 | 10 |
 | | Proud | 49 | 38 | 10 |
-| Progress | 48 | 40 | 12 | |
-| Well-being | 41 | 35 | 13 | |
+| | Progress | 48 | 40 | 12 |
+| | Well-being | 41 | 35 | 13 |
 | Reliability | Trust | 55 | 50 | 18 |
 | | Technology | 53 | 44 | 8 |
 | | Brands | 44 | 36 | 12 |
@@ -898,7 +898,7 @@ Gen Z: random + Boosters
 
 While Visa leads across most attributes, Mastercard and PayPal compete, perform better among a few.
 
-| | !VISA | !mastercard | !PayPal | !cmi | |
+| | !VISA | !Mastercard | !PayPal | !CMI | |
 | - | - | - | - | - | - |
 | Security | Secure | 62 | 51 | 46 | 18 |
 | | Data | 53 | 50 | 38 | 13 |
@@ -919,7 +919,7 @@ While Visa leads across most attributes, Mastercard and PayPal compete, perform 
 | No cost | 36 | 42 | 30 | 12 | |
 
 
-| | !VISA | !mastercard | !PayPal | !cmi | |
+| | !VISA | !Mastercard | !PayPal | !CMI | |
 | - | - | - | - | - | - |
 | Lifestyle | Family | 64 | 52 | 26 | 17 |
 | | Needs | 51 | 42 | 30 | 13 |
@@ -955,8 +955,8 @@ Gen Z: random + Boosters
 | | Protection | 55 | 43 | 38 | 18 |
 | | Alert | 52 | 42 | 32 | 14 |
 | | Personal data | 51 | 40 | 33 | 19 |
-| | Acceptance | 73 | 51 | 26 | 15 |
-| Convenience | Receive | 58 | 49 | 36 | 20 |
+| Convenience | Acceptance | 73 | 51 | 26 | 15 |
+| | Receive | 58 | 49 | 36 | 20 |
 | | Wallet | 60 | 44 | 49 | 21 |
 | | Everyday payments | 60 | 44 | 28 | 21 |
 | | Experience | 58 | 46 | 39 | 23 |
@@ -964,7 +964,7 @@ Gen Z: random + Boosters
 | | I travel | 58 | 43 | 39 | 13 |
 | | Retailer | 57 | 44 | 24 | 30 |
 | | Online | 55 | 43 | 54 | 14 |
-| | Small business | 50 | 43 | 37 | 20 |
+| Other | Small business | 50 | 43 | 37 | 20 |
 | | Gaming | 54 | 39 | 43 | 15 |
 | | No cost | 39 | 40 | 29 | 15 |
 | Lifestyle | Family | 69 | 51 | 29 | 21 |
@@ -1001,8 +1001,8 @@ Base: Brand Aware
 | | Alert | 62 | 43 | 43 | 19 |
 | | Personal data | 62 | 50 | 41 | 26 |
 | | Acceptance | 77 | 52 | 28 | 19 |
-| | Receive | 69 | 44 | 42 | 21 |
-| Convenience | Wallet | 65 | 42 | 54 | 20 |
+| Convenience | Receive | 69 | 44 | 42 | 21 |
+| | Wallet | 65 | 42 | 54 | 20 |
 | | Everyday payments | 69 | 38 | 32 | 23 |
 | | Experience | 65 | 47 | 43 | 24 |
 | | Budget | 58 | 43 | 43 | 14 |
@@ -1010,8 +1010,8 @@ Base: Brand Aware
 | | Retailer | 64 | 40 | 25 | 31 |
 | | Online | 57 | 44 | 61 | 23 |
 | | Small business | 55 | 41 | 42 | 29 |
-| | Gaming | 61 | 38 | 54 | 14 |
-| | No cost | 42 | 34 | 28 | 14 |
+| Gaming | | 61 | 38 | 54 | 14 |
+| No cost | | 42 | 34 | 28 | 14 |
 | Lifestyle | Family | 69 | 50 | 34 | 33 |
 | | Needs | 63 | 42 | 35 | 21 |
 | | Connected | 62 | 38 | 42 | 13 |
@@ -1083,28 +1083,27 @@ Base: Brand Aware
 ©2021 Visa. All rights reserved. Visa Confidential 39
 # Brand Image Attributes – Definition
 
-| Security | | Lifestyle | |
+| Attribute | Definition | Attribute | Definition |
 | - | - | - | - |
+| **Security** | | **Lifestyle** | |
 | Alert | Actively alerts me about potential fraudulent transactions | Connected | I feel connected to the brand |
 | Data | Actively protects my personal data | Family | Is what my friends / families are using |
 | Personal data | Never sells my personal data | Like | Is a brand for someone like me |
 | Protection | Proactively protects my payments | Needs | Understands my needs |
 | Secure | Is a secure way to pay | Personalized | Offers me relevant benefits, privileges, and personalized features |
-| | | Progress | Helps me make progress in life |
-| Convenience | | Proud | I'm proud to be seen using this brand |
-| Acceptance | Is accepted wherever and whenever I need it | Well-being | Helps me build financial well-being |
-| Budget | Helps me feel in control of my spending | | |
-| Everyday | Is best for paying everyday small amounts | Reliability | |
+| **Convenience** | | Progress | Helps me make progress in life |
+| Acceptance | Is accepted wherever and whenever I need it | Proud | I'm proud to be seen using this brand |
+| Budget | Helps me feel in control of my spending | Well-being | Helps me build financial well-being |
+| Everyday | Is best for paying everyday small amounts | **Reliability** | |
 | Experience | Enables a seamless payment experience | Brands | Is distinct from other payment brands |
 | Gaming | Is easy to make purchases while gaming | Technology | Is always improving the technology behind my payments |
 | I Travel | Is the best way to make purchases while traveling internationally | Trust | Is a brand I trust |
-| No cost | There is no cost to use | | |
-| Online | Is best for online transactions | Brand values | |
-| Receive | Is the best way to get paid | Action | The brands actions match its words |
-| Retailer | Is a brand that retailers prefer I use | Community | Helps the communities that matter to me make progress |
-| Small business | Is best for sending and receiving money between people, small businesses | Empower | Is a brand that empowers small and micro businesses |
-| Wallet | Easy to use with my smartphone or digital wallets | Everyone | Opens doors to opportunities for everyone |
-| | | Growth | Supports small business growth |
+| No cost | There is no cost to use | **Brand values** | |
+| Online | Is best for online transactions | Action | The brands actions match its words |
+| Receive | Is the best way to get paid | Community | Helps the communities that matter to me make progress |
+| Retailer | Is a brand that retailers prefer I use | Empower | Is a brand that empowers small and micro businesses |
+| Small business | Is best for sending and receiving money between people, small businesses | Everyone | Opens doors to opportunities for everyone |
+| Wallet | Easy to use with my smartphone or digital wallets | Growth | Supports small business growth |
 | | | Support | Is a brand that supports small business |
 | | | Uplifting | Cares about uplifting people |
 | | | Values | Shares values that inspire me |
@@ -1116,48 +1115,34 @@ Morocco flag
 ```mermaid
 graph TD
     A[Brand Health]
-    B[Rational]
-    C[Emotional]
-    D[Prominence]
-    E[Preference]
-    F[Affinity]
-    G[Reputation]
-    H[Ownership/Usage + External market factors]
-
-    A --> B
-    A --> C
-    B --> D
-    B --> E
-    C --> F
-    C --> G
-    A --> H
-
-    D[Prominence<br>First to Mind<br>20%]
-    E[Preference<br>Preferred Brand<br>30%]
-    F[Affinity<br>Love/Hate<br>25%]
-    G[Reputation<br>Great Company<br>25%]
+    A --> B[Prominence]
+    A --> C[Preference]
+    A --> D[Affinity]
+    A --> E[Reputation]
+    B --> F[20%]
+    C --> G[30%]
+    D --> H[25%]
+    E --> I[25%]
+    J[Rational] --> B
+    J --> C
+    K[Emotional] --> D
+    K --> E
+    L[Ownership/Usage + External market factors] --> J
+    L --> K
 ```
 
-The Brand Health Score is composed of four main components:
+| Metric | Description | Percentage | Category |
+|--------|-------------|------------|----------|
+| Prominence | First to Mind | 20% | Rational |
+| Preference | Preferred Brand | 30% | Rational |
+| Affinity | Love/Hate | 25% | Emotional |
+| Reputation | Great Company | 25% | Emotional |
 
-1. **Prominence** (20%): First to Mind
-2. **Preference** (30%): Preferred Brand
-3. **Affinity** (25%): Love/Hate
-4. **Reputation** (25%): Great Company
-
-These components are further categorized into:
-
-- **Rational**: Prominence and Preference
-- **Emotional**: Affinity and Reputation
-
-The Brand Health Score also takes into account:
-
-- Ownership/Usage
-- External market factors
+The Brand Health Score is derived from both rational and emotional factors, which are influenced by ownership/usage and external market factors.
 
 VISA
 
-© 2021 Visa. All rights reserved. Visa Confidential   41
+©2021 Visa. All rights reserved. Visa Confidential  41
 # Calculating Brand Health Score
 
 The Brand Health Score is a composite score of four individual questions.
@@ -1172,28 +1157,65 @@ The Brand Health Score is a composite score of four individual questions.
 
 Brand Health Score is calculated at the respondent level
 
-*Morocco flag icon in the top right corner*
-
-VISA logo at the bottom left
-
-©2023 Visa. All rights reserved. Visa Confidential
+Morocco
 # Components of the Brand & Campaign Survey
 
 Each consumer asked to answer questions below
 
-| Brand Health Score | | | |
-| - | - | - | - |
-| • Brand Preference • Prominence • Brand Affinity • Reputation | | | |
-| Funnel Measures | Brand Attributes | Advertising Effectiveness | Global & Market KPIs |
-| • Awareness • Ownership • Usage • Share of wallet | • 20+ brand attributes Brand Image Brand Experience Brand Purpose Product Experience Product Benefits Payment Occasions | • All media formats • Recall • Brand Linkage • Ad Diagnostics • Custom Message Perf. • Monthly & Qrtly • Rptg: 14 audiences | • Cross Border • eCommerce • Contactless • SMB • Cash Conversion • Market-specific KPIs • Quarterly Reporting |
-| Brand Performance | | Campaign Performance | |
+## Brand Health Score
 
+- Brand Preference
+- Brand Affinity
+- Prominence
+- Reputation
+
+The Brand Health Score is connected to four main components:
+
+### Funnel Measures
+
+- Awareness
+- Ownership
+- Usage
+- Share of wallet
+
+### Brand Attributes
+
+- 20+ brand attributes
+  - Brand Image
+  - Brand Experience
+  - Brand Purpose
+  - Product Experience
+  - Product Benefits
+  - Payment Occasions
+
+### Advertising Effectiveness
+
+- All media formats
+- Recall
+- Brand Linkage
+- Ad Diagnostics
+- Custom Message Perf.
+- Monthly & Qrtly
+- Rptg: 14 audiences
+
+### Global & Market KPIs
+
+- Cross Border
+- eCommerce
+- Contactless
+- SMB
+- Cash Conversion
+- Market-specific KPIs
+- Quarterly Reporting
+
+The components are further categorized into:
+
+**Brand Performance** (includes Funnel Measures and Brand Attributes)
+
+**Campaign Performance** (includes Advertising Effectiveness and Global & Market KPIs)
 # CEMEA Coverage & frequency
 
 | Brand Health Study | | |
 | - | - | - |
 | Global Managed & Funded | Regional Managed & Funded (FY21+) | |
 | **Continues/Quarterly** 1. UAE 2. KSA (FY22 & Prior was Annual) **Annual:** 1. Ukraine 2. South Africa 3. Nigeria 4. Saudi Arabia | 1. Belarus, 2. Kazakhstan 3. Serbia 4. Pakistan 5. Qatar, 6. Egypt, 7. Ethiopia, 8. Morocco, 9. Ivory Coast, 10. Kenya, 11. Cameroon, 12. DR Congo | |
-
-
-Morocco

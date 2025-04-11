@@ -1,109 +1,121 @@
-
 //axiosConfig.jsx
-import axios from 'axios';
+import axios from "axios";
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:8000/api', // Your Django backend URL
+  baseURL: "http://localhost:8000/api", // Your Django backend URL
   headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    "Content-Type": "application/json",
+    Accept: "application/json",
   },
 });
 
 // Add request interceptor for adding auth token
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
-      config.headers['Authorization'] = `Token ${token}`;
+      config.headers["Authorization"] = `Token ${token}`;
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-
 export const topicModelingService = {
   uploadDataset: (formData) => {
-    return axiosInstance.post('/analysis/upload_dataset/', formData, {
+    return axiosInstance.post("/analysis/upload_dataset/", formData, {
       headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+        "Content-Type": "multipart/form-data",
+      },
     });
   },
 
   enhancedCustomAnalysis: (data) => {
-    return axiosInstance.post('/analysis/enhanced_handle_custom_analysis/', data);
+    return axiosInstance.post(
+      "/analysis/enhanced_handle_custom_analysis/",
+      data
+    );
   },
 
   analyzeSentiment: (data) => {
-    return axiosInstance.post('/analysis/analyze_sentiment/', data);
+    return axiosInstance.post("/analysis/analyze_sentiment/", data);
   },
 
   semanticSearch: (data) => {
-    return axiosInstance.post('/analysis/semantic_search/', data);
-  }
+    return axiosInstance.post("/analysis/semantic_search/", data);
+  },
 };
-
 
 export const dataAnalysisService = {
   uploadFile: (formData) => {
-    return axiosInstance.post('/data/analysis/', formData, {
+    return axiosInstance.post("/data/analysis/", formData, {
       headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+        "Content-Type": "multipart/form-data",
+      },
     });
   },
 
   analyzeData: (query) => {
-    return axiosInstance.post('/data/analysis/', { query }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+    return axiosInstance.post(
+      "/data/analysis/",
+      { query },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
       }
-    });
+    );
   },
 
   saveResults: (results) => {
-    return axiosInstance.post('/data/save-results/', { results }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+    return axiosInstance.post(
+      "/data/save-results/",
+      { results },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
       }
-    });
-  }
+    );
+  },
 };
 
 export const ideaService = {
   generateIdeas: (data) => {
-    return axiosInstance.post('/ideas/generate_ideas/', data);
+    return axiosInstance.post("/ideas/generate_ideas/", data);
   },
   getIdeaDetails: (ideaId) => {
     return axiosInstance.get(`/ideas/${ideaId}/details/`); // added for Visualization_ prompt(sourav/ 11-02-2025)
   },
   updateIdea: (data) => {
-    return axiosInstance.put('/ideas/update_idea/', data);
+    return axiosInstance.put("/ideas/update_idea/", data);
   },
   deleteIdea: (ideaId) => {
-    return axiosInstance.delete('/ideas/delete_idea/', { data: { idea_id: ideaId } });
+    return axiosInstance.delete("/ideas/delete_idea/", {
+      data: { idea_id: ideaId },
+    });
   },
   generateProductImage: (data) => {
-    return axiosInstance.post('/ideas/generate_product_image/', data);
+    return axiosInstance.post("/ideas/generate_product_image/", data);
   },
   regenerateProductImage: (data) => {
-    return axiosInstance.post('/ideas/regenerate_product_image/', data);
+    return axiosInstance.post("/ideas/regenerate_product_image/", data);
   },
   getIdeaHistory: async (ideaId) => {
     try {
-      const response = await axiosInstance.get(`/ideas/idea-history/${ideaId}/`);
+      const response = await axiosInstance.get(
+        `/ideas/idea-history/${ideaId}/`
+      );
       return response;
     } catch (error) {
-      console.error('Error fetching idea history:', error);
+      console.error("Error fetching idea history:", error);
       throw error;
     }
   },
   restoreIdeaVersion: async (data) => {
-    return await axiosInstance.post('/ideas/restore-idea-version/', {
+    return await axiosInstance.post("/ideas/restore-idea-version/", {
       version_id: data.version_id,
       current_id: data.current_id,
       image_id: data.image_id,
@@ -112,38 +124,45 @@ export const ideaService = {
   // Create project
   createProject: async (data) => {
     try {
-      const response = await axiosInstance.post('/ideas/projects/', data);
+      const response = await axiosInstance.post("/ideas/projects/", data);
       return response;
     } catch (error) {
       // Enhanced error handling
       if (error.response) {
         // Server responded with an error status
         if (error.response.status === 500) {
-          const errorData = error.response.data?.toString() || '';
-          
+          const errorData = error.response.data?.toString() || "";
+
           // Check for duplicate key violation
-          if (errorData.includes('duplicate key value') && errorData.includes('already exists')) {
+          if (
+            errorData.includes("duplicate key value") &&
+            errorData.includes("already exists")
+          ) {
             // Extract the project name from the error message if possible
             const nameMatch = errorData.match(/Key \(name\)=\(([^)]+)\)/);
-            const projectName = nameMatch ? nameMatch[1] : 'this name';
-            
+            const projectName = nameMatch ? nameMatch[1] : "this name";
+
             // Create a user-friendly error response
             error.response.data = {
               success: false,
-              error: `A project with the name "${projectName}" already exists. Please choose a different name.`
+              error: `A project with the name "${projectName}" already exists. Please choose a different name.`,
             };
           } else {
             // For other 500 errors
             error.response.data = {
               success: false,
-              error: 'There was a server error creating your project. Please try again later.'
+              error:
+                "There was a server error creating your project. Please try again later.",
             };
           }
-        } else if (!error.response.data || typeof error.response.data.error === 'undefined') {
+        } else if (
+          !error.response.data ||
+          typeof error.response.data.error === "undefined"
+        ) {
           // Ensure there's a structured error response
           error.response.data = {
             success: false,
-            error: error.response.statusText || 'Error creating project'
+            error: error.response.statusText || "Error creating project",
           };
         }
       } else if (error.request) {
@@ -151,16 +170,17 @@ export const ideaService = {
         error.response = {
           data: {
             success: false,
-            error: 'No response from server. Please check your connection and try again.'
-          }
+            error:
+              "No response from server. Please check your connection and try again.",
+          },
         };
       } else {
         // Something happened in setting up the request
         error.response = {
           data: {
             success: false,
-            error: error.message || 'Error creating project'
-          }
+            error: error.message || "Error creating project",
+          },
         };
       }
       throw error;
@@ -179,45 +199,65 @@ export const ideaService = {
 
   // Get all projects - uses the GET method of project_operations view
   getProjectDetails: (params) => {
-    return axiosInstance.get('/ideas/projects/',{ params });
+    return axiosInstance.get("/ideas/projects/", { params });
   },
 
   // Get single project details
   getSingleProjectDetails: (projectId, params) => {
-    return axiosInstance.get(`/ideas/projects/${projectId}/details/`, { params });
+    return axiosInstance.get(`/ideas/projects/${projectId}/details/`, {
+      params,
+    });
   },
-
- 
 };
-
 
 export const authService = {
   // ... existing auth methods ...
 
   initiatePasswordReset: (email) => {
-    return axiosInstance.post('/password-reset/initiate/', { email });
+    return axiosInstance.post("/password-reset/initiate/", { email });
   },
 
   confirmPasswordReset: (token, newPassword) => {
-    return axiosInstance.post('/password-reset/confirm/', { 
-      token, 
-      new_password: newPassword 
+    return axiosInstance.post("/password-reset/confirm/", {
+      token,
+      new_password: newPassword,
     });
-  }
+  },
 };
 
 // Export services
 export const documentService = {
-  uploadDocument: (formData, mainProjectId, config = {}) => {
+  // uploadDocument: (formData, mainProjectId, config = {}) => {
+  //   // Ensure mainProjectId is added to formData
+  //   formData.append("main_project_id", mainProjectId);
+
+  //   return axiosInstance.post("/upload-documents/", formData, {
+  //     headers: {
+  //       "Content-Type": "multipart/form-data",
+  //     },
+  //     ...config,
+  //   });
+  // },
+
+  uploadDocument: (formData, mainProjectId, config = {}, targetUserId = null) => {
     // Ensure mainProjectId is added to formData
-    formData.append('main_project_id', mainProjectId);
+    formData.append("main_project_id", mainProjectId);
     
-    return axiosInstance.post('/upload-documents/', formData, {
+    // Add target_user_id if provided (for admin uploads)
+    if (targetUserId) {
+      formData.append("target_user_id", targetUserId);
+    }
+  
+    return axiosInstance.post("/upload-documents/", formData, {
       headers: {
-        'Content-Type': 'multipart/form-data'
+        "Content-Type": "multipart/form-data",
       },
-      ...config
+      ...config,
     });
+  },
+
+  checkUploadPermissions: () => {
+    return axiosInstance.get('/api/check-upload-permissions/');
   },
 
   // Add this new method for custom upload handling
@@ -227,168 +267,225 @@ export const documentService = {
       baseURL: axiosInstance.defaults.baseURL,
       headers: {
         ...axiosInstance.defaults.headers,
-        'Content-Type': 'multipart/form-data'
+        "Content-Type": "multipart/form-data",
       },
-      timeout: 120000 // Longer timeout for large uploads (2 minutes)
+      timeout: 120000, // Longer timeout for large uploads (2 minutes)
     });
-    
+
     // Add the auth token
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
-      customInstance.defaults.headers.common['Authorization'] = `Token ${token}`;
+      customInstance.defaults.headers.common[
+        "Authorization"
+      ] = `Token ${token}`;
     }
-    
+
     return customInstance;
   },
 
   setActiveDocument: (documentId, mainProjectId) =>
-    axiosInstance.post('/set-active-document/', {
+    axiosInstance.post("/set-active-document/", {
       document_id: documentId,
-      main_project_id: mainProjectId
+      main_project_id: mainProjectId,
     }),
 
-    getUserDocuments: async (mainProjectId) => {
-      if (!mainProjectId) {
-        console.warn('No mainProjectId provided to getUserDocuments');
-        return { data: [] };
-      }
-  
-      try {
-        console.log('Fetching documents for project:', mainProjectId);
-        const response = await axiosInstance.get('/user-documents/', {
-          params: { main_project_id: mainProjectId }
-        });
-        console.log('Documents response:', response.data);
-        return response;
-      } catch (error) {
-        console.error('Error in getUserDocuments:', error);
-        return { data: [] };
-      }
-    },
+  getUserDocuments: async (mainProjectId) => {
+    if (!mainProjectId) {
+      console.warn("No mainProjectId provided to getUserDocuments");
+      return { data: [] };
+    }
 
-    getOriginalDocument: (documentId) => {
-      return axiosInstance.get(`/documents/${documentId}/original/`, {
-        responseType: 'blob', // Important for handling binary files
+    try {
+      console.log("Fetching documents for project:", mainProjectId);
+      const response = await axiosInstance.get("/user-documents/", {
+        params: { main_project_id: mainProjectId },
       });
-    },
-  
-    trackDocumentView: (documentId, mainProjectId) => {
-      return axiosInstance.post(`/documents/${documentId}/view-log/`, {
-        main_project_id: mainProjectId
-      });
-    },
-  
-    
+      console.log("Documents response:", response.data);
+      return response;
+    } catch (error) {
+      console.error("Error in getUserDocuments:", error);
+      return { data: [] };
+    }
+  },
+
+  getOriginalDocument: (documentId) => {
+    return axiosInstance.get(`/documents/${documentId}/original/`, {
+      responseType: "blob", // Important for handling binary files
+    });
+  },
+
+  trackDocumentView: (documentId, mainProjectId) => {
+    return axiosInstance.post(`/documents/${documentId}/view-log/`, {
+      main_project_id: mainProjectId,
+    });
+  },
+
   getChatHistory: () => {
-    return axiosInstance.get('/chat-history/', {
+    return axiosInstance.get("/chat-history/", {
       params: {
-        limit: 50,  // Optional: limit number of chats
+        limit: 50, // Optional: limit number of chats
         include_messages: true,
-        include_documents: true
-      }
+        include_documents: true,
+      },
     });
   },
   generateSummary: (documentIds, mainProjectId) => {
-    return axiosInstance.post('/generate-document-summary/', {
+    return axiosInstance.post("/generate-document-summary/", {
       document_ids: documentIds,
-      main_project_id: mainProjectId
+      main_project_id: mainProjectId,
     });
   },
 
   generateConsolidatedSummary: (documentIds, projectId) => {
     return axiosInstance.post("/consolidated_summary/", {
       document_ids: documentIds,
-      main_project_id: projectId
+      main_project_id: projectId,
     });
   },
 
-  generateIdeaContext: (data) => axiosInstance.post('/generate-idea-context/', {
-    document_id: data.document_id,
-    main_project_id: data.main_project_id
-  }),
+  generateIdeaContext: (data) =>
+    axiosInstance.post("/generate-idea-context/", {
+      document_id: data.document_id,
+      main_project_id: data.main_project_id,
+    }),
 
   deleteDocument: (documentId, mainProjectId) =>
     axiosInstance.delete(`/documents/${documentId}/delete/`, {
-      params: { main_project_id: mainProjectId }
+      params: { main_project_id: mainProjectId },
     }),
 
-    searchDocumentContent: (data) => {
-      return axiosInstance.post('/search-document-content/', {
-        query: data.query,
-        main_project_id: data.main_project_id
-      });
-    }
+  searchDocumentContent: (data) => {
+    return axiosInstance.post("/search-document-content/", {
+      query: data.query,
+      main_project_id: data.main_project_id,
+    });
+  },
+
+  
 };
 
 export const chatService = {
   sendMessage: (data) => {
     console.log("Sending message data:", data);
-    
+
     // Determine if we should use general chat mode based on document selection
-    const useGeneralChat = !data.selected_documents || data.selected_documents.length === 0 || data.general_chat_mode === true;
-    
-    return axiosInstance.post('/chat/', {
-      message: data.message,
-      conversation_id: data.conversation_id,
-      selected_documents: data.selected_documents,
-      main_project_id: data.main_project_id || data.mainProjectId, // Support both naming conventions
-      use_web_knowledge: data.use_web_knowledge || false,
-      general_chat_mode: useGeneralChat, // Automatically set based on document selection
-      response_length: data.response_length || 'short', // For response length parameter
-      response_format: data.response_format || 'auto_detect' // Add response format parameter
-    })
-    .then(response => {
-      console.log("Chat service response:", response.data);
-      return response;
-    })
-    .catch(error => {
-      console.error("Chat error:", error);
-      throw error;
-    });
+    const useGeneralChat =
+      !data.selected_documents ||
+      data.selected_documents.length === 0 ||
+      data.general_chat_mode === true;
+
+    // Add flag to request citation processing from the backend
+    const processOptions = {
+      process_citations: true, // Tell backend to process citations
+      citation_threshold: 0.3   // Minimum similarity threshold (optional)
+    };
+
+    return axiosInstance
+      .post("/chat/", {
+        message: data.message,
+        conversation_id: data.conversation_id,
+        selected_documents: data.selected_documents,
+        main_project_id: data.main_project_id || data.mainProjectId, // Support both naming conventions
+        use_web_knowledge: data.use_web_knowledge || false,
+        general_chat_mode: useGeneralChat, // Automatically set based on document selection
+        response_length: data.response_length || "short", // For response length parameter
+        response_format: data.response_format || "auto_detect", // Add response format parameter
+        citation_options: processOptions // Add citation processing options
+      })
+      .then((response) => {
+        console.log("Chat service response:", response.data);
+        return response;
+      })
+      .catch((error) => {
+        console.error("Chat error:", error);
+        throw error;
+      });
   },
-  
+
   updateConversationTitle: (conversationId, data) => {
     console.log("Updating conversation title:", conversationId, data);
-    
+
     // Create a properly formatted request payload
     const payload = {
       title: data.title,
       is_active: data.is_active || true,
       // Include main_project_id if available
-      ...(data.main_project_id && { main_project_id: data.main_project_id })
+      ...(data.main_project_id && { main_project_id: data.main_project_id }),
     };
-    
+
     // Send PATCH request to the correct endpoint
-    return axiosInstance.patch(`/conversations/${conversationId}/`, payload)
-      .then(response => {
+    return axiosInstance
+      .patch(`/conversations/${conversationId}/`, payload)
+      .then((response) => {
         console.log("Conversation title update response:", response.data);
         return response;
       })
-      .catch(error => {
-        console.error("Conversation title update error:", error.response || error);
+      .catch((error) => {
+        console.error(
+          "Conversation title update error:",
+          error.response || error
+        );
         throw error;
       });
   },
 
   manageConversation: (conversationId, data) => {
-    return axiosInstance.patch(`/conversations/${conversationId}/`, data)
-      .then(response => {
+    return axiosInstance
+      .patch(`/conversations/${conversationId}/`, data)
+      .then((response) => {
         console.log("Conversation management response:", response.data);
         return response.data;
       })
-      .catch(error => {
+      .catch((error) => {
         console.error("Conversation management error:", error);
         throw error;
       });
   },
 
-  getConversationDetails: async (conversationId, mainProjectId) => {
+  getConversationDetails: async (conversationId, mainProjectId, processCitations = false) => {
     try {
-      console.log('Fetching conversation:', conversationId, 'for project:', mainProjectId);
-      const response = await axiosInstance.get(`/conversations/${conversationId}/`, {
-        params: { main_project_id: mainProjectId }
-      });
-      
+      console.log(
+        "Fetching conversation:",
+        conversationId,
+        "for project:",
+        mainProjectId
+      );
+      const response = await axiosInstance.get(
+        `/conversations/${conversationId}/`,
+        {
+          params: { main_project_id: mainProjectId },
+        }
+      );
+
+      // Process citations for messages if requested and needed
+      if (processCitations && response.data && response.data.messages) {
+        const messages = [...response.data.messages];
+        
+        // Process citations for assistant messages that have citations but no markers
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
+          if (
+            msg.role === 'assistant' && 
+            msg.citations && 
+            msg.citations.length > 0 && 
+            !msg.content.includes('<citation id="')
+          ) {
+            try {
+              // Process citations for this message
+              const processed = await citationService.processCitations(msg.content, msg.citations);
+              if (processed && processed.processed_text) {
+                messages[i] = {...msg, content: processed.processed_text};
+              }
+            } catch (err) {
+              console.warn("Failed to process citations for message:", err);
+              // Continue with original message
+            }
+          }
+        }
+        
+        response.data.messages = messages;
+      }
+
       // Ensure the response is properly formatted
       if (response.data) {
         return {
@@ -396,233 +493,302 @@ export const chatService = {
             ...response.data,
             messages: response.data.messages || [],
             selected_documents: response.data.selected_documents || [],
-            follow_up_questions: response.data.follow_up_questions || []
-          }
+            follow_up_questions: response.data.follow_up_questions || [],
+          },
         };
       }
       return response;
     } catch (error) {
-      console.error('Error fetching conversation details:', error);
+      console.error("Error fetching conversation details:", error);
       throw error;
     }
   },
-  
 
   // Add a method to fetch all conversations
   getAllConversations: async (mainProjectId) => {
     if (!mainProjectId) {
-      console.warn('No mainProjectId provided to getAllConversations');
+      console.warn("No mainProjectId provided to getAllConversations");
       return { data: [] };
     }
 
     try {
-      const response = await axiosInstance.get('/chat-history/', {
-        params: { main_project_id: mainProjectId }
+      const response = await axiosInstance.get("/chat-history/", {
+        params: { main_project_id: mainProjectId },
       });
-      console.log('Chat history response:', response.data);
+      console.log("Chat history response:", response.data);
       return response;
     } catch (error) {
-      console.error('Error fetching chat history:', error);
+      console.error("Error fetching chat history:", error);
       return { data: [] };
     }
   },
 
   // Optional: Method to delete a conversation
   deleteConversation: (conversationId) => {
-    return axiosInstance.delete(`/conversations/${conversationId}/delete/`)
-      .then(response => {
+    return axiosInstance
+      .delete(`/conversations/${conversationId}/delete/`)
+      .then((response) => {
         console.log("Conversation deleted:", response.data);
         return response.data;
       })
-      .catch(error => {
-        console.error("Failed to delete conversation:", error.response?.data || error.message);
+      .catch((error) => {
+        console.error(
+          "Failed to delete conversation:",
+          error.response?.data || error.message
+        );
         throw error;
       });
   },
 
   startConversation: (documentId, message) => {
-    return axiosInstance.post('/conversation/start/', {
+    return axiosInstance.post("/conversation/start/", {
       document_id: documentId,
-      message: message
+      message: message,
     });
   },
 
   continueConversation: (conversationId, message) => {
-    return axiosInstance.post('/conversation/continue/', {
+    return axiosInstance.post("/conversation/continue/", {
       conversation_id: conversationId,
-      message: message
+      message: message,
     });
   },
+
+  
 };
 
+export const citationService = {
+  // Process citations on demand (frontend approach)
+  processCitations: (responseText, citations) => {
+    return axiosInstance.post("/process-citations/", {
+      response_text: responseText,
+      citations: citations
+    })
+    .then(response => {
+      console.log("Citations processed successfully");
+      return response.data;
+    })
+    .catch(error => {
+      console.error("Error processing citations:", error);
+      throw error;
+    });
+  },
 
+  // Get citation details for a specific citation (future enhancement)
+  getCitationDetails: (documentId, pageNumber, sectionTitle) => {
+    return axiosInstance.get("/citation-details/", {
+      params: {
+        document_id: documentId,
+        page_number: pageNumber,
+        section_title: sectionTitle
+      }
+    })
+    .then(response => {
+      return response.data;
+    })
+    .catch(error => {
+      console.error("Error fetching citation details:", error);
+      throw error;
+    });
+  },
 
+  // View original source document at specific citation
+  viewSourceDocument: (documentId, pageNumber) => {
+    // Generate URL for viewing the document at specific page
+    const url = `/documents/${documentId}/original/?page=${pageNumber || 1}`;
+    
+    // Open in new tab or handle as needed
+    window.open(url, '_blank');
+    
+    // Return success for promise chaining
+    return Promise.resolve({ success: true });
+  }
+};
 
 export const userService = {
   getUserProfile: () => {
-    return axiosInstance.get('/user/profile/');
+    return axiosInstance.get("/user/profile/");
   },
-  
+
   changePassword: (currentPassword, newPassword) => {
-    return axiosInstance.post('/user/change-password/', {
+    return axiosInstance.post("/user/change-password/", {
       current_password: currentPassword,
-      new_password: newPassword
+      new_password: newPassword,
     });
   },
-  
+
   updateProfile: (data) => {
-    return axiosInstance.put('/user/profile/', data);
+    return axiosInstance.put("/user/profile/", data);
   },
-
-  
 };
-
 
 export const coreService = {
   // Create a new project
   createProject: (projectData) => {
     // Send JSON data directly instead of FormData
-    return axiosInstance.post('/core/projects/create/', {
-      name: projectData.name,
-      description: projectData.description,
-      category: projectData.category,
-      selected_modules: projectData.selected_modules
-    })
-    .then(response => {
-      console.log("Project created:", response.data);
-      return response.data;
-    })
-    .catch(error => {
-      console.error("Failed to create project:", error.response?.data || error.message);
-      throw error;
-    });
+    return axiosInstance
+      .post("/core/projects/create/", {
+        name: projectData.name,
+        description: projectData.description,
+        category: projectData.category,
+        selected_modules: projectData.selected_modules,
+      })
+      .then((response) => {
+        console.log("Project created:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to create project:",
+          error.response?.data || error.message
+        );
+        throw error;
+      });
   },
 
   // Get all projects for current user
   getProjects: () => {
-    return axiosInstance.get('/core/projects/')
-      .then(response => {
+    return axiosInstance
+      .get("/core/projects/")
+      .then((response) => {
         console.log("Projects retrieved:", response.data);
         return response.data.projects;
       })
-      .catch(error => {
-        console.error("Failed to fetch projects:", error.response?.data || error.message);
+      .catch((error) => {
+        console.error(
+          "Failed to fetch projects:",
+          error.response?.data || error.message
+        );
         throw error;
       });
   },
 
   // Get single project details
   getProjectDetails: (projectId) => {
-    return axiosInstance.get(`/core/projects/${projectId}/`)
-      .then(response => {
+    return axiosInstance
+      .get(`/core/projects/${projectId}/`)
+      .then((response) => {
         console.log("Project details:", response.data);
         return response.data.project;
       })
-      .catch(error => {
-        console.error("Failed to fetch project details:", error.response?.data || error.message);
+      .catch((error) => {
+        console.error(
+          "Failed to fetch project details:",
+          error.response?.data || error.message
+        );
         throw error;
       });
   },
 
   // Delete a project
   deleteProject: (projectId) => {
-    return axiosInstance.post(`/core/projects/${projectId}/delete/`)
-      .then(response => {
+    return axiosInstance
+      .post(`/core/projects/${projectId}/delete/`)
+      .then((response) => {
         console.log("Project deleted:", response.data);
         return response.data;
       })
-      .catch(error => {
-        console.error("Failed to delete project:", error.response?.data || error.message);
+      .catch((error) => {
+        console.error(
+          "Failed to delete project:",
+          error.response?.data || error.message
+        );
         throw error;
       });
   },
 
-
-// Update an existing project
-// In your coreService or axiosConfig.js file
-updateProject: (projectId, projectData) => {
-  return axiosInstance.put(`/core/projects/${projectId}/update/`, {
-    name: projectData.name,
-    description: projectData.description,
-    category: projectData.category,
-    selected_modules: projectData.selected_modules
-  })
-  .then(response => {
-    console.log("Update response:", response.data); // Debug log
-    return response.data.project; // Return the project object from the response
-  })
-  .catch(error => {
-    console.error("Update error details:", error);
-    throw error; // Rethrow so the component can handle it
-  });
-},
-// Add new method to get current user profile with module permissions
-getCurrentUser: () => {
-  return axiosInstance.get('/user/profile/')
-    .then(response => {
-      console.log("Current user profile:", response.data);
-      return response.data;
-    })
-    .catch(error => {
-      console.error("Failed to fetch current user:", error.response?.data || error.message);
-      throw error;
-    });
-}
+  // Update an existing project
+  // In your coreService or axiosConfig.js file
+  updateProject: (projectId, projectData) => {
+    return axiosInstance
+      .put(`/core/projects/${projectId}/update/`, {
+        name: projectData.name,
+        description: projectData.description,
+        category: projectData.category,
+        selected_modules: projectData.selected_modules,
+      })
+      .then((response) => {
+        console.log("Update response:", response.data); // Debug log
+        return response.data.project; // Return the project object from the response
+      })
+      .catch((error) => {
+        console.error("Update error details:", error);
+        throw error; // Rethrow so the component can handle it
+      });
+  },
+  // Add new method to get current user profile with module permissions
+  getCurrentUser: () => {
+    return axiosInstance
+      .get("/user/profile/")
+      .then((response) => {
+        console.log("Current user profile:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to fetch current user:",
+          error.response?.data || error.message
+        );
+        throw error;
+      });
+  },
 };
-
 
 export const adminService = {
   // Get all users (admin only)
   getAllUsers: () => {
-    return axiosInstance.get('/api/admin/users/')
-      .then(response => {
+    return axiosInstance
+      .get("/api/admin/users/")
+      .then((response) => {
         console.log("Admin service - get users response:", response.data);
         return response.data;
       })
-      .catch(error => {
+      .catch((error) => {
         console.error("Admin service - get users error:", error);
         throw error;
       });
   },
- 
+
   // Create a new user (admin only)
   createUser: (userData) => {
-    return axiosInstance.post('/api/admin/users/', userData)
-      .then(response => {
+    return axiosInstance
+      .post("/api/admin/users/", userData)
+      .then((response) => {
         console.log("Admin service - create user response:", response.data);
         return response.data;
       })
-      .catch(error => {
+      .catch((error) => {
         console.error("Admin service - create user error:", error);
         throw error;
       });
   },
- 
+
   // Update a user's API tokens (admin only)
   updateUserTokens: (userId, tokenData) => {
-    return axiosInstance.put('/api/admin/users/', {
-      user_id: userId,
-      ...tokenData
-    })
-      .then(response => {
+    return axiosInstance
+      .put("/api/admin/users/", {
+        user_id: userId,
+        ...tokenData,
+      })
+      .then((response) => {
         console.log("Admin service - update tokens response:", response.data);
         return response.data;
       })
-      .catch(error => {
+      .catch((error) => {
         console.error("Admin service - update tokens error:", error);
         throw error;
       });
-
   },
- 
+
   // Delete a user (admin only)
   deleteUser: (userId) => {
-    return axiosInstance.delete(`/api/admin/users/?user_id=${userId}`)
-      .then(response => {
+    return axiosInstance
+      .delete(`/api/admin/users/?user_id=${userId}`)
+      .then((response) => {
         console.log("Admin service - delete user response:", response.data);
         return response.data;
       })
-      .catch(error => {
+      .catch((error) => {
         console.error("Admin service - delete user error:", error);
         throw error;
       });
@@ -630,24 +796,47 @@ export const adminService = {
 
   // Add new method for updating module permissions
   updateUserModulePermissions: (userId, permissionsData) => {
-    return axiosInstance.patch(`/admin/users/${userId}/modules/`, permissionsData)
-      .then(response => {
-        console.log("Admin service - update module permissions response:", response.data);
+    return axiosInstance
+      .patch(`/admin/users/${userId}/modules/`, permissionsData)
+      .then((response) => {
+        console.log(
+          "Admin service - update module permissions response:",
+          response.data
+        );
         return response.data;
       })
-      .catch(error => {
-        console.error("Admin service - update module permissions error:", error);
+      .catch((error) => {
+        console.error(
+          "Admin service - update module permissions error:",
+          error
+        );
         throw error;
       });
-  }
+  },
+
+  updateUserUploadPermissions: (userId, permissionData) => {
+    console.log(`Sending API request to update user ${userId} upload permissions:`, permissionData);
+    
+    // Fix the URL path to not duplicate "api/"
+    return axiosInstance.patch(`/admin/users/${userId}/upload-permissions/`, permissionData);
+  },
+  
+  
+
+  getUserProjects: async (userId) => {
+    return axiosInstance
+      .get(`/admin/users/${userId}/projects/`)
+      .then((response) => {
+        console.log("Admin service - get user projects response:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Admin service - get user projects error:", error);
+        throw error;
+      });
+  },
+
+  
 };
- 
- 
-
-
-
 
 export default axiosInstance;
-
-
-           

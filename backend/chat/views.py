@@ -14,6 +14,7 @@ import re
 from datetime import datetime
 from django.core.files.storage import default_storage
 from django.conf import settings
+from django.utils.deprecation import MiddlewareMixin
 import google.generativeai as genai  
 from .models import (
     ChatHistory,
@@ -22,7 +23,8 @@ from .models import (
     ProcessedIndex,
     UserAPITokens,
     ConversationMemoryBuffer,
-    UserModulePermissions
+    UserModulePermissions,
+    UserUploadPermissions
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -34,10 +36,9 @@ from core.models import Project
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-import json
-import csv
+
 from io import StringIO, BytesIO
-from django.http import HttpResponse, FileResponse
+from django.http import HttpResponse, FileResponse, JsonResponse
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.shortcuts import get_object_or_404
@@ -45,11 +46,16 @@ from django.contrib.auth import update_session_auth_hash
 from llama_parse import LlamaParse
 import requests
 from bs4 import BeautifulSoup
-import time
 import re
-import openai
 from duckduckgo_search import DDGS
 from urllib.parse import urlparse
+import nltk
+from nltk.tokenize import sent_tokenize
+from django.utils.html import strip_tags
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 
 
 load_dotenv()
@@ -856,6 +862,29 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         user = request.user
         main_project_id = request.data.get('main_project_id')
 
+        target_user_id = request.data.get('target_user_id')
+        
+        if target_user_id and request.user.username == 'admin':
+            # Admin uploading for another user
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # Regular upload
+            user = request.user
+
+        try:
+            permissions = UserModulePermissions.objects.get(user=user)
+            if permissions.disabled_modules.get('document-upload', False):
+                return Response({
+                    'error': 'Document uploads are disabled for this user'
+                }, status=status.HTTP_403_FORBIDDEN)
+        except UserModulePermissions.DoesNotExist:
+            pass
+
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
             uploaded_docs = []
@@ -1616,6 +1645,42 @@ class ChatView(APIView):
                 )
 
             user = request.user
+
+            conversation_context = ""
+            if conversation_id:
+                try:
+                    # Try to get existing conversation
+                    conversation = ChatHistory.objects.get(
+                        conversation_id=conversation_id,
+                        user=user
+                    )
+                    
+                    # Get last 5 conversation messages (max 10 messages = 5 turns)
+                    recent_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('-created_at')[:10]
+                    
+                    # Format for context
+                    if recent_messages:
+                        context_messages = []
+                        for msg in recent_messages:
+                            prefix = "User: " if msg.role == 'user' else "Assistant: "
+                            context_messages.append(f"{prefix}{msg.content[:150]}...")
+                        
+                        conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
+                    
+                    # Try to get memory buffer
+                    try:
+                        memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
+                        if memory_buffer.context_summary:
+                            conversation_context += f"\n\nConversation Summary: {memory_buffer.context_summary}"
+                    except ConversationMemoryBuffer.DoesNotExist:
+                        # No memory buffer yet, that's fine
+                        pass
+                        
+                except ChatHistory.DoesNotExist:
+                    # No conversation yet, that's fine
+                    pass
             
             # Skip document validation if in general chat mode
             if not general_chat_mode:
@@ -1642,10 +1707,12 @@ class ChatView(APIView):
             print(f"Selected documents: {selected_documents}")
             print(f"Response format: {response_format}")
             print(f"Response length: {response_length}")
+            print(f"Has conversation context: {bool(conversation_context)}")
 
             # Process document search early to get context for format detection
             all_chunks = []
             content_sources = []
+            similar_contents = []  # Store document content separately
             
             if not general_chat_mode:
                 try:
@@ -1769,11 +1836,6 @@ class ChatView(APIView):
             web_knowledge_response = None
             web_sources = []
             
-            if use_web_knowledge:
-                # Implement web search here instead of pass
-                web_knowledge_response, web_sources = self.get_web_knowledge_response(message)
-                print(f"Web knowledge response received, source count: {len(web_sources)}")
-            
             # Get answer based on mode
             if general_chat_mode:
                 # Process request in general chat mode (no documents needed)
@@ -1782,32 +1844,41 @@ class ChatView(APIView):
             else:
                 # Process with documents
                 if all_chunks:
-                    # Generate document-based answer based on requested response length
+                    # First, generate document-based answer
                     if response_length == 'short':
-                        document_answer = self.generate_short_response(message, similar_contents, content_sources, False, response_format)
+                        document_answer = self.generate_short_response(message, similar_contents, content_sources, False, response_format, conversation_context)
                     else:  # Default to comprehensive
-                        document_answer = self.generate_response(message, similar_contents, content_sources, False, response_format)
+                        document_answer = self.generate_response(message, similar_contents, content_sources, False, response_format, conversation_context)
                     
                     print(f"Generated document-based answer using {response_length} response length")
                     
-                    # If web knowledge is also requested, combine the responses
-                    if use_web_knowledge and web_knowledge_response:
-                        # Combined answer
+                    # If web knowledge is requested, get web response using document context to enhance the query
+                    if use_web_knowledge:
+                        web_knowledge_response, web_sources = self.get_web_knowledge_response(
+                            message, 
+                            document_context=similar_contents  # Pass document context to enhance web search
+                        )
+                        print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
+                        
+                        # Combine document and web responses
                         answer = self.combine_document_and_web_responses(
                             message, 
                             document_answer, 
                             web_knowledge_response, 
                             content_sources, 
                             web_sources,
-                            response_format
+                            response_format,
+                            conversation_context
                         )
                         print("Combined document and web responses")
                     else:
                         # Just use document answer
                         answer = document_answer
                 else:
-                    if use_web_knowledge and web_knowledge_response:
+                    # No document content found
+                    if use_web_knowledge:
                         # Only web knowledge available
+                        web_knowledge_response, web_sources = self.get_web_knowledge_response(message)
                         answer = web_knowledge_response
                         print("Using web knowledge response as document search returned no results")
                     else:
@@ -1867,16 +1938,17 @@ class ChatView(APIView):
             title = f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
             # Create or retrieve conversation
-            conversation, created = ChatHistory.objects.get_or_create(
-                user=user,
-                conversation_id=conversation_id,
-                main_project_id=main_project_id,
-                defaults={
-                    'title': title,
-                    'is_active': True,
-                    'follow_up_questions': follow_up_questions,
-                }
-            )
+            if conversation_id:
+                conversation, created = ChatHistory.objects.get_or_create(
+                    user=user,
+                    conversation_id=conversation_id,
+                    main_project_id=main_project_id,
+                    defaults={
+                        'title': f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                        'is_active': True,
+                        'follow_up_questions': follow_up_questions,
+                    }
+                )
 
             # Create user message
             user_message = ChatMessage.objects.create(
@@ -1895,6 +1967,20 @@ class ChatView(APIView):
                 response_length=response_length,
                 response_format=response_format
             )
+
+
+            # Update or create memory buffer
+            memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
+                conversation=conversation
+            )
+            
+            # Get all messages for this conversation
+            all_messages = ChatMessage.objects.filter(
+                chat_history=conversation
+            ).order_by('created_at')
+            
+            # Update memory with all messages
+            memory_buffer.update_memory(all_messages)
 
             # Add selected documents to the conversation (skip if general chat mode)
             if selected_documents and not general_chat_mode:
@@ -1942,24 +2028,104 @@ class ChatView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    def get_web_knowledge_response(self, query):
+    def get_web_knowledge_response(self, query, document_context=None):
         """
-        Search the web for information and generate a response.
+        Search the web for information and generate a response, using document context to enhance the search.
         
         Args:
             query (str): The user's query
+            document_context (list, optional): List of context chunks from document search
             
         Returns:
             tuple: (response, sources)
         """
         try:
-            # Step 1: Search the web using DuckDuckGo
-            web_results = self.search_web(query, max_results=5)
+            # Step 1: Extract keywords and context from document context if available
+            enhanced_query = query
+            doc_context_text = ""
+            
+            if document_context and len(document_context) > 0:
+                # Combine all document context into a single text for analysis
+                combined_context = " ".join(document_context[:3])  # Use top 3 context chunks
+                
+                # Extract keywords using a smarter prompt that identifies entity types
+                keyword_prompt = f"""
+                Analyze the following document context and the user query to extract key information for a web search.
+
+                USER QUERY: "{query}"
+                
+                DOCUMENT CONTEXT:
+                {combined_context[:2500]}
+                
+                Follow these steps:
+                1. Identify the main entities (brands, products, organizations, etc.) in the document
+                2. For each entity, determine its type (e.g., "cosmetic brand", "financial service", "software company")
+                3. Extract distinctive attributes or features of these entities
+                4. Identify industry-specific terminology that might help with search precision
+                5. Include geographical context if relevant
+                
+                Return ONLY a comma-separated list of 5-8 search terms that would help find the most relevant information online.
+                
+                Note: Focus on terms that will disambiguate search results and prevent confusion with similarly-named but unrelated entities.
+                """
+                
+                try:
+                    # Extract context-aware keywords using OpenAI
+                    keyword_response = client.chat.completions.create(
+                        model="gpt-3.5-turbo",  # Using a smaller model for efficiency
+                        messages=[
+                            {"role": "system", "content": "You are a search optimization specialist who identifies the most effective search terms based on document context."},
+                            {"role": "user", "content": keyword_prompt}
+                        ],
+                        temperature=0.3,
+                        max_tokens=150
+                    )
+                    
+                    search_terms = keyword_response.choices[0].message.content.strip()
+                    logger.info(f"Extracted search terms: {search_terms}")
+                    
+                    # Create a more precise enhanced query that includes both the original query and the extracted search terms
+                    enhanced_query = f"{query} {search_terms}"
+                    
+                    # Also extract key passages for the context section of our prompt
+                    context_prompt = f"""
+                    Analyze the following document context and select 2-3 short passages (2-3 sentences each) that contain the most important information related to this query: "{query}"
+                    
+                    DOCUMENT CONTEXT:
+                    {combined_context[:3000]}
+                    
+                    Return ONLY the extracted passages with no additional commentary.
+                    """
+                    
+                    context_response = client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": "You extract the most relevant passages from documents."},
+                            {"role": "user", "content": context_prompt}
+                        ],
+                        temperature=0.3,
+                        max_tokens=300
+                    )
+                    
+                    # Get key passages for later use in the main prompt
+                    doc_context_text = context_response.choices[0].message.content.strip()
+                    logger.info(f"Extracted key passages for context")
+                    
+                except Exception as ke:
+                    logger.warning(f"Error extracting keywords: {str(ke)}, proceeding with original query")
+                    enhanced_query = query
+            
+            # Log the queries for comparison
+            logger.info(f"Original query: {query}")
+            logger.info(f"Enhanced query: {enhanced_query}")
+            
+            # Step 2: Search the web using the enhanced query
+            web_results = self.search_web(enhanced_query, max_results=5)
             
             if not web_results:
                 return "I couldn't find relevant information on the web for your query.", []
             
-            # Step 2: Scrape content from the top search results
+            # Step 3: Scrape content from the top search results
             scraped_contents = []
             web_sources = []
             
@@ -1984,35 +2150,59 @@ class ChatView(APIView):
             if not scraped_contents:
                 return "I found search results but couldn't extract useful content from the webpages.", []
             
-            # Step 3: Generate a response using the scraped content
+            # Step 4: Generate a response using the scraped content and document context
             # Prepare context from scraped contents
-            context = ""
+            web_context = ""
             for i, item in enumerate(scraped_contents, 1):
-                context += f"Source {i} ({self.extract_domain(item['url'])}):\n"
-                context += f"Title: {item['title']}\n"
-                context += f"Content: {item['content'][:2500]}...\n\n"  # Limit each source content
+                web_context += f"Source {i} ({self.extract_domain(item['url'])}):\n"
+                web_context += f"Title: {item['title']}\n"
+                web_context += f"Content: {item['content'][:2500]}...\n\n"  # Limit each source content
+            
+            # Prepare document context section if available
+            doc_context_section = ""
+            if doc_context_text:
+                doc_context_section = f"""
+                KEY DOCUMENT PASSAGES:
+                {doc_context_text}
+                
+                Use this document information to better understand the context of the question and ensure relevance in your response.
+                If the web sources provide different or contradictory information to what's in the documents, highlight this in your response.
+                If the web sources expand on concepts mentioned in the documents, explain how they add to the understanding.
+                """
             
             # Create the prompt for OpenAI
             prompt = f"""
-            You are a web research assistant. Based on the following information from multiple web sources, 
-            provide a comprehensive, accurate, and well-structured answer to the question.
+            You are a research assistant analyzing information from both web sources and existing document knowledge.
 
-            Question: {query}
+            QUESTION: {query}
 
-            Information from web sources:
-            {context}
+            {doc_context_section}
 
-            Please format your answer with proper HTML tags (<p>, <ul>, <li>, <b>, etc.) where appropriate, 
-            and make sure to synthesize information from different sources. If the information is insufficient or 
-            contradictory, acknowledge this in your response. If the question asks about time-sensitive information, 
-            indicate when the data was retrieved.
+            INFORMATION FROM WEB SOURCES:
+            {web_context}
+
+            INSTRUCTIONS:
+            1. Primarily use the web sources to provide information relevant to the question.
+            2. When applicable, connect web information with document context to provide a comprehensive answer.
+            3. The web information should complement, expand, or update what's known from the documents.
+            4. If the web sources don't directly address aspects of the question that were covered in the documents, acknowledge this.
+            5. If the web sources contradict information from the documents, present both perspectives.
+            6. Structure your response with clear sections differentiating document and web information.
+
+            FORMAT:
+            - Use <b> tags for headings
+            - Use <p> tags for paragraphs
+            - Use <ul> and <li> tags for lists
+            - Organize information logically and clearly
             """
+            
+            system_message = "You are an expert research analyst who synthesizes information from multiple sources to provide comprehensive answers."
             
             # Generate response using OpenAI
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that provides comprehensive answers based on web search results."},
+                    {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
@@ -2047,8 +2237,9 @@ class ChatView(APIView):
         """Scrape content from a webpage"""
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
             }
+
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             
@@ -2098,7 +2289,7 @@ class ChatView(APIView):
         except:
             return url
     
-    def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format):
+    def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format, conversation_context):
         """
         Combine document-based response and web-based response into a single coherent answer.
         
@@ -2108,6 +2299,8 @@ class ChatView(APIView):
             web_response (str): Response generated from web search
             doc_sources (list): Document sources
             web_sources (list): Web sources
+            response_format (str): Desired format for the response
+            conversation_context (str): Previous conversation context
             
         Returns:
             str: Combined response
@@ -2127,6 +2320,9 @@ class ChatView(APIView):
         
         The response format should be: {response_format.replace('_', ' ').title()}
         
+        Previous conversation context:
+        {conversation_context}
+        
         User query: {query}
         
         RESPONSE FROM DOCUMENTS:
@@ -2136,7 +2332,7 @@ class ChatView(APIView):
         {web_response}
         
         GUIDELINES FOR COMBINATION:
-       1. When information appears in both sources, prioritize the document information.
+    1. When information appears in both sources, prioritize the document information.
 
         2. Clearly distinguish when you're providing information from the web vs. from documents.
 
@@ -2157,6 +2353,7 @@ class ChatView(APIView):
             - <h3>Information from the Web</h3> for web-based information.
         
         Create a single, coherent, well-structured response that combines both sources of information.
+        Make sure your response is contextually relevant to the ongoing conversation.
         """
         
         try:
@@ -2469,7 +2666,7 @@ class ChatView(APIView):
 
 
 
-    def generate_response(self, query, context, sources, use_web_knowledge=False, response_format='natural'):
+    def generate_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a response using the provided context and sources with web search capability.
         
@@ -2478,6 +2675,8 @@ class ChatView(APIView):
             context (list): List of context chunks
             sources (list): List of source documents for each context chunk
             use_web_knowledge (bool): Whether to use web search in addition to documents
+            response_format (str): Format style for the response
+            conversation_context (str): Previous conversation history context
             
         Returns:
             str: Generated response based on the context and/or web search
@@ -2497,13 +2696,25 @@ class ChatView(APIView):
         # Get format-specific guidance
         format_guidance = self._get_format_guidance(response_format, 'comprehensive')
         
-        # Define the user prompt (consistent with existing implementation)
+        # Include conversation context if available
+        conversation_prompt = ""
+        if conversation_context:
+            conversation_prompt = f"""
+            RECENT CONVERSATION HISTORY:
+            {conversation_context}
+            
+            Please consider this conversation history when providing your response to maintain continuity.
+            """
+        
+        # Define the user prompt (consistent with existing implementation but with conversation context)
         user_prompt = f"""
         Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
-    
+
         {format_guidance}
+
+        {conversation_prompt}
 
         RESPONSE GENERATION GUIDELINES:
         - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
@@ -2514,12 +2725,13 @@ class ChatView(APIView):
         - Maintain a natural, conversational tone.
         - Ensure the response is directly derived from the provided document context.
         - If the document does NOT contain relevant information, explicitly state that and summarize related available content instead.
-     
+        - Consider the conversation history to maintain continuity in the discussion.
+    
         DOCUMENT CONTEXT:
         {full_context}
-     
+    
         USER QUERY: {query}
-     
+    
         RESPONSE FORMAT REQUIREMENTS:
         1. Begin with a comprehensive summary of all key information related to the query
         2. Follow with detailed elaboration on each aspect of the question
@@ -2530,7 +2742,7 @@ class ChatView(APIView):
         7. Use <p> tags for detailed explanations
         8. Use <ul> and <li> for list-based information
         9. Use <table> and <tr>, <td> for tabular information
-     
+    
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document.
         - DO NOT generate speculative or external information.
@@ -2539,7 +2751,7 @@ class ChatView(APIView):
         """
         
         # Define system message
-        system_message = "You are a document analysis expert. Provide a comprehensive and detailed answer using only available information."
+        system_message = "You are a document analysis expert with conversation memory. Provide a comprehensive and detailed answer using only available information while maintaining conversation continuity."
         
         try:
             # Call the OpenAI chat completion API
@@ -2556,7 +2768,7 @@ class ChatView(APIView):
             
             # If answer seems too short, try to generate a more detailed one
             if len(answer.split()) < 100:  # If less than ~100 words
-                enhanced_system_message = "You are a document analysis expert. The previous response was too brief. Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context."
+                enhanced_system_message = "You are a document analysis expert with conversation memory. Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity."
                 
                 completion = client.chat.completions.create(
                     model="o3-mini",
@@ -2571,20 +2783,27 @@ class ChatView(APIView):
         except Exception as e:
             # If there's an error (e.g., token limit), try with fewer context chunks
             reduced_context = "\n\n".join(contextualized_content[:8])
+            # Create a shorter version of conversation context if needed
+            short_conv_context = ""
+            if conversation_context:
+                short_conv_context = f"Previous conversation context: {conversation_context[:300]}..."
+                
             fallback_prompt = f"""
             Based ONLY on the following context, provide a comprehensive answer to the question: {query}
+            
+            {short_conv_context}
             
             CONTEXT:
             {reduced_context}
             
-            Ensure the response is detailed and covers all relevant information from the context.
+            Ensure the response is detailed and covers all relevant information from the context while maintaining conversational continuity.
             """
             
             try:
                 fallback_completion = client.chat.completions.create(
                     model="o3-mini",
                     messages=[
-                        {"role": "system", "content": "You are a document analysis expert."},
+                        {"role": "system", "content": "You are a document analysis expert with conversation memory."},
                         {"role": "user", "content": fallback_prompt}
                     ]
                 )
@@ -2599,7 +2818,7 @@ class ChatView(APIView):
         source_info = ", ".join(source_list)
         return f"{answer}\n\n*Sources: {source_info}*"
 
-    def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural'):
+    def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a shorter, concise response using the provided context with web search capability.
         
@@ -2608,6 +2827,8 @@ class ChatView(APIView):
             context (list): List of context chunks
             sources (list): List of source documents for each context chunk
             use_web_knowledge (bool): Whether to use web search in addition to documents
+            response_format (str): Format style for the response
+            conversation_context (str): Previous conversation history context
             
         Returns:
             str: Generated response based on the context and/or web search
@@ -2627,14 +2848,27 @@ class ChatView(APIView):
         # Get format-specific guidance for short responses
         format_guidance = self._get_format_guidance(response_format, 'short')
         
-        # Define the user prompt for short response
+        # Include conversation context if available (shorter format for concise response)
+        conversation_prompt = ""
+        if conversation_context:
+            # Create a shortened version since this is for concise responses
+            conversation_prompt = f"""
+            RECENT CONVERSATION:
+            {conversation_context[:500]}...
+            
+            Consider this conversation history for continuity.
+            """
+        
+        # Define the user prompt for short response with conversation context
         user_prompt = f"""
         Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
-    
+
         {format_guidance}
-     
+
+        {conversation_prompt}
+    
         RESPONSE GENERATION GUIDELINES:
         - Provide a CONCISE yet THOROUGH answer.
         - Focus on the most relevant information from the context.
@@ -2643,12 +2877,13 @@ class ChatView(APIView):
         - Maintain a natural, conversational tone.
         - Ensure the response is directly derived from the provided document context.
         - If the document does NOT contain relevant information, explicitly state that.
-     
+        - Consider the conversation history to maintain continuity.
+    
         DOCUMENT CONTEXT:
         {full_context}
-     
+    
         USER QUERY: {query}
-     
+    
         RESPONSE FORMAT REQUIREMENTS:
         1. Begin with a direct answer to the query
         2. Include only the most relevant details and evidence from the documents
@@ -2658,7 +2893,7 @@ class ChatView(APIView):
         6. Use <p> tags for explanations
         7. Use <ul> and <li> for list-based information
         8. Use <table> and <tr>, <td> for tabular information if absolutely necessary
-     
+    
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document.
         - DO NOT generate speculative or external information.
@@ -2667,7 +2902,7 @@ class ChatView(APIView):
         """
         
         # Define system message for short response
-        system_message = "You are a document analysis expert. Provide a concise, to-the-point answer using only available information and use the appropriate html tags for formatting."
+        system_message = "You are a document analysis expert with conversation memory. Provide a concise yet informative response that maintains conversation continuity."
         
         try:
             # Call the OpenAI chat completion API for short response
@@ -2712,7 +2947,7 @@ class ChatView(APIView):
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{answer}\n\n*Sources: {source_info}*"
-    
+        
 
     def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural'):
             """
@@ -2781,48 +3016,68 @@ class ChatView(APIView):
                    
                     # Create the prompt for OpenAI
                     prompt = f"""
-                    You are a web research assistant. Based on the following information from multiple web sources,
-                    provide a {response_length} answer to the question.
- 
+                    You are a web research assistant. Based ONLY on the following information from multiple web sources, answer the user question. 
+
+                    If relevant details are missing or contradictory, clearly acknowledge this and summarize available related content. Be helpful by highlighting potentially useful information even if it doesn’t fully resolve the question. Provide quantitative details where available.
+
                     RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
-                   
+
                     {format_guidance}
- 
-                    Question: {query}
- 
-                    Information from web sources:
+
+                    RESPONSE GENERATION GUIDELINES:
+                    - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
+                    - Include ALL relevant information from the web sources below.
+                    - Prioritize completeness over brevity — include important details.
+                    - If multiple perspectives or data points exist, include all of them.
+                    - When appropriate, structure the information clearly with headings.
+                    - Maintain a natural, conversational tone.
+                    - If the web sources do NOT contain relevant information, clearly state that and summarize any related or tangential insights.
+
+                    QUESTION: {query}
+
+                    INFORMATION FROM WEB SOURCES:
                     {context}
- 
-                    Please format your answer with proper HTML tags (<p>, <ul>, <li>, <b>, etc.) where appropriate,
-                    and make sure to synthesize information from different sources. If the information is insufficient or
-                    contradictory, acknowledge this in your response. If the question asks about time-sensitive information,
-                    indicate when the data was retrieved.
-                   
+
+                    RESPONSE FORMAT REQUIREMENTS:
+                    1. Follow with detailed elaboration on each relevant point.
+                    2. Include specific details, examples, and support from the source content.
+                    3. Use clear, logical sections when needed.
+                    4. Conclude with any other contextually relevant insights.
+                    5. Use <b> for section headers.
+                    6. Use <p> for body text.
+                    7. Use <ul> / <li> for lists.
+                    8. Use <table>, <tr>, <td> for tables, if applicable.
+                    9. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
+
+                    CRITICAL CONSTRAINTS:
+                    - Ensure clarity, accuracy, and full coverage of the relevant content.
+
                     RESPONSE LENGTH: {'Provide a focused, concise response prioritizing the most important information.' if response_length == 'short' else 'Provide a comprehensive, detailed response that thoroughly covers the topic.'}
                     """
-                   
-                    # Generate response using OpenAI
+                    system_message = "You are a web search analysis expert. Provide an EXTREMELY DETAILED and COMPREHENSIVE response."
+
                     temperature = 0.3 if response_format in ['factual_brief', 'technical_deep_dive'] else 0.5
-                    max_tokens = 800 if response_length == 'short' else 2000
-                   
+                    max_tokens = 2000 if response_length == 'short' else 2000
+
                     print(f"Calling OpenAI API with temperature={temperature}, max_tokens={max_tokens}")
                     response = client.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "system", "content": "You are a helpful assistant that provides well-structured answers based on web search results."},
+                            {"role": "system", "content": system_message},
                             {"role": "user", "content": prompt}
                         ],
                         temperature=temperature,
                         max_tokens=max_tokens
                     )
-                   
+
                     web_response = response.choices[0].message.content
-                   
+
                     # Add source information
                     source_domains = [self.extract_domain(source['url']) for source in web_sources]
                     source_info = ", ".join(source_domains)
-                   
+
                     return f"{web_response}\n\n*Sources: {source_info}*"
+
                    
                 except Exception as e:
                     logger.error(f"Error in web knowledge general chat: {str(e)}", exc_info=True)
@@ -3324,288 +3579,6 @@ class DeleteConversationView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-# class GenerateIdeaContextView(APIView):
-#     """
-#     API endpoint to extract structured idea generation parameters
-#     from documents or query results.
-#     """
-   
-#     def post(self, request):
-#         user = request.user
-#         document_id = request.data.get('document_id')
-#         query = request.data.get('query')
-#         main_project_id = request.data.get('main_project_id')
-       
-#         # Validate input - need either document_id or query
-#         if not document_id and not query:
-#             return Response({
-#                 'error': 'Either document_id or query parameter is required'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-           
-#         try:
-#             # Case 1: Using Document ID - fetch existing parameters or extract new ones
-#             if document_id:
-#                 document = get_object_or_404(Document, id=document_id, user=user)
-                
-#                 # Get document name without extension
-#                 document_name_no_ext = self.remove_file_extension(document.filename)
-                
-#                 # Generate a unique project name - handle the case when main_project_id is None
-#                 suggested_project_name = f"Ideas from {document_name_no_ext}"
-#                 if main_project_id:
-#                     try:
-#                         suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
-#                     except Exception as e:
-#                         # Log the error but continue with the default name
-#                         print(f"Error generating unique project name: {str(e)}")
-               
-#                 try:
-#                     # Check if we already have parameters stored
-#                     processed_index = ProcessedIndex.objects.get(document=document)
-                   
-#                     # If parameters exist, return them
-#                     if processed_index.idea_parameters:
-#                         return Response({
-#                             'document_id': document_id,
-#                             'document_name': document.filename,
-#                             'document_name_no_ext': document_name_no_ext,
-#                             'idea_parameters': processed_index.idea_parameters,
-#                             'suggested_project_name': suggested_project_name
-#                         })
-                   
-#                     # If no parameters yet, extract them from the document
-#                     index_file = processed_index.faiss_index
-#                     metadata_file = processed_index.metadata
-                   
-#                     # Load index and metadata
-#                     index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
-                   
-#                     # Extract parameters from document content
-#                     full_text = " ".join([chunk['text'] for chunk in chunks])
-#                     idea_params = self.extract_idea_parameters(full_text, chunks)
-                   
-#                     # Save the parameters for future use
-#                     processed_index.idea_parameters = idea_params
-#                     processed_index.save()
-                   
-#                     return Response({
-#                         'document_id': document_id,
-#                         'document_name': document.filename,
-#                         'document_name_no_ext': document_name_no_ext,
-#                         'idea_parameters': idea_params,
-#                         'suggested_project_name': suggested_project_name
-#                     })
-                   
-#                 except ProcessedIndex.DoesNotExist:
-#                     return Response({
-#                         'error': 'Document has not been processed yet'
-#                     }, status=status.HTTP_404_NOT_FOUND)
-           
-#             # Case 2: Using Query - search across documents and extract from relevant chunks
-#             else:
-#                 # Get active/selected document
-#                 active_doc_id = request.session.get('active_document_id')
-#                 if not active_doc_id:
-#                     return Response({
-#                         'error': 'No active document selected'
-#                     }, status=status.HTTP_400_BAD_REQUEST)
-               
-#                 document = get_object_or_404(Document, id=active_doc_id, user=user)
-#                 processed_index = get_object_or_404(ProcessedIndex, document=document)
-                
-#                 # Get document name without extension
-#                 document_name_no_ext = self.remove_file_extension(document.filename)
-                
-#                 # Generate a unique project name - handle the case when main_project_id is None
-#                 suggested_project_name = f"Ideas from {document_name_no_ext}"
-#                 if main_project_id:
-#                     try:
-#                         suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
-#                     except Exception as e:
-#                         # Log the error but continue with the default name
-#                         print(f"Error generating unique project name: {str(e)}")
-               
-#                 # Load index and metadata
-#                 index_file = processed_index.faiss_index
-#                 metadata_file = processed_index.metadata
-#                 index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
-               
-#                 # Get embedding for query
-#                 query_embedding = self.get_query_embedding(query)
-               
-#                 # Search for relevant chunks
-#                 relevant_chunks = self.search_faiss_index(index, chunks, query_embedding, k=5)
-               
-#                 # Extract parameters from relevant chunks
-#                 idea_params = self.extract_idea_parameters(query, relevant_chunks)
-               
-#                 return Response({
-#                     'document_id': active_doc_id,
-#                     'document_name': document.filename,
-#                     'document_name_no_ext': document_name_no_ext,
-#                     'query': query,
-#                     'idea_parameters': idea_params,
-#                     'suggested_project_name': suggested_project_name
-#                 })
-               
-#         except Exception as e:
-#             print(f"Error generating idea context: {str(e)}")
-#             return Response({
-#                 'error': str(e),
-#                 'detail': 'An error occurred while generating idea context'
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-#     def remove_file_extension(self, filename):
-#         """
-#         Remove file extension from filename
-#         """
-#         import os
-#         return os.path.splitext(filename)[0]
-    
-#     def generate_unique_project_name(self, document_name, main_project_id):
-#         """
-#         Generate a unique project name based on document name,
-#         adding (1), (2), etc. if needed to avoid duplicates
-#         """
-#         from ideaGen.models import Project
-        
-#         base_name = f"Ideas from {document_name}"
-#         project_name = base_name
-#         counter = 1
-        
-#         # Check for existing projects with this name in the main project
-#         while Project.objects.filter(
-#             name=project_name,
-#             main_project_id=main_project_id
-#         ).exists():
-#             # Increment counter and update name
-#             project_name = f"{base_name} ({counter})"
-#             counter += 1
-            
-#         return project_name
-   
-#     def load_faiss_index_from_paths(self, index_file, metadata_file):
-#         """Load FAISS index and metadata from file paths"""
-#         import faiss
-#         import pickle
-       
-#         try:
-#             index = faiss.read_index(index_file)
-#             with open(metadata_file, "rb") as f:
-#                 chunks = pickle.load(f)
-#             return index, chunks
-#         except Exception as e:
-#             print(f"Error loading FAISS index: {str(e)}")
-#             return None, []
-   
-#     def get_query_embedding(self, query):
-#         """Get embedding for the query"""
-#         from openai import OpenAI
-#         client = OpenAI()  # Initialize the client
-       
-#         try:
-#             response = client.embeddings.create(
-#                 input=[query],
-#                 model="text-embedding-3-small"
-#             )
-#             return response.data[0].embedding
-#         except Exception as e:
-#             print(f"Error getting embedding for query: {str(e)}")
-#             raise
-   
-#     def search_faiss_index(self, index, chunks, query_embedding, k=5):
-#         """Search FAISS index for relevant chunks"""
-#         import numpy as np
-       
-#         # Convert embedding to numpy array
-#         query_vector = np.array([query_embedding]).astype('float32')
-       
-#         # Search index
-#         distances, indices = index.search(query_vector, k=k)
-       
-#         # Get relevant chunks
-#         results = []
-#         for i in indices[0]:
-#             if i < len(chunks):
-#                 results.append(chunks[i])
-       
-#         return results
-   
-#     def extract_idea_parameters(self, context, relevant_chunks=None):
-#         """
-#         Extract structured parameters for the Idea Generator
-       
-#         Args:
-#             context (str): Either full document content or query
-#             relevant_chunks (list, optional): List of relevant chunks from search
-           
-#         Returns:
-#             dict: Structured parameters for idea generation
-#         """
-#         from openai import OpenAI
-#         client = OpenAI()  # Initialize the client
-#         import json
-       
-#         try:
-#             # If relevant chunks are provided, use them for extraction context
-#             if relevant_chunks and len(relevant_chunks) > 0:
-#                 extraction_context = "\n\n".join([chunk['text'] for chunk in relevant_chunks])
-#             else:
-#                 # If no chunks available, use the context directly
-#                 extraction_context = context
-               
-#             # Create extraction prompt
-#             extraction_prompt = f"""
-#             Extract the following key parameters from the provided context.
-#             If a parameter isn't explicitly mentioned, infer it from context or leave it blank.
-           
-#             Context:
-#             {extraction_context}
-           
-#             Extract these parameters:
-#             - Brand_Name: The company or product brand mentioned
-#             - Category: The product category or market area
-#             - Concept: The main idea, campaign, or product concept
-#             - Benefits: Key benefits or value propositions (list up to 3)
-#             - RTB: Reason to Believe - evidence supporting the benefits (list up to 3)
-#             - Ingredients: Key ingredients or components (if applicable)
-#             - Features: Notable product/service features (list up to 3)
-#             - Theme: Overall theme or tone
-#             - Demographics: Target audience demographics
-           
-#             Format the response as a valid JSON object with these fields.
-#             """
-           
-#             # Call LLM to extract parameters
-#             response = client.chat.completions.create(
-#                 model="gpt-4o",  
-#                 messages=[
-#                     {"role": "system", "content": "You are a specialist in extracting structured information from documents."},
-#                     {"role": "user", "content": extraction_prompt}
-#                 ],
-#                 response_format={"type": "json_object"}
-#             )
-           
-#             # Parse JSON response
-#             extracted_params = json.loads(response.choices[0].message.content)
-           
-#             return extracted_params
-       
-#         except Exception as e:
-#             print(f"Error extracting idea parameters: {str(e)}")
-#             # Return empty structure if extraction fails
-#             return {
-#                 "Brand_Name": "",
-#                 "Category": "",
-#                 "Concept": "",
-#                 "Benefits": "",
-#                 "RTB": "",
-#                 "Ingredients": "",
-#                 "Features": "",
-#                 "Theme": "",
-#                 "Demographics": ""
-#             }
-
 
 class GenerateIdeaContextView(APIView):
     """
@@ -3981,12 +3954,25 @@ class AdminUserManagementView(APIView):
                     module_permissions = {}
                     # Create module permissions if they don't exist
                     UserModulePermissions.objects.create(user=user, disabled_modules={})
+
+                # Get upload permissions
+                try:
+                    upload_permissions = UserUploadPermissions.objects.get(user=user)
+                    can_upload = upload_permissions.can_upload
+                except UserUploadPermissions.DoesNotExist:
+                    # Default to allowed if permissions don't exist
+                    can_upload = True
+                    # Create default permissions
+                    UserUploadPermissions.objects.create(user=user, can_upload=True)
                
                 user_info = {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
                     'disabled_modules': module_permissions,
+                    'upload_permissions': {
+                    'can_upload': can_upload
+                },
                     'api_tokens': {
                         'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
                         'gemini_token': api_tokens.gemini_token if api_tokens else None,
@@ -4286,10 +4272,6 @@ class OriginalDocumentView(APIView):
             # For now, we'll just log it
             logger.info(f"User {user.username} viewed document {document.id}: {document.filename}")
             
-            # If you want to track view counts, you could add this to your Document model:
-            # document.view_count = F('view_count') + 1
-            # document.last_viewed_at = timezone.now()
-            # document.save(update_fields=['view_count', 'last_viewed_at'])
         except Exception as e:
             logger.error(f"Error logging document view: {str(e)}")
             # Don't raise the exception - this is a non-critical feature
@@ -4302,14 +4284,7 @@ class DocumentViewLogView(APIView):
         try:
             # Get the document ensuring it belongs to the user
             document = get_object_or_404(Document, id=document_id, user=request.user)
-            
-            # You could create a model to track this if needed
-            # For example:
-            # DocumentViewLog.objects.create(
-            #     user=request.user,
-            #     document=document,
-            #     view_date=timezone.now()
-            # )
+    
             
             # For simplicity, just update the document's view count
             document.view_count = F('view_count') + 1  # This requires adding view_count field to Document model
@@ -4335,85 +4310,6 @@ class DocumentViewLogView(APIView):
             }, status=status.HTTP_200_OK)
 
 
-# Add this to views.py
-
-# class DocumentContentSearchView(APIView):
-#     permission_classes = [IsAuthenticated]
-    
-#     def post(self, request):
-#         try:
-#             user = request.user
-#             query = request.data.get('query')
-#             main_project_id = request.data.get('main_project_id')
-            
-#             if not query or not main_project_id:
-#                 return Response({
-#                     'error': 'Query and project ID are required'
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-            
-#             # Get all documents for this user and project
-#             documents = Document.objects.filter(
-#                 user=user, 
-#                 main_project_id=main_project_id
-#             )
-            
-#             search_results = []
-            
-#             # For each document, search for query in the content
-#             for doc in documents:
-#                 try:
-#                     # Get the processed index for this document
-#                     processed_index = ProcessedIndex.objects.get(document=doc)
-                    
-#                     # Check if we have the FAISS index and metadata path
-#                     if processed_index.faiss_index and processed_index.metadata:
-#                         # Load the metadata (chunks)
-#                         if os.path.exists(processed_index.metadata):
-#                             with open(processed_index.metadata, 'rb') as f:
-#                                 chunks = pickle.load(f)
-                            
-#                             # Convert query to lowercase for case-insensitive search
-#                             query_lower = query.lower()
-#                             matches = []
-                            
-#                             # Search in each chunk
-#                             for chunk in chunks:
-#                                 chunk_text = chunk.get('text', '')
-#                                 if chunk_text and query_lower in chunk_text.lower():
-#                                     # Found a match, add the context
-#                                     matches.append(chunk_text)
-                            
-#                             # If we found matches, add to results
-#                             if matches:
-#                                 # Use the first match for preview, but count all matches
-#                                 search_results.append({
-#                                     'id': doc.id,
-#                                     'filename': doc.filename,
-#                                     'match_count': len(matches),
-#                                     'match_context': matches[0] if matches else "",
-#                                     'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
-#                                 })
-                                
-#                 except ProcessedIndex.DoesNotExist:
-#                     # Skip documents that haven't been processed
-#                     continue
-#                 except Exception as e:
-#                     logger.error(f"Error searching document {doc.id}: {str(e)}")
-#                     continue
-            
-#             # Sort results by number of matches (most relevant first)
-#             search_results.sort(key=lambda x: x['match_count'], reverse=True)
-            
-#             return Response({
-#                 'results': search_results,
-#                 'total_count': len(search_results)
-#             }, status=status.HTTP_200_OK)
-            
-#         except Exception as e:
-#             logger.error(f"Error in document content search: {str(e)}")
-#             return Response({
-#                 'error': f'An error occurred: {str(e)}'
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class DocumentContentSearchView(APIView):
@@ -4531,3 +4427,354 @@ class DocumentContentSearchView(APIView):
             return Response({
                 'error': f'An error occurred: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class AdminUserProjectsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, user_id):
+        """Get all projects for a specific user"""
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can access this endpoint'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get the user
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'User not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get projects for the user
+            projects = Project.objects.filter(user=user)
+            
+            # Format response
+            project_list = []
+            for project in projects:
+                project_list.append({
+                    'id': project.id,
+                    'name': project.name,
+                    'created_at': project.created_at.strftime('%Y-%m-%d %H:%M:%S')
+                })
+            
+            return Response(project_list, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in AdminUserProjectsView: {str(e)}")
+            return Response(
+                {'error': f'Failed to fetch user projects: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+
+class AdminUserUploadPermissionsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, user_id):
+        """Update a user's upload permissions"""
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can update upload permissions',
+                    'success': False
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get the user
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found',
+                    'success': False
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+            # Extract permissions data - with explicit conversion to boolean
+            can_upload = request.data.get('can_upload', True)
+            
+            # Convert can_upload to boolean if it's a string
+            if isinstance(can_upload, str):
+                can_upload = can_upload.lower() in ('true', 't', 'yes', 'y', '1')
+            
+            # Get or create upload permissions
+            permissions, created = UserUploadPermissions.objects.get_or_create(
+                user=user,
+                defaults={'can_upload': can_upload}
+            )
+            
+            # Update permissions if not created
+            if not created:
+                permissions.can_upload = can_upload
+                permissions.save()
+            
+            # Log the update for troubleshooting
+            print(f"Admin user {request.user.username} set upload permissions for user {user.username} to {can_upload}")
+            
+            return Response({
+                'id': user.id,
+                'username': user.username,
+                'upload_permissions': {
+                    'can_upload': permissions.can_upload
+                },
+                'success': True
+            }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            print(f"Error in AdminUserUploadPermissionsView: {str(e)}")
+            return Response({
+                'error': f'Failed to update upload permissions: {str(e)}',
+                'success': False
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+
+class UserUploadPermissionsMiddleware(MiddlewareMixin):
+    def process_request(self, request):
+        # Skip middleware for admin or non-upload endpoints
+        if request.path_info.startswith('/admin/') or not request.path_info.endswith('/upload/'):
+            return None
+        
+        # Skip for non-authenticated requests
+        if not hasattr(request, 'user') or not request.user.is_authenticated:
+            return None
+        
+        # Skip for admin users (they can always upload)
+        if request.user.username == 'admin':
+            return None
+        
+        # Check if user is allowed to upload
+        try:
+            permissions = UserUploadPermissions.objects.get(user=request.user)
+            if not permissions.can_upload:
+                return JsonResponse({
+                    'error': 'You do not have permission to upload documents. Please contact your administrator.'
+                }, status=403)
+        except UserUploadPermissions.DoesNotExist:
+            # Default to allowed if no permissions are explicitly set
+            pass
+        
+        # Continue with the request
+        return None
+    
+class CheckUploadPermissionsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            user = request.user
+            
+            # Skip permission check for admin users
+            if user.username == 'admin':
+                return Response({
+                    'can_upload': True
+                }, status=status.HTTP_200_OK)
+            
+            # Check if the user has upload permissions
+            try:
+                permissions = UserUploadPermissions.objects.get(user=user)
+                can_upload = permissions.can_upload
+            except UserUploadPermissions.DoesNotExist:
+                # Default to allowed if no permissions are explicitly set
+                can_upload = True
+            
+            return Response({
+                'can_upload': can_upload
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in CheckUploadPermissionsView: {str(e)}")
+            return Response({
+                'error': f'Failed to check upload permissions: {str(e)}',
+                'can_upload': False  # Default to disallowing upload on error
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ProcessCitationsView(APIView):
+    """
+    API endpoint to process a response and map citations to relevant parts of the text.
+    This can be called by the frontend when displaying a message.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            response_text = request.data.get('response_text')
+            citations = request.data.get('citations')
+            
+            if not response_text or not citations:
+                return Response({
+                    'error': 'Both response_text and citations are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Process the response text with citations
+            processed_text, enhanced_citations = self.process_response_with_citations(response_text, citations)
+            
+            return Response({
+                'processed_text': processed_text,
+                'enhanced_citations': enhanced_citations
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import traceback
+            print(f"Citation processing error: {str(e)}")
+            print(traceback.format_exc())
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def extract_citation_metadata(self, citation_text, source_file):
+        """
+        Extract metadata like page numbers and section titles from citation text.
+        
+        Args:
+            citation_text (str): The citation text from the document
+            source_file (str): The source file name
+            
+        Returns:
+            dict: Enhanced citation metadata
+        """
+        # Default citation structure
+        citation = {
+            'source_file': source_file,
+            'page_number': 'Unknown',
+            'section_title': 'Unknown',
+            'snippet': citation_text,
+        }
+        
+        # Try to extract page numbers - common formats
+        page_matches = re.findall(r'(page|p\.?)\s*(\d+)', citation_text, re.IGNORECASE)
+        if page_matches:
+            citation['page_number'] = page_matches[0][1]
+        
+        # Try to extract section titles - look for section headings
+        section_matches = re.findall(r'(?:section|heading):\s*["\'"]([^\'"\']+)[\'"\']', citation_text, re.IGNORECASE)
+        if section_matches:
+            citation['section_title'] = section_matches[0]
+        
+        # Alternative: Look for text in quotes that might be section titles
+        if citation['section_title'] == 'Unknown':
+            quote_matches = re.findall(r'[\'"\']([^\'"\']{5,50})[\'"\']', citation_text)
+            if quote_matches:
+                citation['section_title'] = quote_matches[0]
+        
+        # Look for date information
+        date_matches = re.findall(r'\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b', citation_text)
+        if date_matches:
+            citation['date'] = date_matches[0]
+        
+        return citation
+    
+    def process_response_with_citations(self, response_text, citations):
+        """
+        Maps citations to specific parts of the response text based on content similarity.
+        
+        Args:
+            response_text (str): The response text from the LLM
+            citations (list): List of citation objects with source information
+            
+        Returns:
+            tuple: (processed_text, enhanced_citations)
+        """
+        if not citations or not response_text:
+            return response_text, citations
+        
+        # First, try to improve citation metadata
+        enhanced_citations = []
+
+        for idx, citation in enumerate(citations):
+            # Get basic info
+            source_file = citation.get('source_file', 'Unknown Document')
+            snippet = citation.get('snippet', '')
+            
+            # If metadata is missing, try to extract it
+            if citation.get('page_number') in [None, 'Unknown'] or citation.get('section_title') in [None, 'Unknown']:
+                enhanced_citation = self.extract_citation_metadata(snippet, source_file)
+                # Preserve original data where available
+                for key, value in citation.items():
+                    if value and value != 'Unknown':
+                        enhanced_citation[key] = value
+                enhanced_citations.append(enhanced_citation)
+            else:
+                enhanced_citations.append(citation)
+        
+        # Remove HTML tags for better text processing
+        clean_text = strip_tags(response_text)
+        
+        # Step 1: Split the response into sentences
+        sentences = sent_tokenize(clean_text)
+        
+        # Step 2: For each citation, find the most relevant sentence
+        citation_mapping = {}  # Maps citation index to sentence index
+        
+        for citation_idx, citation in enumerate(enhanced_citations):
+            snippet = citation.get('snippet', '').lower()
+            if not snippet:
+                continue
+                
+            # Generate keywords from the snippet
+            keywords = set(re.findall(r'\b\w+\b', snippet.lower()))
+            keywords = {k for k in keywords if len(k) > 3}  # Filter out short words
+            
+            # Score each sentence based on keyword overlap
+            best_score = 0
+            best_sentence_idx = -1
+            
+            for sent_idx, sentence in enumerate(sentences):
+                sentence_lower = sentence.lower()
+                sentence_words = set(re.findall(r'\b\w+\b', sentence_lower))
+                
+                # Calculate overlap score
+                overlap = keywords.intersection(sentence_words)
+                if overlap:
+                    score = len(overlap) / max(len(keywords), 1)  # Avoid division by zero
+                    
+                    # Give higher score for exact phrase matches
+                    for i in range(0, len(snippet), 10):
+                        if i + 20 <= len(snippet):
+                            phrase = snippet[i:i+20]
+                            if phrase in sentence_lower:
+                                score += 0.5
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_sentence_idx = sent_idx
+            
+            # Map citation to sentence if we found a good match
+            if best_score > 0.2 and best_sentence_idx >= 0:  # Threshold to ensure relevance
+                if best_sentence_idx not in citation_mapping:
+                    citation_mapping[best_sentence_idx] = []
+                citation_mapping[best_sentence_idx].append(citation_idx)
+        
+        # Step 3: Reinsert the HTML and add citation markers
+        # Start by marking positions in the original response_text where sentences end
+        sentence_positions = []
+        current_pos = 0
+        
+        for sentence in sentences:
+            # Find this sentence in the original text
+            sentence_pos = response_text.find(sentence, current_pos)
+            if sentence_pos >= 0:
+                sentence_end = sentence_pos + len(sentence)
+                sentence_positions.append(sentence_end)
+                current_pos = sentence_end
+        
+        # Now insert citation markers at the end of relevant sentences
+        result = response_text
+        offset = 0  # Track position offset as we insert markers
+        
+        for sent_idx, end_pos in enumerate(sentence_positions):
+            if sent_idx in citation_mapping:
+                # Create citation markers
+                citation_markers = ""
+                for citation_idx in citation_mapping[sent_idx]:
+                    citation_markers += f'<citation id="{citation_idx}"></citation>'
+                
+                # Insert at the adjusted position
+                insert_pos = end_pos + offset
+                if insert_pos <= len(result):
+                    result = result[:insert_pos] + citation_markers + result[insert_pos:]
+                    offset += len(citation_markers)
+        
+        return result, enhanced_citations

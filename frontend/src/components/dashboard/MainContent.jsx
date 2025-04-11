@@ -1,3 +1,4 @@
+
 // MainContent.jsx
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -41,6 +42,7 @@ import {
 import MessageVersionHistory from "./MessageVersionHistory";
 import DocumentProcessingLoader from "./DocumentUpload/DocumentProcessingLoader";
 import WebModeWelcome from "./WebModeWelcome";
+import { SimpleCitationManager } from "./CitationManager";
 const MainContent = ({
   selectedChat,
   mainProjectId,
@@ -64,7 +66,7 @@ const MainContent = ({
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const [isFollowUpQuestionsMinimized, setIsFollowUpQuestionsMinimized] =
-    useState(false);
+    useState(true);
   const chatContainerRef = useRef(null);
   const [localSelectedDocuments, setLocalSelectedDocuments] = useState(
     propSelectedDocuments || [] // Initialize with prop value if provided
@@ -115,7 +117,25 @@ const MainContent = ({
   //for response length
   const [responseLength, setResponseLength] = useState("short");
   const [responseFormat, setResponseFormat] = useState("auto-detect");
+  const [hasUploadPermissions, setHasUploadPermissions] = useState(true);
 
+  // Add a function to check upload permissions when component mounts
+  const checkUploadPermissions = async () => {
+    try {
+      const response = await documentService.checkUploadPermissions();
+      setHasUploadPermissions(response.data.can_upload);
+    } catch (error) {
+      console.error("Failed to check upload permissions:", error);
+      // If we can't determine permissions, default to allowing the button
+      setHasUploadPermissions(true);
+    }
+  };
+
+  // Add this to your useEffect hooks
+  useEffect(() => {
+    // Call this after component mounts
+    checkUploadPermissions();
+  }, []);
   useEffect(() => {
     // If no documents are selected, force web knowledge mode on
     if (localSelectedDocuments.length === 0) {
@@ -305,85 +325,6 @@ const MainContent = ({
       recognitionRef.current.start();
     }
   };
-
-  const InlineCitation = ({ citation, index }) => {
-    const [isHovered, setIsHovered] = useState(false);
-
-    return (
-      <span
-        className="relative inline-block"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <sup
-          className="
-          text-xs 
-          text-blue-400 
-          cursor-help 
-          hover:underline 
-          ml-0.5 
-          transition-colors
-        "
-        >
-          [{index + 1}]
-        </sup>
-
-        {isHovered && (
-          <div
-            className="
-            absolute 
-            z-50 
-            bottom-full 
-            left-1/2 
-            transform 
-            -translate-x-1/2 
-            bg-gray-800 
-            text-white 
-            p-2 
-            rounded-lg 
-            shadow-lg 
-            text-xs 
-            w-64 
-            pointer-events-none
-            transition-all
-            duration-300
-            opacity-100
-            animate-fade-in
-          "
-          >
-            <div className="font-bold mb-1">Source Details</div>
-            <div className="space-y-1">
-              <p>
-                <strong>Document:</strong> {citation.source_file}
-              </p>
-              <p>
-                <strong>Page:</strong> {citation.page_number}
-              </p>
-              <div className="mt-1 text-gray-300 italic">
-                {citation.snippet}
-              </div>
-            </div>
-          </div>
-        )}
-      </span>
-    );
-  };
-
-  InlineCitation.propTypes = {
-    citation: PropTypes.shape({
-      source_file: PropTypes.string,
-      page_number: PropTypes.oneOfType([
-        PropTypes.string,
-        PropTypes.number,
-        PropTypes.oneOf([null, undefined]),
-      ]),
-      snippet: PropTypes.string,
-    }),
-    index: PropTypes.number,
-  };
-
-  // New method to toggle between chat and summary views
-  // Updated toggleView method
   const toggleView = (view) => {
     if (view === "summary" && localSelectedDocuments.length === 0) {
       toast.warning(
@@ -738,7 +679,6 @@ const MainContent = ({
         console.log("Setting follow-up questions:", followUps);
         setCurrentFollowUpQuestions(followUps);
         setFollowUpQuestions(followUps);
-        setIsFollowUpQuestionsMinimized(false); // Make sure they're visible
       } else {
         // Reset follow-up questions if none exist
         setCurrentFollowUpQuestions([]);
@@ -854,6 +794,13 @@ const MainContent = ({
   }, [fetchUserDocuments]);
 
   const handleFileChange = async (event) => {
+    if (!hasUploadPermissions) {
+      toast.error(
+        "You do not have permission to upload documents. Please contact your administrator."
+      );
+      event.target.value = ""; // Clear the file input
+      return;
+    }
     const selectedFiles = Array.from(event.target.files);
     if (!selectedFiles.length) return;
 
@@ -1034,6 +981,11 @@ const MainContent = ({
     setMessage("");
     setIsLoading(true);
 
+    // Close follow-up questions panel when loading begins
+    if (!isFollowUpQuestionsMinimized) {
+      setIsFollowUpQuestionsMinimized(true);
+    }
+
     try {
       // Force useWebKnowledge to true if no documents are selected
       // Otherwise use the user's preference (will default to false when docs are selected)
@@ -1051,6 +1003,10 @@ const MainContent = ({
         response_length: responseLength,
         response_format: responseFormat,
         general_chat_mode: localSelectedDocuments.length === 0, // Add this flag for backend to know it's general chat
+        citation_options: {
+          process_citations: true, // Enable backend citation processing
+          citation_threshold: 0.3, // Similarity threshold for matching citations to text
+        },
       };
 
       console.log("Sending message with data:", messageData);
@@ -1171,6 +1127,11 @@ const MainContent = ({
     }
 
     setIsLoading(true);
+
+     // Close follow-up questions panel when loading begins
+    if (!isFollowUpQuestionsMinimized) {
+      setIsFollowUpQuestionsMinimized(true);
+    }
 
     try {
       // Get current message content and create a version entry
@@ -1590,8 +1551,8 @@ const MainContent = ({
                           message={msg}
                           messageIndex={index}
                           onUpdate={handleMessageUpdate}
-                          messageVersions={messageVersions} // Replace messageHistory
-                          currentVersionIndex={currentVersionIndex} // New prop
+                          messageVersions={messageVersions}
+                          currentVersionIndex={currentVersionIndex}
                           onRestoreVersion={handleRestoreVersion}
                           onOpenHistoryModal={() => {
                             setActiveHistoryMessageIndex(index);
@@ -1599,54 +1560,71 @@ const MainContent = ({
                           }}
                         />
                       ) : (
-                        <div
-                          className="message-content"
-                          dangerouslySetInnerHTML={{
-                            __html: msg.content
-                              .replace(/```html/g, '')
-                              .replace(/```/g, '')
-                              .replace(/"""html/g, '')
-                              .replace(/"""/g, '')
-                              .replace(/<p>/g, '<p class="mb-4">')
-                              .replace(/<b>/g, '<b class="font-bold">')
-                              .replace(
-                                /<h3>/g,
-                                '<h3 class="text-lg font-semibold mt-4 mb-2">'
-                              )
-                              .replace(
-                                /<ul>/g,
-                                '<ul class="list-disc pl-6 mb-4">'
-                              )
-                              .replace(
-                                /<ol>/g,
-                                '<ol class="list-decimal pl-6 mb-4">'
-                              )
-                              .replace(/<li>/g, '<li class="mb-2">')
-                              // Add proper styling for tables
-                              .replace(
-                                /<table>/g,
-                                '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
-                              )
-                              .replace(
-                                /<th>/g,
-                                '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
-                              )
-                              .replace(
-                                /<td>/g,
-                                '<td class="border border-gray-500 p-2">'
-                              )
-                              // Ensure proper spacing for tables
-                              .replace(
-                                /<\/table>\s*<p>/g,
-                                '</table><p class="mt-4">'
-                              )
-                              // Remove excess newlines
-                              .replace(/\n{3,}/g, "\n\n")
-                              // Ensure one line break after headers
-                              .replace(/<\/b>\s*\n+/g, "</b>\n"),
-                              
-                          }}
-                        />
+                        <div className="message-content">
+                          {/* Use the CitationManager for assistant messages that have citations */}
+                          {msg.citations && msg.citations.length > 0 ? (
+                            <>
+                              <SimpleCitationManager
+                                content={msg.content}
+                                citations={msg.citations}
+                                autoProcess={
+                                  !msg.content.includes('<citation id="')
+                                } // Auto-process only if no markers
+                              />
+
+                              {/* Optional: Add citation list at the bottom
+        <CitationList citations={msg.citations}
+      onViewSource={(documentId) => {
+        // Handle viewing the document source
+        window.open(`/documents/${documentId}/original/`, '_blank');
+      }}
+    /> */}
+                            </>
+                          ) : (
+                            <div
+                              dangerouslySetInnerHTML={{
+                                __html: msg.content
+                                  .replace(/```html/g, "")
+                                  .replace(/```/g, "")
+                                  .replace(/"""html/g, "")
+                                  .replace(/"""/g, "")
+                                  .replace(/<p>/g, '<p class="mb-4">')
+                                  .replace(/<b>/g, '<b class="font-bold">')
+                                  .replace(
+                                    /<h3>/g,
+                                    '<h3 class="text-lg font-semibold mt-4 mb-2">'
+                                  )
+                                  .replace(
+                                    /<ul>/g,
+                                    '<ul class="list-disc pl-6 mb-4">'
+                                  )
+                                  .replace(
+                                    /<ol>/g,
+                                    '<ol class="list-decimal pl-6 mb-4">'
+                                  )
+                                  .replace(/<li>/g, '<li class="mb-2">')
+                                  .replace(
+                                    /<table>/g,
+                                    '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
+                                  )
+                                  .replace(
+                                    /<th>/g,
+                                    '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
+                                  )
+                                  .replace(
+                                    /<td>/g,
+                                    '<td class="border border-gray-500 p-2">'
+                                  )
+                                  .replace(
+                                    /<\/table>\s*<p>/g,
+                                    '</table><p class="mt-4">'
+                                  )
+                                  .replace(/\n{3,}/g, "\n\n")
+                                  .replace(/<\/b>\s*\n+/g, "</b>\n"),
+                              }}
+                            />
+                          )}
+                        </div>
                       )}
 
                       {/* Add Copy option for Klarifai messages only */}
@@ -1750,16 +1728,61 @@ const MainContent = ({
                   <div className="flex justify-center">
                     <button
                       onClick={toggleFollowUpQuestions}
-                      className="text-white p-0.5 transition-colors"
+                      className="text-white p-0.5 transition-colors relative group" // Added "relative group" for tooltip positioning
+                      title={
+                        isFollowUpQuestionsMinimized
+                          ? "Show follow-up questions"
+                          : "Hide follow-up questions"
+                      } // Basic HTML title attribute
                     >
                       {isFollowUpQuestionsMinimized ? (
-                        <ChevronUp className="h-4 w-4" />
+                        <>
+                          <ChevronUp className="h-4 w-4" />
+                          {/* Enhanced tooltip that appears on hover */}
+                          {currentFollowUpQuestions.length > 0 && (
+                            <div
+                              className="
+            absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2
+            px-3 py-2 
+            bg-gray-800/90 backdrop-blur-md 
+            text-white text-xs 
+            rounded-lg shadow-lg
+            border border-blue-500/20
+            opacity-0 group-hover:opacity-100
+            transition-opacity duration-300
+            whitespace-nowrap
+            pointer-events-none
+            z-50
+          "
+                            >
+                              <div className="flex items-center">
+                                <Info className="h-3 w-3 mr-1.5 text-blue-400" />
+                                <span>
+                                  Expand to see{" "}
+                                  {currentFollowUpQuestions.length} follow-up
+                                  question
+                                  {currentFollowUpQuestions.length > 1
+                                    ? "s"
+                                    : ""}
+                                </span>
+                              </div>
+                              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-gray-800/90 border-r border-b border-blue-500/20"></div>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <ChevronDown className="h-4 w-4" />
                       )}
                     </button>
                   </div>
-                  {!isFollowUpQuestionsMinimized &&
+                  {isFollowUpQuestionsMinimized &&
+                  currentFollowUpQuestions.length > 0 ? (
+                    <div className="text-xs text-center text-gray-400 py-1 animate-pulse">
+                      {currentFollowUpQuestions.length} follow-up question
+                      {currentFollowUpQuestions.length > 1 ? "s" : ""} available
+                    </div>
+                  ) : (
+                    !isFollowUpQuestionsMinimized &&
                     currentFollowUpQuestions.length > 0 && (
                       <div className="w-full px-2">
                         <div className="flex gap-1 overflow-x-auto">
@@ -1780,7 +1803,8 @@ const MainContent = ({
                           ))}
                         </div>
                       </div>
-                    )}
+                    )
+                  )}
                 </div>
                 {/* Input Area */}
                 <div className="bg-gray-900/90 backdrop-blur-xl rounded-b-2xl sm:rounded-b-3xl shadow-2xl p-2 relative border-t border-blue-500/10">
@@ -1833,13 +1857,15 @@ const MainContent = ({
                     <div className="flex items-center justify-between w-full">
                       {/* Left-side actions */}
                       <div className="flex items-center space-x-2">
-                        <button
-                          title="Upload documents"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
-                        >
-                          <Paperclip className="h-4 w-4" />
-                        </button>
+                        {hasUploadPermissions && (
+                          <button
+                            title="Upload documents"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
+                          >
+                            <Paperclip className="h-4 w-4" />
+                          </button>
+                        )}
 
                         {/* Mic button with recording indicator */}
                         {!message && (
@@ -1992,7 +2018,14 @@ const MainContent = ({
       )}
 
       {/* Custom Scrollbar Styles */}
-      <style>{`
+      <style>{` 
+              
+                
+                /* Your existing styles */
+                @keyframes bounce {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-10px); }
+                }
   
                 @keyframes bounce {
                   0%, 100% { transform: translateY(0); }

@@ -17,9 +17,11 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
     AdminUserModuleView,
     OriginalDocumentView,
     DocumentViewLogView,
-    DocumentContentSearchView
-    
-
+    DocumentContentSearchView,
+    AdminUserProjectsView,
+    AdminUserUploadPermissionsView,
+    CheckUploadPermissionsView,
+    ProcessCitationsView,
     
 )
 
@@ -39,6 +41,9 @@ urlpatterns = [
     
     # Chat functionality
     path('chat/', ChatView.as_view(), name='chat'),
+
+    # Citation processing endpoint
+    path('process-citations/', ProcessCitationsView.as_view(), name='process-citations'),
     
     # Chat history endpoints
     path('chat-history/', GetChatHistoryView.as_view(), name='chat-history'),
@@ -60,5 +65,12 @@ urlpatterns = [
     path('documents/<int:document_id>/view-log/', DocumentViewLogView.as_view(), name='log_document_view'),
 
      path('search-document-content/', DocumentContentSearchView.as_view(), name='search-document-content'),
+
+     
+    path('admin/users/<int:user_id>/projects/', AdminUserProjectsView.as_view()),
+    path('admin/users/<int:user_id>/upload-permissions/', AdminUserUploadPermissionsView.as_view(), name='admin_user_upload_permissions'),
+    path('api/check-upload-permissions/', CheckUploadPermissionsView.as_view(), name='check_upload_permissions'),
+    
+   
     
 ]   

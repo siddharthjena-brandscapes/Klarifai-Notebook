@@ -42,6 +42,15 @@ class Document(models.Model):
         return self.filename
     class Meta:
         app_label = 'chat'
+
+class UserUploadPermissions(models.Model):
+    user = models.OneToOneField(User, related_name='upload_permissions', on_delete=models.CASCADE)
+    can_upload = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.username} - Can Upload: {self.can_upload}"
 class ProcessedIndex(models.Model):
     document = models.OneToOneField(Document, on_delete=models.CASCADE)
     faiss_index = models.CharField(max_length=255, help_text="Path to saved FAISS index file")
