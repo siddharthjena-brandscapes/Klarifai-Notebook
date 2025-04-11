@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 
-// Wikipedia-style Citation Tooltip Component
+
 const SimpleCitation = ({ citation, index }) => {
   const [isOpen, setIsOpen] = useState(false);
   const tooltipTimeoutRef = useRef(null);

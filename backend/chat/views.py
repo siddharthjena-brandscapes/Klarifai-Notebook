@@ -4591,190 +4591,190 @@ class CheckUploadPermissionsView(APIView):
                 'can_upload': False  # Default to disallowing upload on error
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class ProcessCitationsView(APIView):
-    """
-    API endpoint to process a response and map citations to relevant parts of the text.
-    This can be called by the frontend when displaying a message.
-    """
-    permission_classes = [IsAuthenticated]
+# class ProcessCitationsView(APIView):
+#     """
+#     API endpoint to process a response and map citations to relevant parts of the text.
+#     This can be called by the frontend when displaying a message.
+#     """
+#     permission_classes = [IsAuthenticated]
     
-    def post(self, request):
-        try:
-            response_text = request.data.get('response_text')
-            citations = request.data.get('citations')
+#     def post(self, request):
+#         try:
+#             response_text = request.data.get('response_text')
+#             citations = request.data.get('citations')
             
-            if not response_text or not citations:
-                return Response({
-                    'error': 'Both response_text and citations are required'
-                }, status=status.HTTP_400_BAD_REQUEST)
+#             if not response_text or not citations:
+#                 return Response({
+#                     'error': 'Both response_text and citations are required'
+#                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Process the response text with citations
-            processed_text, enhanced_citations = self.process_response_with_citations(response_text, citations)
+#             # Process the response text with citations
+#             processed_text, enhanced_citations = self.process_response_with_citations(response_text, citations)
             
-            return Response({
-                'processed_text': processed_text,
-                'enhanced_citations': enhanced_citations
-            }, status=status.HTTP_200_OK)
+#             return Response({
+#                 'processed_text': processed_text,
+#                 'enhanced_citations': enhanced_citations
+#             }, status=status.HTTP_200_OK)
             
-        except Exception as e:
-            import traceback
-            print(f"Citation processing error: {str(e)}")
-            print(traceback.format_exc())
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#         except Exception as e:
+#             import traceback
+#             print(f"Citation processing error: {str(e)}")
+#             print(traceback.format_exc())
+#             return Response({
+#                 'error': str(e)
+#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def extract_citation_metadata(self, citation_text, source_file):
-        """
-        Extract metadata like page numbers and section titles from citation text.
+#     def extract_citation_metadata(self, citation_text, source_file):
+#         """
+#         Extract metadata like page numbers and section titles from citation text.
         
-        Args:
-            citation_text (str): The citation text from the document
-            source_file (str): The source file name
+#         Args:
+#             citation_text (str): The citation text from the document
+#             source_file (str): The source file name
             
-        Returns:
-            dict: Enhanced citation metadata
-        """
-        # Default citation structure
-        citation = {
-            'source_file': source_file,
-            'page_number': 'Unknown',
-            'section_title': 'Unknown',
-            'snippet': citation_text,
-        }
+#         Returns:
+#             dict: Enhanced citation metadata
+#         """
+#         # Default citation structure
+#         citation = {
+#             'source_file': source_file,
+#             'page_number': 'Unknown',
+#             'section_title': 'Unknown',
+#             'snippet': citation_text,
+#         }
         
-        # Try to extract page numbers - common formats
-        page_matches = re.findall(r'(page|p\.?)\s*(\d+)', citation_text, re.IGNORECASE)
-        if page_matches:
-            citation['page_number'] = page_matches[0][1]
+#         # Try to extract page numbers - common formats
+#         page_matches = re.findall(r'(page|p\.?)\s*(\d+)', citation_text, re.IGNORECASE)
+#         if page_matches:
+#             citation['page_number'] = page_matches[0][1]
         
-        # Try to extract section titles - look for section headings
-        section_matches = re.findall(r'(?:section|heading):\s*["\'"]([^\'"\']+)[\'"\']', citation_text, re.IGNORECASE)
-        if section_matches:
-            citation['section_title'] = section_matches[0]
+#         # Try to extract section titles - look for section headings
+#         section_matches = re.findall(r'(?:section|heading):\s*["\'"]([^\'"\']+)[\'"\']', citation_text, re.IGNORECASE)
+#         if section_matches:
+#             citation['section_title'] = section_matches[0]
         
-        # Alternative: Look for text in quotes that might be section titles
-        if citation['section_title'] == 'Unknown':
-            quote_matches = re.findall(r'[\'"\']([^\'"\']{5,50})[\'"\']', citation_text)
-            if quote_matches:
-                citation['section_title'] = quote_matches[0]
+#         # Alternative: Look for text in quotes that might be section titles
+#         if citation['section_title'] == 'Unknown':
+#             quote_matches = re.findall(r'[\'"\']([^\'"\']{5,50})[\'"\']', citation_text)
+#             if quote_matches:
+#                 citation['section_title'] = quote_matches[0]
         
-        # Look for date information
-        date_matches = re.findall(r'\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b', citation_text)
-        if date_matches:
-            citation['date'] = date_matches[0]
+#         # Look for date information
+#         date_matches = re.findall(r'\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b', citation_text)
+#         if date_matches:
+#             citation['date'] = date_matches[0]
         
-        return citation
+#         return citation
     
-    def process_response_with_citations(self, response_text, citations):
-        """
-        Maps citations to specific parts of the response text based on content similarity.
+#     def process_response_with_citations(self, response_text, citations):
+#         """
+#         Maps citations to specific parts of the response text based on content similarity.
         
-        Args:
-            response_text (str): The response text from the LLM
-            citations (list): List of citation objects with source information
+#         Args:
+#             response_text (str): The response text from the LLM
+#             citations (list): List of citation objects with source information
             
-        Returns:
-            tuple: (processed_text, enhanced_citations)
-        """
-        if not citations or not response_text:
-            return response_text, citations
+#         Returns:
+#             tuple: (processed_text, enhanced_citations)
+#         """
+#         if not citations or not response_text:
+#             return response_text, citations
         
-        # First, try to improve citation metadata
-        enhanced_citations = []
+#         # First, try to improve citation metadata
+#         enhanced_citations = []
 
-        for idx, citation in enumerate(citations):
-            # Get basic info
-            source_file = citation.get('source_file', 'Unknown Document')
-            snippet = citation.get('snippet', '')
+#         for idx, citation in enumerate(citations):
+#             # Get basic info
+#             source_file = citation.get('source_file', 'Unknown Document')
+#             snippet = citation.get('snippet', '')
             
-            # If metadata is missing, try to extract it
-            if citation.get('page_number') in [None, 'Unknown'] or citation.get('section_title') in [None, 'Unknown']:
-                enhanced_citation = self.extract_citation_metadata(snippet, source_file)
-                # Preserve original data where available
-                for key, value in citation.items():
-                    if value and value != 'Unknown':
-                        enhanced_citation[key] = value
-                enhanced_citations.append(enhanced_citation)
-            else:
-                enhanced_citations.append(citation)
+#             # If metadata is missing, try to extract it
+#             if citation.get('page_number') in [None, 'Unknown'] or citation.get('section_title') in [None, 'Unknown']:
+#                 enhanced_citation = self.extract_citation_metadata(snippet, source_file)
+#                 # Preserve original data where available
+#                 for key, value in citation.items():
+#                     if value and value != 'Unknown':
+#                         enhanced_citation[key] = value
+#                 enhanced_citations.append(enhanced_citation)
+#             else:
+#                 enhanced_citations.append(citation)
         
-        # Remove HTML tags for better text processing
-        clean_text = strip_tags(response_text)
+#         # Remove HTML tags for better text processing
+#         clean_text = strip_tags(response_text)
         
-        # Step 1: Split the response into sentences
-        sentences = sent_tokenize(clean_text)
+#         # Step 1: Split the response into sentences
+#         sentences = sent_tokenize(clean_text)
         
-        # Step 2: For each citation, find the most relevant sentence
-        citation_mapping = {}  # Maps citation index to sentence index
+#         # Step 2: For each citation, find the most relevant sentence
+#         citation_mapping = {}  # Maps citation index to sentence index
         
-        for citation_idx, citation in enumerate(enhanced_citations):
-            snippet = citation.get('snippet', '').lower()
-            if not snippet:
-                continue
+#         for citation_idx, citation in enumerate(enhanced_citations):
+#             snippet = citation.get('snippet', '').lower()
+#             if not snippet:
+#                 continue
                 
-            # Generate keywords from the snippet
-            keywords = set(re.findall(r'\b\w+\b', snippet.lower()))
-            keywords = {k for k in keywords if len(k) > 3}  # Filter out short words
+#             # Generate keywords from the snippet
+#             keywords = set(re.findall(r'\b\w+\b', snippet.lower()))
+#             keywords = {k for k in keywords if len(k) > 3}  # Filter out short words
             
-            # Score each sentence based on keyword overlap
-            best_score = 0
-            best_sentence_idx = -1
+#             # Score each sentence based on keyword overlap
+#             best_score = 0
+#             best_sentence_idx = -1
             
-            for sent_idx, sentence in enumerate(sentences):
-                sentence_lower = sentence.lower()
-                sentence_words = set(re.findall(r'\b\w+\b', sentence_lower))
+#             for sent_idx, sentence in enumerate(sentences):
+#                 sentence_lower = sentence.lower()
+#                 sentence_words = set(re.findall(r'\b\w+\b', sentence_lower))
                 
-                # Calculate overlap score
-                overlap = keywords.intersection(sentence_words)
-                if overlap:
-                    score = len(overlap) / max(len(keywords), 1)  # Avoid division by zero
+#                 # Calculate overlap score
+#                 overlap = keywords.intersection(sentence_words)
+#                 if overlap:
+#                     score = len(overlap) / max(len(keywords), 1)  # Avoid division by zero
                     
-                    # Give higher score for exact phrase matches
-                    for i in range(0, len(snippet), 10):
-                        if i + 20 <= len(snippet):
-                            phrase = snippet[i:i+20]
-                            if phrase in sentence_lower:
-                                score += 0.5
+#                     # Give higher score for exact phrase matches
+#                     for i in range(0, len(snippet), 10):
+#                         if i + 20 <= len(snippet):
+#                             phrase = snippet[i:i+20]
+#                             if phrase in sentence_lower:
+#                                 score += 0.5
                     
-                    if score > best_score:
-                        best_score = score
-                        best_sentence_idx = sent_idx
+#                     if score > best_score:
+#                         best_score = score
+#                         best_sentence_idx = sent_idx
             
-            # Map citation to sentence if we found a good match
-            if best_score > 0.2 and best_sentence_idx >= 0:  # Threshold to ensure relevance
-                if best_sentence_idx not in citation_mapping:
-                    citation_mapping[best_sentence_idx] = []
-                citation_mapping[best_sentence_idx].append(citation_idx)
+#             # Map citation to sentence if we found a good match
+#             if best_score > 0.2 and best_sentence_idx >= 0:  # Threshold to ensure relevance
+#                 if best_sentence_idx not in citation_mapping:
+#                     citation_mapping[best_sentence_idx] = []
+#                 citation_mapping[best_sentence_idx].append(citation_idx)
         
-        # Step 3: Reinsert the HTML and add citation markers
-        # Start by marking positions in the original response_text where sentences end
-        sentence_positions = []
-        current_pos = 0
+#         # Step 3: Reinsert the HTML and add citation markers
+#         # Start by marking positions in the original response_text where sentences end
+#         sentence_positions = []
+#         current_pos = 0
         
-        for sentence in sentences:
-            # Find this sentence in the original text
-            sentence_pos = response_text.find(sentence, current_pos)
-            if sentence_pos >= 0:
-                sentence_end = sentence_pos + len(sentence)
-                sentence_positions.append(sentence_end)
-                current_pos = sentence_end
+#         for sentence in sentences:
+#             # Find this sentence in the original text
+#             sentence_pos = response_text.find(sentence, current_pos)
+#             if sentence_pos >= 0:
+#                 sentence_end = sentence_pos + len(sentence)
+#                 sentence_positions.append(sentence_end)
+#                 current_pos = sentence_end
         
-        # Now insert citation markers at the end of relevant sentences
-        result = response_text
-        offset = 0  # Track position offset as we insert markers
+#         # Now insert citation markers at the end of relevant sentences
+#         result = response_text
+#         offset = 0  # Track position offset as we insert markers
         
-        for sent_idx, end_pos in enumerate(sentence_positions):
-            if sent_idx in citation_mapping:
-                # Create citation markers
-                citation_markers = ""
-                for citation_idx in citation_mapping[sent_idx]:
-                    citation_markers += f'<citation id="{citation_idx}"></citation>'
+#         for sent_idx, end_pos in enumerate(sentence_positions):
+#             if sent_idx in citation_mapping:
+#                 # Create citation markers
+#                 citation_markers = ""
+#                 for citation_idx in citation_mapping[sent_idx]:
+#                     citation_markers += f'<citation id="{citation_idx}"></citation>'
                 
-                # Insert at the adjusted position
-                insert_pos = end_pos + offset
-                if insert_pos <= len(result):
-                    result = result[:insert_pos] + citation_markers + result[insert_pos:]
-                    offset += len(citation_markers)
+#                 # Insert at the adjusted position
+#                 insert_pos = end_pos + offset
+#                 if insert_pos <= len(result):
+#                     result = result[:insert_pos] + citation_markers + result[insert_pos:]
+#                     offset += len(citation_markers)
         
-        return result, enhanced_citations
+#         return result, enhanced_citations
