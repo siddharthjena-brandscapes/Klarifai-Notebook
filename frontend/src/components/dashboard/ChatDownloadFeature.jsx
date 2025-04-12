@@ -113,9 +113,17 @@ const ChatDownloadFeature = ({
       const link = document.createElement('a');
       link.href = url;
       
-      // Set the download filename
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      // Set the download filename - FIXED DATE FORMATTING
+      // Format the date without timezone conversion to prevent off-by-one errors
+      const formatDateString = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      
+      const startDateStr = formatDateString(startDate);
+      const endDateStr = formatDateString(endDate);
       link.setAttribute('download', `Chats_${startDateStr}_to_${endDateStr}.pdf`);
       
       // Append to the document body and click
@@ -195,7 +203,7 @@ const ChatDownloadFeature = ({
                     onChange={(date) => setStartDate(date)}
                     maxDate={endDate || new Date()}
                     placeholderText="Select start date"
-                    className="w-full p-2 border rounded"
+                    className="w-full p-2 border rounded bg-gray-900 text-white text-sm"
                   />
                 </div>
                 <div>
@@ -206,7 +214,7 @@ const ChatDownloadFeature = ({
                     minDate={startDate}
                     maxDate={new Date()}
                     placeholderText="Select end date"
-                    className="w-full p-2 border rounded"
+                    className="w-full p-2 border rounded bg-gray-900 text-white text-sm"
                   />
                 </div>
               </div>

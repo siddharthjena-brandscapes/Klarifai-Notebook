@@ -4778,3 +4778,1125 @@ class CheckUploadPermissionsView(APIView):
 #                     offset += len(citation_markers)
         
 #         return result, enhanced_citations
+
+
+# codes for chat download
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle, ListStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, ListFlowable, ListItem, Preformatted, PageBreak
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+from bs4 import BeautifulSoup, Comment, NavigableString, Tag
+from datetime import timedelta
+import re
+from django.utils import timezone
+import json
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus.flowables import HRFlowable
+
+class ChatPDFExportView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            # Parse request data
+            conversation_id = request.data.get('conversation_id')
+            date_range = request.data.get('date_range')
+            options = request.data.get('options', {})
+            
+            # Set default options if not provided
+            include_timestamps = options.get('includeTimestamps', True)
+            include_metadata = options.get('includeChatMetadata', True)
+            include_followups = options.get('includeFollowUpQuestions', True)
+            format_code = options.get('formatCode', True)
+            
+            # Log the request for debugging
+            print(f"PDF Export Request - ID: {conversation_id}, Date Range: {date_range}, Options: {options}")
+            
+            # Register available fonts
+            self._register_fonts()
+            
+            # Buffer to store PDF
+            buffer = BytesIO()
+            
+            if conversation_id:
+                # Single conversation export
+                conversation = get_object_or_404(
+                    ChatHistory, 
+                    conversation_id=conversation_id,
+                    user=request.user
+                )
+                
+                # Generate PDF for a single conversation
+                self.generate_single_chat_pdf(
+                    buffer, 
+                    conversation, 
+                    include_timestamps,
+                    include_metadata,
+                    include_followups,
+                    format_code
+                )
+                
+                # Set filename with conversation title
+                safe_title = re.sub(r'[^\w\-_\. ]', '_', conversation.title or 'Chat')
+                filename = f"{safe_title}_{timezone.now().strftime('%Y%m%d')}.pdf"
+                
+            elif date_range:
+                # Date range export
+                start_date = date_range.get('startDate')
+                end_date = date_range.get('endDate')
+                
+                if not start_date or not end_date:
+                    return Response(
+                        {'error': 'Start and end dates are required for date range export'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Parse dates
+                try:
+                    # Handle both ISO format and datetime objects
+                    if isinstance(start_date, str):
+                        start_date = timezone.datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                    if isinstance(end_date, str):
+                        end_date = timezone.datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    
+                    # Add a day to end_date to include the entire end date
+                    end_date = end_date.replace(hour=23, minute=59, second=59)
+                except (ValueError, TypeError) as e:
+                    return Response(
+                        {'error': f'Invalid date format: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Get conversations in date range
+                conversations = ChatHistory.objects.filter(
+                    user=request.user,
+                    created_at__gte=start_date,
+                    created_at__lte=end_date
+                ).order_by('-created_at')
+                
+                if not conversations.exists():
+                    return Response(
+                        {'error': 'No conversations found in the specified date range'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Generate multi-chat PDF
+                self.generate_multiple_chat_pdf(
+                    buffer,
+                    conversations,
+                    include_timestamps,
+                    include_metadata,
+                    include_followups,
+                    format_code
+                )
+                
+                # Set filename with date range
+                filename = f"Chats_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.pdf"
+            else:
+                return Response(
+                    {'error': 'Either conversation_id or date_range must be provided'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Set buffer position to the beginning
+            buffer.seek(0)
+            
+            # Create the HTTP response with PDF content
+            response = HttpResponse(buffer, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            
+            return response
+            
+        except Exception as e:
+            print(f"Error generating PDF: {str(e)}")
+            return Response(
+                {'error': f'Failed to generate PDF: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _register_fonts(self):
+        """Register fonts for the PDF generation"""
+        try:
+            # Skip if fonts are already registered
+            if hasattr(self, '_fonts_registered'):
+                return
+                
+            # Use default courier font from ReportLab if custom font not available
+            from reportlab.pdfbase._fontdata import standardFonts
+            if 'Courier' not in pdfmetrics._fonts and 'Courier' in standardFonts:
+                from reportlab.pdfbase.ttfonts import TTFont
+                pdfmetrics.registerFont(TTFont('Courier', 'Courier'))
+                
+            setattr(self, '_fonts_registered', True)
+            
+        except Exception as e:
+            print(f"Warning: Using default fonts - {str(e)}")
+            # Continue anyway - ReportLab will use default fonts
+    
+    def generate_single_chat_pdf(self, buffer, conversation, include_timestamps, include_metadata, include_followups, format_code):
+        # Create the PDF document
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=72
+        )
+        
+        # Create story (list of flowables)
+        story = []
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        title_style = styles['Title']
+        heading_style = styles['Heading2']
+        normal_style = styles['Normal']
+        
+        # Custom styles for better formatting
+        timestamp_style = ParagraphStyle(
+            'TimestampStyle',
+            parent=styles['Italic'],
+            fontSize=8,
+            textColor=colors.gray
+        )
+        
+        user_style = ParagraphStyle(
+            'UserStyle',
+            parent=normal_style,
+            fontSize=10,
+            leading=14,
+            spaceAfter=6,
+            spaceBefore=6,
+            bulletIndent=12,
+            leftIndent=0
+        )
+        
+        assistant_style = ParagraphStyle(
+            'AssistantStyle',
+            parent=normal_style,
+            fontSize=10,
+            leading=14,
+            spaceAfter=6,
+            spaceBefore=6,
+            bulletIndent=12,
+            leftIndent=0,
+            backColor=colors.lightgrey.clone(alpha=0.2)
+        )
+        
+        # Enhanced bullet styles
+        bullet_style = ParagraphStyle(
+            'BulletStyle',
+            parent=normal_style,
+            fontSize=10,
+            leading=14,
+            leftIndent=20,
+            bulletIndent=0,
+            spaceAfter=2,
+            bulletFontName='Helvetica-Bold'
+        )
+        
+        assistant_bullet_style = ParagraphStyle(
+            'AssistantBulletStyle',
+            parent=bullet_style,
+            backColor=colors.lightgrey.clone(alpha=0.2)
+        )
+        
+        code_style = ParagraphStyle(
+            'CodeStyle',
+            parent=normal_style,
+            fontName='Courier',
+            fontSize=9,
+            leading=12,
+            spaceAfter=10,
+            spaceBefore=10,
+            leftIndent=20,
+            rightIndent=20,
+            backColor=colors.whitesmoke
+        )
+        
+        # Add title
+        story.append(Paragraph(conversation.title or "Chat Conversation", title_style))
+        story.append(Spacer(1, 0.25*inch))
+        
+        # Add metadata if requested
+        if include_metadata:
+            metadata = [
+                ["Created", conversation.created_at.strftime("%Y-%m-%d %H:%M")],
+                ["Conversation ID", str(conversation.conversation_id)]
+            ]
+            
+            # Get document names if available
+            if conversation.documents.exists():
+                doc_names = ", ".join([doc.filename for doc in conversation.documents.all()])
+                metadata.append(["Documents", doc_names])
+            
+            # Create metadata table
+            metadata_table = Table(metadata, colWidths=[100, 350])
+            metadata_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.black),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            
+            story.append(metadata_table)
+            story.append(Spacer(1, 0.25*inch))
+        
+        # Get messages
+        messages = conversation.messages.all().order_by('created_at')
+        
+        # Process messages
+        for message in messages:
+            role = message.role.capitalize()
+            content = message.content
+            
+            # Add message role header
+            role_text = f"{role}"
+            story.append(Paragraph(role_text, heading_style))
+            
+            # Add timestamp if requested
+            if include_timestamps:
+                timestamp = message.created_at.strftime("%Y-%m-%d %H:%M")
+                story.append(Paragraph(timestamp, timestamp_style))
+            
+            # Select style based on role
+            style = assistant_style if role.lower() == 'assistant' else user_style
+            bullet_style_to_use = assistant_bullet_style if role.lower() == 'assistant' else bullet_style
+            
+            # Special case for messages with HTML tags
+            if '<' in content and '>' in content:
+                # Process HTML content using a different approach to avoid duplication
+                html_content = self.process_html_for_pdf(content, style, bullet_style_to_use, code_style, format_code)
+                for item in html_content:
+                    story.append(item)
+            else:
+                # Process plain text content (without HTML)
+                lines = content.split('\n')
+                buffer = []
+                in_code_block = False
+                
+                for line in lines:
+                    # Check if line is a bullet point or numbered item
+                    bullet_match = re.match(r'^\s*[•\-*]\s+(.*)', line)
+                    number_match = re.match(r'^\s*(\d+)[\.\)]\s+(.*)', line)
+                    
+                    # First add any buffered content
+                    if buffer and (bullet_match or number_match or (line.strip() == '' and buffer[-1].strip() != '')):
+                        buffer_text = '\n'.join(buffer)
+                        if buffer_text.strip():
+                            story.append(Paragraph(buffer_text, style))
+                        buffer = []
+                    
+                    # Process bullets and numbers
+                    if bullet_match:
+                        bullet_content = bullet_match.group(1)
+                        story.append(Paragraph(f"• {bullet_content}", bullet_style_to_use))
+                    elif number_match:
+                        number = number_match.group(1)
+                        item_content = number_match.group(2)
+                        story.append(Paragraph(f"{number}. {item_content}", bullet_style_to_use))
+                    else:
+                        # Regular line, add to buffer
+                        if in_code_block or (len(line) > 0 and line[0] in [' ', '\t'] and line.strip()):
+                            # This looks like code (indented line)
+                            if not in_code_block:
+                                # Start of code block
+                                in_code_block = True
+                                if buffer:
+                                    buffer_text = '\n'.join(buffer)
+                                    if buffer_text.strip():
+                                        story.append(Paragraph(buffer_text, style))
+                                    buffer = []
+                            buffer.append(line)
+                        else:
+                            # End of code block?
+                            if in_code_block and line.strip() == '':
+                                in_code_block = False
+                                code_text = '\n'.join(buffer)
+                                if code_text.strip():
+                                    story.append(Preformatted(code_text, code_style))
+                                buffer = []
+                            else:
+                                # Normal text
+                                buffer.append(line)
+                
+                # Add remaining buffer content
+                if buffer:
+                    buffer_text = '\n'.join(buffer)
+                    if buffer_text.strip():
+                        if in_code_block:
+                            story.append(Preformatted(buffer_text, code_style))
+                        else:
+                            story.append(Paragraph(buffer_text, style))
+            
+            # Add spacing between messages
+            story.append(Spacer(1, 0.2*inch))
+        
+        # Add follow-up questions if available and requested
+        if include_followups and conversation.follow_up_questions:
+            story.append(Spacer(1, 0.25*inch))
+            story.append(Paragraph("Follow-up Questions", heading_style))
+            
+            # Use ListFlowable for follow-up questions
+            follow_up_items = []
+            for i, question in enumerate(conversation.follow_up_questions, 1):
+                follow_up_items.append(ListItem(Paragraph(question, normal_style), leftIndent=20))
+            
+            if follow_up_items:
+                follow_up_list = ListFlowable(
+                    follow_up_items,
+                    bulletType='1',
+                    start=1,
+                    bulletFontSize=10,
+                    bulletOffsetY=2,
+                    leftIndent=10,
+                    bulletDedent=10
+                )
+                story.append(follow_up_list)
+        
+        # Build the PDF
+        doc.build(story)
+
+    def process_html_for_pdf(self, html_content, base_style, bullet_style, code_style, format_code):
+        """
+        Process HTML content and return a list of ReportLab flowables
+        with improved heading and section formatting preservation
+        """
+        from bs4 import BeautifulSoup, NavigableString, Tag, Comment
+        from reportlab.platypus import Paragraph, Spacer, ListFlowable, ListItem, Preformatted, Table, TableStyle
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        import re
+        
+        # Pre-process HTML content to ensure section headings are properly tagged
+        # Look for patterns like "**Section Name:**" and wrap them in proper tags
+        html_content = re.sub(r'\*\*(.*?):\*\*', r'<strong>\1:</strong>', html_content)
+        
+        soup = BeautifulSoup(html_content, 'html.parser')
+        flowables = []
+        
+        # Helper function to process text with formatting
+        def format_text(text_node):
+            if not text_node or not text_node.strip():
+                return text_node
+                
+            text = text_node
+            
+            # Handle bold tags - ensure they're preserved
+            text = re.sub(r'<b>(.*?)</b>', r'<b>\1</b>', text, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<strong>(.*?)</strong>', r'<b>\1</b>', text, flags=re.DOTALL | re.IGNORECASE)
+            
+            # Handle italic tags
+            text = re.sub(r'<i>(.*?)</i>', r'<i>\1</i>', text, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<em>(.*?)</em>', r'<i>\1</i>', text, flags=re.DOTALL | re.IGNORECASE)
+            
+            # Handle underline tags
+            text = re.sub(r'<u>(.*?)</u>', r'<u>\1</u>', text, flags=re.DOTALL | re.IGNORECASE)
+            
+            # Additional pattern for **bold text**
+            text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text, flags=re.DOTALL)
+            
+            return text
+        
+        # Helper function to process list items with better formatting handling
+        def process_list_items(list_element, level=0):
+            items = []
+            
+            for li in list_element.find_all('li', recursive=False):
+                # Create a new soup just for this list item to properly extract formatting
+                li_soup = BeautifulSoup(str(li), 'html.parser')
+                item_content = ''
+                nested_lists = []
+                
+                # Process each child in the list item
+                for child in li.children:
+                    if isinstance(child, NavigableString):
+                        item_content += str(child)
+                    elif child.name in ['ul', 'ol']:
+                        # Save nested list for processing after the main content
+                        nested_lists.append(child)
+                    elif child.name in ['b', 'strong']:
+                        # Ensure bold text is properly captured
+                        item_content += f'<b>{child.get_text()}</b>'
+                    elif child.name in ['i', 'em']:
+                        item_content += f'<i>{child.get_text()}</i>'
+                    else:
+                        # Preserve any formatting within other elements
+                        inner_html = str(child)
+                        # Extract only the inner part, not the outer tag
+                        inner_content = child.get_text()
+                        # Check if the inner content has bold formatting that needs preserving
+                        if '**' in inner_content:
+                            inner_content = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', inner_content)
+                            item_content += inner_content
+                        else:
+                            item_content += inner_content
+                
+                # Create a list item with formatted content
+                if item_content.strip():
+                    # Create indent style based on nesting level
+                    indent_style = ParagraphStyle(
+                        f'Level{level}Style',
+                        parent=bullet_style,
+                        leftIndent=20 * level
+                    )
+                    
+                    # Process and preserve bold text in item content
+                    formatted_content = format_text(item_content)
+                    items.append(
+                        ListItem(
+                            Paragraph(formatted_content, indent_style),
+                            leftIndent=20 * level
+                        )
+                    )
+                
+                # Process any nested lists
+                for nested_list in nested_lists:
+                    # Add sub-list items with increased indentation
+                    nested_items = process_list_items(nested_list, level + 1)
+                    items.extend(nested_items)
+            
+            return items
+        
+        # Helper function to process HTML tables
+        def process_table(table_element):
+            rows_data = []
+            
+            # Process each row
+            for tr in table_element.find_all('tr', recursive=False):
+                row = []
+                
+                # Find all cells (th or td)
+                for cell in tr.find_all(['th', 'td']):
+                    # Process the cell content with formatting
+                    cell_content = ''
+                    
+                    for child in cell.children:
+                        if isinstance(child, NavigableString):
+                            cell_content += str(child)
+                        elif child.name in ['b', 'strong']:
+                            cell_content += f'<b>{child.get_text()}</b>'
+                        elif child.name in ['i', 'em']:
+                            cell_content += f'<i>{child.get_text()}</i>'
+                        else:
+                            # Preserve any markdown-style bold formatting
+                            text = child.get_text()
+                            if '**' in text:
+                                text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+                            cell_content += text
+                    
+                    # Create a paragraph with the formatted cell content
+                    if cell_content.strip():
+                        # Use Paragraph for cells to enable formatting
+                        cell_para = Paragraph(format_text(cell_content), base_style)
+                        row.append(cell_para)
+                    else:
+                        # Empty cell
+                        row.append('')
+                
+                # Add the row if it has any content
+                if row:
+                    rows_data.append(row)
+            
+            # Only proceed if we have rows
+            if not rows_data:
+                return None
+            
+            # Determine if the first row is a header
+            has_header = any(cell.name == 'th' for cell in table_element.find_all('tr', recursive=False)[0].find_all(['th', 'td']))
+            
+            # Calculate column widths (equal distribution)
+            if rows_data and rows_data[0]:
+                num_cols = len(rows_data[0])
+                # Set a max width for the table (80% of page width)
+                max_table_width = 450  # In points (letter page width is 612 points)
+                col_width = max_table_width / num_cols if num_cols > 0 else max_table_width
+                col_widths = [col_width] * num_cols
+            else:
+                # Fallback if no rows or columns
+                col_widths = [100]
+            
+            # Create the table with the data and column widths
+            pdf_table = Table(rows_data, colWidths=col_widths)
+            
+            # Create table style
+            table_style = [
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ]
+            
+            # Add header style if first row contains th elements
+            if has_header:
+                table_style.extend([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ])
+            
+            # Apply styles to the table
+            pdf_table.setStyle(TableStyle(table_style))
+            
+            return pdf_table
+        
+        # First detect if this is likely to contain a major heading
+        # Many responses start with "**Heading**" pattern
+        heading_match = re.search(r'^\s*\*\*(.*?)\*\*\s*$', html_content, re.MULTILINE)
+        if heading_match:
+            heading_text = heading_match.group(1)
+            heading_style = ParagraphStyle(
+                'MajorHeading',
+                parent=base_style,
+                fontSize=14,
+                fontName='Helvetica-Bold',
+                spaceBefore=6,
+                spaceAfter=6
+            )
+            flowables.append(Paragraph(heading_text, heading_style))
+            flowables.append(Spacer(1, 0.1*inch))
+        
+        # Get all top-level elements
+        top_elements = list(soup.children)
+        
+        # Skip pure whitespace text nodes
+        top_elements = [el for el in top_elements if not (isinstance(el, NavigableString) and not el.strip())]
+        
+        # If there are no proper elements, just use the text
+        if not any(isinstance(el, Tag) for el in top_elements):
+            text = soup.get_text()
+            if text.strip():
+                # Check for section headers in the text - these would be standalone paragraphs
+                paragraphs = [p for p in text.split('\n') if p.strip()]
+                for para in paragraphs:
+                    # Check if this paragraph is a section heading (bold text at the beginning)
+                    if para.strip().startswith('**') and '**' in para[2:]:
+                        # This is likely a section heading
+                        heading_end = para.find('**', 2)
+                        if heading_end > 0:
+                            heading = para[2:heading_end]
+                            rest_of_para = para[heading_end+2:].strip()
+                            
+                            heading_style = ParagraphStyle(
+                                'SectionHeading',
+                                parent=base_style,
+                                fontSize=12,
+                                fontName='Helvetica-Bold',
+                                spaceBefore=6,
+                                spaceAfter=2
+                            )
+                            flowables.append(Paragraph(heading, heading_style))
+                            
+                            if rest_of_para:
+                                flowables.append(Paragraph(format_text(rest_of_para), base_style))
+                    else:
+                        # Regular paragraph
+                        flowables.append(Paragraph(format_text(para), base_style))
+            
+            return flowables
+        
+        # Otherwise process each top-level element
+        for element in top_elements:
+            # Skip comments
+            if isinstance(element, Comment):
+                continue
+                
+            # Handle text nodes - check for section headers
+            if isinstance(element, NavigableString):
+                text = str(element).strip()
+                if text:
+                    # Check if this might be a section heading (starts with **)
+                    if text.startswith('**') and '**' in text[2:]:
+                        # This is likely a section heading
+                        heading_end = text.find('**', 2)
+                        if heading_end > 0:
+                            heading = text[2:heading_end]
+                            rest_of_text = text[heading_end+2:].strip()
+                            
+                            heading_style = ParagraphStyle(
+                                'SectionHeading',
+                                parent=base_style,
+                                fontSize=12,
+                                fontName='Helvetica-Bold',
+                                spaceBefore=6,
+                                spaceAfter=2
+                            )
+                            flowables.append(Paragraph(heading, heading_style))
+                            
+                            if rest_of_text:
+                                flowables.append(Paragraph(format_text(rest_of_text), base_style))
+                    else:
+                        # Regular text node
+                        flowables.append(Paragraph(format_text(text), base_style))
+                continue
+            
+            # Handle paragraph elements - check for section headers
+            if element.name in ['p', 'div']:
+                element_html = str(element)
+                element_text = element.get_text().strip()
+                
+                # Check if this paragraph contains a section heading
+                if element_text.startswith('**') and '**' in element_text[2:]:
+                    # This is likely a section heading
+                    heading_end = element_text.find('**', 2)
+                    if heading_end > 0:
+                        heading = element_text[2:heading_end]
+                        rest_of_text = element_text[heading_end+2:].strip()
+                        
+                        heading_style = ParagraphStyle(
+                            'SectionHeading',
+                            parent=base_style,
+                            fontSize=12,
+                            fontName='Helvetica-Bold',
+                            spaceBefore=6,
+                            spaceAfter=2
+                        )
+                        flowables.append(Paragraph(heading, heading_style))
+                        
+                        if rest_of_text:
+                            flowables.append(Paragraph(format_text(rest_of_text), base_style))
+                        
+                        flowables.append(Spacer(1, 0.05*inch))
+                        continue
+                
+                # Otherwise treat as regular paragraph
+                # Get text with proper formatting of sub-elements
+                para_content = ''
+                
+                # Handle internal formatting (bold, italic, etc.)
+                for child in element.children:
+                    if isinstance(child, NavigableString):
+                        para_content += str(child)
+                    elif child.name in ['b', 'strong']:
+                        para_content += f'<b>{child.get_text()}</b>'
+                    elif child.name in ['i', 'em']:
+                        para_content += f'<i>{child.get_text()}</i>'
+                    elif child.name in ['u']:
+                        para_content += f'<u>{child.get_text()}</u>'
+                    else:
+                        # Get text and preserve any markdown formatting
+                        text = child.get_text()
+                        if '**' in text:
+                            text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+                        para_content += text
+                
+                if para_content.strip():
+                    flowables.append(Paragraph(format_text(para_content), base_style))
+                    flowables.append(Spacer(1, 0.05*inch))
+            
+            # Handle unordered lists
+            elif element.name == 'ul':
+                # Get all list items including nested ones
+                list_items = process_list_items(element)
+                
+                if list_items:
+                    # Create list flowable with custom bullet symbol and styling
+                    bullet_list = ListFlowable(
+                        list_items,
+                        bulletType='bullet',
+                        start=None,
+                        bulletFontSize=10,
+                        bulletOffsetY=2,
+                        leftIndent=10,
+                        bulletDedent=10
+                    )
+                    flowables.append(bullet_list)
+                    flowables.append(Spacer(1, 0.05*inch))
+            
+            # Handle ordered lists
+            elif element.name == 'ol':
+                # Get all list items including nested ones
+                list_items = process_list_items(element)
+                
+                if list_items:
+                    # Create list flowable with numbers
+                    numbered_list = ListFlowable(
+                        list_items,
+                        bulletType='1',
+                        start=1,
+                        bulletFontSize=10,
+                        bulletOffsetY=2,
+                        leftIndent=10,
+                        bulletDedent=10
+                    )
+                    flowables.append(numbered_list)
+                    flowables.append(Spacer(1, 0.05*inch))
+            
+            # Handle tables
+            elif element.name == 'table':
+                # Process the table using our helper function
+                table = process_table(element)
+                if table:
+                    flowables.append(table)
+                    flowables.append(Spacer(1, 0.1*inch))
+            
+            # Handle code blocks
+            elif element.name in ['pre', 'code']:
+                code_text = element.get_text()
+                if code_text.strip():
+                    if format_code:
+                        flowables.append(Preformatted(code_text, code_style))
+                    else:
+                        flowables.append(Paragraph(code_text, base_style))
+                    flowables.append(Spacer(1, 0.05*inch))
+            
+            # Handle headings
+            elif element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                heading_text = element.get_text()
+                if heading_text.strip():
+                    # Create heading style based on level
+                    level = int(element.name[1])
+                    if level <= 2:
+                        heading_style = ParagraphStyle(
+                            f'Heading{level}',
+                            parent=base_style,
+                            fontSize=14 - (level-1)*2,
+                            fontName='Helvetica-Bold',
+                            spaceBefore=10,
+                            spaceAfter=6
+                        )
+                    else:
+                        heading_style = ParagraphStyle(
+                            f'Heading{level}',
+                            parent=base_style,
+                            fontSize=12 - (level-3),
+                            fontName='Helvetica-Bold',
+                            spaceBefore=8,
+                            spaceAfter=4
+                        )
+                    
+                    flowables.append(Paragraph(heading_text, heading_style))
+                    flowables.append(Spacer(1, 0.05*inch))
+        
+        return flowables
+
+
+    def generate_multiple_chat_pdf(self, buffer, conversations, include_timestamps, include_metadata, include_followups, format_code):
+        """
+        Generate PDF for multiple chat conversations with consistent formatting
+        """
+        # Create the PDF document
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=72
+        )
+        
+        # Create story (list of flowables)
+        story = []
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        title_style = styles['Title']
+        heading1_style = styles['Heading1']
+        heading2_style = styles['Heading2']
+        normal_style = styles['Normal']
+        
+        # Add title
+        story.append(Paragraph("Chat Conversations Export", title_style))
+        story.append(Spacer(1, 0.25*inch))
+        
+        # Add date range info
+
+        end_date = conversations.first().created_at + timedelta(days=1)
+        date_range_text = f"Conversations from {conversations.last().created_at.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+        story.append(Paragraph(date_range_text, heading2_style))
+        story.append(Spacer(1, 0.25*inch))
+        
+        # Process each conversation - CRITICAL CHANGE HERE: use a temporary buffer and the same processing as single chats
+        for i, conversation in enumerate(conversations):
+            # Add conversation header with page break for all except first
+            if i > 0:
+                story.append(PageBreak())
+            
+            # Add conversation title
+            convo_title = conversation.title or f"Chat {conversation.created_at.strftime('%Y-%m-%d %H:%M')}"
+            story.append(Paragraph(convo_title, heading1_style))
+            story.append(Spacer(1, 0.1*inch))
+            
+            # Create a temporary buffer for this conversation
+            temp_buffer = BytesIO()
+            
+            # Use the SAME function as single chat PDF to ensure consistent formatting
+            self.generate_single_chat_pdf(
+                temp_buffer, 
+                conversation,
+                include_timestamps,
+                include_metadata,
+                include_followups,
+                format_code
+            )
+            
+            # Extract the content from the temporary PDF
+            temp_buffer.seek(0)
+            
+            # Instead of using the PDF directly, extract the flowables
+            # We'll generate a fresh set of flowables for this conversation
+            # matching exactly what would be produced for a single chat
+            
+            # Get messages for this conversation
+            messages = conversation.messages.all().order_by('created_at')
+            
+            # Add metadata if requested
+            if include_metadata:
+                metadata = [
+                    ["Created", conversation.created_at.strftime("%Y-%m-%d %H:%M")],
+                    ["Conversation ID", str(conversation.conversation_id)]
+                ]
+                
+                # Get document names if available
+                if conversation.documents.exists():
+                    doc_names = ", ".join([doc.filename for doc in conversation.documents.all()])
+                    metadata.append(["Documents", doc_names])
+                
+                # Create metadata table
+                metadata_table = Table(metadata, colWidths=[100, 350])
+                metadata_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                    ('TEXTCOLOR', (0, 0), (0, -1), colors.black),
+                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ]))
+                
+                story.append(metadata_table)
+                story.append(Spacer(1, 0.2*inch))
+            
+            # Process messages
+            for message in messages:
+                role = message.role.capitalize()
+                content = message.content
+                
+                # Add message role header
+                role_text = f"{role}"
+                story.append(Paragraph(role_text, heading2_style))
+                
+                # Add timestamp if requested
+                if include_timestamps:
+                    timestamp_style = ParagraphStyle(
+                        'TimestampStyle',
+                        parent=styles['Italic'],
+                        fontSize=8,
+                        textColor=colors.gray
+                    )
+                    timestamp = message.created_at.strftime("%Y-%m-%d %H:%M")
+                    story.append(Paragraph(timestamp, timestamp_style))
+                
+                # Process the HTML content using the same method as in single chat
+                content_flowables = self.process_html_for_pdf(
+                    content,
+                    normal_style,
+                    ParagraphStyle('BulletStyle', parent=normal_style, leftIndent=20),
+                    ParagraphStyle('CodeStyle', parent=normal_style, fontName='Courier', fontSize=9, backColor=colors.whitesmoke),
+                    format_code
+                )
+                
+                # Add each flowable to the story
+                for flowable in content_flowables:
+                    story.append(flowable)
+                
+                # Add spacing between messages
+                story.append(Spacer(1, 0.2*inch))
+            
+            # Add follow-up questions if available and requested
+            if include_followups and conversation.follow_up_questions:
+                story.append(Spacer(1, 0.25*inch))
+                story.append(Paragraph("Follow-up Questions", heading2_style))
+                
+                # Use ListFlowable for follow-up questions
+                follow_up_items = []
+                for i, question in enumerate(conversation.follow_up_questions, 1):
+                    follow_up_items.append(ListItem(Paragraph(question, normal_style), leftIndent=20))
+                
+                if follow_up_items:
+                    follow_up_list = ListFlowable(
+                        follow_up_items,
+                        bulletType='1',
+                        start=1,
+                        bulletFontSize=10,
+                        bulletOffsetY=2,
+                        leftIndent=10,
+                        bulletDedent=10
+                    )
+                    story.append(follow_up_list)
+            
+            # Add separator between conversations
+            if i < len(conversations) - 1:
+                story.append(Spacer(1, 0.25*inch))
+                story.append(HRFlowable(width="100%", thickness=1, lineCap='round', color=colors.lightgrey, spaceBefore=0.2*inch, spaceAfter=0.2*inch))
+        
+        # Build the PDF
+        doc.build(story)
+    
+    def process_html_content(self, content, format_code):
+        """Process HTML content to make it compatible with ReportLab while preserving format"""
+        if not content:
+            return ""
+            
+        # First, preserve code blocks by replacing them with placeholders
+        code_blocks = []
+        code_block_pattern = re.compile(r'<pre.*?>(.*?)</pre>', re.DOTALL)
+        code_inline_pattern = re.compile(r'<code.*?>(.*?)</code>', re.DOTALL)
+        
+        # Extract and save code blocks
+        for i, match in enumerate(code_block_pattern.finditer(content)):
+            placeholder = f"__CODE_BLOCK_{i}__"
+            code_blocks.append((placeholder, match.group(1)))
+            content = content.replace(match.group(0), placeholder)
+            
+        # Extract and save inline code
+        for i, match in enumerate(code_inline_pattern.finditer(content)):
+            placeholder = f"__CODE_INLINE_{i}__"
+            code_blocks.append((placeholder, match.group(1)))
+            content = content.replace(match.group(0), placeholder)
+        
+        # Create soup for better HTML handling
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # Process each HTML element type
+        result_parts = []
+        
+        # Helper function to process HTML elements recursively
+        def process_element(element, level=0, parent_type=None):
+            if element.name is None:  # Text node
+                text = element.string
+                if text and text.strip():
+                    return [(parent_type or 'p', text.strip())]
+                return []
+                
+            output = []
+            
+            # Process specific HTML elements
+            if element.name == 'b' or element.name == 'strong':
+                # Handle bold text
+                inner_text = "".join(str(child) for child in element.contents)
+                return [('b', inner_text)]
+                
+            elif element.name == 'i' or element.name == 'em':
+                # Handle italic text
+                inner_text = "".join(str(child) for child in element.contents)
+                return [('i', inner_text)]
+                
+            elif element.name == 'p':
+                # Process paragraph content
+                for child in element.children:
+                    output.extend(process_element(child, level, 'p'))
+                    
+            elif element.name == 'ul':
+                # Handle unordered lists
+                for i, li in enumerate(element.find_all('li', recursive=False)):
+                    li_content = "".join(str(child) for child in li.contents)
+                    # Add bullet with proper indentation
+                    output.append(('bullet', li_content, level))
+                    
+                    # Process any nested lists
+                    nested_lists = li.find_all(['ul', 'ol'], recursive=False)
+                    for nested_list in nested_lists:
+                        output.extend(process_element(nested_list, level + 1))
+                        
+            elif element.name == 'ol':
+                # Handle ordered lists
+                for i, li in enumerate(element.find_all('li', recursive=False)):
+                    li_content = "".join(str(child) for child in li.contents)
+                    # Add numbered item with proper indentation
+                    output.append(('number', li_content, level, i + 1))
+                    
+                    # Process any nested lists
+                    nested_lists = li.find_all(['ul', 'ol'], recursive=False)
+                    for nested_list in nested_lists:
+                        output.extend(process_element(nested_list, level + 1))
+                        
+            elif element.name == 'h1' or element.name == 'h2' or element.name == 'h3':
+                # Handle headings
+                heading_text = "".join(str(child) for child in element.contents)
+                output.append((f'h{element.name[1]}', heading_text))
+                
+            elif element.name == 'table':
+                # Handle tables - simplified for now
+                output.append(('table', str(element)))
+                
+            elif element.name == 'div' or element.name == 'span':
+                # Process div/span content
+                for child in element.children:
+                    output.extend(process_element(child, level, parent_type or 'p'))
+            
+            # Handle more element types if needed
+            else:
+                # Fallback for other elements
+                for child in element.children:
+                    output.extend(process_element(child, level, parent_type or 'p'))
+                    
+            return output
+            
+        # Process the main content
+        for child in soup.children:
+            result_parts.extend(process_element(child))
+        
+        # Convert processed parts into a reportlab-compatible format
+        reportlab_content = []
+        
+        for part in result_parts:
+            if part[0] == 'p':
+                # Paragraph text
+                reportlab_content.append(part[1])
+            elif part[0] == 'b':
+                # Bold text
+                reportlab_content.append(f"<b>{part[1]}</b>")
+            elif part[0] == 'i':
+                # Italic text
+                reportlab_content.append(f"<i>{part[1]}</i>")
+            elif part[0] == 'bullet':
+                # Bullet point with indentation
+                level = part[2]
+                indent = "    " * level
+                reportlab_content.append(f"{indent}• {part[1]}")
+            elif part[0] == 'number':
+                # Numbered item with indentation
+                level = part[2]
+                number = part[3]
+                indent = "    " * level
+                reportlab_content.append(f"{indent}{number}. {part[1]}")
+            elif part[0].startswith('h'):
+                # Heading
+                reportlab_content.append(f"<b>{part[1]}</b>")
+            elif part[0] == 'table':
+                # Table - handled separately
+                reportlab_content.append("[TABLE PLACEHOLDER]")
+        
+        # Join the content with proper spacing
+        content = "\n".join(reportlab_content)
+        
+        # Restore code blocks
+        for placeholder, code in code_blocks:
+            if placeholder.startswith("__CODE_BLOCK_"):
+                # Format as a code block with proper indentation
+                formatted_code = "\n".join(["    " + line for line in code.split("\n")])
+                content = content.replace(placeholder, f"\n{formatted_code}\n")
+            else:
+                # Inline code
+                content = content.replace(placeholder, code)
+        
+        # Clean up multiple newlines and normalize spacing
+        content = re.sub(r'\n{3,}', '\n\n', content)
+        
+        return content

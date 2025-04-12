@@ -28,6 +28,7 @@ import DeleteChatModal  from './DeleteChatModal';
 import { ideaService, coreService } from '../../utils/axiosConfig';
 import DocumentViewer from './DocumentViewer'; 
 import DocumentSearchModal from './DocumentSearchModal'; 
+import ChatDownloadFeature from './ChatDownloadFeature';
 import BulkDeleteModal from './BulkDeleteModal';
 
 const Sidebar = ({ 
@@ -253,7 +254,7 @@ const handleGenerateIdeas = async () => {
       
       // Create a default project name from document
       const projectName = response.data.suggested_project_name || 
-      		`Ideas from ${response.data.document_name_no_ext || response.data.document_name}`;
+          `Ideas from ${response.data.document_name_no_ext || response.data.document_name}`;
       
       // Create a new project first
       const projectResponse = await ideaService.createProject({
@@ -1490,7 +1491,7 @@ const formattedActiveConversation = activeConversation ? {
         </div>
   
        {/* Sidebar Footer with Download Feature */}
-{/* {isOpen && (
+{isOpen && (
   <div className="sidebar-footer mt-auto border-t border-gray-700/30 pt-3 px-4 pb-4">
     <div className="flex items-center justify-between">
       <div className="flex-grow">
@@ -1506,7 +1507,7 @@ const formattedActiveConversation = activeConversation ? {
      
     </div>
   </div>
-)} */}
+)}
         </aside>
     
         {/* Custom Scrollbar Styles */}
