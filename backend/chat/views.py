@@ -1868,7 +1868,8 @@ class ChatView(APIView):
                             content_sources, 
                             web_sources,
                             response_format,
-                            conversation_context
+                            conversation_context,
+                            original_doc_context=similar_contents
                         )
                         print("Combined document and web responses")
                     else:
@@ -2289,7 +2290,7 @@ class ChatView(APIView):
         except:
             return url
     
-    def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format, conversation_context):
+    def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format, conversation_context, original_doc_context=None):
         """
         Combine document-based response and web-based response into a single coherent answer.
         
@@ -2301,10 +2302,67 @@ class ChatView(APIView):
             web_sources (list): Web sources
             response_format (str): Desired format for the response
             conversation_context (str): Previous conversation context
+            original_doc_context (list, optional): The original document context chunks
             
         Returns:
             str: Combined response
         """
+        # Check if the query is a simple greeting
+        greeting_keywords = [
+            # Basic greetings
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
+            "good afternoon", "good evening", "what's up", "sup", "hiya",
+            
+            # Variations with repeated letters
+            "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
+            
+            # Short forms/abbreviations
+            "hlw", "g'day", "yo", "heya", 
+            
+            # Informal greetings
+            "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
+            "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
+            
+            # Time-specific with variations
+            "morning", "afternoon", "evening", "gm", "ga", "ge",
+            
+            # Other languages and cultural greetings
+            "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
+            
+            # Casual text-style greetings
+            "sup", "yo yo", "hiya", "hai", "hullo"
+        ]
+        
+        # Convert to lowercase and strip to properly detect greetings
+        query_lower = query.lower().strip()
+        
+        # Check if the query is just a greeting or a greeting followed by a name/simple phrase
+        is_greeting = False
+        
+        # Exact matches
+        if query_lower in greeting_keywords:
+            is_greeting = True
+        
+        # Starting with a greeting
+        for greeting in greeting_keywords:
+            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
+                is_greeting = True
+                break
+        
+        # If it's a greeting, respond directly without using more complex logic
+        if is_greeting:
+            greeting_responses = [
+                f"Hello! How can I assist you today?",
+                f"Hi there! What can I help you with?",
+                f"Greetings! How may I be of service?",
+                f"Hello! I'm here to help. What do you need?",
+                f"Hey! What questions do you have for me today?"
+            ]
+            # Select a response using a simple hash of the query to ensure consistent responses
+            response_index = hash(query_lower) % len(greeting_responses)
+            return greeting_responses[response_index]
+        
+        # If not a greeting, proceed with the regular flow
         # Clean up responses by removing source sections
         if "\n\n*Sources:" in document_response:
             document_response = document_response.split("\n\n*Sources:")[0]
@@ -2312,69 +2370,257 @@ class ChatView(APIView):
         if "\n\n*Sources:" in web_response:
             web_response = web_response.split("\n\n*Sources:")[0]
         
-        # Create a combined prompt for OpenAI
-        prompt = f"""
-        You have two responses to the user's query: one based on their documents and one based on web search.
-        Your task is to combine these into a single coherent response that prioritizes the document information
-        (since that is more specific to the user) but supplements with web information when valuable.
+        # Detect if this is a comparison query that needs special handling
+        comparison_words = ["compare", "comparison", "versus", "vs", "difference", "similarities", 
+                            "better than", "worse than", "alternative", "competitors", "competition",
+                            "similar to", "different from", "compared to"]
         
-        The response format should be: {response_format.replace('_', ' ').title()}
+        is_comparison_query = any(word in query_lower for word in comparison_words)
         
-        Previous conversation context:
-        {conversation_context}
+        # Analyze the document response and original context to extract key entities for comparison
+        # Prepare document context if available
+        doc_context_text = ""
+        if original_doc_context and len(original_doc_context) > 0:
+            # Use up to 5 most relevant chunks from the original document context
+            doc_context_text = "\n\n".join(original_doc_context[:5])
         
-        User query: {query}
+        analyze_prompt = f"""
+        Analyze the following information to identify key details about the topic being discussed.
         
-        RESPONSE FROM DOCUMENTS:
+        USER QUERY: {query}
+        
+        DOCUMENT RESPONSE:
         {document_response}
         
-        RESPONSE FROM WEB SEARCH:
-        {web_response}
+        {f"ORIGINAL DOCUMENT CONTEXT:{doc_context_text}" if doc_context_text else ""}
         
-        GUIDELINES FOR COMBINATION:
-    1. When information appears in both sources, prioritize the document information.
-
-        2. Clearly distinguish when you're providing information from the web vs. from documents.
-
-        3. Add web information that complements, updates, or expands on document information.
-
-        4. Maintain a natural tone and logical flow between document and web information.
-
-        5. If there are contradictions, note them and explain the different perspectives.
-
-        6. Use HTML tags for structure: <p>, <ul>, <li>, <b>, etc.
-
-        7. Structure your response with proper headings and sections for readability.
-
-        8. Use <h3> tags for different sources:
-
-            - <h3>Information from Documents</h3> for document-based information.
-
-            - <h3>Information from the Web</h3> for web-based information.
+        Your task is to identify:
         
-        Create a single, coherent, well-structured response that combines both sources of information.
-        Make sure your response is contextually relevant to the ongoing conversation.
+        1. The main entities (products, services, concepts, etc.) being discussed - be very specific with exact names
+        2. The domain or category these entities belong to (e.g., "protein supplements", "accounting software", etc.)
+        3. Any attributes or aspects mentioned about these entities that would be useful for comparison
+        4. Any competitors or alternatives that are explicitly mentioned
+        5. If this appears to be a comparison query, what specifically is being compared?
+        6. Any specific industry, market, or specialized field this query relates to
+        
+        Return your analysis in this format:
+        MAIN_ENTITIES: [List the exact names of main entities]
+        DOMAIN: [Domain/category these entities belong to - be specific]
+        KEY_ATTRIBUTES: [Important attributes mentioned]
+        MENTIONED_COMPETITORS: [Any competitors explicitly mentioned]
+        IS_COMPARISON: [Yes/No - is this a comparison query?]
+        COMPARISON_FOCUS: [If it's a comparison, what aspects are being compared?]
+        INDUSTRY_CONTEXT: [Specific industry or market context]
+        MISSING_INFORMATION: [What important information seems to be missing that would help with a comparison?]
+
         """
         
         try:
-            # Generate the combined response
-            completion = client.chat.completions.create(
-                model="gpt-4o",
+            # Extract key information from document response to enhance web results integration
+            analysis_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are an expert at synthesizing information from multiple sources."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are an expert analyst who extracts structured information from text."},
+                    {"role": "user", "content": analyze_prompt}
                 ],
-                temperature=0.3,
-                max_tokens=2500
+                temperature=0.2,
+                max_tokens=500
             )
             
-            combined_response = completion.choices[0].message.content
+            doc_analysis = analysis_response.choices[0].message.content.strip()
+            logger.info(f"Document analysis: {doc_analysis}")
+            
+            # Parse the analysis to extract key components
+            analysis_dict = {}
+            for line in doc_analysis.split('\n'):
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    analysis_dict[key.strip()] = value.strip()
+            
+            # Check if web response seems insufficient based on analysis
+            web_info_lacking = False
+            if "Unfortunately, there was no additional relevant information found on the web" in web_response or "no relevant information" in web_response.lower():
+                web_info_lacking = True
+                logger.info("Web information appears to be lacking")
+            
+            # Determine if we need to use model knowledge for a better response
+            use_model_knowledge = False
+            
+            # If this is a comparison query and web info is lacking, use model knowledge
+            if is_comparison_query and (web_info_lacking or not web_sources):
+                use_model_knowledge = True
+                logger.info("Using model knowledge to supplement missing web information for comparison")
+            
+            # If web is lacking information about mentioned entities, use model knowledge
+            if web_info_lacking and analysis_dict.get('MAIN_ENTITIES'):
+                use_model_knowledge = True
+                logger.info("Using model knowledge to supplement information about entities")
+            
+            # Create a custom prompt based on the analysis and whether to use model knowledge
+            if use_model_knowledge:
+                # Extract key information from the analysis
+                main_entities = analysis_dict.get('MAIN_ENTITIES', '[]').strip('[]').split(',')
+                domain = analysis_dict.get('DOMAIN', '')
+                mentioned_competitors = analysis_dict.get('MENTIONED_COMPETITORS', '[]').strip('[]').split(',')
+                industry_context = analysis_dict.get('INDUSTRY_CONTEXT', '')
+                
+                # Clean up the extracted items
+                main_entities = [entity.strip() for entity in main_entities if entity.strip()]
+                mentioned_competitors = [comp.strip() for comp in mentioned_competitors if comp.strip()]
+                domain = domain.strip()
+                industry_context = industry_context.strip()
+                
+                # Craft a knowledge-enhanced prompt
+                # Enhanced prompt without any explicit brand examples:
+
+                enhanced_prompt = f"""
+                You have a document response and a web response to the user's query. Your task is to combine these into a coherent response.
+
+                DETAILED CONTEXT:
+                - Domain: {domain if domain else "Not clearly identified"}
+                - Industry: {industry_context if industry_context else "Not specified"}
+                - Main entities: {', '.join(main_entities) if main_entities else "Not clearly identified"}
+                - Mentioned competitors: {', '.join(mentioned_competitors) if mentioned_competitors else "None explicitly mentioned"}
+
+                USER QUERY: {query}
+
+                DOCUMENT RESPONSE:
+                {document_response}
+
+                WEB RESPONSE:
+                {web_response}
+
+                SPECIAL INSTRUCTIONS:
+                1. The web search did not return sufficiently helpful information, especially about additional competitors or alternatives not mentioned in the document.
+
+                2. Use your built-in knowledge to SIGNIFICANTLY EXPAND the information, focusing on:
+                - ADDITIONAL competitors or alternatives NOT mentioned in the document
+                - The broader competitive landscape beyond just the entities mentioned in the document
+                - Different market segments and their leading brands relevant to this industry
+                - Comparing the main entities with other market players not covered in the document or web results
+                
+                3. When using your built-in knowledge:
+                - Clearly label it as "Additional Market Information"
+                - Focus on providing NEW information not found in either the document or web results
+                - Include major competing products/services relevant to this specific industry
+                - Include international alternatives if relevant
+                - Mention different positioning of these alternatives (by demographic, price point, features, etc.)
+
+                4. Format your response with these sections:
+                - <h3>Information from Documents</h3> (prioritize this information)
+                - <h3>Information from the Web</h3> (include relevant web information)
+                - <h3>Additional Market Information</h3> (for supplementary information from your knowledge, focusing on NEW competitors and alternatives)
+                
+                5. In cases where you are adding information about competitors or alternatives:
+                - Focus on major players NOT mentioned in either the document or web response
+                - Include at least 3-5 additional competing entities if relevant to the domain
+                - Highlight how they differ from the main entities in the document
+                - Include details about:
+                    * Target audience or use case
+                    * Distinctive features or characteristics
+                    * Market positioning (premium, mid-range, budget)
+                    * Distribution approach
+                    * Unique selling propositions
+                - Organize the information in a clear, structured way (tables or bullet points if appropriate)
+
+                6. The final response should:
+                - Begin with document information (it's specific to the user's context)
+                - Include relevant web information when available
+                - Add substantial new knowledge about additional competitors and market alternatives
+                - Be clearly structured and easy to follow
+                - Use proper HTML formatting (<h3>, <b>, <p>, <ul>, <li>, <table> if appropriate)
+
+                The response format should be: {response_format.replace('_', ' ').title()}
+                """
+                
+                completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are an expert at combining information from multiple sources and using your knowledge to provide comprehensive answers."},
+                        {"role": "user", "content": enhanced_prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=2500
+                )
+                
+                combined_response = completion.choices[0].message.content
+                
+            else:
+                # Standard combination prompt if we don't need model knowledge
+                prompt = f"""
+                You have two responses to the user's query: one based on their documents and one based on web search.
+                Your task is to combine these into a single coherent response that prioritizes the document information
+                (since that is more specific to the user) but supplements with web information when valuable.
+
+                The response format should be: {response_format.replace('_', ' ').title()}
+
+                Previous conversation context:
+                {conversation_context}
+
+                User query: {query}
+
+                RESPONSE FROM DOCUMENTS:
+                {document_response}
+
+                RESPONSE FROM WEB SEARCH:
+                {web_response}
+
+                GUIDELINES FOR COMBINATION:
+                1. When information appears in both sources, prioritize the document information.
+
+                2. Clearly distinguish when you're providing information from the web vs. from documents.
+
+                3. The web information should EXPAND BEYOND what's in the documents - focus on adding NEW information:
+                - Additional competitors or alternatives NOT mentioned in the documents
+                - Information about different market segments not covered in the documents
+                - Broader competitive landscape and market positioning
+                - If the query is about competitors, aim to mention additional major players not in the document
+
+                4. Maintain a natural tone and logical flow between document and web information.
+
+                5. If there are contradictions, note them and explain the different perspectives.
+
+                6. Use HTML tags for structure: <p>, <ul>, <li>, <b>, etc.
+
+                7. Structure your response with proper headings and sections for readability.
+
+                8. Use <h3> tags for different sources:
+                - <h3>Information from Documents</h3> for document-based information.
+                - <h3>Information from the Web</h3> for web-based information.
+
+                Create a single, coherent, well-structured response that combines both sources of information.
+                Make sure your response is contextually relevant to the ongoing conversation.
+
+                IMPORTANT: If the web search doesn't provide much additional information beyond what's in the documents, 
+                use your background knowledge to expand the response with additional relevant information about competitors, 
+                alternatives, or market players that aren't mentioned in either source.
+                """
+                
+                completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are an expert at synthesizing information from multiple sources."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=2500
+                )
+                
+                combined_response = completion.choices[0].message.content
             
             # Add all sources
             all_doc_sources = list(set(doc_sources))
             all_web_domains = [self.extract_domain(source.get('url', '')) for source in web_sources]
             all_sources = all_doc_sources + all_web_domains
-            all_sources_str = ", ".join(all_sources)
+            
+            # If we used model knowledge, add a note
+            if use_model_knowledge:
+                if all_sources:
+                    all_sources_str = ", ".join(all_sources) + ", and general knowledge"
+                else:
+                    all_sources_str = "Document context and general knowledge"
+            else:
+                all_sources_str = ", ".join(all_sources) if all_sources else "Document context only"
             
             return f"{combined_response}\n\n*Sources: {all_sources_str}*"
             
@@ -2681,6 +2927,62 @@ class ChatView(APIView):
         Returns:
             str: Generated response based on the context and/or web search
         """
+        # Check if the query is a simple greeting
+        greeting_keywords = [
+            # Basic greetings
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
+            "good afternoon", "good evening", "what's up", "sup", "hiya",
+            
+            # Variations with repeated letters
+            "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
+            
+            # Short forms/abbreviations
+            "hlw", "g'day", "yo", "heya", 
+            
+            # Informal greetings
+            "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
+            "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
+            
+            # Time-specific with variations
+            "morning", "afternoon", "evening", "gm", "ga", "ge",
+            
+            # Other languages and cultural greetings
+            "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
+            
+            # Casual text-style greetings
+            "sup", "yo yo", "hiya", "hai", "hullo"
+        ]
+        
+        # Convert to lowercase and strip to properly detect greetings
+        query_lower = query.lower().strip()
+        
+        # Check if the query is just a greeting or a greeting followed by a name/simple phrase
+        is_greeting = False
+        
+        # Exact matches
+        if query_lower in greeting_keywords:
+            is_greeting = True
+        
+        # Starting with a greeting
+        for greeting in greeting_keywords:
+            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
+                is_greeting = True
+                break
+        
+        # If it's a greeting, respond directly without using more complex logic
+        if is_greeting:
+            greeting_responses = [
+                f"Hello! How can I assist you today?",
+                f"Hi there! What can I help you with?",
+                f"Greetings! How may I be of service?",
+                f"Hello! I'm here to help. What do you need?",
+                f"Hey! What questions do you have for me today?"
+            ]
+            # Select a response using a simple hash of the query to ensure consistent responses
+            response_index = hash(query_lower) % len(greeting_responses)
+            return greeting_responses[response_index]
+        
+        # If not a greeting, proceed with the regular flow
         if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents."
         
@@ -2717,6 +3019,8 @@ class ChatView(APIView):
         {conversation_prompt}
 
         RESPONSE GENERATION GUIDELINES:
+        - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
+        - Previous conversation context should only inform your response when directly relevant to the current query.
         - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
         - Include ALL relevant information from the context in your response.
         - Prioritize completeness over brevity - make sure to include details.
@@ -2725,13 +3029,13 @@ class ChatView(APIView):
         - Maintain a natural, conversational tone.
         - Ensure the response is directly derived from the provided document context.
         - If the document does NOT contain relevant information, explicitly state that and summarize related available content instead.
-        - Consider the conversation history to maintain continuity in the discussion.
-    
+        - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
+
         DOCUMENT CONTEXT:
         {full_context}
-    
+
         USER QUERY: {query}
-    
+
         RESPONSE FORMAT REQUIREMENTS:
         1. Begin with a comprehensive summary of all key information related to the query
         2. Follow with detailed elaboration on each aspect of the question
@@ -2742,12 +3046,14 @@ class ChatView(APIView):
         7. Use <p> tags for detailed explanations
         8. Use <ul> and <li> for list-based information
         9. Use <table> and <tr>, <td> for tabular information
-    
+
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document.
         - DO NOT generate speculative or external information.
+        - Your response must be based EXCLUSIVELY on the document context provided.
         - Ensure clarity, accuracy, and comprehensive coverage of all relevant details.
         - Avoid summarizing or condensing important information - include all relevant details.
+        - Use <b> tags for key section headings.
         """
         
         # Define system message
@@ -2817,7 +3123,6 @@ class ChatView(APIView):
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{answer}\n\n*Sources: {source_info}*"
-
     def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a shorter, concise response using the provided context with web search capability.
@@ -2833,6 +3138,62 @@ class ChatView(APIView):
         Returns:
             str: Generated response based on the context and/or web search
         """
+        # Check if the query is a simple greeting
+        greeting_keywords = [
+            # Basic greetings
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
+            "good afternoon", "good evening", "what's up", "sup", "hiya",
+            
+            # Variations with repeated letters
+            "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
+            
+            # Short forms/abbreviations
+            "hlw", "g'day", "yo", "heya", 
+            
+            # Informal greetings
+            "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
+            "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
+            
+            # Time-specific with variations
+            "morning", "afternoon", "evening", "gm", "ga", "ge",
+            
+            # Other languages and cultural greetings
+            "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
+            
+            # Casual text-style greetings
+            "sup", "yo yo", "hiya", "hai", "hullo"
+        ]
+        
+        # Convert to lowercase and strip to properly detect greetings
+        query_lower = query.lower().strip()
+        
+        # Check if the query is just a greeting or a greeting followed by a name/simple phrase
+        is_greeting = False
+        
+        # Exact matches
+        if query_lower in greeting_keywords:
+            is_greeting = True
+        
+        # Starting with a greeting
+        for greeting in greeting_keywords:
+            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
+                is_greeting = True
+                break
+        
+        # If it's a greeting, respond directly without using more complex logic
+        if is_greeting:
+            greeting_responses = [
+                f"Hello! How can I assist you today?",
+                f"Hi there! What can I help you with?",
+                f"Greetings! How may I be of service?",
+                f"Hello! I'm here to help. What do you need?",
+                f"Hey! What questions do you have for me today?"
+            ]
+            # Select a response using a simple hash of the query to ensure consistent responses
+            response_index = hash(query_lower) % len(greeting_responses)
+            return greeting_responses[response_index]
+        
+        # If not a greeting, proceed with the regular flow
         if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents."
         
@@ -2848,15 +3209,14 @@ class ChatView(APIView):
         # Get format-specific guidance for short responses
         format_guidance = self._get_format_guidance(response_format, 'short')
         
-        # Include conversation context if available (shorter format for concise response)
+        # Include conversation context if available
         conversation_prompt = ""
         if conversation_context:
-            # Create a shortened version since this is for concise responses
             conversation_prompt = f"""
-            RECENT CONVERSATION:
-            {conversation_context[:500]}...
+            RECENT CONVERSATION HISTORY:
+            {conversation_context}
             
-            Consider this conversation history for continuity.
+            Please consider this conversation history when providing your response to maintain continuity.
             """
         
         # Define the user prompt for short response with conversation context
@@ -2868,8 +3228,10 @@ class ChatView(APIView):
         {format_guidance}
 
         {conversation_prompt}
-    
+
         RESPONSE GENERATION GUIDELINES:
+        - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
+        - Previous conversation context should only inform your response when directly relevant to the current query.
         - Provide a CONCISE yet THOROUGH answer.
         - Focus on the most relevant information from the context.
         - Prioritize clarity and directness over excessive detail.
@@ -2877,13 +3239,14 @@ class ChatView(APIView):
         - Maintain a natural, conversational tone.
         - Ensure the response is directly derived from the provided document context.
         - If the document does NOT contain relevant information, explicitly state that.
-        - Consider the conversation history to maintain continuity.
+        - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
     
+
         DOCUMENT CONTEXT:
         {full_context}
-    
+
         USER QUERY: {query}
-    
+
         RESPONSE FORMAT REQUIREMENTS:
         1. Begin with a direct answer to the query
         2. Include only the most relevant details and evidence from the documents
@@ -2893,12 +3256,13 @@ class ChatView(APIView):
         6. Use <p> tags for explanations
         7. Use <ul> and <li> for list-based information
         8. Use <table> and <tr>, <td> for tabular information if absolutely necessary
-    
+
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document.
         - DO NOT generate speculative or external information.
-        - Ensure clarity and accuracy while being concise.
-        - Keep the response focused and to-the-point.
+        - Your response must be based EXCLUSIVELY on the document context provided.
+        - Ensure clarity, accuracy, and comprehensive coverage of all relevant details.
+        - Avoid summarizing or condensing important information - include all relevant details.
         """
         
         # Define system message for short response
@@ -2913,6 +3277,7 @@ class ChatView(APIView):
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.4,
+                max_completion_tokens=2000
             )
             
             answer = completion.choices[0].message.content
@@ -2950,179 +3315,235 @@ class ChatView(APIView):
         
 
     def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural'):
-            """
-            Generate an answer for general chat mode, optionally using web knowledge.
-           
-            Args:
-                query (str): The user's query
-                use_web_knowledge (bool): Whether to use web search
-                response_length (str): 'short' or 'comprehensive'
-                response_format (str): The format to use for the response
-               
-            Returns:
-                str: Generated response
-            """
-            # If web knowledge is enabled, implement the full web search flow
-            if use_web_knowledge:
-                try:
-                    # Step 1: Search the web using DuckDuckGo
-                    print(f"Searching web for: {query}")
-                    web_results = self.search_web(query, max_results=5)
-                   
-                    if not web_results:
-                        return "I couldn't find relevant information on the web for your query."
-                   
-                    # Step 2: Scrape content from the top search results
-                    print(f"Found {len(web_results)} search results, scraping content...")
-                    scraped_contents = []
-                    web_sources = []
-                   
-                    for result in web_results:
-                        try:
-                            # Extract content from the webpage
-                            scraped_content = self.scrape_webpage(result['href'])
-                           
-                            if scraped_content and scraped_content.get('content'):
-                                scraped_contents.append(scraped_content)
-                               
-                                # Store source information
-                                web_sources.append({
-                                    'title': scraped_content.get('title', result.get('title', 'Unknown')),
-                                    'url': result.get('href', ''),
-                                    'snippet': result.get('body', '')[:300]  # First 300 chars of snippet
-                                })
-                        except Exception as e:
-                            logger.error(f"Error scraping {result.get('href')}: {str(e)}")
-                            continue
-                   
-                    if not scraped_contents:
-                        return "I found search results but couldn't extract useful content from the webpages."
-                   
-                    # Step 3: Generate a response using the scraped content
-                    print(f"Generating response from {len(scraped_contents)} scraped sources...")
-                   
-                    # Prepare context from scraped contents
-                    context = ""
-                    for i, item in enumerate(scraped_contents, 1):
-                        domain = self.extract_domain(item['url'])
-                        context += f"Source {i} ({domain}):\n"
-                        context += f"Title: {item['title']}\n"
-                        # Limit content based on response length
-                        content_limit = 2000 if response_length == 'comprehensive' else 1000
-                        context += f"Content: {item['content'][:content_limit]}...\n\n"
-                   
-                    # Get format-specific guidance
-                    format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
-                   
-                    # Create the prompt for OpenAI
-                    prompt = f"""
-                    You are a web research assistant. Based ONLY on the following information from multiple web sources, answer the user question. 
-
-                    If relevant details are missing or contradictory, clearly acknowledge this and summarize available related content. Be helpful by highlighting potentially useful information even if it doesn’t fully resolve the question. Provide quantitative details where available.
-
-                    RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
-
-                    {format_guidance}
-
-                    RESPONSE GENERATION GUIDELINES:
-                    - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
-                    - Include ALL relevant information from the web sources below.
-                    - Prioritize completeness over brevity — include important details.
-                    - If multiple perspectives or data points exist, include all of them.
-                    - When appropriate, structure the information clearly with headings.
-                    - Maintain a natural, conversational tone.
-                    - If the web sources do NOT contain relevant information, clearly state that and summarize any related or tangential insights.
-
-                    QUESTION: {query}
-
-                    INFORMATION FROM WEB SOURCES:
-                    {context}
-
-                    RESPONSE FORMAT REQUIREMENTS:
-                    1. Follow with detailed elaboration on each relevant point.
-                    2. Include specific details, examples, and support from the source content.
-                    3. Use clear, logical sections when needed.
-                    4. Conclude with any other contextually relevant insights.
-                    5. Use <b> for section headers.
-                    6. Use <p> for body text.
-                    7. Use <ul> / <li> for lists.
-                    8. Use <table>, <tr>, <td> for tables, if applicable.
-                    9. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
-
-                    CRITICAL CONSTRAINTS:
-                    - Ensure clarity, accuracy, and full coverage of the relevant content.
-
-                    RESPONSE LENGTH: {'Provide a focused, concise response prioritizing the most important information.' if response_length == 'short' else 'Provide a comprehensive, detailed response that thoroughly covers the topic.'}
-                    """
-                    system_message = "You are a web search analysis expert. Provide an EXTREMELY DETAILED and COMPREHENSIVE response."
-
-                    temperature = 0.3 if response_format in ['factual_brief', 'technical_deep_dive'] else 0.5
-                    max_tokens = 2000 if response_length == 'short' else 2000
-
-                    print(f"Calling OpenAI API with temperature={temperature}, max_tokens={max_tokens}")
-                    response = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=temperature,
-                        max_tokens=max_tokens
-                    )
-
-                    web_response = response.choices[0].message.content
-
-                    # Add source information
-                    source_domains = [self.extract_domain(source['url']) for source in web_sources]
-                    source_info = ", ".join(source_domains)
-
-                    return f"{web_response}\n\n*Sources: {source_info}*"
-
-                   
-                except Exception as e:
-                    logger.error(f"Error in web knowledge general chat: {str(e)}", exc_info=True)
-                    return f"I encountered an error while searching the web: {str(e)}. Please try a different question or try again later."
-           
-            # If no web knowledge requested, use standard chat completion
-            else:
-                # Format-specific guidance
+        """
+        Generate an answer for general chat mode, optionally using web knowledge.
+        
+        Args:
+            query (str): The user's query
+            use_web_knowledge (bool): Whether to use web search
+            response_length (str): 'short' or 'comprehensive'
+            response_format (str): The format to use for the response
+            
+        Returns:
+            str: Generated response
+        """
+        # Check if the query is a simple greeting
+        greeting_keywords = [
+            # Basic greetings
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
+            "good afternoon", "good evening", "what's up", "sup", "hiya",
+            
+            # Variations with repeated letters
+            "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
+            
+            # Short forms/abbreviations
+            "hlw", "g'day", "yo", "heya", 
+            
+            # Informal greetings
+            "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
+            "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
+            
+            # Time-specific with variations
+            "morning", "afternoon", "evening", "gm", "ga", "ge",
+            
+            # Other languages and cultural greetings
+            "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
+            
+            # Casual text-style greetings
+            "sup", "yo yo", "hiya", "hai", "hullo"
+        ]
+        
+        # Convert to lowercase and strip to properly detect greetings
+        query_lower = query.lower().strip()
+        
+        # Check if the query is just a greeting or a greeting followed by a name/simple phrase
+        is_greeting = False
+        
+        # Exact matches
+        if query_lower in greeting_keywords:
+            is_greeting = True
+        
+        # Starting with a greeting
+        for greeting in greeting_keywords:
+            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
+                is_greeting = True
+                break
+        
+        # If it's a greeting, respond directly without using more complex logic
+        if is_greeting:
+            greeting_responses = [
+                f"Hello! How can I assist you today?",
+                f"Hi there! What can I help you with?",
+                f"Greetings! How may I be of service?",
+                f"Hello! I'm here to help. What do you need?",
+                f"Hey! What questions do you have for me today?"
+            ]
+            # Select a response using a simple hash of the query to ensure consistent responses
+            response_index = hash(query_lower) % len(greeting_responses)
+            return greeting_responses[response_index]
+        
+        # If not a greeting, proceed with the regular flow
+        # If web knowledge is enabled, implement the full web search flow
+        if use_web_knowledge:
+            try:
+                # Step 1: Search the web using DuckDuckGo
+                print(f"Searching web for: {query}")
+                web_results = self.search_web(query, max_results=5)
+                
+                if not web_results:
+                    return "I couldn't find relevant information on the web for your query."
+                
+                # Step 2: Scrape content from the top search results
+                print(f"Found {len(web_results)} search results, scraping content...")
+                scraped_contents = []
+                web_sources = []
+                
+                for result in web_results:
+                    try:
+                        # Extract content from the webpage
+                        scraped_content = self.scrape_webpage(result['href'])
+                        
+                        if scraped_content and scraped_content.get('content'):
+                            scraped_contents.append(scraped_content)
+                            
+                            # Store source information
+                            web_sources.append({
+                                'title': scraped_content.get('title', result.get('title', 'Unknown')),
+                                'url': result.get('href', ''),
+                                'snippet': result.get('body', '')[:300]  # First 300 chars of snippet
+                            })
+                    except Exception as e:
+                        logger.error(f"Error scraping {result.get('href')}: {str(e)}")
+                        continue
+                
+                if not scraped_contents:
+                    return "I found search results but couldn't extract useful content from the webpages."
+                
+                # Step 3: Generate a response using the scraped content
+                print(f"Generating response from {len(scraped_contents)} scraped sources...")
+                
+                # Prepare context from scraped contents
+                context = ""
+                for i, item in enumerate(scraped_contents, 1):
+                    domain = self.extract_domain(item['url'])
+                    context += f"Source {i} ({domain}):\n"
+                    context += f"Title: {item['title']}\n"
+                    # Limit content based on response length
+                    content_limit = 2000 if response_length == 'comprehensive' else 1000
+                    context += f"Content: {item['content'][:content_limit]}...\n\n"
+                
+                # Get format-specific guidance
                 format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
-               
-                # Configure conciseness based on response length
-                conciseness = "Be concise and to-the-point." if response_length == 'short' else "Provide a comprehensive and detailed response."
-               
-                # Create a prompt for the general chat
+                
+                # Create the prompt for OpenAI
                 prompt = f"""
-                Please answer the following question in a helpful, informative way.
-               
+                You are a web research assistant. Based ONLY on the following information from multiple web sources, answer the user question. 
+
+                If relevant details are missing or contradictory, clearly acknowledge this and summarize available related content. Be helpful by highlighting potentially useful information even if it doesn't fully resolve the question. Provide quantitative details where available.
+
                 RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
-               
+
                 {format_guidance}
-               
-                {conciseness}
-               
-                Use HTML tags for structure (<b>, <p>, <ul>, <li>) to enhance readability.
-               
-                USER QUERY: {query}
+
+                RESPONSE GENERATION GUIDELINES:
+                - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
+                - Include ALL relevant information from the web sources below.
+                - Prioritize completeness over brevity — include important details.
+                - If multiple perspectives or data points exist, include all of them.
+                - When appropriate, structure the information clearly with headings.
+                - Maintain a natural, conversational tone.
+                - If the web sources do NOT contain relevant information, clearly state that and summarize any related or tangential insights.
+
+                QUESTION: {query}
+
+                INFORMATION FROM WEB SOURCES:
+                {context}
+
+                RESPONSE FORMAT REQUIREMENTS:
+                1. Follow with detailed elaboration on each relevant point.
+                2. Include specific details, examples, and support from the source content.
+                3. Use clear, logical sections when needed.
+                4. Conclude with any other contextually relevant insights.
+                5. Use <b> for section headers.
+                6. Use <p> for body text.
+                7. Use <ul> / <li> for lists.
+                8. Use <table>, <tr>, <td> for tables, if applicable.
+                9. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
+
+                CRITICAL CONSTRAINTS:
+                - Ensure clarity, accuracy, and full coverage of the relevant content.
+
+                RESPONSE LENGTH: {'Provide a focused, concise response prioritizing the most important information.' if response_length == 'short' else 'Provide a comprehensive, detailed response that thoroughly covers the topic.'}
                 """
-               
-                try:
-                    # Use the OpenAI API
-                    completion = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": "You are a helpful, friendly AI assistant providing informative and thoughtful responses."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.5,
-                        max_tokens=2000 if response_length == 'comprehensive' else 800
-                    )
-                   
-                    return completion.choices[0].message.content
-                   
-                except Exception as e:
-                    logger.error(f"Error in general chat: {str(e)}", exc_info=True)
-                    return f"I'm sorry, I encountered an error while processing your request. Please try again or rephrase your question."
+                system_message = "You are a web search analysis expert. Provide an EXTREMELY DETAILED and COMPREHENSIVE response."
+
+                temperature = 0.3 if response_format in ['factual_brief', 'technical_deep_dive'] else 0.5
+                max_tokens = 2000 if response_length == 'short' else 2000
+
+                print(f"Calling OpenAI API with temperature={temperature}, max_tokens={max_tokens}")
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+
+                web_response = response.choices[0].message.content
+
+                # Add source information
+                source_domains = [self.extract_domain(source['url']) for source in web_sources]
+                source_info = ", ".join(source_domains)
+
+                return f"{web_response}\n\n*Sources: {source_info}*"
+
+                
+            except Exception as e:
+                logger.error(f"Error in web knowledge general chat: {str(e)}", exc_info=True)
+                return f"I encountered an error while searching the web: {str(e)}. Please try a different question or try again later."
+        
+        # If no web knowledge requested, use standard chat completion
+        else:
+            # Format-specific guidance
+            format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
+            
+            # Configure conciseness based on response length
+            conciseness = "Be concise and to-the-point." if response_length == 'short' else "Provide a comprehensive and detailed response."
+            
+            # Create a prompt for the general chat
+            prompt = f"""
+            Please answer the following question in a helpful, informative way.
+            
+            RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
+            
+            {format_guidance}
+            
+            {conciseness}
+            
+            Use HTML tags for structure (<b>, <p>, <ul>, <li>) to enhance readability.
+            
+            USER QUERY: {query}
+            """
+            
+            try:
+                # Use the OpenAI API
+                completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful, friendly AI assistant providing informative and thoughtful responses."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.5,
+                    max_tokens=2000 if response_length == 'comprehensive' else 800
+                )
+                
+                return completion.choices[0].message.content
+                
+            except Exception as e:
+                logger.error(f"Error in general chat: {str(e)}", exc_info=True)
+                return f"I'm sorry, I encountered an error while processing your request. Please try again or rephrase your question."
 
     # Enhanced embeddings function from Streamlit version
     def get_embeddings(self, texts):
