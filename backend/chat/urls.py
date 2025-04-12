@@ -22,7 +22,7 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
     AdminUserUploadPermissionsView,
     CheckUploadPermissionsView,
     # ProcessCitationsView,
-     ChatPDFExportView
+     ChatExportView
     
 )
 
@@ -71,7 +71,7 @@ urlpatterns = [
     path('admin/users/<int:user_id>/projects/', AdminUserProjectsView.as_view()),
     path('admin/users/<int:user_id>/upload-permissions/', AdminUserUploadPermissionsView.as_view(), name='admin_user_upload_permissions'),
     path('api/check-upload-permissions/', CheckUploadPermissionsView.as_view(), name='check_upload_permissions'),
-    path('api/chat/export-pdf/', ChatPDFExportView.as_view(), name='chat-pdf-export'), # for pdf chat export
+    path('export-chat/', ChatExportView.as_view(), name='export-chat'), # for pdf chat export
     
    
     

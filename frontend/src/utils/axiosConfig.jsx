@@ -554,8 +554,8 @@ export const chatService = {
     });
   },
 
-  exportChatAsPdf: (data, config = {}) => {
-    return axiosInstance.post('/api/chat/export-pdf/', data, config);
+  exportChatAsDocx: (data, config = {}) => {
+    return axiosInstance.post('/export-chat/', {...data, format: 'docx'}, config);
   },
 };
 

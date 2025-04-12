@@ -40,7 +40,7 @@ const ChatDownloadFeature = ({
     }));
   };
 
-  // Function to download current chat as PDF
+  // Function to download current chat as DOCX
   const handleDownloadCurrentChat = async () => {
     if (!currentChatData || !activeConversationId) {
       toast.error('No active conversation to download');
@@ -50,7 +50,7 @@ const ChatDownloadFeature = ({
     try {
       setIsLoading(true);
       
-      const response = await chatService.exportChatAsPdf({
+      const response = await chatService.exportChatAsDocx({
         conversation_id: activeConversationId,
         options
       }, { responseType: 'blob' });
@@ -66,7 +66,7 @@ const ChatDownloadFeature = ({
       const chatTitle = currentChatData.title || 'Chat';
       const safeTitle = chatTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const date = new Date().toISOString().split('T')[0];
-      link.setAttribute('download', `${safeTitle}_${date}.pdf`);
+      link.setAttribute('download', `${safeTitle}_${date}.docx`);
       
       // Append to the document body and click
       document.body.appendChild(link);
@@ -87,8 +87,8 @@ const ChatDownloadFeature = ({
     }
   };
 
-  // Function to generate and download multiple chats as PDF
-  const generateMultiChatPdf = async () => {
+  // Function to generate and download multiple chats as DOCX
+  const generateMultiChatDocx = async () => {
     if (!startDate || !endDate) {
       toast.error('Please select a date range');
       return;
@@ -97,7 +97,7 @@ const ChatDownloadFeature = ({
     try {
       setIsLoading(true);
       
-      const response = await chatService.exportChatAsPdf({
+      const response = await chatService.exportChatAsDocx({
         date_range: {
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString()
@@ -113,18 +113,15 @@ const ChatDownloadFeature = ({
       const link = document.createElement('a');
       link.href = url;
       
-      // Set the download filename - FIXED DATE FORMATTING
-      // Format the date without timezone conversion to prevent off-by-one errors
-      const formatDateString = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-      
-      const startDateStr = formatDateString(startDate);
-      const endDateStr = formatDateString(endDate);
-      link.setAttribute('download', `Chats_${startDateStr}_to_${endDateStr}.pdf`);
+      // Set the download filename
+      const adjustedStartDate = new Date(startDate);
+      adjustedStartDate.setDate(adjustedStartDate.getDate() + 1);
+      const adjustedEndDate = new Date(endDate);
+      adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+
+      const startDateStr = adjustedStartDate.toISOString().split('T')[0];
+      const endDateStr = adjustedEndDate.toISOString().split('T')[0];
+      link.setAttribute('download', `Chats_${startDateStr}_to_${endDateStr}.docx`);
       
       // Append to the document body and click
       document.body.appendChild(link);
@@ -138,7 +135,7 @@ const ChatDownloadFeature = ({
       setIsDownloadMenuOpen(false);
       
     } catch (error) {
-      console.error('Error generating multi-chat PDF:', error);
+      console.error('Error generating multi-chat DOCX:', error);
       toast.error('Failed to export chats');
     } finally {
       setIsLoading(false);
@@ -220,7 +217,7 @@ const ChatDownloadFeature = ({
               </div>
 
               <button
-                onClick={generateMultiChatPdf}
+                onClick={generateMultiChatDocx}  // Changed from generateMultiChatPdf
                 disabled={isLoading || !startDate || !endDate}
                 className={`w-full py-2 rounded text-white flex items-center justify-center gap-2
                   ${
@@ -237,7 +234,7 @@ const ChatDownloadFeature = ({
                 ) : (
                   <>
                     <Download size={16} />
-                    <span>Generate PDF</span>
+                    <span>Generate Document</span>  {/* Changed from "Generate PDF" */}
                   </>
                 )}
               </button>
