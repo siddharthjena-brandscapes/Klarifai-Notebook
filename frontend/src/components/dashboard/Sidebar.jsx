@@ -1,6 +1,7 @@
+
 // //sidebar.jsx with project management
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -19,7 +20,10 @@ import {
   Tag,
   Lightbulb, Sparkles,
   Eye, 
-  Download
+  Download,
+  ChevronRight,
+  PanelLeft,
+  HelpCircle
 } from 'lucide-react';
 import { documentService, chatService } from '../../utils/axiosConfig';
 import { toast } from 'react-toastify';
@@ -30,6 +34,8 @@ import DocumentViewer from './DocumentViewer';
 import DocumentSearchModal from './DocumentSearchModal'; 
 import ChatDownloadFeature from './ChatDownloadFeature';
 import BulkDeleteModal from './BulkDeleteModal';
+import FaqButton from '../faq/FaqButton';
+import { ThemeContext } from '../../context/ThemeContext';
 
 const Sidebar = ({ 
   isOpen, 
@@ -41,6 +47,8 @@ const Sidebar = ({
   setSelectedDocuments, 
   selectedDocuments,
   onNewChat,
+  chatInputFocused,
+  onToggle
   
 }) => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -48,7 +56,7 @@ const Sidebar = ({
   const [isChatHistoryVisible, setIsChatHistoryVisible] = useState(true);
   const [documents, setDocuments] = useState([]);
   const [isLoading, setLoading] = useState(true);
-  const [isDocumentsVisible, setIsDocumentsVisible] = useState(true);
+  const [isDocumentsVisible, setIsDocumentsVisible] = useState(false);
   const [showDocumentSearch, setShowDocumentSearch] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState(null);
   const [activeConversationId, setActiveConversationId] = useState(null);
@@ -69,6 +77,7 @@ const Sidebar = ({
   const [projectModules, setProjectModules] = useState([]);
 
   const [viewingDocument, setViewingDocument] = useState(null);
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
 
   // Add navigate for redirection
   const navigate = useNavigate();
@@ -80,6 +89,74 @@ const Sidebar = ({
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [isDocumentsExpanded, setIsDocumentsExpanded] = useState(false);
+
+  const { theme } = useContext(ThemeContext);
+  
+  // In Sidebar.jsx, update the useEffect for chat input focus
+  useEffect(() => {
+    if (chatInputFocused) {
+      setIsDocumentsVisible(false);
+      setIsChatHistoryVisible(true);
+    }
+  }, [chatInputFocused]);
+
+  // Add this with your other useEffect hooks
+useEffect(() => {
+  const handleClickOutside = (event) => {
+    if (isFilterDropdownOpen && !event.target.closest('.filter-dropdown-container')) {
+      setIsFilterDropdownOpen(false);
+    }
+  };
+
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => {
+    document.removeEventListener('mousedown', handleClickOutside);
+  };
+}, [isFilterDropdownOpen]);
+
+useEffect(() => {
+  // Use setTimeout to ensure the DOM is fully loaded
+  setTimeout(() => {
+    // Try multiple selectors to find the chat input
+    const chatInputElement = 
+      document.querySelector('.chat-input-area') || 
+      document.querySelector('textarea[placeholder*="Ask me"]');
+    
+    console.log("Chat input element found:", chatInputElement); // Debug
+    
+    if (!chatInputElement) {
+      console.warn("Chat input element not found");
+      return;
+    }
+    
+    const handleChatInputFocus = () => {
+      console.log("Chat input focused"); // Debug
+      // Collapse Documents section
+      setIsDocumentsVisible(false);
+      // Expand Chat History section
+      setIsChatHistoryVisible(true);
+    };
+    
+    chatInputElement.addEventListener('focus', handleChatInputFocus);
+    
+    return () => {
+      chatInputElement.removeEventListener('focus', handleChatInputFocus);
+    };
+  }, 1000); // Wait 1 second for everything to render
+}, []);
+// Modify this function to toggle Documents visibility and close Chat section
+const toggleDocumentsVisibility = () => {
+  setIsDocumentsVisible(!isDocumentsVisible);
+  // Close the chat history when documents are made visible
+  if (!isDocumentsVisible) {
+    setIsChatHistoryVisible(false);
+  }
+};
+
+// Similarly, modify chat toggle function to close documents section
+
+
   const toggleBulkDeleteMode = () => {
     // If turning off bulk delete mode, clear any document selections
     if (bulkDeleteMode) {
@@ -372,7 +449,7 @@ const handleGenerateIdeas = async () => {
       let title = firstUserMessage
         .trim()
         .split(/[.!?]/)[0] // Take first sentence
-        .slice(0, 25); // Limit length
+        .slice(0, 22); // Limit length
       
       // Add ellipsis if truncated
       if (firstUserMessage.length > 25) {
@@ -656,21 +733,15 @@ const scrollToSelectedDocument = (documentId) => {
           `Document "${doc.filename}" deselected` : 
           `Document "${doc.filename}" selected`, 
           {
-            position: "bottom-right",
+            
             autoClose: 2000,
             hideProgressBar: false,
             closeOnClick: true,
             pauseOnHover: true,
             draggable: true,
             progress: undefined,
-            theme: "dark",
-            style: {
-              background: 'linear-gradient(to right, #2c3e95, #3fa88e)',
-              color: '#ffffff',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-            },
-            icon: () => <FileText className="text-[#5ff2b6]" />
+            
+            icon: () => <FileText className="text-[#114430]" />
           });
       } catch (error) {
         console.error('Failed to set active document:', error);
@@ -679,8 +750,14 @@ const scrollToSelectedDocument = (documentId) => {
     }
   };
 
+ 
+
   const toggleChatHistory = () => {
     setIsChatHistoryVisible(!isChatHistoryVisible);
+    // Close the documents section when chat history is made visible
+    if (!isChatHistoryVisible) {
+      setIsDocumentsVisible(false);
+    }
   };
 
   const handleNewChat = () => {
@@ -720,21 +797,16 @@ const scrollToSelectedDocument = (documentId) => {
       setSelectedDocuments([]);
       setIsSelectAllChecked(false);
       toast.success('All documents deselected', {
-        position: "bottom-right",
+        
         autoClose: 2000,
         hideProgressBar: false,
         closeOnClick: true,
         pauseOnHover: true,
         draggable: true,
         progress: undefined,
-        theme: "dark",
-        style: {
-          background: 'linear-gradient(to right, #2c3e95, #3fa88e)',
-          color: '#ffffff',
-          borderRadius: '8px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-        },
-        icon: () => <FileText className="text-[#5ff2b6]" />
+        
+        
+        icon: () => <FileText className="text-[#114430]" />
       });
     } else {
       // Select all documents
@@ -742,21 +814,16 @@ const scrollToSelectedDocument = (documentId) => {
       setSelectedDocuments(allDocumentIds);
       setIsSelectAllChecked(true);
       toast.success(`${allDocumentIds.length} documents selected`, {
-        position: "bottom-right",
+       
         autoClose: 2000,
         hideProgressBar: false,
         closeOnClick: true,
         pauseOnHover: true,
         draggable: true,
         progress: undefined,
-        theme: "dark",
-        style: {
-          background: 'linear-gradient(to right, #2c3e95, #3fa88e)',
-          color: '#ffffff',
-          borderRadius: '8px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-        },
-        icon: () => <FileText className="text-[#5ff2b6]" />
+        
+        
+        icon: () => <FileText className="text-[#114430]" />
       });
     }
   };
@@ -987,8 +1054,8 @@ const activeConversation = activeConversationId ?
       key={doc.id}
       data-doc-id={doc.id}
       className={`
-        flex items-center gap-2 
-        p-2 rounded-lg 
+        flex items-center gap-1 
+        py-1 px-2 rounded-lg 
         cursor-pointer 
         transition-all 
         ${selectedDocuments.includes(doc.id.toString())
@@ -1004,17 +1071,17 @@ const activeConversation = activeConversationId ?
         type="checkbox"
         checked={selectedDocuments.includes(doc.id.toString())}
         readOnly
-        className={`mr-2 form-checkbox 
-          h-3 w-3 
+        className={`mr-1 form-checkbox 
+          h-1 w-1 
           ${bulkDeleteMode ? 'text-red-600 border-red-400' : 'text-blue-600 border-[#5ff2b6]'}
           rounded-xl
           focus:ring-[#5ff2b6]`}
       />
-      <FileText size={16} className={bulkDeleteMode ? "text-red-400 flex-shrink-0" : "text-blue-400 flex-shrink-0"} />
+      <FileText size={14} className={bulkDeleteMode ? "text-red-400 flex-shrink-0" : "text-blue-400 flex-shrink-0"} />
       <div className="flex-grow flex items-center justify-between overflow-hidden">
         <div className="flex flex-col flex-grow overflow-hidden">
-          <span className="truncate text-sm">{doc.filename}</span>
-          <span className="text-xs text-gray-400">
+          <span className="truncate text-xs">{doc.filename}</span>
+          <span className="text-[10px] text-gray-400">
             {formatRelativeDate(doc.created_at || doc.uploaded_at)}
           </span>
         </div>
@@ -1027,26 +1094,26 @@ const activeConversation = activeConversationId ?
                 e.stopPropagation();
                 handleViewOriginalDocument(doc);
               }}
-              className="text-blue-400 hover:text-blue-300 p-1 rounded-full
+              className="text-blue-400 hover:text-blue-300 p-0.5 rounded-full
                 transition-colors duration-300
                 focus:outline-none
                 hover:bg-blue-500/10"
               title="View Original Document"
             >
-              <Eye size={16} />
+              <Eye size={14} />
             </button>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
                 handleDeleteConfirmation(doc);
               }}
-              className="text-red-400 hover:text-red-300 p-1 rounded-full
+              className="text-red-400 hover:text-red-300 p-0.5 rounded-full
                 transition-colors duration-300
                 focus:outline-none
                 hover:bg-red-500/10"
               title="Delete Document"
             >
-              <Trash2 size={16} />
+              <Trash2 size={14} />
             </button>
           </div>
         )}
@@ -1057,64 +1124,185 @@ const activeConversation = activeConversationId ?
   // Modified documents list rendering with bulk delete option
   const renderDocumentsList = () => (
     <>
+      
       {/* Documents actions header */}
-      {filteredDocuments.length > 0 && (
-        <div className="sticky top-0 z-10 flex items-center p-2 bg-gray-800/30 to-blue-900/20 rounded-lg backdrop-blur-md mb-2 justify-between">
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="select-all-documents"
-              checked={isSelectAllChecked}
-              onChange={handleSelectAllDocuments}
-              className={`mr-2 form-checkbox 
-                  h-3 w-3 
-                  ${bulkDeleteMode ? 'text-red-600 border-red-400' : 'text-blue-600 border-gray-300'}
-                  rounded-xl
-                  focus:ring-blue-500
-                  backdrop-blur-md`}
-            />
-            <label 
-              htmlFor="select-all-documents" 
-              className="text-sm text-gray-300 cursor-pointer"
-            >
-              Select All
-            </label>
-            
-            {selectedDocuments.length > 0 && (
-              <span className="text-xs text-red-400 ml-2">
-                {selectedDocuments.length} selected
-              </span>
-            )}
+{filteredDocuments.length > 0 && (
+  <div className={`sticky top-0 z-10 flex items-center p-1 ${theme === 'dark' ? 'bg-gray-800/10' : 'bg-[#e9dcc9]/70'} rounded-lg backdrop-blur-md mb-2 justify-between`}>
+    <div className="flex items-center ">
+      <input
+        type="checkbox"
+        id="select-all-documents"
+        checked={isSelectAllChecked}
+        onChange={handleSelectAllDocuments}
+        className={`mr-2 form-checkbox 
+            h-1 w-1
+            ${bulkDeleteMode 
+              ? theme === 'dark' ? 'text-red-600 border-red-400' : 'text-red-600 border-red-400' 
+              : theme === 'dark' ? 'text-blue-600 border-gray-300' : 'text-[#0c393b] border-[#d6cbbf]'}
+            rounded-xl
+            focus:ring-blue-500
+            backdrop-blur-md`}
+      />
+      <label 
+        htmlFor="select-all-documents" 
+        className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a]'} cursor-pointer`}
+      >
+        Select All
+      </label>
+      
+      {selectedDocuments.length > 0 && (
+        <span className={`text-sm ${theme === 'dark' ? 'text-red-400' : 'text-[#0c393b]'} ml-2`}>
+          {selectedDocuments.length} selected
+        </span>
+      )}
+    </div>
+    
+    <div className="flex items-center">
+      {/* Delete button that opens modal directly */}
+      <button
+        onClick={() => {
+          if (selectedDocuments.length > 0) {
+            setIsBulkDeleteModalOpen(true);
+          } else {
+            toast.info("Select documents to delete", { autoClose: 2000 });
+          }
+        }}
+        className={`p-1.5 rounded-lg transition-colors ${theme === 'dark' ? 'text-red-400 hover:text-red-300 hover:bg-red-700/30' : 'text-red-600 hover:text-red-700 hover:bg-red-100'}`}
+        title="Delete Selected Documents"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  </div>
+)}
+
+{filteredDocuments.length === 0 ? (
+  <div className={`${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a]'} text-center py-4`}>
+    {documentSearchTerm 
+      ? `No documents match "${documentSearchTerm}"` 
+      : 'No documents available'}
+  </div>
+) : (
+  // Display either all documents or a limited number based on expansion state
+  filteredDocuments
+    .slice(0, isDocumentsExpanded ? filteredDocuments.length : 10)
+    .map(doc => (
+      <div
+        key={doc.id}
+        data-doc-id={doc.id}
+        className={`
+          flex items-center gap-1 
+          py-1 px-2 rounded-lg 
+          cursor-pointer 
+          transition-all 
+          ${selectedDocuments.includes(doc.id.toString())
+            ? theme === 'dark' 
+              ? 'bg-gradient-to-b from-blue-300/20 border border-[#5ff2b6]/50 text-white'
+              : 'bg-[#556052]/10 border border-[#a55233]/30 text-[#0c393b]'
+            : theme === 'dark'
+              ? 'hover:bg-gray-700'
+              : 'hover:bg-[#e8ddcc]'}
+          ${activeDocumentId === doc.id && !bulkDeleteMode 
+            ? theme === 'dark' ? 'border border-yellow-400' : 'border border-[#a55233]' 
+            : ''}
+          ${bulkDeleteMode 
+            ? theme === 'dark' ? 'hover:bg-red-900/20' : 'hover:bg-red-100' 
+            : ''}
+          group relative
+        `}
+        onClick={() => bulkDeleteMode ? handleDocumentToggle(doc.id) : handleDocumentClick(doc.id)}
+      >
+        <input
+          type="checkbox"
+          checked={selectedDocuments.includes(doc.id.toString())}
+          readOnly
+          className={`mr-1 form-checkbox 
+            h-1 w-1 
+            ${bulkDeleteMode 
+              ? theme === 'dark' ? 'text-red-600 border-red-400' : 'text-red-600 border-red-400'
+              : theme === 'dark' ? 'text-blue-600 border-[#5ff2b6]' : 'text-[#0c393b] border-[#d6cbbf]'}
+            rounded-xl
+            ${theme === 'dark' ? 'focus:ring-[#5ff2b6]' : 'focus:ring-[#a55233]'}`}
+        />
+        <FileText size={14} className={bulkDeleteMode 
+          ? theme === 'dark' ? "text-red-400 flex-shrink-0" : "text-red-600 flex-shrink-0"
+          : theme === 'dark' ? "text-blue-400 flex-shrink-0" : "text-[#0c393b] flex-shrink-0"} 
+        />
+        <div className="flex-grow flex items-center justify-between overflow-hidden">
+          <div className="flex flex-col flex-grow overflow-hidden">
+            <span className={`truncate text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-[#1a535c] font-medium'}`}>{doc.filename}</span>
+            <span className={`text-[10px] ${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a]'}`}>
+              {formatRelativeDate(doc.created_at || doc.uploaded_at)}
+            </span>
           </div>
           
-          <div className="flex items-center">
-            {/* Delete button that opens modal directly */}
-            <button
-              onClick={() => {
-                if (selectedDocuments.length > 0) {
-                  setIsBulkDeleteModalOpen(true);
-                } else {
-                  toast.info("Select documents to delete", { autoClose: 2000 });
-                }
-              }}
-              className="p-1.5 rounded-lg transition-colors text-red-400 hover:text-red-300 hover:bg-red-700/30"
-              title="Delete Selected Documents"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+          {/* Document actions menu - only show when not in bulk delete mode */}
+          {!bulkDeleteMode && (
+            <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition-opacity">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleViewOriginalDocument(doc);
+                }}
+                className={`${theme === 'dark' 
+                  ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-500/10' 
+                  : 'text-[#556052] hover:text-[#425142] hover:bg-[#556052]/10'} 
+                  p-0.5 rounded-full
+                  transition-colors duration-300
+                  focus:outline-none`}
+                title="View Original Document"
+              >
+                <Eye size={14} />
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteConfirmation(doc);
+                }}
+                className={`${theme === 'dark' 
+                  ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10' 
+                  : 'text-red-600 hover:text-red-700 hover:bg-red-100'} 
+                  p-0.5 rounded-full
+                  transition-colors duration-300
+                  focus:outline-none`}
+                title="Delete Document"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
         </div>
-      )}
-      
-      {filteredDocuments.length === 0 ? (
-        <div className="text-gray-400 text-center py-4">
-          {documentSearchTerm 
-            ? `No documents match "${documentSearchTerm}"` 
-            : 'No documents available'}
-        </div>
-      ) : (
-        filteredDocuments.map(doc => renderDocumentItem(doc))
-      )}
+      </div>
+    ))
+)}
+
+{/* Show "Show more" button when there are more than 5 documents and not expanded */}
+{!isDocumentsExpanded && filteredDocuments.length > 10 && (
+  <button 
+    onClick={() => setIsDocumentsExpanded(true)}
+    className={`w-full text-center py-2 text-sm ${theme === 'dark' 
+      ? 'text-blue-400 hover:text-blue-300' 
+      : 'text-[#0c393b] hover:text-[#8b4513]'} 
+      flex items-center justify-center transition-colors`}
+  >
+    <ChevronDown size={16} className="mr-1" />
+    Show {filteredDocuments.length - 5} more
+  </button>
+)}
+
+{/* Show "Show less" button when expanded */}
+{isDocumentsExpanded && filteredDocuments.length > 5 && (
+  <button 
+    onClick={() => setIsDocumentsExpanded(false)}
+    className={`w-full text-center py-2 text-sm ${theme === 'dark' 
+      ? 'text-blue-400 hover:text-blue-300' 
+      : 'text-[#0c393b] hover:text-[#8b4513]'} 
+      flex items-center justify-center transition-colors`}
+  >
+    <ChevronUp size={16} className="mr-1" />
+    Show less
+  </button>
+)}
     </>
   );
   
@@ -1130,350 +1318,393 @@ const formattedActiveConversation = activeConversation ? {
   return (
     <div className="flex h-screen relative">
         {/* Sidebar */}
-      <aside
-        className={`
-          ${isOpen ? 'w-80 translate-x-0' : 'w-0 -translate-x-full'} 
-          bg-gray-700/20
-          text-white transition-all duration-300 
-          overflow-hidden 
-          h-[calc(100vh-4rem)] mt-16 
-          fixed top-0 left-0
-          flex flex-col 
-          shadow-2xl
-          z-40
-          relative
-          ${isMobile ? 'mobile-sidebar' : ''}
-          aria-hidden={!isOpen}
-        `}
-      >
-        <div className="p-4 flex flex-col flex-grow overflow-hidden">
-          {/* New Chat Button */}
-          {isOpen && (
-            <div className="mb-4 flex justify-center items-center">
-              <button
-                onClick={handleNewChat}
-                className="
-                  text-[#d6292c] font-semibold text-white
-                  bg-gradient-to-r from-[#2c3e95]/90 to-[#3fa88e]/80 p-3 rounded-lg flex items-center 
-                  justify-center w-full
-                  hover:bg-gray-100 hover:shadow-md 
-                  transition-all duration-300
-                  active:scale-95 space-x-2
-                "
-              >
-                <Plus size={20} />New Chat
-              </button>
-            </div>
-          )}
-
-           {/* Generate Ideas Button - Only shown if user has access to the idea-generator module */}
-           {isOpen && isModuleAvailable('idea-generator') && (
-            <div className="mb-4 relative">
-              <button
-                onClick={handleGenerateIdeas}
-                disabled={!selectedDocuments || selectedDocuments.length === 0}
+        <aside
+    className={`
+      ${isOpen ? 'w-80 translate-x-0' : 'w-0 -translate-x-full'} 
+      ${theme === 'dark' ? 'dark:bg-gray-700/20' : 'bg-[#f7f3ea] border-r border-[#e8ddcc]'} 
+      ${theme === 'dark' ? 'text-white' : 'text-[#5e4636]'} 
+      transition-all duration-300 
+      overflow-hidden 
+      h-[calc(100vh-4rem)] 
+      fixed left-0
+      top-16 bottom-0
+      flex flex-col 
+      rounded-r-lg
+      ${theme === 'dark' ? 'shadow-2xl' : 'shadow-md'}
+      z-40
+      relative
+      ${isMobile ? 'mobile-sidebar' : ''}
+      aria-hidden={!isOpen}
+    `}
+  >
+        <div className="p-4 pb-0 flex flex-col h-full overflow-hidden">
+          
+        {isOpen && (
+    <div className="mb-3 flex items-center gap-2">
+      {/* Collapse button - placed at the beginning of the row */}
+      <button
+            onClick={onToggle}
+            className={`p-2 ${theme === 'dark' ? 'text-gray-300 hover:text-white hover:bg-gray-700/50' : 'text-[#5e4636] hover:text-[#a55233] hover:bg-[#f5e6d8]'} rounded-lg transition-colors`}
+            title="Collapse Sidebar"
+            aria-label="Collapse Sidebar"
+          >
+            <PanelLeft size={20} className={theme === 'dark' ? 'text-gray-300' : 'text-[#5e4636]'} />
+          </button>
+      
+      {/* New Chat Button */}
+      <button
+            onClick={handleNewChat}
+            className={`
+              ${theme === 'dark' 
+                ? 'text-white bg-gradient-to-r from-[#2c3e95]/80 to-[#3fa88e]/70 hover:from-[#2c3e95] hover:to-[#3fa88e]' 
+                : 'text-white bg-[#a55233] hover:bg-[#8b4513]'}
+              font-medium
+              p-2 rounded-lg 
+              flex items-center justify-center flex-1
+              shadow-sm hover:shadow-md 
+              transition-all duration-300
+              active:scale-95 space-x-2
+              text-sm
+            `}
+          >
+            <Plus size={16} className="mr-1" />
+            <span>New Chat</span>
+      </button>
+      
+      {/* Generate Ideas Button - only shown if user has access */}
+      {isModuleAvailable('idea-generator') && (
+            <button
+              onClick={handleGenerateIdeas}
+              disabled={!selectedDocuments || selectedDocuments.length === 0}
+              className={`
+                flex-1 py-2 px-2 rounded-lg text-sm
+                ${selectedDocuments && selectedDocuments.length > 0 
+                  ? theme === 'dark'
+                    ? 'bg-gradient-to-r from-indigo-600/80 to-purple-500/70 hover:from-indigo-600 hover:to-purple-500' 
+                    : 'bg-[#556052] hover:bg-[#425142] text-white'
+                  : theme === 'dark' 
+                    ? 'bg-gray-700/40 cursor-not-allowed opacity-60'
+                    : 'bg-[#d6cbbf] cursor-not-allowed opacity-60'
+                }
+                text-white transition-all duration-300
+                flex items-center justify-center gap-2
+                shadow-sm hover:shadow-md active:scale-95
+                border ${selectedDocuments && selectedDocuments.length > 0 
+                  ? theme === 'dark' ? 'border-indigo-400/20' : 'border-[#556052]/20' 
+                  : theme === 'dark' ? 'border-gray-600/20' : 'border-[#d6cbbf]'}
+                relative overflow-hidden
+              `}
+            >
+         <Lightbulb 
+                size={16} 
                 className={`
-                  w-full py-3 px-4 rounded-lg
-                  ${selectedDocuments && selectedDocuments.length > 0 
-                    ? 'bg-gradient-to-r from-indigo-600/90 to-purple-500/90 hover:from-indigo-700 hover:to-purple-600' 
-                    : 'bg-gray-700/50 cursor-not-allowed opacity-60'
-                  }
-                  text-white transition-all duration-300
-                  flex items-center justify-center gap-2
-                  shadow-lg hover:shadow-xl active:scale-95
-                  border ${selectedDocuments && selectedDocuments.length > 0 ? 'border-indigo-400/30' : 'border-gray-600/30'}
-                  relative overflow-hidden
-                `}
-              >
-                {/* Animated background when active */}
-                {isGenerateIdeasAnimating && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/30 to-purple-500/30 animate-pulse"></div>
-                )}
-                
-                {/* Icon with conditional animation */}
-                <Lightbulb 
-                  size={18} 
-                  className={`
-                    ${selectedDocuments && selectedDocuments.length > 0 ? 'text-yellow-300' : 'text-gray-400'}
-                    ${isGenerateIdeasAnimating ? 'animate-pulse' : ''}
-                  `} 
-                />
-                
-                {/* Sparkles animation when hovering and enabled */}
-                {selectedDocuments && selectedDocuments.length > 0 && (
-                  <Sparkles 
-                    size={14} 
-                    className="absolute top-1 right-2 text-yellow-200/70 animate-pulse" 
-                  />
-                )}
-                
-                <span>Create Ideas from Documents</span>
-              </button>
-              
-              {/* Status indicator text */}
-              <p className={`
-                text-xs text-center mt-1.5 
-                ${selectedDocuments && selectedDocuments.length > 0 ? 'text-indigo-300/80' : 'text-gray-500'}
-                transition-colors duration-300
-              `}>
-                {selectedDocuments && selectedDocuments.length > 0 
-                  ? `Transform ${selectedDocuments.length} document${selectedDocuments.length > 1 ? 's' : ''} into creative ideas`
-                  : 'Select documents first to generate ideas'}
-              </p>
-            </div>
+                  ${selectedDocuments && selectedDocuments.length > 0 ? 'text-yellow-300' : 'text-gray-400'}
+                  ${isGenerateIdeasAnimating ? 'animate-pulse' : ''}
+                `} 
+              />
+              <span>Ideas</span>
+          
+           {/* Sparkles only visible when enabled */}
+           {selectedDocuments && selectedDocuments.length > 0 && (
+                <Sparkles size={12} className="absolute top-1 right-2 text-yellow-200/70 animate-pulse" />
+              )}
+            </button>
           )}
-
+        </div>
+      )}
           {/* Documents Section */}
           {isOpen && (
-  <div className="mb-4 flex flex-col overflow-hidden">
+  <div className="flex flex-col overflow-hidden">
     {/* Documents Header - Restructured */}
-    <div className="flex items-center justify-between mb-2 bg-gradient-to-r from-gray-800/30 to-transparent p-2 rounded-lg">
-      <span className="text-white font-semibold text-xs uppercase tracking-wider">
-        Documents
+    <div className={`flex items-center justify-between mb-1 p-1.5 rounded-lg ${theme === 'dark' ? '' : 'border-b border-[#e3d5c8]'}`}>
+      <span className={`${theme === 'dark' ? 'text-gray-300' : 'text-[#0a3b25]'} font-medium text-xs uppercase tracking-wider`}>
+        Documents {filteredDocuments.length > 0 && `(${filteredDocuments.length})`}
       </span>
-      <div className="flex items-center gap-2">
-      <button 
-    onClick={() => setIsDocumentSearchModalOpen(true)}
-    className="p-1.5 text-gray-300 hover:text-white transition-colors 
-      rounded-lg hover:bg-gray-700/30 relative group"
-    title='Advanced Document Search'
-  >
-    <Search size={16} />
-    <span className="hidden group-hover:block absolute -top-8 left-1/2 transform -translate-x-1/2 
-      bg-gray-900 text-xs text-white py-1 px-2 rounded whitespace-nowrap">
-      Search in content
-    </span>
-  </button>
-        <button
-          onClick={() => setIsDocumentsVisible(!isDocumentsVisible)}
-          className="p-1.5 text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-gray-700/30"
+      <div className="flex items-center gap-1">
+        <button 
+          onClick={() => setIsDocumentSearchModalOpen(true)}
+          className={`p-1 ${theme === 'dark' ? 'text-gray-300 hover:text-white hover:bg-gray-700/30' : 'text-[#5e4636] hover:text-[#a55233] hover:bg-[#f5e6d8]'} transition-colors rounded-lg relative group`}
+          title='Advanced Document Search'
         >
-          {isDocumentsVisible ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          <Search size={14} />
+          <span className={`hidden group-hover:block absolute -top-8 left-1/2 transform -translate-x-1/2 ${theme === 'dark' ? 'bg-gray-900' : 'bg-[#5e4636]'} text-xs text-white py-1 px-2 rounded whitespace-nowrap`}>
+            Search in content
+          </span>
+        </button>
+        <button
+          onClick={toggleDocumentsVisibility}
+          className={`p-1 ${theme === 'dark' ? 'text-gray-300 hover:text-white hover:bg-gray-700/30' : 'text-[#5e4636] hover:text-[#a55233] hover:bg-[#f5e6d8]'} transition-colors rounded-lg`}
+        >
+          {isDocumentsVisible ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
       </div>
     </div>
-  
-              {/* Expandable Search Input */}
-              {showDocumentSearch && (
-                <div className=" mb-2">
-                  <div className="flex items-center bg-gray-800/30 rounded-lg">
-                    <Search size={16} className="ml-2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search documents..."
-                      value={documentSearchTerm}
-                      onChange={(e) => setDocumentSearchTerm(e.target.value)}
-                      className="
-                        w-full bg-transparent 
-                        text-white 
-                        placeholder-gray-400 
-                        p-2 
-                        focus:outline-none 
-                        text-sm
-                      "
-                    />
-                    {documentSearchTerm && (
-                      <button 
-                        onClick={handleResetSearch}
-                        className="mr-2 text-gray-400 hover:text-white"
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-  
-              {/* Documents List with Visibility Toggle */}
-              {isDocumentsVisible && (
-                <div className="max-h-60 overflow-y-auto custom-scrollbar pr-2 space-y-2">
-                  {isLoading && isInitialLoad ? (
-                    <div className="text-gray-400 text-center py-4 flex items-center justify-center">
-                      <div className="flex items-center gap-2">
-                        <div className="animate-spin h-4 w-4 border-2 border-blue-500 rounded-full border-t-transparent"/>
-                        Loading documents...
-                      </div>
-                    </div>
-                  ) : (
-                    renderDocumentsList()
-                  )}
-                </div>
-              )}
-            </div>
+
+    {showDocumentSearch && (
+      <div className="mb-2">
+        <div className={`flex items-center ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-white/80 border border-[#d6cbbf]'} rounded-lg`}>
+          <Search size={16} className={`ml-2 ${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a]'}`} />
+          <input
+            type="text"
+            placeholder="Search documents..."
+            value={documentSearchTerm}
+            onChange={(e) => setDocumentSearchTerm(e.target.value)}
+            className={`
+              w-full bg-transparent 
+              ${theme === 'dark' ? 'text-white placeholder-gray-400' : 'text-[#5e4636] placeholder-[#5a544a]'}
+              p-2 
+              focus:outline-none 
+              text-sm
+            `}
+          />
+          {documentSearchTerm && (
+            <button 
+              onClick={handleResetSearch}
+              className={`mr-2 ${theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-[#5a544a] hover:text-[#a55233]'}`}
+            >
+              <X size={16} />
+            </button>
           )}
+        </div>
+      </div>
+    )}
+
+    
+    {/* Documents List with Visibility Toggle */}
+    {isDocumentsVisible && (
+      <div className={`
+        overflow-y-auto custom-scrollbar pr-2 space-y-2
+        ${isDocumentsExpanded ? 'max-h-[40vh]' : 'max-h-[600px]'}
+        transition-all duration-300
+      `}>
+        {isLoading && isInitialLoad ? (
+          <div className={`${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a]'} text-center py-4 flex items-center justify-center`}>
+            <div className="flex items-center gap-2">
+              <div className={`animate-spin h-4 w-4 border-2 ${theme === 'dark' ? 'border-blue-500' : 'border-[#a55233]'} rounded-full border-t-transparent`}/>
+              Loading documents...
+            </div>
+          </div>
+    ) : (
+      renderDocumentsList()
+    )}
+  </div>
+)}
+  </div>
+)}
           
           {/* Recent Chats Section with Enhanced Rendering */}
           {isOpen && (
-            <div className="flex-grow flex flex-col overflow-hidden">
-              <h6
-                className="
-                  text-white mb-2 flex justify-between 
-                  items-center font-semibold text-xs uppercase 
-                  tracking-wider
-                  bg-gradient-to-r from-gray-800/30 to-transparent 
-                  p-2 rounded-lg
-                  relative
-                "
-              >
-                Recent Chats
-                <div className="flex items-center space-x-2">
-  <button 
-    onClick={() => setChatFilterMode(prev => prev ? null : 'recent')}
-    className="p-1 text-gray-300 hover:text-white transition-colors rounded-full hover:bg-gray-700/30"
-    title='Filter Chats'
-  >
-    <Filter size={16} />
-  </button>
+  <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+    <h6
+      className={`
+        ${theme === 'dark' ? 'text-gray-300' : 'text-[#0a3b25]'} mb-1 flex justify-between 
+        items-center font-medium text-xs uppercase 
+        tracking-wider
+        p-1.5 rounded-lg
+        relative
+        ${theme === 'dark' ? '' : 'border-b border-[#e3d5c8]'}
+      `}
+    >
+  Recent Chats {filteredChatHistory.length > 0 && `(${filteredChatHistory.length})`}
+  <div className="flex items-center gap-1">
+  <div className="relative filter-dropdown-container">
+    <button 
+      onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+      className={`p-1 relative ${theme === 'dark' 
+        ? 'text-gray-300 hover:text-white hover:bg-gray-700/30' 
+        : 'text-[#5e4636] hover:text-[#a55233] hover:bg-[#f5e6d8]'} 
+        ${chatFilterMode ? (theme === 'dark' ? 'bg-blue-500/20' : 'bg-[#a55233]/10') : ''}
+        transition-colors rounded-lg`}
+      title='Filter Chats'
+    >
+      <Filter size={14} />
+      {chatFilterMode && (
+        <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${theme === 'dark' ? 'bg-blue-500' : 'bg-[#a55233]'}`}></span>
+      )}
+    </button>
+    
+    {/* Filter dropdown menu */}
+    {isFilterDropdownOpen && (
+      <div className={`absolute right-0 mt-1 py-1 w-36 rounded-md shadow-lg 
+        ${theme === 'dark' ? 'bg-gray-800' : 'bg-white border border-[#e3d5c8]'}
+        z-10`}>
+        <button 
+          onClick={() => {
+            setChatFilterMode(null);
+            setIsFilterDropdownOpen(false);
+          }}
+          className={`block px-4 py-1 text-sm w-full text-left
+            ${!chatFilterMode 
+              ? theme === 'dark' ? 'bg-blue-500/20 text-white' : 'bg-[#ddd9c5] text-[#a55233]'
+              : theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-[#5e4636] hover:bg-[#f0eee5]'}`}
+        >
+          Default
+        </button>
+        <button 
+          onClick={() => {
+            setChatFilterMode('recent');
+            setIsFilterDropdownOpen(false);
+          }}
+          className={`block px-4 py-1 text-sm w-full text-left
+            ${chatFilterMode === 'recent' 
+              ? theme === 'dark' ? 'bg-blue-500/20 text-white' : 'bg-[#ddd9c5] text-[#a55233]'
+              : theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-[#5e4636] hover:bg-[#f0eee5]'}`}
+        >
+          Most Recent
+        </button>
+        <button 
+          onClick={() => {
+            setChatFilterMode('oldest');
+            setIsFilterDropdownOpen(false);
+          }}
+          className={`block px-4 py-1 text-sm w-full text-left
+            ${chatFilterMode === 'oldest' 
+              ? theme === 'dark' ? 'bg-blue-500/20 text-white' : 'bg-[#d88e6f]/20 text-[#a55233]'
+              : theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-[#5e4636] hover:bg-[#f0eee5]'}`}
+        >
+          Oldest First
+        </button>
+        <button 
+          onClick={() => {
+            setChatFilterMode('mostMessages');
+            setIsFilterDropdownOpen(false);
+          }}
+          className={`block px-4 py-1 text-sm w-full text-left
+            ${chatFilterMode === 'mostMessages' 
+              ? theme === 'dark' ? 'bg-blue-500/20 text-white' : 'bg-[#ddd9c5] text-[#a55233]'
+              : theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-[#5e4636] hover:bg-[#f0eee5]'}`}
+        >
+          Most Messages
+        </button>
+      </div>
+    )}
+  </div>
   <button
     onClick={toggleChatHistory}
-    className="p-1 text-gray-300 hover:text-white transition-colors rounded-full hover:bg-gray-700/30"
+    className={`p-1 ${theme === 'dark' 
+      ? 'text-gray-300 hover:text-white hover:bg-gray-700/30' 
+      : 'text-[#5e4636] hover:text-[#a55233] hover:bg-[#f5e6d8]'} transition-colors rounded-lg`}
   >
-    {isChatHistoryVisible ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+    {isChatHistoryVisible ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
   </button>
 </div>
-                
-                {/* Chat Filter Dropdown */}
-                {chatFilterMode && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-gradient-to-r from-[#2c3e95] to-[#3fa88e] focus:ring-[#5ff2b6]  rounded-lg shadow-lg z-50">
-                    <div className="py-1">
-                      {[
-                        { value: 'recent', label: 'Most Recent', icon: <Calendar size={16} /> },
-                        { value: 'oldest', label: 'Oldest First', icon: <Calendar size={16} /> },
-                        { value: 'mostMessages', label: 'Most Messages', icon: <Tag size={16} /> }
-                      ].map((filter) => (
-                        <button
-                          key={filter.value}
-                          onClick={() => setChatFilterMode(filter.value)}
-                          className={`
-                            w-full text-left px-4 py-2 flex items-center 
-                            hover:bg-gray-500/30 
-                            ${chatFilterMode === filter.value ? 'bg-gradient-to-b from-blue-300/20 focus:ring-[#5ff2b6] border border-[#5ff2b6] rounded-xl shadow-lgtext-white' : ''}
-                          `}
-                        >
-                          {filter.icon}
-                          <span className="ml-2">{filter.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </h6>
+    </h6>
 
               {/* Add Chat Search Input */}
-              {isChatHistoryVisible && (
-                <div className="mb-2">
-                  <div className="flex items-center bg-gray-800/30 rounded-lg">
-                    <Search size={16} className="ml-2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search chats..."
-                      value={chatSearchTerm}
-                      onChange={(e) => setChatSearchTerm(e.target.value)}
-                      className="
-                        w-full bg-transparent 
-                        text-white 
-                        placeholder-gray-400 
-                        p-2 
-                        focus:outline-none 
-                        text-sm
-                      "
-                    />
-                    {chatSearchTerm && (
-                      <button 
-                        onClick={handleResetChatSearch}
-                        className="mr-2 text-gray-400 hover:text-white"
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
+    {isChatHistoryVisible && (
+      <div className="mb-2">
+        <div className={`flex items-center ${theme === 'dark' 
+          ? 'bg-gray-800/10' 
+          : 'bg-white/80 border border-[#d6cbbf]'} rounded-lg`}>
+          <Search size={16} className={`ml-2 ${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a]'}`} />
+          <input
+            type="text"
+            placeholder="Search chats..."
+            value={chatSearchTerm}
+            onChange={(e) => setChatSearchTerm(e.target.value)}
+            className={`
+              w-full bg-transparent 
+              ${theme === 'dark' ? 'text-white placeholder-gray-400' : 'text-[#5e4636] placeholder-[#5a544a]'} 
+              p-2 
+              focus:outline-none 
+              text-sm
+            `}
+          />
+          {chatSearchTerm && (
+            <button 
+              onClick={handleResetChatSearch}
+              className={`mr-2 ${theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-[#5a544a] hover:text-[#a55233]'}`}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+    )}
               
               {isChatHistoryVisible && (
-                <div
-                  className="
-                    max-h-60 overflow-y-auto 
-                    custom-scrollbar pr-2 space-y-2
-                  "
-                >
-                  {filteredChatHistory.length === 0 ? (
-                    <div className="text-gray-400 text-center py-4">
-                      {chatSearchTerm 
-                        ? `No chats match "${chatSearchTerm}"` 
-                        : 'No recent chats available'}
-                  </div>
+      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
+        {filteredChatHistory.length === 0 ? (
+          <div className={`${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a]'} text-center py-4`}>
+            {chatSearchTerm 
+              ? `No chats match "${chatSearchTerm}"` 
+              : 'No recent chats available'}
+          </div>
                   ) : (
                     filteredChatHistory.map((chat) => (
                       <div
                         key={`chat-${chat.conversation_id}`}
                         className={`
                           relative group cursor-pointer 
-                          hover:bg-gray-700 
+                          ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-[#f5e6d8]'} 
                           hover:shadow-md 
                           p-2 rounded-lg text-sm
                           transition-all duration-300
                           ${activeConversationId === chat.conversation_id 
-                            ? 'bg-gradient-to-b from-blue-300/20 border border-[#5ff2b6]/50 text-white' 
+                            ? theme === 'dark' 
+                              ? 'bg-gradient-to-b from-blue-300/20 border border-[#5ff2b6]/50 text-white' 
+                              : 'bg-[#e8ddcc] border-l-2 border-[#a55233] text-[#5e4636]' 
                             : ''}
                         `}
                       >
-                        {isRenamingChat === chat.conversation_id ? (
-                          <div className="flex items-center">
-                            <input
-                              type="text"
-                              value={newChatTitle}
-                              onChange={(e) => setNewChatTitle(e.target.value)}
-                              className="flex-grow bg-gray-700 text-white p-1 rounded"
-                              placeholder="Enter new chat name"
-                            />
+                       {isRenamingChat === chat.conversation_id ? (
+                <div className="flex items-center">
+                  <input
+                    type="text"
+                    value={newChatTitle}
+                    onChange={(e) => setNewChatTitle(e.target.value)}
+                    className={`flex-grow ${theme === 'dark' 
+                      ? 'bg-gray-700 text-white' 
+                      : 'bg-white text-[#5e4636] border border-[#d6cbbf]'} p-1 rounded`}
+                    placeholder="Enter new chat name"
+                  />
                             <button 
-                              onClick={() => handleRenameChat(chat.conversation_id)}
-                              className="ml-2 text-green-400 hover:text-green-300"
-                            >
-                              ✓
-                            </button>
-                            <button 
-                              onClick={() => setIsRenamingChat(null)}
-                              className="ml-2 text-red-400 hover:text-red-300"
-                            >
-                              ✗
-                            </button>
-                          </div>
+                    onClick={() => handleRenameChat(chat.conversation_id)}
+                    className={`ml-2 ${theme === 'dark' ? 'text-green-400 hover:text-green-300' : 'text-[#556052] hover:text-[#425142]'}`}
+                  >
+                    ✓
+                  </button>
+                  <button 
+                    onClick={() => setIsRenamingChat(null)}
+                    className={`ml-2 ${theme === 'dark' ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}
+                  >
+                    ✗
+                  </button>
+                </div>
                         ) : (
                           <div 
-                            onClick={() => handleChatSelection(chat)}
-                            className="flex items-center justify-between"
-                          >
-                            <div className="flex items-center">
-                              <MessageCircle size={16} className="text-green-400 mr-2" />
-                              <div className="flex flex-col flex-grow overflow-hidden">
-                                <span>{chat.title || 'Untitled Conversation'}</span>
-                                <span className="text-xs text-gray-400">
-                                    {formatRelativeDate(chat.created_at)}
-                                </span>
-                              </div>
+                          onClick={() => handleChatSelection(chat)}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex items-center">
+                            <MessageCircle size={14} className={theme === 'dark' ? "text-green-400 mr-2" : "text-[#1a535c] mr-2"} />
+                            <div className="flex flex-col flex-grow overflow-hidden">
+                              <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-[#1a535c] font-medium tracking-wide '}`}>{chat.title || 'Untitled Conversation'}</span>
+                              <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-[#5a544a] '}`}>
+                                {formatRelativeDate(chat.created_at)}
+                              </span>
                             </div>
+                          </div>
                             
                             {/* Chat Management Actions */}
                             <div className="hidden group-hover:flex items-center space-x-2">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setIsRenamingChat(chat.conversation_id);
-                                  setNewChatTitle(chat.title);
-                                }}
-                                className="text-blue-400 hover:text-blue-300"
-                                title="Rename Chat"
-                              >
-                                <Edit2 size={16} />
-                              </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsRenamingChat(chat.conversation_id);
+                        setNewChatTitle(chat.title);
+                      }}
+                      className={`${theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-[#556052] hover:text-[#425142]'}`}
+                      title="Rename Chat"
+                    >
+                      <Edit2 size={16} />
+                    </button>
                               <button 
   onClick={(e) => {
     e.stopPropagation();
     handleDeleteChatConfirmation(chat);
   }}
-  className="text-red-400 hover:text-red-300"
+  className={`${theme === 'dark' ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}
   title="Delete Chat"
 >
   <Trash2 size={16} />
@@ -1490,9 +1721,11 @@ const formattedActiveConversation = activeConversation ? {
           )}
         </div>
   
-       {/* Sidebar Footer with Download Feature */}
+      {/* Sidebar Footer with Download Feature */}
 {isOpen && (
-  <div className="sidebar-footer mt-auto border-t border-gray-700/30 pt-3 px-4 pb-4">
+  <div className={`sidebar-footer ${theme === 'dark' 
+    ? 'border-t border-gray-700/30' 
+    : 'border-t border-[#e3d5c8]'} pt-3 px-4 pb-3 mt-auto`}>
     <div className="flex items-center justify-between">
       <div className="flex-grow">
         <ChatDownloadFeature
@@ -1500,97 +1733,258 @@ const formattedActiveConversation = activeConversation ? {
           mainProjectId={mainProjectId}
           chatHistory={chatHistory}
           activeConversationId={activeConversationId}
-          className="download-button"
+          className={`download-button ${theme === 'dark' 
+            ? '' 
+            : 'bg-white border-[#d6cbbf] hover:bg-[#f5e6d8] text-[#5e4636]'}`}
         />
       </div>
       
-     
+      {/* Add FAQ button here */}
+      <FaqButton className={`ml-2 ${theme === 'dark' 
+        ? 'hover:bg-gray-700/50' 
+        : 'hover:bg-[#f5e6d8]'} rounded-lg`} />
     </div>
   </div>
 )}
+
+
         </aside>
     
         {/* Custom Scrollbar Styles */}
-        <style>{`
-          .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.2);
-            border-radius: 10px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(255,255,255,0.3);
-          }
+      {/* Custom Scrollbar Styles */}
+<style>{`
+  /* Add to your styles */
+  .sidebar-footer {
+    margin-top: auto; /* Push to bottom */
+  }
 
-            @keyframes documentHighlight {
-        0% { background-color: rgba(95, 242, 182, 0.6); box-shadow: 0 0 10px rgba(95, 242, 182, 0.8); }
-        50% { background-color: rgba(95, 242, 182, 0.3); box-shadow: 0 0 15px rgba(95, 242, 182, 0.4); }
-        100% { background-color: transparent; box-shadow: none; }
-      }
-      
-      .document-highlight-animation {
-        animation: documentHighlight 2s ease-out forwards;
-      }
-      
-      .selected-document {
-        background: linear-gradient(to right, rgba(95, 242, 182, 0.1), rgba(44, 62, 149, 0.1)) !important;
-        border: 1px solid rgba(95, 242, 182, 0.5) !important;
-      }
-      
-      /* Make checkboxes more visible */
-      input[type="checkbox"] {
-        accent-color: #5ff2b6;
-        width: 16px;
-        height: 16px;
-        cursor: pointer;
-      }
-      
-      /* Ensure checkboxes are properly positioned */
-      [data-doc-id] {
-        position: relative;
-      }
-      
-      /* Style for when document is both selected and active */
-      [data-doc-id].selected-document.document-highlight-animation {
-        border: 1px solid rgba(95, 242, 182, 0.8) !important;
-      }
-         @keyframes glow {
-            0% { box-shadow: 0 0 5px rgba(124, 58, 237, 0.5); }
-            50% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.8); }
-            100% { box-shadow: 0 0 5px rgba(124, 58, 237, 0.5); }
-          }
-          
-          .glow-animation {
-            animation: glow 2s infinite;
-          }
-          
-          @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-3px); }
-            100% { transform: translateY(0px); }
-          }
-          
-          .float-animation {
-            animation: float 3s ease-in-out infinite;
-          }
+  /* For collapsed sidebar footer positioning */
+  .collapsed-sidebar-footer {
+    position: absolute;
+    bottom: 16px;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
 
-          .sidebar-footer .download-button {
-  height: 40px;
-  background: rgba(44, 62, 149, 0.5);
-  border: 1px solid rgba(95, 242, 182, 0.2);
-  transition: all 0.2s ease;
-}
+  /* Add to your style section */
+  .collapsed-sidebar-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
 
-.sidebar-footer .download-button:hover {
-  background: rgba(44, 62, 149, 0.7);
-  border-color: rgba(95, 242, 182, 0.5);
-}
-        `}</style>
+  /* For tooltip display */
+  .tooltip {
+    position: absolute;
+    left: 100%;
+    margin-left: 10px;
+    opacity: 0;
+    background-color: rgba(30, 30, 30, 0.9);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .collapsed-sidebar-icon:hover .tooltip {
+    opacity: 1;
+  }
+
+  /* Common scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  /* Theme-specific scrollbar styling */
+  ${theme === 'dark' 
+    ? `
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.2);
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    `
+    : `
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(165,82,51,0.05);
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(165,82,51,0.2);
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(165,82,51,0.3);
+    }
+    `
+  }
+
+  /* Animation updates for both themes */
+  @keyframes documentHighlight {
+    0% { 
+      background-color: ${theme === 'dark' 
+        ? 'rgba(95, 242, 182, 0.6)' 
+        : 'rgba(165, 82, 51, 0.2)'
+      }; 
+      box-shadow: 0 0 10px ${theme === 'dark' 
+        ? 'rgba(95, 242, 182, 0.8)' 
+        : 'rgba(165, 82, 51, 0.3)'
+      }; 
+    }
+    50% { 
+      background-color: ${theme === 'dark' 
+        ? 'rgba(95, 242, 182, 0.3)' 
+        : 'rgba(165, 82, 51, 0.1)'
+      }; 
+      box-shadow: 0 0 15px ${theme === 'dark' 
+        ? 'rgba(95, 242, 182, 0.4)' 
+        : 'rgba(165, 82, 51, 0.2)'
+      }; 
+    }
+    100% { 
+      background-color: transparent; 
+      box-shadow: none; 
+    }
+  }
+  
+  .document-highlight-animation {
+    animation: documentHighlight 2s ease-out forwards;
+  }
+  
+  .selected-document {
+    background: ${theme === 'dark'
+      ? 'linear-gradient(to right, rgba(95, 242, 182, 0.1), rgba(44, 62, 149, 0.1)) !important'
+      : 'linear-gradient(to right, rgba(165, 82, 51, 0.05), rgba(85, 96, 82, 0.05)) !important'
+    };
+    border: ${theme === 'dark'
+      ? '1px solid rgba(95, 242, 182, 0.5) !important'
+      : '1px solid rgba(165, 82, 51, 0.2) !important'
+    };
+  }
+  
+  /* Make checkboxes more visible */
+  input[type="checkbox"] {
+    accent-color: ${theme === 'dark' ? '#5ff2b6' : '#a55233'};
+    width: 11px;
+    height: 14px;
+    cursor: pointer;
+  }
+  
+  /* Ensure checkboxes are properly positioned */
+  [data-doc-id] {
+    position: relative;
+  }
+  
+  /* Style for when document is both selected and active */
+  [data-doc-id].selected-document.document-highlight-animation {
+    border: ${theme === 'dark'
+      ? '1px solid rgba(95, 242, 182, 0.8) !important'
+      : '1px solid rgba(165, 82, 51, 0.5) !important'
+    };
+  }
+
+  @keyframes glow {
+    0% { box-shadow: 0 0 5px ${theme === 'dark' 
+      ? 'rgba(124, 58, 237, 0.5)' 
+      : 'rgba(165, 82, 51, 0.2)'
+    }; }
+    50% { box-shadow: 0 0 20px ${theme === 'dark' 
+      ? 'rgba(124, 58, 237, 0.8)' 
+      : 'rgba(165, 82, 51, 0.4)'
+    }; }
+    100% { box-shadow: 0 0 5px ${theme === 'dark' 
+      ? 'rgba(124, 58, 237, 0.5)' 
+      : 'rgba(165, 82, 51, 0.2)'
+    }; }
+  }
+  
+  .glow-animation {
+    animation: glow 2s infinite;
+  }
+  
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-3px); }
+    100% { transform: translateY(0px); }
+  }
+  
+  .float-animation {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  /* Download button styling */
+  .sidebar-footer .download-button {
+    height: 30px;
+    padding: 1px 5px; 
+    
+    background: ${theme === 'dark' 
+      ? 'rgba(44, 62, 149, 0.5)' 
+      : 'rgba(255, 255, 255, 0.8)'
+    };
+    border: ${theme === 'dark' 
+      ? '1px solid rgba(95, 242, 182, 0.2)' 
+      : '1px solid rgba(214, 203, 191, 1)'
+    };
+    transition: all 0.2s ease;
+    border-radius: 3px;
+    display: inline-flex; 
+    gap: 2px;
+    align-items: center;
+    
+    font-size: 0.875rem;
+    width: auto; 
+    min-width: 32px;
+    max-width: 100%; 
+    color: ${theme === 'dark' ? 'white' : '#5e4636'};
+  }
+
+  .sidebar-footer .download-button:hover {
+    background: ${theme === 'dark' 
+      ? 'rgba(44, 62, 149, 0.7)' 
+      : '#f5e6d8'
+    };
+    border-color: ${theme === 'dark' 
+      ? 'rgba(95, 242, 182, 0.5)' 
+      : '#a68a70'
+    };
+    transform: translateY(-1px); 
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); 
+  }
+
+  .sidebar-footer .download-button:active {
+    transform: translateY(0px);
+  }
+
+  /* This ensures the icon inside the button is properly sized */
+  .sidebar-footer .download-button svg {
+    width: 12px;
+    height: 16px;
+    margin-right: 4px;
+    color: ${theme === 'dark' ? 'white' : '#a55233'};
+  }
+
+  /* If there's text and icon, keep them nicely spaced */
+  .sidebar-footer .download-button span {
+    margin-left: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+`}</style>
 
 {viewingDocument && (
         <DocumentViewer
@@ -1629,7 +2023,143 @@ const formattedActiveConversation = activeConversation ? {
       selectedDocuments={selectedDocuments}
       documents={documents}
     />
+{/* Collapsed Sidebar */}
+{!isOpen && (
+  <div className={`fixed left-0 top-4 bottom-0 w-12 ${theme === 'dark' 
+    ? 'bg-gray-700/20 backdrop-blur-sm border-r border-gray-700/30' 
+    : 'bg-[#f7f3ea] backdrop-blur-sm border-r border-[#e8ddcc]'} z-40 flex flex-col items-center pt-14 space-y-6`}>
+    {/* Add the toggle button first, at the top of the sidebar */}
+    <button
+      onClick={() => {
+        // We need direct access to the toggle function
+        // Option 1: If onToggle is passed as a prop
+        if (typeof onToggle === 'function') {
+          onToggle();
+        } 
+        // Option 2: Create a custom event that Dashboard.jsx listens for
+        else {
+          const event = new CustomEvent('toggle-sidebar');
+          document.dispatchEvent(event);
+        }
+      }}
+      className={`my-4 p-2 ${theme === 'dark' 
+        ? 'text-white hover:bg-gray-700' 
+        : 'text-[#5e4636] hover:bg-[#f5e6d8]'} rounded-lg transition-colors`}
+      title="Expand Sidebar"
+    >
+      <PanelLeft size={20} className={theme === 'dark' ? "text-blue-500" : "text-[#c24124]"} />
+    </button>
+    {/* Main icons */}
+    <div className="flex flex-col items-center space-y-6">
+      {/* New Chat Button - Same function as expanded mode */}
+      <button
+        onClick={handleNewChat}
+        className={`p-2 ${theme === 'dark' 
+          ? 'text-white hover:bg-gray-700' 
+          : 'text-[#5e4636] hover:bg-[#f5e6d8]'} rounded-full transition-colors`}
+        title="New Chat"
+      >
+        <Plus size={20} className={theme === 'dark' ? "text-indigo-400" : "text-[#c24124]"} />
+      </button>
+    
+    {/* Ideas Button - Same function as expanded mode */}
+    {isModuleAvailable('idea-generator') && (
+        <button
+          onClick={handleGenerateIdeas}
+          disabled={!selectedDocuments || selectedDocuments.length === 0}
+          className={`p-2 rounded-full transition-colors
+            ${selectedDocuments && selectedDocuments.length > 0 
+              ? theme === 'dark'
+                ? 'text-yellow-400 hover:bg-indigo-700/50' 
+                : 'text-[#3d7647] hover:bg-[#556052]/20'
+              : theme === 'dark'
+                ? 'text-gray-400 cursor-not-allowed' 
+                : 'text-[#d6cbbf] cursor-not-allowed'}
+          `}
+          title="Generate Ideas from Documents"
+        >
+          <Lightbulb size={20} />
+        </button>
+      )}
+      
+      {/* Documents Button - Opens sidebar and shows documents */}
+      <button
+        onClick={() => {
+          // First ensure sidebar is open
+          if (onToggle) onToggle();
+          // After sidebar animation completes, open documents section
+          setTimeout(() => {
+            setIsDocumentsVisible(true);
+            setIsChatHistoryVisible(false);
+          }, 300);
+        }}
+        className={`p-2 ${theme === 'dark' 
+          ? 'text-white hover:bg-gray-700' 
+          : 'text-[#5e4636] hover:bg-[#f5e6d8]'} rounded-full transition-colors`}
+        title="Documents"
+      >
+        <FileText size={20} className={theme === 'dark' ? "text-blue-500" : "text-[#c24124]"} />
+      </button>
+      
+      {/* Chats Button - Opens sidebar and shows chats */}
+      <button
+        onClick={() => {
+          // First ensure sidebar is open
+          if (onToggle) onToggle();
+          // After sidebar animation completes, open chat section
+          setTimeout(() => {
+            setIsChatHistoryVisible(true);
+            setIsDocumentsVisible(false);
+          }, 300);
+        }}
+        className={`p-2 ${theme === 'dark' 
+          ? 'text-white hover:bg-gray-700' 
+          : 'text-[#5e4636] hover:bg-[#f5e6d8]'} rounded-full transition-colors`}
+        title="Recent Chats"
+      >
+        <MessageCircle size={20} className={theme === 'dark' ? "text-green-500" : "text-[#3d7647]"} />
+      </button>
+    </div>
+    
+    {/* Add space between main icons and footer */}
+    <div className="flex-grow"></div>
+    
+    {/* Footer section with Export Chat and FAQ */}
+    <div className={`flex flex-col items-center space-y-5 mb-4 border-t ${theme === 'dark' 
+      ? 'border-gray-700/30' 
+      : 'border-[#e3d5c8]'} pt-5`}>
+      {/* Export Chat button */}
+      <button
+        onClick={() => {
+          if (onToggle) onToggle();
+          setTimeout(() => {
+            document.querySelector('.download-button')?.click();
+          }, 300);
+        }}
+        className={`p-2 ${theme === 'dark' 
+          ? 'text-white hover:bg-gray-700' 
+          : 'text-[#5e4636] hover:bg-[#f5e6d8]'} rounded-full transition-colors`}
+        title="Export Chats"
+      >
+        <Download size={20} className={theme === 'dark' ? "text-indigo-400" : "text-[#c24124]"} />
+      </button>
+      
+      {/* FAQ button */}
+      <button
+        onClick={() => window.open('/faq', '_blank')}
+        className={`p-2 ${theme === 'dark' 
+          ? 'text-white hover:bg-gray-700' 
+          : 'text-[#5e4636] hover:bg-[#f5e6d8]'} rounded-full transition-colors`}
+        title="Frequently Asked Questions"
+      >
+        <HelpCircle size={20} className={theme === 'dark' ? "text-purple-400" : "text-[#7a5741]"} />
+      </button>
+    </div>
+  </div>
+)}
+
       </div>
+      
       
       
     );
@@ -1643,6 +2173,7 @@ Sidebar.propTypes = {
   onSelectChat: PropTypes.func.isRequired,
   onToggle: PropTypes.func.isRequired,
   onDocumentSelect: PropTypes.func,
+
   onNewChat: PropTypes.func.isRequired,
   onSendMessage: PropTypes.func.isRequired,
   setSelectedDocuments: PropTypes.func.isRequired,
@@ -1651,4 +2182,6 @@ Sidebar.propTypes = {
 
 
 export default Sidebar;
+
+
 

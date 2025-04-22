@@ -9,7 +9,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
     const [password, setPassword] = useState('');
     const [huggingfaceToken, setHuggingfaceToken] = useState('');
     const [geminiToken, setGeminiToken] = useState('');
-    const [llamaToken, setLlamaToken] = useState('');  // New state for Llama token
+    const [llamaToken, setLlamaToken] = useState('');
     const [error, setError] = useState('');
 
     const handleSubmit = async (e) => {
@@ -24,7 +24,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                 password,
                 huggingface_token: huggingfaceToken,
                 gemini_token: geminiToken,
-                llama_token: llamaToken  // Include Llama token
+                llama_token: llamaToken
             });
 
             // If signup is successful, automatically log in
@@ -60,86 +60,84 @@ const SignupForm = ({ onSuccess = () => {} }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
             {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 max-h-20 overflow-y-auto" role="alert">
+                <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded relative mb-3 max-h-20 overflow-y-auto" role="alert">
                     <span className="block sm:inline">{error}</span>
                 </div>
             )}
             <div>
-                <label className="block text-sm font-medium text-gray-600">Username</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Username</label>
                 <input
                     type="text"
                     required
                     placeholder='User Name'
                     value={username} 
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
     
             <div>
-                <label className="block text-sm font-medium text-gray-600">Email</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Email</label>
                 <input
                     type="email"
                     placeholder="Email" 
                     value={email} 
                     onChange={(e) => setEmail(e.target.value)} 
                     required
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
           
             <div>
-                <label className="block text-sm font-medium text-gray-600">Password</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Password</label>
                 <input
                     type="password" 
                     placeholder="Password" 
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)} 
                     required
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-600">Hugging Face API Token</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Hugging Face API Token</label>
                 <input
                     type="text" 
                     placeholder="Hugging Face API Token" 
                     value={huggingfaceToken} 
                     onChange={(e) => setHuggingfaceToken(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
-              
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-600">Gemini API Token</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Gemini API Token</label>
                 <input
                     type="text" 
                     placeholder="Gemini API Token" 
                     value={geminiToken} 
                     onChange={(e) => setGeminiToken(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
-              
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-600">Llama API Token</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Llama API Token</label>
                 <input
                     type="text" 
                     placeholder="Llama API Token" 
                     value={llamaToken} 
                     onChange={(e) => setLlamaToken(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
 
             <button
                 type="submit"
-                className="w-full py-2 mt-6 font-semibold text-white bg-blue-900 rounded-lg hover:bg-blue-800 transition-all duration-300"
+                className="w-full py-2 mt-4 font-semibold text-white bg-blue-900 rounded-lg hover:bg-blue-800 transition-all duration-300"
             >
                 Sign Up
             </button>

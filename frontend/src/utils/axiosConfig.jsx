@@ -647,7 +647,50 @@ export const coreService = {
         throw error;
       });
   },
-
+ 
+ 
+  enhancePromptWithAI: (prompt) => {
+    return axiosInstance
+      .post("/core/projects/enhance-prompt/", {
+        prompt: prompt
+      })
+      .then((response) => {
+        console.log("Prompt enhanced:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to enhance prompt:",
+          error.response?.data || error.message
+        );
+        throw error;
+      });
+  },
+ 
+ 
+  uploadDocumentForPrompt: (file) => {
+    const formData = new FormData();
+    formData.append('document', file);
+   
+    return axiosInstance
+      .post("/core/projects/upload-document-for-prompt/", formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      .then((response) => {
+        console.log("Document processed:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to process document:",
+          error.response?.data || error.message
+        );
+        throw error;
+      });
+  },
+ 
   // Get all projects for current user
   getProjects: () => {
     return axiosInstance
@@ -664,7 +707,7 @@ export const coreService = {
         throw error;
       });
   },
-
+ 
   // Get single project details
   getProjectDetails: (projectId) => {
     return axiosInstance
@@ -681,7 +724,7 @@ export const coreService = {
         throw error;
       });
   },
-
+ 
   // Delete a project
   deleteProject: (projectId) => {
     return axiosInstance
@@ -698,7 +741,7 @@ export const coreService = {
         throw error;
       });
   },
-
+ 
   // Update an existing project
   // In your coreService or axiosConfig.js file
   updateProject: (projectId, projectData) => {
@@ -734,6 +777,44 @@ export const coreService = {
         throw error;
       });
   },
+// Archive a project
+archiveProject: async (projectId) => {
+  try {
+    // Correct URL structure to match your other API calls
+    const response = await axiosInstance.post(`/core/projects/${projectId}/archive/`);
+    console.log("Project archived:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error archiving project:', error.response?.data || error.message);
+    throw error;
+  }
+},
+
+// Unarchive a project
+unarchiveProject: async (projectId) => {
+  try {
+    // Correct URL structure to match your other API calls
+    const response = await axiosInstance.post(`/core/projects/${projectId}/unarchive/`);
+    console.log("Project unarchived:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error unarchiving project:', error.response?.data || error.message);
+    throw error;
+  }
+},
+
+// Get all archived projects
+getArchivedProjects: async () => {
+  try {
+    // Correct URL structure to match your other API calls
+    const response = await axiosInstance.get('/core/projects/archived/');
+    console.log("Archived projects retrieved:", response.data);
+    return response.data.projects;
+  } catch (error) {
+    console.error('Error fetching archived projects:', error.response?.data || error.message);
+    throw error;
+  }
+},
 };
 
 export const adminService = {

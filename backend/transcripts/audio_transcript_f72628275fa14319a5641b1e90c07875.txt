@@ -1,0 +1,249 @@
+00:00:35 I want to start with you Amy, because I know you obviously at Shell have had AI as part of the working process, creating efficiencies, a number of different use cases, you're using it to kind of transcend as well, at least do the transformation away from some of the the the carbon parts of the business towards that green evolution and you see that as consequential.
+00:00:58 How do you look, how do you assess what the needs are and then isolate and focus on the potential solutions before we get onto the question of how you incorporate that.
+00:01:08 How do you how do you how do you zero in on where the needs are across the business?
+00:01:14 I think it's like with any, um, improvement initiative, you're going to have have a lot of different ways you look for ideas and you can do them top down, you can do benchmarking, you can say where have we got high areas of cost, um, what's your intuition, what what what did you learn in your last business?
+00:01:33 And you can do it bottom up as well where you ask the machine operator, how is this process stupid?
+00:01:40 How could you do better?
+00:01:41 Also you look for any kind of very manual process or something which is very, um, tricky or often goes wrong.
+00:01:52 Um, I think the trouble is there's opportunity everywhere.
+00:01:56 The only difference is how much value it is.
+00:01:59 So once you've got your kind of long list of ideas or areas you think you could look at.
+00:02:05 It's then a question of your standard two by two matrix of feasibility, um how easy is it versus value.
+00:02:14 And that's the piece we use to to from the beginning say, do we think this is worth looking at?
+00:02:22 And then as we go through, as we learn more about the problem, you'll find actually it's harder than you thought, or it's easier than you thought, or the value isn't there for some reason.
+00:02:31 And then you adjust.
+00:02:32 But basically it's the usual, I don't actually think it's that different from any other lever you can pull in business in terms of process redesign and the rest of it, because it's also it's not just about efficiency, often it's a quality thing as well.
+00:02:46 If you want to improve customer service, you don't just want to talk to more customers in an hour and treat more of them.
+00:02:52 You also want to provide a better service, make sure you answer their query quickly.
+00:02:56 But fairly standard.
+00:02:57 Is it is it a harder sell to the board because of the some of the unknowns around at least the new generative parts of AI?
+00:03:07 The generative AI.
+00:03:09 Or or do you get it across the board as easily as you would any other potential?
+00:03:14 It's an interesting one because I think with AI and particularly generative AI, you have your usual problem with AI which is on the one hand people think it's magic.
+00:03:22 Yeah.
+00:03:22 Magic is an easy sell.
+00:03:25 On the other hand, you have to deliver to magic and that's not easy.
+00:03:29 So it's always this mix of you have to do a certain amount of marketing, you have to tell people what we can do genuinely if you haven't seen it before, this is the amazing stuff we can do, but also set expectations that this isn't magic.
+00:03:44 It's hard work, it often fails.
+00:03:47 It requires just as much process change, um, change management impact from the business as anything else.
+00:03:57 Um, and that's a very balanced message.
+00:03:59 But I've certainly found, um, with our leadership there's a lot of receptivity and it's there's a lot of excitement at the moment.
+00:04:08 Tony, let's bring you in at this point.
+00:04:10 Cloud services, the cloud essential to what what you do, and Temenos recently launching an AI power product as well for transactions, so to make it easier for your clients, financial services and banking clients to be able to kind of put out, at least monitor and give detailed information on it on on transactions for for their clients and their customers as well.
+00:04:42 How how do you identify the need?
+00:04:45 How have you been thinking about this and some of the potential pitfalls and opportunities around how to implement?
+00:04:53 Yeah, I think to to build on what Amy was saying, it's it's a lever, right?
+00:04:58 And we were joking just before in the uh over coffee that the the answer is generative AI.
+00:05:04 Now what's your problem.
+00:05:06 Yeah.
+00:05:07 Um and that's that's a a pitfall.
+00:05:11 Um so we're at Temenos we're a big fan of appropriate use of technology.
+00:05:19 Um, and that can be the pragmatic stuff.
+00:05:23 Um, a lot of it, again, building what Amy was saying, is around not only the AI elements, the culture and the organization as well.
+00:05:34 You're you are changing people's jobs.
+00:05:37 That's part of that's part of what we're doing and hopefully for the better.
+00:05:43 Um and so when you look at things like, you know, transaction classification is not new.
+00:05:50 We've been doing it for years and years based off, you know, originally rules, then traditional AI, if I can say that, at this point.
+00:06:00 Um and then moving into explainable AI and now generative AI.
+00:06:05 So it's layering on these tools and techniques, coupling it with the the culture change and the the underlying organization change that you need as well.
+00:06:17 Does that ring true with you, Alex at Ocado?
+00:06:21 Uh absolutely.
+00:06:23 Uh at Ocado we really first look at the business end to end, understand the operating costs uh of our retail partners.
+00:06:35 Socado, we are no longercado retail.
+00:06:38 Uh we own 50% ofcado retail along with M&S. Uhcado's business today is in providing an end-to-end ecom grocery logistics platform for international retailers world over.
+00:06:53 Socroger, Coles, Aon, uh to name just a few.
+00:06:58 Uh and teams that work for me and acrosscado technology, we focus really on understanding uh the customer's the customer's business model.
+00:07:08 And so, you know, last mile logistics is a very significant uh proportion of sales in terms of the cost.
+00:07:17 Uh as is uh operating the warehousing, the logistics.
+00:07:22 And so that's where we really focus an awful lot of our innovation uh is in these two areas are very high cost for retailers to operate uh a logistics platform.
+00:07:33 Uh but we need to have uh machine learning and AI pervasive through the end-to-end capability in order to be able to realize those sort of incremental gains that really lead to fundamentally either having a profitable business or not.
+00:07:50 because of, you know, how uh thin the margins are in grocery.
+00:07:53 And so, uh, you know, interaction from the webshop through to the warehouse, supply chain, routing systems, all the way to last mile grocery logistics, the delivery, uh have to be very tightly coupled together, uh and insights from one have to be fed through and so, you know, customer customer shopping habits uh influence how we design warehouses.
+00:08:20 Um and then all the way through into using AI uh to do things like picking and packing, which is what my teams do at the moment.
+00:08:29 Uh all the retailers around the world range different items.
+00:08:34 Uh in the UK, they range 70,000 different types of items and so the diversity and complexity is huge.
+00:08:41 There's no way you can build systems using traditional technologies and heristics.
+00:08:46 One really has to embrace uh systems that learn from data, uh such as AI and and doing that by really focusing the investment where it generates that return.
+00:09:00 How how do you decide whether to build in house or to buy in or pull in third parties?
+00:09:12 Uh, socado in effect is monetizing its intellectual property.
+00:09:18 And so we have to be very careful about how we use third party technology uh in the way that it's licensed, but we leverage an awful lot of common AI technology and tooling such as TensorFlow.
+00:09:31 Uh a few years ago we were working on a project to uh predict the failures in some of our pieces of actual automation, physical automation.
+00:09:41 Uh Mike came back from Aerospace uh a few years ago and so we leveraged something called Google WaveNet, which was a machine learning capability developed by Google for time domain signals.
+00:09:54 Uh it was traditionally developed for uh speech recognition, but you are able to adapt this technology for learning any time domain signal.
+00:10:02 And then, uh, you know, if you are uh in the process of physical automation, motors, sensors, these all generate time domain uh data streams and so we leverage things like uh WaveNet.
+00:10:17 And then we build our own the latest control system that we have uh leverages a different type of generative AI, not language models, uh but actually it's called behavior cloning, where we use the cognitive ability of humans to effectively remote control the robots to start with.
+00:10:35 Uh we then use that data to train the AI and it is end to end, right?
+00:10:41 So video comes in, uh robot control comes back out and the ability of these systems to generate uh to to generalize across problems they haven't seen is phenomenal.
+00:10:56 I mean it's just it truly blows my mind in terms of the capability.
+00:10:59 So that there's the human training element and then the human step back, steps back and they're able to continue these functions.
+00:11:03 Yeah.
+00:11:08 But AI isn't perfect.
+00:11:11 AI goes wrong.
+00:11:13 And so how we leverage humans and AI working collaboratively together.
+00:11:18 Uh if the robot for whatever reason is unable to complete a pick, uh maybe it drops an item, you know, packaging has changed, the packaging has been damaged or something, uh then we're able to use uh remote operators to effectively collaborate with the AI to help complete the task.
+00:11:37 So it uh performs operational recovery uh in order to maintain that kind of very reliable uh service that we need 24/7 picking millions of items a day.
+00:11:50 Uh and then we can use the data from a failed pick that has been recovered by this remote pilot to go and improve the AI over time.
+00:11:57 And so having a strategy where you build technology that for us this remote operation stuff, it helps us build the ML at the beginning.
+00:12:06 Uh it helps us operate it in terms of the the real world operational challenges, and then that it also helps us kind of build further improvements and so you're kind of you know, uh generating inertia in this flywheel that gets faster and faster and faster.
+00:12:22 There's a combination then of in house solutions and third parties when when it comes to you.
+00:12:26 Absolutely.
+00:12:27 What about at Shell, Amy?
+00:12:28 How do you think about whether to build it out in house?
+00:12:31 Do you have the resources?
+00:12:32 Do you have the team?
+00:12:33 And you've got cash rich company, do you do it in house or do you do you pull in third parties?
+00:12:38 I think similar to Alex, I don't think anyone could say they're building everything in house nowadays because your component parts, the component parts you get from outside are just so good now.
+00:12:50 You'd be crazy to try and do it on island.
+00:12:52 But I mean, we we always think in terms of is it our core IP?
+00:12:56 What are we?
+00:12:57 We are, we produce energy, we process it, we um distribute it and we trade it.
+00:13:07 That's core to what we do.
+00:13:09 And if it's something outside of that, which isn't completely easy or obvious or something like that, then we should use market standard.
+00:13:19 And if it's something within that, then we might want to look carefully at whether it's our core IP and therefore we want to keep it.
+00:13:24 I think build versus buy is a bit simple though because there's plenty of things like partner or build on something that's actually third party.
+00:13:32 And obviously we we use um cloud platforms like everyone else.
+00:13:38 We're not going to try and use our component parts.
+00:13:41 So actually it's it's always a patchwork of taking what you have from the market, building on what you need internally and just being really clear about how best to use your time and resources.
+00:13:52 How do you find are there frictions when it comes you you think of an oil company or an energy company like Shell and you think of engineers out there on rigs.
+00:14:02 You have those engineers, but you also have your software engineers building out some of these AI solutions.
+00:14:07 How do you meld the two?
+00:14:09 Is there a friction there?
+00:14:11 How do you get past that?
+00:14:14 That's a different type of friction.
+00:14:16 I mean, I I don't see that so much with the front line necessarily.
+00:14:22 That's always a change management question that you'll with any population, whatever it is, whether it's call center workers or people on an oil rig.
+00:14:30 It's always going to be some people think brilliant, let's try something new.
+00:14:34 Let's see how we can do this differently.
+00:14:36 Some people are like, I don't know, it's worked so fine fine so far for 25 years, why change it?
+00:14:42 And other people are kind of could go either way.
+00:14:45 So it's always an effort to to really do the change management, make sure everyone's bought in, make sure it's explained properly.
+00:14:52 Make sure it is to everyone's benefit as well.
+00:14:55 Of course people don't want to adopt things which they're not sure about.
+00:15:00 But I mean, that's a very different type of tension I think and that's one which again is no different from any other process change, any other change to a business that you'll have.
+00:15:12 Tony, is it is it is it easier for you because you're a pure software play?
+00:15:17 Maybe you don't have those same I mean you're smiling at this.
+00:15:20 So maybe maybe those tensions exist.
+00:15:23 How do you how do you Once you've decided, you've selected what the problem is, you've chosen whether you're going to do it in house or pull in a third party, make an acquisition, you found out what the what you the the problem you're trying to tackle is and then you have a team to tackle it with that particular solution.
+00:15:42 How do you embed that then into the business and mitigate the downside risks?
+00:15:48 So, I think you've been reading some of our blog posts because the keyword there is embed, right?
+00:15:55 So, so yes, much and again to to not necessarily just say yes us as well.
+00:16:03 But um, yeah, we take a mixed approach.
+00:16:05 We're not going to build out the nuts and bolts.
+00:16:09 There's a great deal of open source out there that we want to use and again partnering is is another angle.
+00:16:16 But then, um, you know, pulling it all together is where it starts to the magic happens as it were.
+00:16:27 So in terms of what we try to do and we try to encourage our clients the banks to do as well is not sort of put AI over there in a corner.
+00:16:40 We want all of our product managers, all of our product teams, all of our engineering teams to be able to use this platform capability which, you know, we may well change over time and that's fine.
+00:16:54 That's why we put a platform over the top of it so that they can then build our core IP, banking IP over the top of those models, over the top of those capabilities regardless of what the underlying AI tech is.
+00:17:10 So it's about exactly that, embedding it into the teams, embedding it into the products.
+00:17:16 That's how we've seen a lot of our customers be successful and that's how we're rolling out our AI power products as well.
+00:17:23 A lot of this innovation is obviously happening far ahead and moving far more quickly than the regulators are.
+00:17:31 And you work obviously in a very regulated space.
+00:17:36 So how how do you how do you keep ahead of your competitors whilst also assuring on ensuring that you don't fall foul of the regulators?
+00:17:46 So, one of the things that we talk about a lot is this concept of responsible AI.
+00:17:54 And, you know, previously we talked about um explainable AI and ethical AI.
+00:18:00 So we kind of roll it all together into this concept of responsible AI.
+00:18:04 And again, we were talking at the break about how we can see legislation coming down the track.
+00:18:12 We know it's coming, but moreover, um it's a duty of care if you will so that if somebody um has a loan application rejected, they need to understand why.
+00:18:27 You can't be using black box models that just, you know, computer says no.
+00:18:35 You need to understand why, you need to be able to challenge that and you need to provide evidence that if it is behavior based.
+00:18:45 So again at the break we were talking about the idea that perhaps as a as an SME, as a leader in a small company, you may not get a loan because your cholesterol is high.
+00:18:57 But unless you know that's what the problem is, then you don't have a way of fixing it and you don't have a way of challenging it.
+00:19:04 So yes, there's all this regulation coming down the track.
+00:19:08 Keep an eye on it, looking to the wider industry obviously.
+00:19:14 But also a lot of that regulation hopefully, maybe this is a little um a little optimistic is there to protect the consumers and ourselves.
+00:19:29 So really, you know, come back to do what's what's good, what's correct.
+00:19:34 Um is is the the North star if you will.
+00:19:37 Okay, so the importance of explainable models versus maybe some of the black box.
+00:19:41 Absolutely.
+00:19:42 So maybe a bit of a critique of of chat GPT and open AI on that level.
+00:19:48 We'll there's a question actually from the audience around what your use is of of open AI.
+00:19:52 So I'll get to that very shortly.
+00:19:55 Uh but Alex, on on the question of of regulation, on the question of data.
+00:20:00 Obviously, your clients are customer facing.
+00:20:03 I may not want your clients to know that on a Friday I buy 10 tubs of ice cream and a bottle of whiskey.
+00:20:09 So how do you think about data and abuses of data and how to put ring fence that so that you don't lose that client trust?
+00:20:19 Uh, so again, we have a responsible uh AI policy that has been heavily influenced.
+00:20:25 No we do.
+00:20:26 Want to ensure clients be tracked for data and we ensure lack of biases.
+00:20:31 Uh fundamentally in terms of your question, how do we ensure that kind of confidence from our retail partners?
+00:20:38 We don't track uh individual people, basically, right?
+00:20:42 They they hold all of that data in their own systems and what we get is effectively tokenized and anonymized data so that we can use that to improve the systems without having any access to uh any individual custom.
+00:20:55 So do you use on this question that's come through from from one of our uh viewers or someone in the room, open AI?
+00:21:01 Do you use it in your systems?
+00:21:03 Uh not within our systems.
+00:21:06 Uh at the moment sort of uh the free to use chat GPT, everything that you put into it is public domain.
+00:21:16 And so we are being very careful about how we do use it.
+00:21:19 However, our teams are, of engineers do leverage it as part of supporting them doing their work.
+00:21:26 Uh, I have a team of engineers 3D printing a robot arm, uh and actually we were uh exploring different permutations of which prints technology in order to drive costs and the right kind of mechanical performance.
+00:21:42 And so we leveraged chat GPT to uh explore different permutations with different types of print technology by posing it a series of questions.
+00:21:53 Uh it came back with the answers in a split second.
+00:21:57 We validated a number of them for accuracy.
+00:22:00 They were 100% accurate and then we just believe the rest, I'm afraid.
+00:22:03 Uh so as a support tool, if you understand how to write the right query, Yeah. Uh it is incredibly powerful.
+00:22:10 Next time bring the arm in with you.
+00:22:12 I will happily do that.
+00:22:13 Okay, so use chat GPT4, the hallucinations you stress test for some of those.
+00:22:18 Amy, you use, you've allowed chat GPT4 to be used at Shell.
+00:22:23 Not me personally, but yeah.
+00:22:25 Okay some institutions, some banks for example.
+00:22:27 Yeah, we certainly are using um well, we haven't actually blocked um public chat GPT yet.
+00:22:40 It's we've trained people, but we haven't blocked that.
+00:22:43 But more importantly, we are using the APIs by Microsoft on Open AI on Chat GPT, um to create services in Shell and to run a series, we would a whole program, um using that and other Generative AI models, both in vision and text to explore what we can do around the business to improve efficiency for sure.
+00:23:03 But also look at quality and other impacts.
+00:23:07 So we do have a large Generative AI program now.
+00:23:09 Okay.
+00:23:11 Uh another question coming through from the audience, where do you see the trend of automation going, especially when we're influenced by chip shortages and AI enthusiasm?
+00:23:26 Tony, let's put that question to you and video was very much in the headline in the last few weeks.
+00:23:30 Some of their most high-end chips cost about 20, 30,000 US dollars.
+00:23:34 We have a shortage of them here in the UK.
+00:23:37 What what is your take on that question?
+00:23:41 So, to an extent, the answer is cloud.
+00:23:45 Now, at the at the risk of coming back to the new answers, the answers is cloud now, what's your problem?
+00:23:52 Um, you know, the ability to put a pragmatic use of technology, putting the right workloads on the most efficient chips, cloud gives you that ability.
+00:24:04 Most banks typically for historic reasons will have an amount of tin that they can reuse.
+00:24:11 It's unlikely they've got vast amounts of GPUs or AI friendly kit lying around.
+00:24:19 So, um, and you know, in 2023, do you want to be building that?
+00:24:24 Now, there's um my friends at IBM, uh we've had a few discussions on this and the idea of a hybrid cloud where some of our customers, some of our banks need to keep this data on Prem or want to for whatever reasons.
+00:24:41 Um, then, you know, there's a different set of chip technology that they can bring to bear there.
+00:24:46 So cloud but hybrid, um so yeah, a combination of those two, again appropriate technology for the right for the right use case.
+00:24:58 Alex, are you project out five years, where do you see automation taking us as we weigh up these two?
+00:25:05 It seems conflicting pressures, the shortage of chips and this hype and enthusiasm around AI.
+00:25:12 Uh in the space that we operate.
+00:25:15 I mean I see it becoming ever more efficient our operation uh for the retailers that we support fundamentally.
+00:25:22 And without getting to a different challenging question about AI and jobs, uh the main uh direct costs that our retailers face is uh, you know, fairly low skill labor roles, whether they are picking and packing the warehouse or doing other types of handling.
+00:25:36 all that jobs, aren't they?
+00:25:38 I I'm afraid I kind of think that at some point in the event horizon they are.
+00:25:41 Uh moving in uncertain environments, if you're on a road is much more complicated than handling things in a warehouse, which is where we are focusing at the moment.
+00:25:50 Uh when it comes to the challenge and constraints of chip availability.
+00:25:54 Actually, at Ocado years ago, we uh encountered our threshold of how much spend we are willing to make in terms of cost for cloud costs.
+00:26:06 And so today, uh we are very conscious when we build new systems about the amount of logging that we're creating, amount of data that we're storing.
+00:26:16 Uh our ability to generate data versus the utility we get from that data, it far exceeds uh the potential benefits and so actually having a very strong focus on how you maximize your utility from data.
+00:26:31 Uh which therefore ultimately ends up meaning we have to be quite efficient with the hardware that we're using where we deploy robots.
+00:26:40 Uh the robots need to be for a certain price point and so I'm afraid we can't deploy them with just like tens of GPUs.
+00:26:47 And so actually we have to find ways of deploying uh very advanced physical automation systems and also software based automation systems uh that don't just consume uh all the compute that you can throw at it.
+00:27:01 So actually being very efficient with data and then, which means being efficient with compute at the same time is key.
+00:27:08 Amy, how much uh free rein do you have to spend on compute?
+00:27:12 Are you are you concerned that the the lack of compute uh the shortage of ships, the cost could could hold back some of these innovations?
+00:27:20 Uh, yes.
+00:27:22 Um, I think the supply chains currently are very fragile and there are efforts being made to make them more robust with government support in various countries.
+00:27:33 That will take some time to flow through.
+00:27:35 So I think the combination of the absolute hype and the fragile supply chain could lead to a bit of a crunch.
+00:27:42 Whether that's actually going to impact everyday operations, I'm not sure because these things take time to develop and really put into practice anyway, but that definitely is a concern.
+00:27:53 There's another question coming and about quantum computing and the impact on the pace in terms of how quantum computing might may speed up the implementation of AI.
+00:28:06 Anyone kind of jumping out with a view, a strong view on that?
+00:28:09 I think it'll take some time.
+00:28:11 It'll take some time.
+00:28:13 Yeah.
+00:28:14 Still a ways up.
+00:28:15 We have a researchers dabbling occasionally.
+00:28:19 There's a problem called the Napsack problem, which is a very classic optimization problem.
+00:28:24 It looks not that dissimilar to a cubing problem that we have where we theoretically testate all of the potential groceries into our shopping baskets.
+00:28:34 As you are clicking add to basket, we are doing that testation live so that we can maximize the efficiency of the traveling salesman problem that is the last mile grocery logistics.
+00:28:46 And at the point that we've tried to formulate this problem into a quantum problem, the number of cubits we need is in the millions and uh at the moment DWave machines are in the thousands and maybe there's some governments out there with uh machines which are far more powerful, but for me when we've dabbled in it, it looks very distant at the moment.
+00:29:04 Not yet for sure.
+00:29:06 Not yet.
+00:29:06 We're talking time frames of years, decades.
+00:29:10 So I'm I mean, depending on who you talk to, constant computing is tomorrow or 300 years away.
+00:29:20 Right, so somewhere between Somewhere between that.
+00:29:23 All right, fantastic.
+00:29:24 Well, thank you very much.

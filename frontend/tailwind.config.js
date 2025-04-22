@@ -17,6 +17,7 @@ export default {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		colors: {
+			'sidebar-bg': '#0D0F12',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -56,9 +57,30 @@ export default {
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
-  			}
+  			},
+			// Add theme-specific colors
+			dark: {
+				bg: '#121a1e',
+				card: '#1e3a3e',
+				text: '#ffffff',
+				muted: '#a0aec0',
+				accent: '#5ff2b6',
+				primary: '#2c3e95',
+				secondary: '#3fa88e',
+			  },
+			  light: {
+				bg: '#f8fafc',
+				card: '#ffffff',
+				text: '#1a3c34',
+				muted: '#64748b',
+				accent: '#0d9488',
+				primary: '#0f766e',
+				secondary: '#14b8a6',
+			  }
+
   		}
   	}
   },
   plugins: [require("tailwindcss-animate")],
 }
+

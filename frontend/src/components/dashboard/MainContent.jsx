@@ -1581,8 +1581,7 @@
 //                             </>
 //                           ) : (
 //                             <div
-//                               dangerouslySetInnerHTML={{
-//                                 __html: msg.content
+//                               dangerouslySetInnerHTML={{ __html: marked(msg.content)
 //                                   .replace(/```html/g, "")
 //                                   .replace(/```/g, "")
 //                                   .replace(/"""html/g, "")
@@ -1619,7 +1618,9 @@
 //                                     '</table><p class="mt-4">'
 //                                   )
 //                                   .replace(/\n{3,}/g, "\n\n")
-//                                   .replace(/<\/b>\s*\n+/g, "</b>\n"),
+//                                   .replace(/<\/b>\s*\n+/g, "</b>\n")
+// .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+// .replace(/\*(.*?)\*/g, '<em>$1</em>')
 //                               }}
 //                             />
 //                           )}
@@ -2277,7 +2278,7 @@ import {
 } from "./ConsolidatedSummaryLoader";
 import { ConsolidatedViewBadge, badgeStyles } from "./ConsolidatedViewBadge";
 import DocumentSelector from "./DocumentSelector";
-
+import ResponseRegenerator from "./ResponseRegenerator";
 import {
   SummaryGenerationLoader,
   SummaryFormatter,
@@ -2287,6 +2288,17 @@ import {
 import MessageVersionHistory from "./MessageVersionHistory";
 import DocumentProcessingLoader from "./DocumentUpload/DocumentProcessingLoader";
 import WebModeWelcome from "./WebModeWelcome";
+import TextSizeControls from "./TextSizeControls";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
+
+// Configure marked
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  smartypants: true,
+});
+
 const MainContent = ({
   selectedChat,
   mainProjectId,
@@ -2299,6 +2311,7 @@ const MainContent = ({
   setIsSummaryPopupOpen,
   selectedDocuments: propSelectedDocuments,
   setSelectedDocuments,
+  onChatInputFocus,
 }) => {
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState("");
@@ -2363,6 +2376,187 @@ const MainContent = ({
   const [responseFormat, setResponseFormat] = useState("auto-detect");
   const [hasUploadPermissions, setHasUploadPermissions] = useState(true);
 
+  const [regeneratedResponses, setRegeneratedResponses] = useState({});
+  const [currentResponseIndex, setCurrentResponseIndex] = useState({});
+  const [textSize, setTextSize] = useState("medium");
+
+  // Add this inside your MainContent component
+useEffect(() => {
+  // Configure DOMPurify
+  DOMPurify.setConfig({
+    ALLOWED_TAGS: ['p', 'b', 'strong', 'i', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'code', 'pre', 'blockquote', 'br', 'hr', 'span', 'div'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
+  });
+}, []);
+
+  useEffect(() => {
+    // Save to localStorage whenever textSize changes
+    localStorage.setItem('preferredTextSize', textSize);
+  }, [textSize]);
+
+  // Add this useEffect to load saved preference on component mount
+  useEffect(() => {
+    const savedTextSize = localStorage.getItem('preferredTextSize');
+    if (savedTextSize) {
+      setTextSize(savedTextSize);
+    }
+  }, []);
+
+  
+  const getTextSizeClass = (size) => {
+    switch (size) {
+      case "xs":
+        return "text-xs";
+      case "small":
+        return "text-sm";
+      case "medium":
+        return "text-base";
+      case "large":
+        return "text-lg";
+      case "xl":
+        return "text-xl";
+      case "2xl":
+        return "text-2xl";
+      default:
+        return "text-base"; // medium as default
+    }
+  };
+
+  
+
+  // Add event handler to textarea
+  const handleTextareaFocus = () => {
+    if (onChatInputFocus) onChatInputFocus();
+  };
+  
+
+  // Updated handleRegenerateResponse function
+const handleRegenerateResponse = async (messageIndex, length = responseLength) => {
+  // Find the user message that prompted this response
+  const userMessageIndex = messageIndex - 1;
+  
+  if (userMessageIndex < 0 || conversation[userMessageIndex].role !== 'user') {
+    toast.error('Could not find the question for this response');
+    return;
+  }
+  
+  const userMessage = conversation[userMessageIndex].content;
+  
+  try {
+    // Make sure regeneratedResponses exists for this message index
+    if (!regeneratedResponses[messageIndex]) {
+      // Store the original response as the first response in the array
+      setRegeneratedResponses(prev => ({
+        ...prev,
+        [messageIndex]: [conversation[messageIndex]]
+      }));
+      
+      // Set current index to 0 (the original response)
+      setCurrentResponseIndex(prev => ({
+        ...prev,
+        [messageIndex]: 0
+      }));
+    }
+
+    // Show a toast to indicate regeneration is in progress
+    // const toastId = toast.loading(`Regenerating ${length} response...`);
+    
+    // Force web mode when no documents are selected
+    const useWebMode = localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+    
+    // Prepare request data for the API
+    const requestData = {
+      message: userMessage,
+      conversation_id: conversationId,
+      selected_documents: localSelectedDocuments,
+      main_project_id: mainProjectId,
+      use_web_knowledge: useWebMode,
+      response_length: length,
+      response_format: responseFormat,
+      general_chat_mode: localSelectedDocuments.length === 0,
+      regenerate: true
+    };
+    
+    const response = await chatService.sendMessage(requestData);
+    
+    if (response && response.data) {
+      const regeneratedMessage = {
+        role: 'assistant',
+        content: response.data.response || response.data.content,
+        citations: response.data.citations || [],
+        follow_up_questions: response.data.follow_up_questions || [],
+        use_web_knowledge: response.data.use_web_knowledge || useWebMode,
+        response_length: response.data.response_length || length,
+        response_format: response.data.response_format || responseFormat,
+        regenerated: true,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Add the regenerated response to the collection
+      setRegeneratedResponses(prev => {
+        const updatedResponses = [...(prev[messageIndex] || []), regeneratedMessage];
+        return {
+          ...prev,
+          [messageIndex]: updatedResponses
+        };
+      });
+      
+      // Set the current index to the newly added response
+      setCurrentResponseIndex(prev => ({
+        ...prev,
+        [messageIndex]: (prev[messageIndex] !== undefined ? prev[messageIndex] : 0) + 1
+      }));
+      
+      // Update the displayed message in the conversation
+      setConversation(prev => {
+        const updatedConversation = [...prev];
+        updatedConversation[messageIndex] = regeneratedMessage;
+        return updatedConversation;
+      });
+      
+      // Update follow-up questions if available
+      if (response.data.follow_up_questions?.length > 0) {
+        setCurrentFollowUpQuestions(response.data.follow_up_questions);
+        setFollowUpQuestions(response.data.follow_up_questions);
+      }
+      toast.success('Response regenerated successfully!', {
+        
+        isLoading: false,
+        autoClose: 2000
+      });
+      
+    }
+  } catch (error) {
+    console.error("Response regeneration error:", error);
+    toast.error("Failed to regenerate response. Please try again.");
+  }
+  
+  
+  
+  // Return a promise that can be awaited by the ResponseRegenerator component
+  return Promise.resolve();
+};
+  
+  // Function to display a specific regenerated response
+  const displayRegeneratedResponse = (messageIndex, responseIndex) => {
+    if (!regeneratedResponses[messageIndex] || 
+        !regeneratedResponses[messageIndex][responseIndex]) {
+      return;
+    }
+    
+    // Update the displayed message in the conversation
+    setConversation(prev => {
+      const updatedConversation = [...prev];
+      updatedConversation[messageIndex] = regeneratedResponses[messageIndex][responseIndex];
+      return updatedConversation;
+    });
+    
+    // Update the current index
+    setCurrentResponseIndex(prev => ({
+      ...prev,
+      [messageIndex]: responseIndex
+    }));
+  };
   // Add a function to check upload permissions when component mounts
   const checkUploadPermissions = async () => {
     try {
@@ -2395,44 +2589,49 @@ const MainContent = ({
     return (
       <div className="relative">
         <select
-          value={responseLength}
-          onChange={(e) => {
-            setResponseLength(e.target.value);
-            toast.info(
-              `Response mode: ${
-                e.target.value === "short"
-                  ? "Short & Concise"
-                  : "Detailed & Comprehensive"
-              }`
-            );
-          }}
-          className="
-          appearance-none
-          bg-gray-900/80
-          hover:bg-gray-800/90
-          text-gray-300
-          text-xs
-          rounded-lg
-          px-2
-          py-1
-          pl-6
-          pr-7
-          focus:outline-none
-          focus:ring-1
-          focus:ring-blue-500
-          cursor-pointer
-          transition-colors
-          border border-blue-500/20
-        "
-        >
+  value={responseLength}
+  onChange={(e) => {
+    setResponseLength(e.target.value);
+    toast.info(
+      `Response mode: ${
+        e.target.value === "short"
+          ? "Short & Concise"
+          : "Detailed & Comprehensive"
+      }`
+    );
+  }}
+  className="
+    appearance-none
+    dark:bg-gray-900/10
+    dark:hover:bg-gray-800/90
+    bg-white 
+    border border-[#d6cbbf]
+    hover:bg-[#ddd9c5]/10
+    dark:text-gray-300
+    text-[#381c0f]
+    text-xs
+    rounded-lg
+    px-2
+    py-1
+    pl-6
+    pr-7
+    focus:outline-none
+    focus:ring-1
+    focus:ring-[#a55233]
+    dark:focus:ring-blue-500
+    cursor-pointer
+    transition-colors
+    dark:border-blue-500/20
+  "
+>
           <option value="short">Short</option>
           <option value="comprehensive">Comprehensive</option>
         </select>
         <span className="absolute inset-y-0 left-1 flex items-center pointer-events-none">
-          <Layers className="h-3 w-3 text-blue-400" />
+          <Layers className="h-3 w-3 dark:text-blue-400" />
         </span>
         <span className="absolute inset-y-0 right-1 flex items-center pointer-events-none">
-          <ChevronDown className="h-3 w-3 text-blue-400" />
+          <ChevronDown className="h-3 w-3 dark:text-blue-400" />
         </span>
       </div>
     );
@@ -2449,22 +2648,27 @@ const MainContent = ({
             toast.info(`Format mode: ${getFormatDisplayName(e.target.value)}`);
           }}
           className="
-          appearance-none
-          bg-gray-900/80
-          hover:bg-gray-800/90
-          text-gray-300
-          text-xs
-          rounded-lg
-          px-2
-          py-1
-          pl-6
-          pr-7
-          focus:outline-none
-          focus:ring-1
-          focus:ring-blue-500
-          cursor-pointer
-          transition-colors
-          border border-blue-500/20
+           appearance-none
+    dark:bg-gray-900/10
+    dark:hover:bg-gray-800/90
+    bg-white 
+    border border-[#d6cbbf]
+    hover:bg-[#ddd9c5]/10
+    dark:text-gray-300
+    text-[#381c0f]
+    text-xs
+    rounded-lg
+    px-2
+    py-1
+    pl-6
+    pr-7
+    focus:outline-none
+    focus:ring-1
+    focus:ring-[#a55233]
+    dark:focus:ring-blue-500
+    cursor-pointer
+    transition-colors
+    dark:border-blue-500/20
         "
         >
           <option value="auto_detect">Auto-Detect</option>
@@ -2480,10 +2684,10 @@ const MainContent = ({
           <option value="technical_deep_dive">Technical Deep Dive</option>
         </select>
         <span className="absolute inset-y-0 left-1 flex items-center pointer-events-none">
-          <ScrollText className="h-3 w-3 text-blue-400" />
+          <ScrollText className="h-3 w-3 dark:text-blue-400" />
         </span>
         <span className="absolute inset-y-0 right-1 flex items-center pointer-events-none">
-          <ChevronDown className="h-3 w-3 text-blue-400" />
+          <ChevronDown className="h-3 w-3 dark:text-blue-400" />
         </span>
       </div>
     );
@@ -2728,226 +2932,256 @@ const MainContent = ({
     }
   };
 
-  const renderSummaryView = () => {
-    // If no documents are selected, show a placeholder
-    if (!localSelectedDocuments || localSelectedDocuments.length === 0) {
-      return (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-          <p className="mb-4">No documents selected</p>
-          <button
-            onClick={() => toggleView("chat")}
-            className="px-4 py-2 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors text-white"
-          >
-            <MessageCircle className="inline-block mr-2 h-4 w-4" />
-            Return to Chat
-          </button>
-          {isConsolidatedSummaryLoading && <ConsolidatedSummaryLoader />}
-        </div>
-      );
-    }
+ // This code focuses on the renderSummaryView method and related styling
+// to be updated in your MainContent.jsx file
 
-    // Get the currently active document for summary view
-    const currentDocId = activeDocumentForSummary || localSelectedDocuments[0];
-    const currentDocument = documents.find(
-      (doc) => doc.id.toString() === currentDocId
-    );
-
-    // Check if all selected documents have summaries
-    const selectedDocs = documents.filter((doc) =>
-      localSelectedDocuments.includes(doc.id.toString())
-    );
-    const allDocsHaveSummaries = selectedDocs.every(
-      (doc) => doc.summary && doc.summary.trim() !== ""
-    );
-
-    // Determine which summary to show
-    const summaryToShow = isConsolidatedView
-      ? consolidatedSummary
-      : selectedChat?.summary ||
-        currentDocument?.summary ||
-        persistentSummary ||
-        "No summary available";
-
-    // Handler for document selection change
-    const handleDocumentChange = (event) => {
-      const newDocId = event.target.value;
-      setActiveDocumentForSummary(newDocId);
-
-      if (newDocId === "consolidated") {
-        setIsConsolidatedView(true);
-        // Generate consolidated summary if it doesn't exist
-        if (!consolidatedSummary) {
-          handleGenerateConsolidatedSummary();
-        }
-      } else {
-        setIsConsolidatedView(false);
-
-        // Move selected document to front of array
-        const updatedDocs = [
-          newDocId,
-          ...localSelectedDocuments.filter((id) => id !== newDocId),
-        ];
-        setLocalSelectedDocuments(updatedDocs);
-
-        if (setSelectedDocuments) {
-          setSelectedDocuments(updatedDocs);
-        }
-      }
-    };
-
+const renderSummaryView = () => {
+  // If no documents are selected, show a placeholder
+  if (!localSelectedDocuments || localSelectedDocuments.length === 0) {
     return (
-      <div className="absolute inset-0 pt-16 backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-300 ease-in-out ">
-        {/* View Toggle at the top */}
-        <div className="fixed left-0 right-0 flex justify-center z-50 top-4">
-          <div className="flex items-center space-x-2 bg-gray-800/50 rounded-full p-1 backdrop-blur-md shadow-lg">
-            <button
-              title="Chat View"
-              onClick={() => toggleView("chat")}
-              className={`
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-[#5a544a] dark:text-gray-400">
+        <p className="mb-4">No documents selected</p>
+        <button
+          onClick={() => toggleView("chat")}
+          className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gray-800/50 dark:hover:bg-gray-700/50 rounded-lg transition-colors text-white"
+        >
+          <MessageCircle className="inline-block mr-2 h-4 w-4" />
+          Return to Chat
+        </button>
+        {isConsolidatedSummaryLoading && <ConsolidatedSummaryLoader />}
+      </div>
+    );
+  }
+
+  // Get the currently active document for summary view
+  const currentDocId = activeDocumentForSummary || localSelectedDocuments[0];
+  const currentDocument = documents.find(
+    (doc) => doc.id.toString() === currentDocId
+  );
+
+  // Check if all selected documents have summaries
+  const selectedDocs = documents.filter((doc) =>
+    localSelectedDocuments.includes(doc.id.toString())
+  );
+  const allDocsHaveSummaries = selectedDocs.every(
+    (doc) => doc.summary && doc.summary.trim() !== ""
+  );
+
+  // Determine which summary to show
+  const summaryToShow = isConsolidatedView
+    ? consolidatedSummary
+    : selectedChat?.summary ||
+      currentDocument?.summary ||
+      persistentSummary ||
+      "No summary available";
+
+  // Handler for document selection change
+  const handleDocumentChange = (event) => {
+    const newDocId = event.target.value;
+    setActiveDocumentForSummary(newDocId);
+
+    if (newDocId === "consolidated") {
+      setIsConsolidatedView(true);
+      // Generate consolidated summary if it doesn't exist
+      if (!consolidatedSummary) {
+        handleGenerateConsolidatedSummary();
+      }
+    } else {
+      setIsConsolidatedView(false);
+
+      // Move selected document to front of array
+      const updatedDocs = [
+        newDocId,
+        ...localSelectedDocuments.filter((id) => id !== newDocId),
+      ];
+      setLocalSelectedDocuments(updatedDocs);
+
+      if (setSelectedDocuments) {
+        setSelectedDocuments(updatedDocs);
+      }
+    }
+  };
+
+  return (
+    <div className="absolute inset-0 pt-16 backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-300 ease-in-out">
+      {/* View Toggle at the top */}
+      <div className="fixed left-0 right-0 flex justify-center z-50 top-4">
+        <div className="flex items-center space-x-2 bg-white/80 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-md shadow-lg border border-[#d6cbbf] dark:border-blue-500/20">
+          <button
+            title="Chat View"
+            onClick={() => toggleView("chat")}
+            className={`
               px-3 py-1.5 rounded-full text-xs transition-all duration-300
               ${
                 currentView === "chat"
-                  ? "bg-gradient-to-r from-blue-600/70 to-green-500/70 text-white"
-                  : "text-gray-300 hover:bg-gray-700/50"
+                  ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600/70 dark:to-green-500/70 text-white"
+                  : "text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50"
               }
             `}
-            >
-              <MessageCircle className="inline-block mr-1.5 h-3 w-3" />
-              Chat
-            </button>
-            <button
-              title="Summarize"
-              onClick={() => toggleView("summary")}
-              className={`
+          >
+            <MessageCircle className="inline-block mr-1.5 h-3 w-3" />
+            Chat
+          </button>
+          <button
+            title="Summarize"
+            onClick={() => toggleView("summary")}
+            className={`
               px-3 py-1.5 rounded-full text-xs transition-all duration-300
               ${
                 currentView === "summary"
-                  ? "bg-gradient-to-r from-blue-600/70 to-green-500/70 text-white"
-                  : "text-gray-300 hover:bg-gray-700/50"
+                  ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600/70 dark:to-green-500/70 text-white"
+                  : "text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50"
               }
             `}
-            >
-              <ScrollText className="inline-block mr-1.5 h-3 w-3" />
-              Summary
-            </button>
-          </div>
+          >
+            <ScrollText className="inline-block mr-1.5 h-3 w-3" />
+            Summary
+          </button>
         </div>
-        <div className="h-full w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-          <div className="h-full flex flex-col bg-gradient-to-br from-gray-900/80 via-gray-800/80 to-gray-900/80 border border-blue-500/20 rounded-3xl shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="px-4 sm:px-6 py-3 sm:py-2 bg-gradient-to-r from-gray-800/30 to-blue-900/20 border-b border-blue-500/10 flex justify-between items-center">
-              <div>
-                <h2 className="text-sm sm:text-xl font-bold text-white">
-                  {isConsolidatedView
-                    ? "Consolidated Document Summary"
-                    : "Document Summary"}
-                </h2>
-                {/* {currentDocument && !isConsolidatedView && (
-                  <p className="text-sm text-blue-400 mt-1">
-                    File: {currentDocument.filename}
-                  </p>
-                )} */}
+      </div>
 
-                {isConsolidatedView && (
-                  <ConsolidatedViewBadge
-                    documentCount={localSelectedDocuments.length}
-                  />
-                )}
-              </div>
+      <div className="h-full w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+        <div className="h-full flex flex-col bg-white/90 dark:bg-gradient-to-br dark:from-gray-900/80 dark:via-gray-800/80 dark:to-gray-900/80 border border-[#d6cbbf] dark:border-blue-500/20 rounded-3xl shadow-md dark:shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="px-4 sm:px-6 py-3 sm:py-2 bg-[#556052] dark:bg-gradient-to-r dark:from-gray-900/80 dark:via-gray-800/80 dark:to-gray-900/80  border-b border-[#e3d5c8] dark:border-blue-900/90 flex justify-between items-center">
+            <div>
+              <h2 className="text-sm sm:text-xl font-normal font-serif text-white">
+                {isConsolidatedView
+                  ? "Consolidated Document Summary"
+                  : "Document Summary"}
+              </h2>
+              
 
-              <div className="flex items-center space-x-3">
-                {/* Enhanced Document Selector */}
-                {localSelectedDocuments.length > 0 && (
-                  <DocumentSelector
-                    documents={documents}
-                    selectedDocuments={localSelectedDocuments}
-                    activeDocumentId={activeDocumentForSummary}
-                    isConsolidatedView={isConsolidatedView}
-                    onDocumentChange={handleDocumentChange}
-                    onConsolidatedView={handleGenerateConsolidatedSummary}
-                    isConsolidatedSummaryLoading={isConsolidatedSummaryLoading}
-                  />
-                )}
-                {/* Generate Summary Button - Only show if summaries don't exist */}
-                {!allDocsHaveSummaries && (
-                  <button
-                    onClick={handleGenerateSummary}
-                    disabled={isSummaryGenerating}
-                    className={`
+              {isConsolidatedView && (
+                <ConsolidatedViewBadge
+                  documentCount={localSelectedDocuments.length}
+                />
+              )}
+            </div>
+
+            <div className="flex items-center space-x-3">
+              {/* Enhanced Document Selector */}
+              {localSelectedDocuments.length > 0 && (
+                <DocumentSelector
+                  documents={documents}
+                  selectedDocuments={localSelectedDocuments}
+                  activeDocumentId={activeDocumentForSummary}
+                  isConsolidatedView={isConsolidatedView}
+                  onDocumentChange={handleDocumentChange}
+                  onConsolidatedView={handleGenerateConsolidatedSummary}
+                  isConsolidatedSummaryLoading={isConsolidatedSummaryLoading}
+                />
+              )}
+              {/* Generate Summary Button - Only show if summaries don't exist */}
+              {!allDocsHaveSummaries && (
+                <button
+                  onClick={handleGenerateSummary}
+                  disabled={isSummaryGenerating}
+                  className={`
                     px-4 py-2 rounded-lg text-sm
                     ${
                       isSummaryGenerating
-                        ? "bg-gray-600 cursor-not-allowed"
-                        : "bg-gradient-to-r from-blue-600 to-green-500 hover:from-blue-700 hover:to-green-600"
+                        ? "bg-[#d6cbbf] dark:bg-gray-600 cursor-not-allowed"
+                        : "bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600 dark:to-green-500 dark:hover:from-blue-700 dark:hover:to-green-600"
                     }
                     text-white transition-all duration-300 flex items-center space-x-2
                   `}
-                  >
-                    {isSummaryGenerating ? (
-                      <>
-                        <span>Generating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Bot className="h-4 w-4" />
-                        <span>Generate Summary</span>
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {/* Copy Button */}
-                <button
-                  onClick={copySummaryToClipboard}
-                  className="text-gray-300 hover:text-white transition-colors p-2 rounded-full hover:bg-blue-500/20"
-                  title="Copy Summary"
                 >
-                  <Copy className="h-5 w-5 sm:h-6 sm:w-6" />
+                  {isSummaryGenerating ? (
+                    <>
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Bot className="h-4 w-4" />
+                      <span>Generate Summary</span>
+                    </>
+                  )}
                 </button>
-              </div>
-            </div>
-
-            {/* Summary Content */}
-            {/* Summary Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar bg-gray-900/80 p-4">
-              {isConsolidatedView && !consolidatedSummary ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <Layers className="h-16 w-16 mb-4 text-gray-600" />
-                  <p className="mb-4 text-center">
-                    {isConsolidatedSummaryLoading
-                      ? "Generating consolidated summary..."
-                      : "Click 'Analyze Together' to create a unified summary across all documents"}
-                  </p>
-                </div>
-              ) : (!persistentSummary &&
-                  !consolidatedSummary &&
-                  !summaryToShow) ||
-                summaryToShow === "No summary available" ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <ScrollText className="h-16 w-16 mb-4 text-gray-600" />
-                  <p className="mb-4 text-center">
-                    {allDocsHaveSummaries
-                      ? "Loading summary..."
-                      : "Click 'Generate Summary' to analyze the selected documents"}
-                  </p>
-                </div>
-              ) : (
-                <SummaryFormatter content={summaryToShow} />
               )}
+
+              {/* Copy Button */}
+              <button
+                onClick={copySummaryToClipboard}
+                className="text-white hover:text-[#a55233] dark:text-gray-300 dark:hover:text-white transition-colors p-2 rounded-full hover:bg-[#f5e6d8]/50 dark:hover:bg-blue-500/20"
+                title="Copy Summary"
+              >
+                <Copy className="h-5 w-5 sm:h-6 sm:w-6" />
+              </button>
             </div>
           </div>
-        </div>
-        {/* Show proper loading states */}
-        {isSummaryGenerating && <SummaryGenerationLoader />}
-        {isConsolidatedSummaryLoading && <ConsolidatedSummaryLoader />}
 
-        {/* Styles */}
-        <style>{summaryStyles}</style>
-        <style>{consolidatedSummaryStyles}</style>
-        <style>{badgeStyles}</style>
+          {/* Summary Content */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-gray-900/80 p-4">
+            {isConsolidatedView && !consolidatedSummary ? (
+              <div className="flex flex-col items-center justify-center h-full text-[#8c715f] dark:text-gray-400">
+                <Layers className="h-16 w-16 mb-4 text-[#a55233]/30 dark:text-gray-600" />
+                <p className="mb-4 text-center">
+                  {isConsolidatedSummaryLoading
+                    ? "Generating consolidated summary..."
+                    : "Click 'Analyze Together' to create a unified summary across all documents"}
+                </p>
+              </div>
+            ) : (!persistentSummary &&
+                !consolidatedSummary &&
+                !summaryToShow) ||
+              summaryToShow === "No summary available" ? (
+              <div className="flex flex-col items-center justify-center h-full text-[#8c715f] dark:text-gray-400">
+                <ScrollText className="h-16 w-16 mb-4 text-[#a55233]/30 dark:text-gray-600" />
+                <p className="mb-4 text-center">
+                  {allDocsHaveSummaries
+                    ? "Loading summary..."
+                    : "Click 'Generate Summary' to analyze the selected documents"}
+                </p>
+              </div>
+            ) : (
+              <SummaryFormatter content={summaryToShow} />
+            )}
+          </div>
+        </div>
       </div>
-    );
-  };
+      {/* Show proper loading states */}
+      {isSummaryGenerating && <SummaryGenerationLoader />}
+      {isConsolidatedSummaryLoading && <ConsolidatedSummaryLoader />}
+
+      {/* Styles */}
+      <style>{summaryStyles}</style>
+      <style>{consolidatedSummaryStyles}</style>
+      <style>{badgeStyles}</style>
+      
+      {/* Add light theme specific styles */}
+      <style>{`
+        /* Light theme specific prose styles */
+        .SummaryFormatter h1, .SummaryFormatter h2, .SummaryFormatter h3, .SummaryFormatter h4 {
+          color: #0a3b25;
+        }
+        .SummaryFormatter p, .SummaryFormatter ul, .SummaryFormatter ol {
+          color: #5e4636;
+        }
+        .SummaryFormatter strong {
+          color: #5e4636;
+          font-weight: 600;
+        }
+        
+        /* Custom scrollbar for light theme */
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(213, 190, 170, 0.1);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(165, 82, 51, 0.2);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(165, 82, 51, 0.3);
+        }
+      `}</style>
+    </div>
+  );
+};
 
   useEffect(() => {
     // Update persistent summary when prop or popup summary changes
@@ -3746,52 +3980,52 @@ const MainContent = ({
                   <div
                     className={`flex ${
                       msg.role === "user"
-                        ? "justify-end mt-16"
+                        ? "justify-end "
                         : "justify-start"
                     }`}
                   >
                     <div
-                      className={`
-              p-4
-              rounded-lg
-              backdrop-blur-md
-              border
-              shadow-lg
-              ${
-                msg.role === "user"
-                  ? "bg-gradient-to-r from-blue-600/30 to-emerald-600/30 text-white max-w-[70%] border-emerald-500/20"
-                  : "bg-gray-900 text-gray-300 max-w-full border-blue-500/20"
-              }
-              transition-all
-              duration-300
-              hover:shadow-xl
-              hover:border-opacity-50
-            `}
-                    >
+  className={`
+    p-4
+    rounded-lg
+    backdrop-blur-md
+    border
+    shadow-sm
+    ${
+      msg.role === "user"
+        ? "dark:bg-[#1e3a3e]/95 bg-[#f0eee5] font-medium tracking-wide dark:text-white text-[#1a535c] max-w-[70%] dark:border-[#2a4a4e]/40"
+        : "dark:bg-[#121a1e]/90 bg-[#ffffff] dark:text-gray-300 text-[#0a2b1c] max-w-full dark:border-[#1e3a46]/25 border-white shadow-sm"
+    }
+    transition-all
+    duration-300
+    dark:hover:shadow-xl
+    hover:shadow-md
+    hover:border-opacity-50
+    
+  `}
+>
                       <div className="flex items-center mb-2">
-                        {msg.role === "user" ? (
-                          <User className="mr-2 h-5 w-5" />
-                        ) : (
-                          <img
-                            src={BotIcon}
-                            alt="Klarifai"
-                            className="mr-2 h-5 w-5"
-                          />
-                        )}
-                        <span className="font-bold">
-                          {msg.role === "user" ? "You" : "Klarifai"}
-                        </span>
+                        {msg.role === "assistant" && (
+  <>
+    <img
+      src={BotIcon}
+      alt="Klarifai"
+      className="mr-2 h-5 w-5"
+    />
+    <span className="font-bold">Klarifai</span>
+  </>
+)}
 
-                        {/* Add edited indicator if message was edited */}
+                        {/* Add edited indicator i message was edited */}
                         {msg.edited && (
-                          <span className="ml-2 text-xs text-blue-400">
+                          <span className="ml-2 text-xs dark:text-blue-400 text-[#1a7d54]">
                             (edited)
                           </span>
                         )}
 
                         {/* Add historical view indicator if viewing a previous version */}
                         {msg.isHistoricalView && (
-                          <span className="ml-2 text-xs text-amber-400">
+                          <span className="ml-2 text-xs dark:text-amber-400 text-[#a55233]">
                             (historical view)
                           </span>
                         )}
@@ -3801,12 +4035,12 @@ const MainContent = ({
                           <div className="flex flex-wrap items-center ml-2 gap-1.5">
                             {/* Web Knowledge Badge */}
                             {msg.use_web_knowledge ? (
-                              <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  text-blue-400">
                                 <Globe className="h-3 w-3 mr-0.5" />
                                 <span>Web</span>
                               </div>
                             ) : (
-                              <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                              <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  dark:text-indigo-400 text-[#7b2cbf]">
                                 <Database className="h-3 w-3 mr-0.5" />
                                 <span>Context</span>
                               </div>
@@ -3819,8 +4053,8 @@ const MainContent = ({
                     inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs
                     ${
                       msg.response_length === "short"
-                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                        : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        ? "dark:text-[#7ccc7c]/90 text-[#1b7742]"
+                        : "dark:text-yellow-100 text-[#e76f51]"
                     }
                   `}
                               >
@@ -3834,7 +4068,7 @@ const MainContent = ({
                             )}
 
                             {/* Format Badge - Show ALL formats including "natural" */}
-                            <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-pink-500/10 text-pink-400 border border-pink-500/20">
+                            <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  dark:text-[#e67e5e] text-[#9c6644]">
                               <ScrollText className="h-3 w-3 mr-0.5" />
                               <span>
                                 {(() => {
@@ -3860,6 +4094,14 @@ const MainContent = ({
                             </div>
                           </div>
                         )}
+                        {msg.role === "assistant" && (
+            <div className="ml-auto">
+              <TextSizeControls 
+                textSize={textSize} 
+                setTextSize={setTextSize} 
+              />
+            </div>
+          )}
                       </div>
 
                       {/* Use EditableMessage component for user messages */}
@@ -3878,57 +4120,75 @@ const MainContent = ({
                         />
                       ) : (
                         <div
-                          className="message-content"
-                          dangerouslySetInnerHTML={{
-                            __html: msg.content
-                              .replace(/```html/g, "")
-                              .replace(/```/g, "")
-                              .replace(/"""html/g, "")
-                              .replace(/"""/g, "")
-                              .replace(/<p>/g, '<p class="mb-4">')
-                              .replace(/<b>/g, '<b class="font-bold">')
-                              .replace(
-                                /<h3>/g,
-                                '<h3 class="text-lg font-semibold mt-4 mb-2">'
-                              )
-                              .replace(
-                                /<ul>/g,
-                                '<ul class="list-disc pl-6 mb-4">'
-                              )
-                              .replace(
-                                /<ol>/g,
-                                '<ol class="list-decimal pl-6 mb-4">'
-                              )
-                              .replace(/<li>/g, '<li class="mb-2">')
-                              // Add proper styling for tables
-                              .replace(
-                                /<table>/g,
-                                '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
-                              )
-                              .replace(
-                                /<th>/g,
-                                '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
-                              )
-                              .replace(
-                                /<td>/g,
-                                '<td class="border border-gray-500 p-2">'
-                              )
-                              // Ensure proper spacing for tables
-                              .replace(
-                                /<\/table>\s*<p>/g,
-                                '</table><p class="mt-4">'
-                              )
-                              // Remove excess newlines
-                              .replace(/\n{3,}/g, "\n\n")
-                              // Ensure one line break after headers
-                              .replace(/<\/b>\s*\n+/g, "</b>\n"),
-                          }}
-                        />
+                        className={`message-content ${getTextSizeClass(textSize)}`}
+                        dangerouslySetInnerHTML={{
+                          __html: DOMPurify.sanitize(
+                            marked.parse(msg.content, {
+                              breaks: true,
+                              gfm: true,
+                              smartypants: true,
+                              sanitize: false,
+                            })
+                          )
+                            // Remove code block markers
+                            .replace(/```html/g, "")
+                            .replace(/```/g, "")
+                            .replace(/"""html/g, "")
+                            .replace(/"""/g, "")
+                            // Add proper spacing and styling
+                            .replace(/<p>/g, '<p class="mb-4">')
+                            .replace(/<b>/g, '<b class="font-bold">')
+                            .replace(/<strong>/g, '<strong class="font-bold">')
+                            .replace(
+                              /<h3>/g,
+                              '<h3 class="text-lg font-semibold mt-4 mb-2">'
+                            )
+                            .replace(
+                              /<ul>/g,
+                              '<ul class="list-disc pl-6 mb-4">'
+                            )
+                            .replace(
+                              /<ol>/g,
+                              '<ol class="list-decimal pl-6 mb-4">'
+                            )
+                            .replace(/<li>/g, '<li class="mb-2">')
+                            // Add proper styling for tables
+                            .replace(
+                              /<table>/g,
+                              '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
+                            )
+                            .replace(
+                              /<th>/g,
+                              '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
+                            )
+                            .replace(
+                              /<td>/g,
+                              '<td class="border border-gray-500 p-2">'
+                            )
+                            // Ensure proper spacing for tables
+                            .replace(
+                              /<\/table>\s*<p>/g,
+                              '</table><p class="mt-4">'
+                            )
+                            // Convert markdown symbols to HTML
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+                            .replace(/\*(.*?)\*/g, '<em>$1</em>') 
+                            // Link formatting
+                            .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">$1</a>')
+                            // Code formatting
+                            .replace(/`(.*?)`/g, '<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">$1</code>')
+                            // Remove excess newlines
+                            .replace(/\n{3,}/g, "\n\n")
+                            // Ensure one line break after headers
+                            .replace(/<\/b>\s*\n+/g, "</b>\n")
+                            .replace(/<\/strong>\s*\n+/g, "</strong>\n"),
+                        }}
+                      />
                       )}
 
                       {/* Add Copy option for Klarifai messages only */}
                       {msg.role !== "user" && (
-                        <div className="flex justify-end mt-4 text-gray-400 text-sm">
+                        <div className="flex justify-end mt-4 dark:text-gray-400 text-[#8c715f] text-sm">
                           {/* Move Info icon and text to the left side */}
                           <div className="flex items-center mr-auto">
                             {msg.use_web_knowledge && (
@@ -3951,23 +4211,44 @@ const MainContent = ({
                             )}
                           </div>
 
-                          {/* Copy button remains on the right side */}
-                          <button
-                            onClick={() =>
-                              handleCopyMessage(msg.content, index)
-                            }
-                            className="flex items-center px-3 py-1 rounded hover:text-blue-400 hover:bg-blue-900/30 active:scale-95 transition-all duration-150"
-                          >
-                            {copyMessageIndex === index ? (
-                              <span className="text-green-400 ml-2">
-                                Copied!
-                              </span>
-                            ) : (
-                              <>
-                                <Copy className="h-4 w-4 ml-2" /> Copy
-                              </>
-                            )}
-                          </button>
+                          {/* Right side - Response Regenerator and Copy button */}
+                          <div className="flex items-center space-x-2 relative">
+                            {/* Add Response Regenerator Component */}
+                            <ResponseRegenerator
+                              messageIndex={index}
+                              message={msg}
+                              conversation={conversation}
+                              onRegenerateResponse={handleRegenerateResponse}
+                              regeneratedResponses={regeneratedResponses}
+                              currentResponseIndex={currentResponseIndex}
+                              setCurrentResponseIndex={setCurrentResponseIndex}
+                              displayRegeneratedResponse={
+                                displayRegeneratedResponse
+                              }
+                              responseLength={responseLength}
+                              responseFormat={responseFormat}
+                              isLoading={isLoading}
+                            />
+
+                            {/* Copy button */}
+                            <button
+                              onClick={() =>
+                                handleCopyMessage(msg.content, index)
+                              }
+                              className="flex items-center px-3 py-1 rounded-md dark:text-gray-400 text-[#602f1a] dark:hover:text-blue-400 dark:hover:bg-blue-900/20  hover:text-[#a55233] hover:bg-[#f5e6d8] active:scale-95 transition-all duration-150"
+                            >
+                              {copyMessageIndex === index ? (
+                                <span className="text-green-400 ml-2">
+                                  Copied!
+                                </span>
+                              ) : (
+                                <>
+                                  <Copy className="h-3 w-3 ml-1.5" />
+                                  <span className="text-xs pl-2">Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3976,7 +4257,7 @@ const MainContent = ({
               ))}
 
               {isLoading && (
-                <div className="flex items-center justify-center py-4 text-blue-400">
+                <div className="flex items-center justify-center py-4 dark:text-blue-400 text-[#1b7742]">
                   <Loader className="h-5 w-5 mr-2 animate-spin" />
                   <span>Generating response...</span>
                 </div>
@@ -3997,303 +4278,310 @@ const MainContent = ({
                 }}
               />
             )}
-
-            {/* Follow-up Questions and Input Area */}
-            <div className="w-full fixed-bottom-0 z-20 pointer-events-none">
-              <div
-                className="w-full px-2 pb-2 bottom-20
+<div className="w-full fixed-bottom-0 z-20 pointer-events-none">
+  <div
+    className="w-full px-2 pb-2 bottom-20
         transition-all duration-300 ease-in-out
         transform ${isFollowUpQuestionsMinimized ? 'translate-y-full' : 'translate-y-0'}
         z-20
         pointer-events-auto
       "
-              >
-                <div
-                  className="
-          bg-gradient-to-b 
-          from-gray-900/80 
-          via-gray-800/80 
-          to-gray-900/80
-          backdrop-blur-xl 
+  >
+    {/* Follow-up questions container */}
+    <div
+      className="
+          bg-[#f0eee5] dark:bg-gray-700/20 backdrop-blur-sm
           rounded-t-2xl 
           sm:rounded-t-3xl 
-          shadow-2xl 
+          shadow-lg
           overflow-hidden
           relative 
           border-t 
-          border-blue-500/20
+          border-[#e3d5c8] dark:border-blue-500/20
         "
+    >
+      <div className="flex justify-center">
+        <button
+          onClick={toggleFollowUpQuestions}
+          className="text-[#5e4636] dark:text-white p-0.5 transition-colors relative group hover:text-[#a55233] dark:hover:text-[#f5e6d8]" 
+          title={
+            isFollowUpQuestionsMinimized
+              ? "Show follow-up questions"
+              : "Hide follow-up questions"
+          }
+        >
+          {isFollowUpQuestionsMinimized ? (
+            <>
+              <ChevronUp className="h-4 w-4" />
+              {/* Enhanced tooltip that appears on hover */}
+              {currentFollowUpQuestions.length > 0 && (
+                <div
+                  className="
+                    absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2
+                    px-3 py-1 
+                    bg-[#f5e6d8] dark:bg-gray-800/90 backdrop-blur-md 
+                    text-[#5e4636] dark:text-white text-xs 
+                    rounded-lg shadow-lg
+                    border border-[#e3d5c8] dark:border-blue-500/20
+                    opacity-0 group-hover:opacity-100
+                    transition-opacity duration-300
+                    whitespace-nowrap
+                    pointer-events-none
+                    z-50
+                  "
                 >
-                  <div className="flex justify-center">
-                    <button
-                      onClick={toggleFollowUpQuestions}
-                      className="text-white p-0.5 transition-colors relative group" // Added "relative group" for tooltip positioning
-                      title={
-                        isFollowUpQuestionsMinimized
-                          ? "Show follow-up questions"
-                          : "Hide follow-up questions"
-                      } // Basic HTML title attribute
-                    >
-                      {isFollowUpQuestionsMinimized ? (
-                        <>
-                          <ChevronUp className="h-4 w-4" />
-                          {/* Enhanced tooltip that appears on hover */}
-                          {currentFollowUpQuestions.length > 0 && (
-                            <div
-                              className="
-            absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2
-            px-3 py-2 
-            bg-gray-800/90 backdrop-blur-md 
-            text-white text-xs 
-            rounded-lg shadow-lg
-            border border-blue-500/20
-            opacity-0 group-hover:opacity-100
-            transition-opacity duration-300
-            whitespace-nowrap
-            pointer-events-none
-            z-50
-          "
-                            >
-                              <div className="flex items-center">
-                                <Info className="h-3 w-3 mr-1.5 text-blue-400" />
-                                <span>
-                                  Expand to see{" "}
-                                  {currentFollowUpQuestions.length} follow-up
-                                  question
-                                  {currentFollowUpQuestions.length > 1
-                                    ? "s"
-                                    : ""}
-                                </span>
-                              </div>
-                              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-gray-800/90 border-r border-b border-blue-500/20"></div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </button>
+                  <div className="flex items-center">
+                    <Info className="h-3 w-3 mr-1.5 text-[#a55233] dark:text-blue-400" />
+                    <span>
+                      Expand to see{" "}
+                      {currentFollowUpQuestions.length} follow-up
+                      question
+                      {currentFollowUpQuestions.length > 1
+                        ? "s"
+                        : ""}
+                    </span>
                   </div>
-                  {isFollowUpQuestionsMinimized &&
-                  currentFollowUpQuestions.length > 0 ? (
-                    <div className="text-xs text-center text-gray-400 py-1 animate-pulse">
-                      {currentFollowUpQuestions.length} follow-up question
-                      {currentFollowUpQuestions.length > 1 ? "s" : ""} available
-                    </div>
-                  ) : (
-                    !isFollowUpQuestionsMinimized &&
-                    currentFollowUpQuestions.length > 0 && (
-                      <div className="w-full px-2">
-                        <div className="flex gap-1 overflow-x-auto">
-                          {currentFollowUpQuestions.map((question, index) => (
-                            <Card
-                              key={index}
-                              onClick={() => {
-                                // Remove numbering like "1. ", "2. ", etc. at the start of the question
-                                const cleanedQuestion = question
-                                  .replace(/^(\d+\.\s*)/, "")
-                                  .trim();
-                                setMessage(cleanedQuestion); // Only sets the message, doesn't send
-                              }}
-                              className="flex-shrink-0 mt-1 py-1 px-2 text-xs"
-                            >
-                              {question}
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  )}
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 
+                    bg-[#f5e6d8] dark:bg-gray-800/90 
+                    border-r border-b border-[#e3d5c8] dark:border-blue-500/20"></div>
                 </div>
-                {/* Input Area */}
-                <div className="bg-gray-900/90 backdrop-blur-xl rounded-b-2xl sm:rounded-b-3xl shadow-2xl p-2 relative border-t border-blue-500/10">
-                  <div className="flex flex-col w-full">
-                    {/* Input field */}
-                    <div className="w-full relative bg-gray-900/90 rounded-xl transition-colors overflow-hidden mb-2">
-                      {/* Textarea - Auto-resizing with reduced min-height */}
-                      <textarea
-                        value={message}
-                        onChange={(e) => {
-                          setMessage(e.target.value);
-                          // Auto-resize logic
-                          e.target.style.height = "inherit";
-                          const scrollHeight = e.target.scrollHeight;
-                          const maxHeight = 100; // Reduced maximum height in pixels
-                          e.target.style.height = `${Math.min(
-                            scrollHeight,
-                            maxHeight
-                          )}px`;
-                        }}
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage(message);
-                          }
-                        }}
-                        placeholder={
-                          localSelectedDocuments.length === 0
-                            ? "Ask me anything using web knowledge..."
-                            : useWebKnowledge
-                            ? "Ask me about your documents with web assistance..."
-                            : "Ask me about your documents..."
-                        }
-                        className="w-full bg-transparent text-white py-2 px-3 text-sm focus:outline-none resize-none overflow-y-auto min-h-[36px] max-h-[100px] custom-scrollbar custom-textarea"
-                        disabled={isLoading}
-                        style={{ scrollbarWidth: "thin" }}
-                      />
-
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        multiple
-                        className="hidden"
-                        accept=".pdf,.docx,.txt,.pptx,.xlsx"
-                      />
-                    </div>
-
-                    {/* Icons and buttons row below textarea - with reduced sizing */}
-                    <div className="flex items-center justify-between w-full">
-                      {/* Left-side actions */}
-                      <div className="flex items-center space-x-2">
-                        {hasUploadPermissions && (
-                          <button
-                            title="Upload documents"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
-                          >
-                            <Paperclip className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {/* Mic button with recording indicator */}
-                        {!message && (
-                          <button
-                            onClick={handleMicInput}
-                            className={`relative text-gray-400 transition-colors p-1 rounded-full ${
-                              isRecording
-                                ? "text-red-500 bg-red-500/10"
-                                : "hover:text-white"
-                            }`}
-                            title="Voice input"
-                          >
-                            <Mic
-                              className={`h-4 w-4 ${
-                                isRecording ? "animate-pulse" : ""
-                              }`}
-                            />
-
-                            {isRecording && (
-                              <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                              </span>
-                            )}
-                          </button>
-                        )}
-
-                        {/* View toggle button */}
-                        <button
-                          title={
-                            currentView === "chat"
-                              ? "View Summary"
-                              : "View Chat"
-                          }
-                          onClick={() =>
-                            toggleView(
-                              currentView === "chat" ? "summary" : "chat"
-                            )
-                          }
-                          className="text-gray-400 hover:text-white transition-colors p-1 rounded-full"
-                        >
-                          {currentView === "chat" ? (
-                            <ScrollText className="h-4 w-4" />
-                          ) : (
-                            <MessageCircle className="h-4 w-4" />
-                          )}
-                        </button>
-
-                        {/* Context/Web knowledge toggle - reduced size */}
-                        {/* Context/Web knowledge toggle */}
-                        {localSelectedDocuments.length > 0 ? (
-                          <button
-                            onClick={toggleWebKnowledge}
-                            title={
-                              useWebKnowledge
-                                ? "Answers from documents and web knowledge"
-                                : "Answers from documents only"
-                            }
-                            className={`
-      flex items-center justify-center gap-1
-      px-2 py-1
-      rounded-lg 
-      transition-all 
-      duration-300
-      text-xs
-      ${
-        useWebKnowledge
-          ? "bg-gradient-to-r from-purple-600/70 to-blue-500/70 text-white"
-          : "appearance-none bg-gray-900/80 text-gray-300 hover:bg-gray-800/90 border border-blue-500/20"
-      }
-    `}
-                          >
-                            {useWebKnowledge ? (
-                              <>
-                                <Globe className="h-3 w-3" />
-                                <span className="hidden sm:inline text-xs">
-                                  Web
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <Database className="h-3 w-3 text-blue-400" />
-                                <span className="hidden sm:inline text-xs">
-                                  Context-only
-                                </span>
-                              </>
-                            )}
-                          </button>
-                        ) : (
-                          // When no documents are selected, show a disabled/locked web mode button
-                          <button
-                            title="Web mode active (no documents selected)"
-                            className="flex items-center justify-center gap-1 px-2 py-1 rounded-lg appearance-none bg-gray-900/80 text-gray-300 hover:bg-gray-800/90 border border-blue-500/20 text-xs cursor-default"
-                            disabled
-                          >
-                            <Globe className="h-3 w-3 text-blue-400" />
-                            <span className="hidden sm:inline text-xs">
-                              Web
-                            </span>
-                          </button>
-                        )}
-
-                        {/* ADD RESPONSE LENGTH TOGGLE HERE */}
-                        <ResponseLengthToggle
-                          responseLength={responseLength}
-                          setResponseLength={setResponseLength}
-                        />
-
-                        {/* ADD RESPONSE FORMAT TOGGLE HERE */}
-                        <ResponseFormatToggle
-                          responseFormat={responseFormat}
-                          setResponseFormat={setResponseFormat}
-                        />
-                      </div>
-
-                      {/* Send button - reduced size */}
-                      <button
-                        onClick={() => handleSendMessage(message)}
-                        disabled={isLoading}
-                        className="bg-gradient-to-r from-blue-600/90 to-emerald-600/80 hover:from-blue-500/80 hover:to-emerald-500/70 text-white p-2 rounded-lg transition-all disabled:opacity-50"
-                        title="Send message"
-                      >
-                        <Send className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
+            </>
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+      {isFollowUpQuestionsMinimized &&
+      currentFollowUpQuestions.length > 0 ? (
+        <div className="text-xs text-center text-[#887d4e] dark:text-gray-400 py-1 animate-pulse">
+          {currentFollowUpQuestions.length} follow-up question
+          {currentFollowUpQuestions.length > 1 ? "s" : ""} available
+        </div>
+      ) : (
+        !isFollowUpQuestionsMinimized &&
+        currentFollowUpQuestions.length > 0 && (
+          <div className="w-full px-2">
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {currentFollowUpQuestions.map((question, index) => (
+                <Card
+                  key={index}
+                  onClick={() => {
+                    const cleanedQuestion = question
+                      .replace(/^(\d+\.\s*)/, "")
+                      .trim();
+                    setMessage(cleanedQuestion);
+                  }}
+                  className="flex-shrink-0 mt-1 py-1 px-2 text-xs
+                    bg-[] dark:bg-gray-800/50
+                    hover:bg-white dark:hover:bg-gray-700
+                    text-[#0c393b] dark:text-white
+                    border-[#e3d5c8] dark:border-blue-500/20
+                    transition-all hover:-translate-y-0.5
+                    cursor-pointer border rounded-lg"
+                >
+                  {question}
+                </Card>
+              ))}
             </div>
+          </div>
+        )
+      )}
+    </div>
+    
+    {/* Input Area */}
+    <div className="bg-[#f0eee5] dark:bg-gray-700/20 backdrop-blur-sm rounded-b-2xl sm:rounded-b-3xl shadow-xl p-2 relative border-t border-[#e3d5c8] dark:border-blue-500/10">
+      <div className="flex flex-col w-full">
+        {/* Input field */}
+        <div className="w-full relative bg-white dark:bg-gray-900/20 rounded-xl transition-colors overflow-hidden mb-2 border border-[#d6cbbf] dark:border-blue-500/20 focus-within:border-[#887d4e] dark:focus-within:border-blue-400/40 shadow-sm">
+          {/* Textarea - Auto-resizing with reduced min-height */}
+          <textarea
+            value={message}
+            onChange={(e) => {
+              setMessage(e.target.value);
+              // Auto-resize logic
+              e.target.style.height = "inherit";
+              const scrollHeight = e.target.scrollHeight;
+              const maxHeight = 100; // Reduced maximum height in pixels
+              e.target.style.height = `${Math.min(
+                scrollHeight,
+                maxHeight
+              )}px`;
+            }}
+            onKeyPress={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(message);
+              }
+            }}
+            placeholder={
+              localSelectedDocuments.length === 0
+                ? "Ask me anything using web knowledge..."
+                : useWebKnowledge
+                ? "Ask me about your documents with web assistance..."
+                : "Ask me about your documents..."
+            }
+            onFocus={handleTextareaFocus}
+            className="w-full bg-transparent text-[#5e4636] dark:text-white font-medium py-2 px-3 text-sm focus:outline-none resize-none overflow-y-auto min-h-[36px] max-h-[100px] custom-scrollbar custom-textarea chat-input-area placeholder:text-[#8c715f]/80 placeholder:tracking-wider dark:placeholder:text-gray-400"
+            disabled={isLoading}
+            style={{ scrollbarWidth: "thin" }}
+          />
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            multiple
+            className="hidden"
+            accept=".pdf,.docx,.txt,.pptx,.xlsx,.mp3"
+          />
+        </div>
+
+        {/* Icons and buttons row below textarea - with reduced sizing */}
+        <div className="flex items-center justify-between w-full">
+          {/* Left-side actions */}
+          <div className="flex items-center space-x-2">
+            {hasUploadPermissions && (
+              <button
+                title="Upload documents"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+            )}
+
+            {/* Mic button with recording indicator */}
+            {!message && (
+              <button
+                onClick={handleMicInput}
+                className={`relative text-[#5a544a] dark:text-gray-400 transition-colors p-1 rounded-full ${
+                  isRecording
+                    ? "text-red-500 bg-red-500/10"
+                    : "hover:text-[#a55233] dark:hover:text-white"
+                }`}
+                title="Voice input"
+              >
+                <Mic
+                  className={`h-4 w-4 ${
+                    isRecording ? "animate-pulse" : ""
+                  }`}
+                />
+
+                {isRecording && (
+                  <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* View toggle button */}
+            <button
+              title={
+                currentView === "chat"
+                  ? "View Summary"
+                  : "View Chat"
+              }
+              onClick={() =>
+                toggleView(
+                  currentView === "chat" ? "summary" : "chat"
+                )
+              }
+              className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
+            >
+              {currentView === "chat" ? (
+                <ScrollText className="h-4 w-4" />
+              ) : (
+                <MessageCircle className="h-4 w-4" />
+              )}
+            </button>
+            
+            {/* Context/Web knowledge toggle */}
+            {localSelectedDocuments.length > 0 ? (
+              <button
+                onClick={toggleWebKnowledge}
+                title={
+                  useWebKnowledge
+                    ? "Answers from documents and web knowledge"
+                    : "Answers from documents only"
+                }
+                className={`
+                  flex items-center justify-center gap-1
+                  px-2 py-1
+                  rounded-lg 
+                  transition-all 
+                  duration-300
+                  text-xs
+                  ${
+                    useWebKnowledge
+                      ? "bg-[#caeaf9] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70  dark:text-white shadow-sm"
+                      : "appearance-none bg-white/80 dark:bg-gray-900/10 text-[#381c0f] dark:text-gray-300 dark:hover:bg-gray-800/90 hover:bg-[#ddd9c5]/10 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
+                  }
+                `}
+              >
+                {useWebKnowledge ? (
+                  <>
+                    <Globe className="h-3 w-3" />
+                    <span className="hidden sm:inline text-xs">
+                      Web
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Database className="h-3 w-3  dark:text-blue-400" />
+                    <span className="hidden sm:inline text-xs">
+                      Context-only
+                    </span>
+                  </>
+                )}
+              </button>
+            ) : (
+              // When no documents are selected, show a disabled/locked web mode button
+              <button
+                title="Web mode active (no documents selected)"
+                className="flex items-center justify-center gap-1 px-2 py-1 rounded-lg appearance-none bg-[#caeaf9] dark:bg-gray-900/80 text-[#5a544a] dark:text-gray-300 border border-[#d6cbbf] dark:border-blue-500/20 text-xs cursor-default shadow-sm"
+                disabled
+              >
+                <Globe className="h-3 w-3  dark:text-blue-400" />
+                <span className="hidden sm:inline text-xs">
+                  Web
+                </span>
+              </button>
+            )}
+
+            {/* Response Length Toggle */}
+            <ResponseLengthToggle
+              responseLength={responseLength}
+              setResponseLength={setResponseLength}
+              className="bg-white/80 dark:bg-gray-900/10 text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-800/90 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
+              activeClassName="bg-[#556052] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70 text-white dark:text-white border-transparent shadow-sm"
+            />
+
+            {/* Response Format Toggle */}
+            <ResponseFormatToggle
+              responseFormat={responseFormat}
+              setResponseFormat={setResponseFormat}
+              className="bg-white/80 dark:bg-gray-900/10 text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-800/90 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
+              activeClassName="bg-[#556052] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70 text-white dark:text-white border-transparent shadow-sm"
+            />
+          </div>
+
+          {/* Send button */}
+          <button
+            onClick={() => handleSendMessage(message)}
+            disabled={isLoading}
+            className="bg-[#a55233] hover:bg-[#884325] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 dark:hover:from-blue-500/80 dark:hover:to-emerald-500/70 text-white p-2 rounded-lg transition-all disabled:opacity-50 disabled:bg-[#d6cbbf] disabled:dark:bg-gray-600 shadow-sm"
+            title="Send message"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
           </div>
         ) : (
           renderSummaryView()
@@ -4318,6 +4606,14 @@ const MainContent = ({
 
       {/* Custom Scrollbar Styles */}
       <style>{`
+      @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.15s ease-out forwards;
+  }
   
                 @keyframes bounce {
                   0%, 100% { transform: translateY(0); }
@@ -4472,6 +4768,19 @@ const MainContent = ({
   100% {
     box-shadow: 0 0 5px rgba(79, 70, 229, 0.5);
   }
+}
+
+/* Dark mode scrollbar variant */
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(30, 58, 62, 0.3);  /* Darker blue-green that matches dark mode theme */
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(85, 96, 82, 0.4);  /* Sage green with higher opacity for better visibility */
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(85, 96, 82, 0.6);  /* Brighter on hover for better interaction feedback */
 }
 
 .web-mode-effect {

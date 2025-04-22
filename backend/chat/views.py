@@ -16,6 +16,7 @@ from django.core.files.storage import default_storage
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 import google.generativeai as genai  
+from core.utils import update_project_timestamp
 from .models import (
     ChatHistory,
     ChatMessage,
@@ -332,7 +333,8 @@ class GetUserDocumentsView(APIView):
                     }
                     document_list.append(document_data)
             
-         
+            # Update project timestamp to track activity
+            update_project_timestamp(main_project_id, user)
             
             return Response(document_list, status=status.HTTP_200_OK)
         
@@ -379,6 +381,10 @@ class ManageConversationView(APIView):
             conversation.is_active = is_active
             conversation.save()
 
+            # Update project timestamp if main_project_id exists
+            if hasattr(conversation, 'main_project_id') and conversation.main_project_id:
+                update_project_timestamp(conversation.main_project_id, request.user)
+
             # Log successful update
             print(f"Conversation {conversation_id} updated successfully")
             print(f"New title: {conversation.title}")
@@ -407,6 +413,94 @@ class ManageConversationView(APIView):
         return self.update_conversation(request, conversation_id)
 
 class DocumentProcessingMixin:
+
+
+    def extract_text_from_audio(self, file_path, user=None):
+        """
+        Extract text from audio files using Google's Gemini API.
+        Returns the transcribed text.
+        
+        Args:
+            file_path: Path to the audio file
+            user: Django user object to get API token
+        """
+        import os
+        import tempfile
+        from google import generativeai as genai
+        import uuid
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        # Set up the transcripts directory
+        TRANSCRIPT_DIR = "transcripts"
+        os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
+        
+        try:
+            # Get the user's Gemini API token
+            gemini_api_key = None
+            if user:
+                try:
+                    user_api_tokens = UserAPITokens.objects.get(user=user)
+                    gemini_api_key = user_api_tokens.gemini_token
+                    
+                    # If no token is saved for the user, use a fallback mechanism or raise an error
+                    if not gemini_api_key:
+                        logger.warning(f"No Gemini API token found for user {user.username}")
+                        # Optional: You could implement a fallback or use an environment variable
+                        import os
+                        gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+                        if not gemini_api_key:
+                            raise ValueError("Gemini API token is required for processing audio files")
+                        
+                except UserAPITokens.DoesNotExist:
+                    logger.error(f"No API tokens record found for user {user.username}")
+                    raise ValueError("User API tokens not configured")
+            else:
+                # Fallback to environment variable if no user provided
+                import os
+                gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+                if not gemini_api_key:
+                    raise ValueError("Gemini API token is required for processing audio files")
+            
+            # Configure the Gemini API with the retrieved key
+            genai.configure(api_key=gemini_api_key)
+            
+            # Create a generative model instance
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            
+            # Upload the file to Gemini
+            uploaded_file = genai.upload_file(path=file_path)
+            
+            # Define the prompt for transcription
+            prompt = """Transcribe this audio. Include:
+            - Exact words spoken
+            - Speaker labels
+            - Timestamps only at speaker change
+            
+            Do not summarize or expand."""
+            
+            # Generate the transcription
+            response = model.generate_content([prompt, uploaded_file])
+            transcription = response.text
+            
+            # Generate a unique filename
+            base_filename = f"audio_transcript_{uuid.uuid4().hex}"
+            
+            # Save the transcription as a text file
+            txt_path = os.path.join(TRANSCRIPT_DIR, f"{base_filename}.txt")
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(transcription)
+            
+            # Extract the text from the saved text file using the existing method
+            extracted_text = self.extract_text_from_txt(txt_path)
+            
+            return extracted_text
+        
+        except Exception as e:
+            print(f"Error transcribing audio file: {str(e)}")
+            return f"Error transcribing audio: {str(e)}"
+        
     def extract_text_from_file(self, file_path):
         """Extract text from different file types."""
         from pathlib import Path
@@ -419,6 +513,11 @@ class DocumentProcessingMixin:
             return self.extract_text_from_pptx(file_path)
         elif ext == '.xlsx':
             return self.extract_text_from_xlsx(file_path)
+        elif ext == '.txt':
+            return self.extract_text_from_txt(file_path)
+        
+        elif ext in ['.mp3', '.mp4', '.wav', '.mpeg']:
+            return self.extract_text_from_audio(file_path)
         else:
             return ""
 
@@ -457,6 +556,29 @@ class DocumentProcessingMixin:
                 row_text = [str(cell) if cell is not None else "" for cell in row]
                 text.append(" | ".join(row_text))
         return "\n".join(text)
+    
+    def extract_text_from_txt(self, file_path):
+        """Extract text from a plain text file."""
+        try:
+            # Try multiple encodings in case UTF-8 fails
+            encodings = ['utf-8', 'latin-1', 'cp1252']
+            
+            for encoding in encodings:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as file:
+                        text = file.read()
+                    return text
+                except UnicodeDecodeError:
+                    continue
+            
+            # If all encodings fail, try binary mode and decode with errors='replace'
+            with open(file_path, 'rb') as file:
+                binary_data = file.read()
+                return binary_data.decode('utf-8', errors='replace')
+                
+        except Exception as e:
+            print(f"Error extracting text from txt file: {str(e)}")
+            return f"Error extracting text: {str(e)}"
 
     def clean_text(self, text):
         """Clean and normalize extracted text."""
@@ -842,6 +964,9 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
             
             # Format the summary with HTML-like tags
             formatted_summary = self.format_summary_response(consolidated_summary)
+
+            # Update project timestamp to track activity
+            update_project_timestamp(main_project_id, user)
             
             return Response({
                 'consolidated_summary': formatted_summary
@@ -968,6 +1093,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 return Response({
                     'error': 'No documents were successfully processed'
                 }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Update project timestamp to track activity
+            update_project_timestamp(main_project_id, user)
 
             return Response({
                 'message': 'Documents uploaded successfully',
@@ -1137,52 +1265,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             start = end - chunk_overlap if end < text_length else text_length
         return chunks
     
-    # Extract text function from Streamlit implementation
-    def extract_text_from_file(self, file_path):
-        """Extract text from various file types."""
-        import os
-        import re
-        from docx import Document
-        import fitz  # PyMuPDF for PDFs
-        import csv
-        import io
-        
-        file_ext = os.path.splitext(file_path)[1].lower()
-        
-        try:
-            if file_ext == '.pdf':
-                pdf_document = fitz.open(file_path)
-                text = ""
-                for page_num in range(len(pdf_document)):
-                    page = pdf_document[page_num]
-                    text += page.get_text()
-                return text
-                
-            elif file_ext == '.docx':
-                doc = Document(file_path)
-                return ' '.join([paragraph.text for paragraph in doc.paragraphs])
-                
-            elif file_ext == '.txt':
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    return file.read()
-                    
-            elif file_ext == '.csv':
-                text = []
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    csv_reader = csv.reader(file)
-                    headers = next(csv_reader, None)
-                    if headers:
-                        text.append(','.join(headers))
-                    for row in csv_reader:
-                        text.append(','.join(row))
-                return '\n'.join(text)
-                
-            else:
-                return f"Unsupported file type: {file_ext}"
-                
-        except Exception as e:
-            print(f"Error extracting text: {str(e)}")
-            return f"Error extracting text: {str(e)}"
     
     # Clean text function (from Streamlit)
     def clean_text(self, text):
@@ -1268,8 +1350,71 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 for chunk in file.chunks():
                     tmp_file.write(chunk)
                 file_path = tmp_file.name
+
+
                 
             try:
+
+                file_ext = os.path.splitext(file_path)[1].lower()
+
+                if file_ext == '.pptx':
+                    return self.process_complex_document_with_llamaparse(file_path, file.name, user)
+                
+
+                # Special handling for audio files
+                if file_ext in ['.mp3', '.mp4', '.wav', '.mpeg']:
+                    print(f"Audio file detected: {file.name}. Using Gemini for transcription...")
+                    extracted_text = self.extract_text_from_audio(file_path, user)
+                    
+                    if not extracted_text:
+                        raise ValueError("No content could be transcribed from the audio file")
+                    
+                    # Clean the text
+                    cleaned_text = self.clean_text(extracted_text)
+                    
+                    # Create document record for processing
+                    doc = {
+                        'text': cleaned_text,
+                        'name': file.name
+                    }
+                    
+                    # Continue with normal processing flow for the extracted text
+                    all_chunks = []
+                    # Split text into chunks
+                    chunks = self.split_text_into_chunks(doc['text'])
+                    for i, chunk in enumerate(chunks):
+                        all_chunks.append({
+                            'text': chunk,
+                            'source': doc['name'],
+                            'source_file': doc['name'],
+                            'chunk_id': i
+                        })
+                    
+                    # Get embeddings for all chunks
+                    text_chunks = [chunk['text'] for chunk in all_chunks]
+                    print(f"Getting embeddings for {len(text_chunks)} text chunks")
+                    embeddings = self.get_embeddings(text_chunks)
+                    
+                    if not embeddings:
+                        raise ValueError("Failed to generate embeddings for document chunks")
+                    
+                    # Create FAISS index
+                    index = self.create_faiss_index(embeddings)
+                    
+                    # Generate a unique session ID for this document
+                    session_id = uuid.uuid4().hex
+                    
+                    # Save the index and chunks
+                    index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
+                    
+                    print(f"Audio document processed successfully: {len(all_chunks)} chunks created")
+                    
+                    return {
+                        'index_path': index_file,
+                        'metadata_path': pickle_file,
+                        'full_text': doc['text']
+                    }
+
                 # Check document complexity (keep this from original code)
                 is_complex = self.detect_document_complexity(file_path)
 
@@ -1339,6 +1484,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             print(f"Error in process_document: {str(e)}")
             raise
 
+
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
     def post(self, request):
         document_ids = request.data.get('document_ids', [])
@@ -1380,6 +1526,8 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
                         'filename': document.filename,
                         'summary': summary
                     })
+            if main_project_id:
+                update_project_timestamp(main_project_id, user)        
 
             return Response({
                 'message': 'Summaries generated successfully',
@@ -1400,6 +1548,9 @@ class DeleteDocumentView(APIView):
                 id=document_id, 
                 user=request.user
             )
+
+            # Get main_project_id from the document
+            main_project_id = document.main_project_id
             
             # Optional: Delete associated ProcessedIndex
             try:
@@ -1410,6 +1561,10 @@ class DeleteDocumentView(APIView):
             
             # Delete the document
             document.delete()
+
+            # Update project timestamp to track activity
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             
             return Response(
                 {'message': 'Document deleted successfully'}, 
@@ -1500,6 +1655,12 @@ class SetActiveDocumentView(APIView):
                 
                 # Check if document is processed
                 ProcessedIndex.objects.get(document=document)
+                # Get the main_project_id from the document
+                main_project_id = document.main_project_id
+                
+                # Update project timestamp to track activity
+                if main_project_id:
+                    update_project_timestamp(main_project_id, request.user)
             except Document.DoesNotExist:
                 return Response(
                     {'error': 'Document not found'},
@@ -1553,6 +1714,10 @@ def post_process_response(response_text):
         # Only remove explicit section headers - not content
         response_text = re.sub(r'^[IVX]+\.\s*[\w\s]+:', '', response_text, flags=re.MULTILINE)
         response_text = re.sub(r'^\d+\.\s*[\w\s]+:', '', response_text, flags=re.MULTILINE)
+
+        # Convert markdown-style formatting to HTML
+        response_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', response_text)
+        response_text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', response_text)
         
         # Remove specific section headers but keep their content
         section_headers = [
@@ -1990,6 +2155,10 @@ class ChatView(APIView):
                     user=user
                 )
                 conversation.documents.set(documents)
+
+            # Update project timestamp to track activity
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
 
             # Update conversation details
             conversation.title = title
@@ -3007,7 +3176,27 @@ class ChatView(APIView):
             
             Please consider this conversation history when providing your response to maintain continuity.
             """
-        
+        # Get project description if available
+        project_description = self._get_project_description(query)
+
+        project_guidance = ""
+        if project_description:
+            project_guidance = f"""
+            PROJECT CONTEXT:
+            {project_description}
+           
+            IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
+           
+            When formulating your response:
+            1. Use this project context solely to understand the general domain and focus of the project
+            2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
+            3. Shape your response style and tone to align with this project's domain, but never invent content
+            4. DO NOT add information from your general knowledge even if relevant to the project description
+            5. If the documents don't contain information relevant to the query, clearly state this limitation
+           
+            Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
+            """
+       
         # Define the user prompt (consistent with existing implementation but with conversation context)
         user_prompt = f"""
         Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
@@ -3017,6 +3206,9 @@ class ChatView(APIView):
         {format_guidance}
 
         {conversation_prompt}
+
+        {project_guidance}
+ 
 
         RESPONSE GENERATION GUIDELINES:
         - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
@@ -3219,7 +3411,28 @@ class ChatView(APIView):
             Please consider this conversation history when providing your response to maintain continuity.
             """
         
-        # Define the user prompt for short response with conversation context
+        # Get project description if available
+        project_description = self._get_project_description(query)
+        
+        project_guidance = ""
+        if project_description:
+            project_guidance = f"""
+            PROJECT CONTEXT:
+            {project_description}
+           
+            IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
+           
+            When formulating your response:
+            1. Use this project context solely to understand the general domain and focus of the project
+            2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
+            3. Shape your response style and tone to align with this project's domain, but never invent content
+            4. DO NOT add information from your general knowledge even if relevant to the project description
+            5. If the documents don't contain information relevant to the query, clearly state this limitation
+           
+            Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
+            """
+       
+        # Define the user prompt (consistent with existing implementation but with conversation context)
         user_prompt = f"""
         Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
 
@@ -3228,6 +3441,9 @@ class ChatView(APIView):
         {format_guidance}
 
         {conversation_prompt}
+
+        {project_guidance}
+ 
 
         RESPONSE GENERATION GUIDELINES:
         - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
@@ -3312,7 +3528,32 @@ class ChatView(APIView):
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{answer}\n\n*Sources: {source_info}*"
+
+    def _get_project_description(self, query):
+        """
+        Get the project description for the current main project
         
+        Returns:
+            str: Project description or empty string if not found
+        """
+        try:
+            # Get the main_project_id from the current request
+            main_project_id = self.request.data.get('main_project_id')
+            
+            if not main_project_id:
+                return ""
+                
+            # Get the project from the database
+            project = Project.objects.filter(id=main_project_id).first()
+            
+            if project and project.description:
+                return project.description
+                
+            return ""
+        except Exception as e:
+            logger.error(f"Error getting project description: {str(e)}")
+            return ""
+    
 
     def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural'):
         """
@@ -4094,6 +4335,10 @@ class GenerateIdeaContextView(APIView):
                     # Save the parameters for future use
                     processed_index.idea_parameters = idea_params
                     processed_index.save()
+
+                    if main_project_id:
+                        update_project_timestamp(main_project_id, user)
+            
                    
                     return Response({
                         'document_id': document_id,
@@ -4167,6 +4412,10 @@ class GenerateIdeaContextView(APIView):
                
                 # Extract parameters from relevant chunks
                 idea_params = self.extract_idea_parameters(query, relevant_chunks)
+
+                if main_project_id:
+                    update_project_timestamp(main_project_id, user)
+            
                
                 return Response({
                     'document_id': active_doc_id,
@@ -4711,6 +4960,13 @@ class DocumentViewLogView(APIView):
             document.view_count = F('view_count') + 1  # This requires adding view_count field to Document model
             document.last_viewed_at = timezone.now()  # This requires adding last_viewed_at field to Document model
             document.save(update_fields=['view_count', 'last_viewed_at'])
+
+            # Get main_project_id from the document
+            main_project_id = document.main_project_id
+            
+            # Update project timestamp to track activity
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             
             return Response({
                 'success': True,
@@ -5012,193 +5268,193 @@ class CheckUploadPermissionsView(APIView):
                 'can_upload': False  # Default to disallowing upload on error
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# class ProcessCitationsView(APIView):
-#     """
-#     API endpoint to process a response and map citations to relevant parts of the text.
-#     This can be called by the frontend when displaying a message.
-#     """
-#     permission_classes = [IsAuthenticated]
+class ProcessCitationsView(APIView):
+    """
+    API endpoint to process a response and map citations to relevant parts of the text.
+    This can be called by the frontend when displaying a message.
+    """
+    permission_classes = [IsAuthenticated]
     
-#     def post(self, request):
-#         try:
-#             response_text = request.data.get('response_text')
-#             citations = request.data.get('citations')
+    def post(self, request):
+        try:
+            response_text = request.data.get('response_text')
+            citations = request.data.get('citations')
             
-#             if not response_text or not citations:
-#                 return Response({
-#                     'error': 'Both response_text and citations are required'
-#                 }, status=status.HTTP_400_BAD_REQUEST)
+            if not response_text or not citations:
+                return Response({
+                    'error': 'Both response_text and citations are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
             
-#             # Process the response text with citations
-#             processed_text, enhanced_citations = self.process_response_with_citations(response_text, citations)
+            # Process the response text with citations
+            processed_text, enhanced_citations = self.process_response_with_citations(response_text, citations)
             
-#             return Response({
-#                 'processed_text': processed_text,
-#                 'enhanced_citations': enhanced_citations
-#             }, status=status.HTTP_200_OK)
+            return Response({
+                'processed_text': processed_text,
+                'enhanced_citations': enhanced_citations
+            }, status=status.HTTP_200_OK)
             
-#         except Exception as e:
-#             import traceback
-#             print(f"Citation processing error: {str(e)}")
-#             print(traceback.format_exc())
-#             return Response({
-#                 'error': str(e)
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            import traceback
+            print(f"Citation processing error: {str(e)}")
+            print(traceback.format_exc())
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-#     def extract_citation_metadata(self, citation_text, source_file):
-#         """
-#         Extract metadata like page numbers and section titles from citation text.
+    def extract_citation_metadata(self, citation_text, source_file):
+        """
+        Extract metadata like page numbers and section titles from citation text.
         
-#         Args:
-#             citation_text (str): The citation text from the document
-#             source_file (str): The source file name
+        Args:
+            citation_text (str): The citation text from the document
+            source_file (str): The source file name
             
-#         Returns:
-#             dict: Enhanced citation metadata
-#         """
-#         # Default citation structure
-#         citation = {
-#             'source_file': source_file,
-#             'page_number': 'Unknown',
-#             'section_title': 'Unknown',
-#             'snippet': citation_text,
-#         }
+        Returns:
+            dict: Enhanced citation metadata
+        """
+        # Default citation structure
+        citation = {
+            'source_file': source_file,
+            'page_number': 'Unknown',
+            'section_title': 'Unknown',
+            'snippet': citation_text,
+        }
         
-#         # Try to extract page numbers - common formats
-#         page_matches = re.findall(r'(page|p\.?)\s*(\d+)', citation_text, re.IGNORECASE)
-#         if page_matches:
-#             citation['page_number'] = page_matches[0][1]
+        # Try to extract page numbers - common formats
+        page_matches = re.findall(r'(page|p\.?)\s*(\d+)', citation_text, re.IGNORECASE)
+        if page_matches:
+            citation['page_number'] = page_matches[0][1]
         
-#         # Try to extract section titles - look for section headings
-#         section_matches = re.findall(r'(?:section|heading):\s*["\'"]([^\'"\']+)[\'"\']', citation_text, re.IGNORECASE)
-#         if section_matches:
-#             citation['section_title'] = section_matches[0]
+        # Try to extract section titles - look for section headings
+        section_matches = re.findall(r'(?:section|heading):\s*["\'"]([^\'"\']+)[\'"\']', citation_text, re.IGNORECASE)
+        if section_matches:
+            citation['section_title'] = section_matches[0]
         
-#         # Alternative: Look for text in quotes that might be section titles
-#         if citation['section_title'] == 'Unknown':
-#             quote_matches = re.findall(r'[\'"\']([^\'"\']{5,50})[\'"\']', citation_text)
-#             if quote_matches:
-#                 citation['section_title'] = quote_matches[0]
+        # Alternative: Look for text in quotes that might be section titles
+        if citation['section_title'] == 'Unknown':
+            quote_matches = re.findall(r'[\'"\']([^\'"\']{5,50})[\'"\']', citation_text)
+            if quote_matches:
+                citation['section_title'] = quote_matches[0]
         
-#         # Look for date information
-#         date_matches = re.findall(r'\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b', citation_text)
-#         if date_matches:
-#             citation['date'] = date_matches[0]
+        # Look for date information
+        date_matches = re.findall(r'\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b', citation_text)
+        if date_matches:
+            citation['date'] = date_matches[0]
         
-#         return citation
+        return citation
     
-#     def process_response_with_citations(self, response_text, citations):
-#         """
-#         Maps citations to specific parts of the response text based on content similarity.
+    def process_response_with_citations(self, response_text, citations):
+        """
+        Maps citations to specific parts of the response text based on content similarity.
         
-#         Args:
-#             response_text (str): The response text from the LLM
-#             citations (list): List of citation objects with source information
+        Args:
+            response_text (str): The response text from the LLM
+            citations (list): List of citation objects with source information
             
-#         Returns:
-#             tuple: (processed_text, enhanced_citations)
-#         """
-#         if not citations or not response_text:
-#             return response_text, citations
+        Returns:
+            tuple: (processed_text, enhanced_citations)
+        """
+        if not citations or not response_text:
+            return response_text, citations
         
-#         # First, try to improve citation metadata
-#         enhanced_citations = []
+        # First, try to improve citation metadata
+        enhanced_citations = []
 
-#         for idx, citation in enumerate(citations):
-#             # Get basic info
-#             source_file = citation.get('source_file', 'Unknown Document')
-#             snippet = citation.get('snippet', '')
+        for idx, citation in enumerate(citations):
+            # Get basic info
+            source_file = citation.get('source_file', 'Unknown Document')
+            snippet = citation.get('snippet', '')
             
-#             # If metadata is missing, try to extract it
-#             if citation.get('page_number') in [None, 'Unknown'] or citation.get('section_title') in [None, 'Unknown']:
-#                 enhanced_citation = self.extract_citation_metadata(snippet, source_file)
-#                 # Preserve original data where available
-#                 for key, value in citation.items():
-#                     if value and value != 'Unknown':
-#                         enhanced_citation[key] = value
-#                 enhanced_citations.append(enhanced_citation)
-#             else:
-#                 enhanced_citations.append(citation)
+            # If metadata is missing, try to extract it
+            if citation.get('page_number') in [None, 'Unknown'] or citation.get('section_title') in [None, 'Unknown']:
+                enhanced_citation = self.extract_citation_metadata(snippet, source_file)
+                # Preserve original data where available
+                for key, value in citation.items():
+                    if value and value != 'Unknown':
+                        enhanced_citation[key] = value
+                enhanced_citations.append(enhanced_citation)
+            else:
+                enhanced_citations.append(citation)
         
-#         # Remove HTML tags for better text processing
-#         clean_text = strip_tags(response_text)
+        # Remove HTML tags for better text processing
+        clean_text = strip_tags(response_text)
         
-#         # Step 1: Split the response into sentences
-#         sentences = sent_tokenize(clean_text)
+        # Step 1: Split the response into sentences
+        sentences = sent_tokenize(clean_text)
         
-#         # Step 2: For each citation, find the most relevant sentence
-#         citation_mapping = {}  # Maps citation index to sentence index
+        # Step 2: For each citation, find the most relevant sentence
+        citation_mapping = {}  # Maps citation index to sentence index
         
-#         for citation_idx, citation in enumerate(enhanced_citations):
-#             snippet = citation.get('snippet', '').lower()
-#             if not snippet:
-#                 continue
+        for citation_idx, citation in enumerate(enhanced_citations):
+            snippet = citation.get('snippet', '').lower()
+            if not snippet:
+                continue
                 
-#             # Generate keywords from the snippet
-#             keywords = set(re.findall(r'\b\w+\b', snippet.lower()))
-#             keywords = {k for k in keywords if len(k) > 3}  # Filter out short words
+            # Generate keywords from the snippet
+            keywords = set(re.findall(r'\b\w+\b', snippet.lower()))
+            keywords = {k for k in keywords if len(k) > 3}  # Filter out short words
             
-#             # Score each sentence based on keyword overlap
-#             best_score = 0
-#             best_sentence_idx = -1
+            # Score each sentence based on keyword overlap
+            best_score = 0
+            best_sentence_idx = -1
             
-#             for sent_idx, sentence in enumerate(sentences):
-#                 sentence_lower = sentence.lower()
-#                 sentence_words = set(re.findall(r'\b\w+\b', sentence_lower))
+            for sent_idx, sentence in enumerate(sentences):
+                sentence_lower = sentence.lower()
+                sentence_words = set(re.findall(r'\b\w+\b', sentence_lower))
                 
-#                 # Calculate overlap score
-#                 overlap = keywords.intersection(sentence_words)
-#                 if overlap:
-#                     score = len(overlap) / max(len(keywords), 1)  # Avoid division by zero
+                # Calculate overlap score
+                overlap = keywords.intersection(sentence_words)
+                if overlap:
+                    score = len(overlap) / max(len(keywords), 1)  # Avoid division by zero
                     
-#                     # Give higher score for exact phrase matches
-#                     for i in range(0, len(snippet), 10):
-#                         if i + 20 <= len(snippet):
-#                             phrase = snippet[i:i+20]
-#                             if phrase in sentence_lower:
-#                                 score += 0.5
+                    # Give higher score for exact phrase matches
+                    for i in range(0, len(snippet), 10):
+                        if i + 20 <= len(snippet):
+                            phrase = snippet[i:i+20]
+                            if phrase in sentence_lower:
+                                score += 0.5
                     
-#                     if score > best_score:
-#                         best_score = score
-#                         best_sentence_idx = sent_idx
+                    if score > best_score:
+                        best_score = score
+                        best_sentence_idx = sent_idx
             
-#             # Map citation to sentence if we found a good match
-#             if best_score > 0.2 and best_sentence_idx >= 0:  # Threshold to ensure relevance
-#                 if best_sentence_idx not in citation_mapping:
-#                     citation_mapping[best_sentence_idx] = []
-#                 citation_mapping[best_sentence_idx].append(citation_idx)
+            # Map citation to sentence if we found a good match
+            if best_score > 0.2 and best_sentence_idx >= 0:  # Threshold to ensure relevance
+                if best_sentence_idx not in citation_mapping:
+                    citation_mapping[best_sentence_idx] = []
+                citation_mapping[best_sentence_idx].append(citation_idx)
         
-#         # Step 3: Reinsert the HTML and add citation markers
-#         # Start by marking positions in the original response_text where sentences end
-#         sentence_positions = []
-#         current_pos = 0
+        # Step 3: Reinsert the HTML and add citation markers
+        # Start by marking positions in the original response_text where sentences end
+        sentence_positions = []
+        current_pos = 0
         
-#         for sentence in sentences:
-#             # Find this sentence in the original text
-#             sentence_pos = response_text.find(sentence, current_pos)
-#             if sentence_pos >= 0:
-#                 sentence_end = sentence_pos + len(sentence)
-#                 sentence_positions.append(sentence_end)
-#                 current_pos = sentence_end
+        for sentence in sentences:
+            # Find this sentence in the original text
+            sentence_pos = response_text.find(sentence, current_pos)
+            if sentence_pos >= 0:
+                sentence_end = sentence_pos + len(sentence)
+                sentence_positions.append(sentence_end)
+                current_pos = sentence_end
         
-#         # Now insert citation markers at the end of relevant sentences
-#         result = response_text
-#         offset = 0  # Track position offset as we insert markers
+        # Now insert citation markers at the end of relevant sentences
+        result = response_text
+        offset = 0  # Track position offset as we insert markers
         
-#         for sent_idx, end_pos in enumerate(sentence_positions):
-#             if sent_idx in citation_mapping:
-#                 # Create citation markers
-#                 citation_markers = ""
-#                 for citation_idx in citation_mapping[sent_idx]:
-#                     citation_markers += f'<citation id="{citation_idx}"></citation>'
+        for sent_idx, end_pos in enumerate(sentence_positions):
+            if sent_idx in citation_mapping:
+                # Create citation markers
+                citation_markers = ""
+                for citation_idx in citation_mapping[sent_idx]:
+                    citation_markers += f'<citation id="{citation_idx}"></citation>'
                 
-#                 # Insert at the adjusted position
-#                 insert_pos = end_pos + offset
-#                 if insert_pos <= len(result):
-#                     result = result[:insert_pos] + citation_markers + result[insert_pos:]
-#                     offset += len(citation_markers)
+                # Insert at the adjusted position
+                insert_pos = end_pos + offset
+                if insert_pos <= len(result):
+                    result = result[:insert_pos] + citation_markers + result[insert_pos:]
+                    offset += len(citation_markers)
         
-#         return result, enhanced_citations
+        return result, enhanced_citations
 
 
 # codes for chat download
@@ -5385,6 +5641,10 @@ class ChatExportView(APIView):
             docx_file = BytesIO()
             doc.save(docx_file)
             docx_file.seek(0)
+
+            # Update project timestamp to track activity
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             
             # Create response with file
             if len(conversations) == 1:
@@ -5585,3 +5845,5 @@ class ChatExportView(APIView):
             elif child.name not in ['ul', 'ol']:
                 # Recursively process other elements
                 self.process_inline_elements(paragraph, child)
+
+

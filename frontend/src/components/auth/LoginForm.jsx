@@ -30,8 +30,8 @@ const LoginForm = ({ onSuccess = () => {} }) => {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <label className="block text-sm font-medium text-gray-600">Username</label>
+            <div className="bg-white">
+                <label className="block text-sm font-medium dark:text-gray-600">Username</label>
                 <input
                     type="text" 
                     placeholder="Username" 
@@ -43,7 +43,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
             </div>
             
             <div>
-                <label className="block text-sm font-medium text-gray-600">Password</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Password</label>
                 <input
                     type="password" 
                     placeholder="Password" 
@@ -63,7 +63,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
             <div className="text-center items-center justify-center">
                 <Link 
                     to="/forgot-password" 
-                    className="text-sm text-blue-900 hover:text-blue-700 justify-center items-center"
+                    className="text-sm dark:text-blue-900 hover:text-blue-700 justify-center items-center"
                 >
                     Forgot Password?
                 </Link>

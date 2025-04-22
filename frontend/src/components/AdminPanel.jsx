@@ -361,75 +361,75 @@ const AdminPanel = () => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 via-black to-emerald-900 min-h-screen text-white p-6">
+    <div className="bg-[#faf4ee] dark:bg-gradient-to-br dark:from-gray-900 dark:via-black dark:to-emerald-900 min-h-screen text-[#5e4636] dark:text-white p-6">
       <Header />
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8 mt-14">
-          <h1 className="text-3xl font-bold text-emerald-400">
+          <h1 className="text-3xl font-bold text-[#0a3b25] dark:text-emerald-400">
             Admin Panel - User Management
           </h1>
           <button
-            className="bg-gradient-to-r from-blue-600/90 to-emerald-600/80 text-white px-4 py-2 rounded-md flex items-center shadow-lg transition-all"
+            className="bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white px-4 py-2 rounded-md flex items-center shadow-lg transition-all"
             onClick={() => setIsAddModalOpen(true)}
           >
             <FaUserPlus className="mr-2" /> Add New User
           </button>
         </div>
-
+  
         {/* Error Alert */}
         {error && (
-          <div className="bg-red-500/80 text-white p-4 mb-6 rounded-md shadow-lg">
+          <div className="bg-[#fff0f0] text-[#ff4a4a] dark:bg-red-500/80 dark:text-white p-4 mb-6 rounded-md shadow-lg">
             {error}
           </div>
         )}
-
+  
         {/* Users Table */}
-        <div className="bg-black/50 backdrop-blur-sm rounded-lg shadow-xl overflow-hidden border border-emerald-900/50">
-          <table className="w-full divide-y divide-gray-800/50">
-            <thead className="bg-black/70">
+        <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-lg shadow-xl overflow-hidden border border-[#e8ddcc] dark:border-emerald-900/50">
+          <table className="w-full divide-y divide-[#e3d5c8] dark:divide-gray-800/50">
+            <thead className="bg-[#e9dcc9] dark:bg-black/70">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#0a3b25] dark:text-emerald-400 uppercase tracking-wider">
                   ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#0a3b25] dark:text-emerald-400 uppercase tracking-wider">
                   Username
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#0a3b25] dark:text-emerald-400 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#0a3b25] dark:text-emerald-400 uppercase tracking-wider">
                   API Keys
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#0a3b25] dark:text-emerald-400 uppercase tracking-wider">
                   Module Permissions
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#0a3b25] dark:text-emerald-400 uppercase tracking-wider">
                   Upload Control
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#0a3b25] dark:text-emerald-400 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800/50">
+            <tbody className="divide-y divide-[#e3d5c8] dark:divide-gray-800/50">
               {users.map((user) => (
                 <tr
                   key={user.id}
-                  className="hover:bg-emerald-900/20 transition-colors"
+                  className="hover:bg-[#f5e6d8] dark:hover:bg-emerald-900/20 transition-colors"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-[#5a544a] dark:text-gray-300">
                     {user.id}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-[#5a544a] dark:text-gray-300">
                     {user.username}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-[#5a544a] dark:text-gray-300">
                     {user.email}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-[#5a544a] dark:text-gray-300">
                     <div className="flex flex-col">
                       <span>
-                        <span className="text-blue-400">Hugging Face:</span>
+                        <span className="text-[#556052] dark:text-blue-400">Hugging Face:</span>
                         {user.api_tokens.huggingface_token
                           ? `${user.api_tokens.huggingface_token.slice(
                               0,
@@ -438,20 +438,20 @@ const AdminPanel = () => {
                           : "Not set"}
                       </span>
                       <span>
-                        <span className="text-emerald-400">Gemini:</span>
+                        <span className="text-[#556052] dark:text-emerald-400">Gemini:</span>
                         {user.api_tokens.gemini_token
                           ? `${user.api_tokens.gemini_token.slice(0, 5)}...`
                           : "Not set"}
                       </span>
                       <span>
-                        <span className="text-amber-400">Llama:</span>
+                        <span className="text-[#a55233] dark:text-amber-400">Llama:</span>
                         {user.api_tokens.llama_token
                           ? `${user.api_tokens.llama_token.slice(0, 5)}...`
                           : "Not set"}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-300">
+                  <td className="px-6 py-4 text-sm text-[#5a544a] dark:text-gray-300">
                     <div className="flex flex-col">
                       {user.disabled_modules
                         ? Object.entries(user.disabled_modules)
@@ -463,7 +463,7 @@ const AdminPanel = () => {
                               return module ? (
                                 <span
                                   key={moduleId}
-                                  className="text-red-400 flex items-center"
+                                  className="text-[#ff4a4a] dark:text-red-400 flex items-center"
                                 >
                                   <FaLock className="mr-1" size={12} />{" "}
                                   {module.name}
@@ -481,19 +481,19 @@ const AdminPanel = () => {
                     <div className="flex flex-col space-y-2">
                       <button
                         onClick={() => handleOpenUploadModal(user)}
-                        className="flex items-center text-blue-400 hover:text-blue-300 transition-all p-1 rounded-md hover:bg-blue-900/30"
+                        className="flex items-center text-[#556052] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-blue-300 transition-all p-1 rounded-md hover:bg-[#556052]/10 dark:hover:bg-blue-900/30"
                         title="Upload documents for this user"
                       >
                         <FaFileUpload size={14} className="mr-1" />
                         <span>Upload Files</span>
                       </button>
-
+  
                       <button
                         onClick={() => toggleUploadPermission(user.id)}
                         className={`flex items-center transition-all p-1 rounded-md ${
                           userUploadPermissions[user.id]
-                            ? "text-green-400 hover:text-red-300 hover:bg-red-900/30"
-                            : "text-red-400 hover:text-green-300 hover:bg-green-900/30"
+                            ? "text-[#556052] hover:text-[#ff4a4a] hover:bg-[#ff4a4a]/10 dark:text-green-400 dark:hover:text-red-300 dark:hover:bg-red-900/30"
+                            : "text-[#ff4a4a] hover:text-[#556052] hover:bg-[#556052]/10 dark:text-red-400 dark:hover:text-green-300 dark:hover:bg-green-900/30"
                         }`}
                         title={
                           userUploadPermissions[user.id]
@@ -520,21 +520,21 @@ const AdminPanel = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex space-x-3">
                       <button
-                        className="text-blue-400 hover:text-emerald-300 transition-colors"
+                        className="text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 transition-colors"
                         onClick={() => handleOpenEditModal(user)}
                         title="Edit API Tokens"
                       >
                         <FaKey size={16} />
                       </button>
                       <button
-                        className="text-purple-400 hover:text-purple-300 transition-colors"
+                        className="text-[#5e4636] hover:text-[#a55233] dark:text-purple-400 dark:hover:text-purple-300 transition-colors"
                         onClick={() => handleOpenModulePermissionsModal(user)}
                         title="Edit Module Permissions"
                       >
                         <FaLock size={16} />
                       </button>
                       <button
-                        className="text-red-500 hover:text-red-400 transition-colors"
+                        className="text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 transition-colors"
                         onClick={() => handleDeleteUser(user.id, user.username)}
                         title="Delete User"
                         disabled={user.username === "admin"}
@@ -549,7 +549,7 @@ const AdminPanel = () => {
                 <tr>
                   <td
                     colSpan="7"
-                    className="px-6 py-4 text-center text-sm text-gray-400"
+                    className="px-6 py-4 text-center text-sm text-[#5a544a] dark:text-gray-400"
                   >
                     No users found
                   </td>
@@ -559,8 +559,8 @@ const AdminPanel = () => {
                 <tr>
                   <td colSpan="7" className="px-6 py-4 text-center text-sm">
                     <div className="flex justify-center items-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-emerald-400"></div>
-                      <span className="ml-2 text-emerald-300">Loading...</span>
+                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
+                      <span className="ml-2 text-[#5e4636] dark:text-emerald-300">Loading...</span>
                     </div>
                   </td>
                 </tr>
@@ -569,17 +569,17 @@ const AdminPanel = () => {
           </table>
         </div>
       </div>
-
+  
       {/* Add User Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-gray-900 to-black rounded-lg max-w-md w-full shadow-2xl border border-emerald-900/30">
-            <div className="flex justify-between items-center border-b border-gray-800 p-4">
-              <h2 className="text-xl font-semibold text-emerald-400">
+        <div className="fixed inset-0 bg-black/30 dark:bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:to-black rounded-lg max-w-md w-full shadow-2xl border border-[#d6cbbf] dark:border-emerald-900/30">
+            <div className="flex justify-between items-center border-b border-[#e3d5c8] dark:border-gray-800 p-4">
+              <h2 className="text-xl font-semibold text-[#0a3b25] dark:text-emerald-400">
                 Add New User
               </h2>
               <button
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-[#5a544a] hover:text-[#a55233] dark:text-gray-400 dark:hover:text-white transition-colors"
                 onClick={() => setIsAddModalOpen(false)}
               >
                 <FaTimes />
@@ -587,7 +587,7 @@ const AdminPanel = () => {
             </div>
             <form onSubmit={handleCreateUser} className="p-4">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Username
                 </label>
                 <input
@@ -595,12 +595,12 @@ const AdminPanel = () => {
                   name="username"
                   value={formData.username}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Email
                 </label>
                 <input
@@ -608,12 +608,12 @@ const AdminPanel = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Password
                 </label>
                 <input
@@ -621,12 +621,12 @@ const AdminPanel = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Hugging Face Token
                 </label>
                 <input
@@ -634,11 +634,11 @@ const AdminPanel = () => {
                   name="huggingface_token"
                   value={formData.huggingface_token}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Gemini Token
                 </label>
                 <input
@@ -646,11 +646,11 @@ const AdminPanel = () => {
                   name="gemini_token"
                   value={formData.gemini_token}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Llama Token
                 </label>
                 <input
@@ -658,20 +658,20 @@ const AdminPanel = () => {
                   name="llama_token"
                   value={formData.llama_token}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
               <div className="flex justify-end">
                 <button
                   type="button"
-                  className="mr-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
+                  className="mr-2 px-4 py-2 bg-white border border-[#d6cbbf] hover:bg-[#f5e6d8] dark:bg-gray-800 dark:hover:bg-gray-700 text-[#5e4636] dark:text-white rounded-md transition-colors"
                   onClick={() => setIsAddModalOpen(false)}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600/90 to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
+                  className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
                   disabled={loading}
                 >
                   {loading ? (
@@ -690,17 +690,17 @@ const AdminPanel = () => {
           </div>
         </div>
       )}
-
+  
       {/* Edit User Modal */}
       {isEditModalOpen && currentUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-gray-900 to-black rounded-lg max-w-md w-full shadow-2xl border border-emerald-900/30">
-            <div className="flex justify-between items-center border-b border-gray-800 p-4">
-              <h2 className="text-xl font-semibold text-emerald-400">
+        <div className="fixed inset-0 bg-black/30 dark:bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:to-black rounded-lg max-w-md w-full shadow-2xl border border-[#d6cbbf] dark:border-emerald-900/30">
+            <div className="flex justify-between items-center border-b border-[#e3d5c8] dark:border-gray-800 p-4">
+              <h2 className="text-xl font-semibold text-[#0a3b25] dark:text-emerald-400">
                 Edit API Tokens - {currentUser.username}
               </h2>
               <button
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-[#5a544a] hover:text-[#a55233] dark:text-gray-400 dark:hover:text-white transition-colors"
                 onClick={() => setIsEditModalOpen(false)}
               >
                 <FaTimes />
@@ -708,7 +708,7 @@ const AdminPanel = () => {
             </div>
             <form onSubmit={handleUpdateTokens} className="p-4">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Hugging Face Token
                 </label>
                 <input
@@ -716,11 +716,11 @@ const AdminPanel = () => {
                   name="huggingface_token"
                   value={formData.huggingface_token}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Gemini Token
                 </label>
                 <input
@@ -728,11 +728,11 @@ const AdminPanel = () => {
                   name="gemini_token"
                   value={formData.gemini_token}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
+                <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                   Llama Token
                 </label>
                 <input
@@ -740,20 +740,20 @@ const AdminPanel = () => {
                   name="llama_token"
                   value={formData.llama_token}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
               <div className="flex justify-end">
                 <button
                   type="button"
-                  className="mr-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
+                  className="mr-2 px-4 py-2 bg-white border border-[#d6cbbf] hover:bg-[#f5e6d8] dark:bg-gray-800 dark:hover:bg-gray-700 text-[#5e4636] dark:text-white rounded-md transition-colors"
                   onClick={() => setIsEditModalOpen(false)}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600/90 to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
+                  className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
                   disabled={loading}
                 >
                   {loading ? (
@@ -772,42 +772,42 @@ const AdminPanel = () => {
           </div>
         </div>
       )}
-
+  
       {/* Module Permissions Modal */}
       {isModulePermissionsModalOpen && currentUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-gray-900 to-black rounded-lg max-w-md w-full shadow-2xl border border-emerald-900/30">
-            <div className="flex justify-between items-center border-b border-gray-800 p-4">
-              <h2 className="text-xl font-semibold text-emerald-400">
+        <div className="fixed inset-0 bg-black/30 dark:bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:to-black rounded-lg max-w-md w-full shadow-2xl border border-[#d6cbbf] dark:border-emerald-900/30">
+            <div className="flex justify-between items-center border-b border-[#e3d5c8] dark:border-gray-800 p-4">
+              <h2 className="text-xl font-semibold text-[#0a3b25] dark:text-emerald-400">
                 Module Permissions - {currentUser.username}
               </h2>
               <button
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-[#5a544a] hover:text-[#a55233] dark:text-gray-400 dark:hover:text-white transition-colors"
                 onClick={() => setIsModulePermissionsModalOpen(false)}
               >
                 <FaTimes />
               </button>
             </div>
             <div className="p-4">
-              <p className="text-sm text-gray-300 mb-4">
+              <p className="text-sm text-[#5a544a] dark:text-gray-300 mb-4">
                 Enable or disable access to specific modules for this user.
               </p>
-
+  
               <div className="space-y-3 mb-6">
                 {availableModules.map((module) => (
                   <div
                     key={module.id}
-                    className="flex items-center justify-between p-3 bg-black/30 border border-emerald-900/30 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-[#e9dcc9] dark:bg-black/30 border border-[#d6cbbf] dark:border-emerald-900/30 rounded-lg"
                   >
-                    <span className="text-white">{module.name}</span>
+                    <span className="text-[#5e4636] dark:text-white">{module.name}</span>
                     <button
                       type="button"
                       onClick={() => toggleModulePermission(module.id)}
                       className={`px-3 py-1.5 rounded-lg flex items-center space-x-2 
                         ${
                           modulePermissions[module.id]
-                            ? "bg-red-600/20 text-red-300 hover:bg-red-600/40"
-                            : "bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/40"
+                            ? "bg-[#ff4a4a]/20 text-[#ff4a4a] hover:bg-[#ff4a4a]/40 dark:bg-red-600/20 dark:text-red-300 dark:hover:bg-red-600/40"
+                            : "bg-[#556052]/20 text-[#556052] hover:bg-[#556052]/40 dark:bg-emerald-600/20 dark:text-emerald-300 dark:hover:bg-emerald-600/40"
                         } 
                         transition-colors`}
                     >
@@ -824,11 +824,11 @@ const AdminPanel = () => {
                   </div>
                 ))}
               </div>
-
+  
               <div className="flex justify-end">
                 <button
                   type="button"
-                  className="mr-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
+                  className="mr-2 px-4 py-2 bg-white border border-[#d6cbbf] hover:bg-[#f5e6d8] dark:bg-gray-800 dark:hover:bg-gray-700 text-[#5e4636] dark:text-white rounded-md transition-colors"
                   onClick={() => setIsModulePermissionsModalOpen(false)}
                 >
                   Cancel
@@ -836,7 +836,7 @@ const AdminPanel = () => {
                 <button
                   type="button"
                   onClick={handleUpdateModulePermissions}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600/90 to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
+                  className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
                   disabled={loading}
                 >
                   {loading ? (
@@ -855,139 +855,138 @@ const AdminPanel = () => {
           </div>
         </div>
       )}
-
       {/* Upload Documents Modal */}
-      {isUploadModalOpen && currentUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-gray-900 to-black rounded-lg max-w-md w-full shadow-2xl border border-emerald-900/30">
-            <div className="flex justify-between items-center border-b border-gray-800 p-4">
-              <h2 className="text-xl font-semibold text-emerald-400">
-                Upload Documents for {currentUser.username}
-              </h2>
-              <button
-                className="text-gray-400 hover:text-white transition-colors"
-                onClick={() => setIsUploadModalOpen(false)}
+    {isUploadModalOpen && currentUser && (
+      <div className="fixed inset-0 bg-black/30 dark:bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:to-black rounded-lg max-w-md w-full shadow-2xl border border-[#d6cbbf] dark:border-emerald-900/30">
+          <div className="flex justify-between items-center border-b border-[#e3d5c8] dark:border-gray-800 p-4">
+            <h2 className="text-xl font-semibold text-[#0a3b25] dark:text-emerald-400">
+              Upload Documents for {currentUser.username}
+            </h2>
+            <button
+              className="text-[#5a544a] hover:text-[#a55233] dark:text-gray-400 dark:hover:text-white transition-colors"
+              onClick={() => setIsUploadModalOpen(false)}
+            >
+              <FaTimes />
+            </button>
+          </div>
+          <form onSubmit={handleUploadForUser} className="p-4">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
+                Select Project
+              </label>
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
+                required
               >
-                <FaTimes />
-              </button>
+                <option value="">Select a project</option>
+                {userProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <form onSubmit={handleUploadForUser} className="p-4">
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
-                  Select Project
-                </label>
-                <select
-                  value={selectedProject}
-                  onChange={(e) => setSelectedProject(e.target.value)}
-                  className="w-full px-3 py-2 bg-black/50 border border-emerald-900/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Select a project</option>
-                  {userProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
+                Select Documents
+              </label>
+              <div
+                className="w-full p-6 border-2 border-dashed border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-center hover:border-[#a68a70] dark:hover:border-emerald-500/50 cursor-pointer transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <FaUpload className="mx-auto h-10 w-10 text-[#a55233]/50 dark:text-emerald-500/50" />
+                <p className="mt-2 text-sm text-[#5a544a] dark:text-gray-300">
+                  Click to select or drag and drop files here
+                </p>
+                <p className="mt-1 text-xs text-[#5a544a] dark:text-gray-400">
+                  PDF, DOCX, TXT, PPTX, XLSX
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept=".pdf,.docx,.txt,.pptx,.xlsx"
+                />
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-emerald-300 mb-1">
-                  Select Documents
-                </label>
-                <div
-                  className="w-full p-6 border-2 border-dashed border-emerald-900/50 rounded-md text-center hover:border-emerald-500/50 cursor-pointer transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <FaUpload className="mx-auto h-10 w-10 text-emerald-500/50" />
-                  <p className="mt-2 text-sm text-gray-300">
-                    Click to select or drag and drop files here
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    PDF, DOCX, TXT, PPTX, XLSX
-                  </p>
-                  <input
-                    type="file"
-                    multiple
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    className="hidden"
-                    accept=".pdf,.docx,.txt,.pptx,.xlsx"
-                  />
-                </div>
-
-                {/* Selected files list */}
-                {selectedFiles.length > 0 && (
-                  <div className="mt-3">
-                    <h4 className="text-sm font-medium text-emerald-300 mb-2">
-                      Selected Files ({selectedFiles.length})
-                    </h4>
-                    <ul className="max-h-40 overflow-y-auto bg-black/20 rounded-md p-2 space-y-1">
-                      {selectedFiles.map((file, index) => (
-                        <li
-                          key={index}
-                          className="text-xs text-gray-300 flex items-center"
-                        >
-                          <FaFileUpload
-                            className="mr-1 text-blue-400"
-                            size={12}
-                          />
-                          {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              {/* Upload progress bar */}
-              {uploadProgress > 0 && (
-                <div className="mb-4">
-                  <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 to-emerald-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-xs text-center mt-1 text-gray-300">
-                    {uploadProgress}% uploaded
-                  </p>
+              {/* Selected files list */}
+              {selectedFiles.length > 0 && (
+                <div className="mt-3">
+                  <h4 className="text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-2">
+                    Selected Files ({selectedFiles.length})
+                  </h4>
+                  <ul className="max-h-40 overflow-y-auto bg-[#e9dcc9]/50 dark:bg-black/20 rounded-md p-2 space-y-1">
+                    {selectedFiles.map((file, index) => (
+                      <li
+                        key={index}
+                        className="text-xs text-[#5a544a] dark:text-gray-300 flex items-center"
+                      >
+                        <FaFileUpload
+                          className="mr-1 text-[#556052] dark:text-blue-400"
+                          size={12}
+                        />
+                        {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
+            </div>
 
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="mr-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
-                  onClick={() => setIsUploadModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600/90 to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
-                  disabled={
-                    loading || !selectedFiles.length || !selectedProject
-                  }
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 mr-2 border-t-2 border-b-2 border-white rounded-full"></div>
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <FaFileUpload className="mr-2" /> Upload Files
-                    </>
-                  )}
-                </button>
+            {/* Upload progress bar */}
+            {uploadProgress > 0 && (
+              <div className="mb-4">
+                <div className="w-full bg-[#e3d5c8] dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+                <p className="text-xs text-center mt-1 text-[#5a544a] dark:text-gray-300">
+                  {uploadProgress}% uploaded
+                </p>
               </div>
-            </form>
-          </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="mr-2 px-4 py-2 bg-white border border-[#d6cbbf] hover:bg-[#f5e6d8] dark:bg-gray-800 dark:hover:bg-gray-700 text-[#5e4636] dark:text-white rounded-md transition-colors"
+                onClick={() => setIsUploadModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
+                disabled={
+                  loading || !selectedFiles.length || !selectedProject
+                }
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 mr-2 border-t-2 border-b-2 border-white rounded-full"></div>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <FaFileUpload className="mr-2" /> Upload Files
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
 };
 
 export default AdminPanel;

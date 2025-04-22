@@ -102,7 +102,7 @@ const HighlightedDescription = ({
   };
 
   return (
-    <p className="text-gray-300 mb-4 text-justify leading-relaxed">
+    <p className="dark:text-gray-300 mb-4 text-justify leading-relaxed">
       {processedContent.map((segment, index) => (
         segment.highlight ? (
           <span

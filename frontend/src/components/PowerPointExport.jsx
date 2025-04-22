@@ -1,35 +1,62 @@
-import React, { useState } from 'react';
+
+
+import React, { useState, useContext } from 'react';
 import { Download } from 'lucide-react';
 import pptxgen from 'pptxgenjs';
 import { format } from 'date-fns';
 import { ideaService } from '../utils/axiosConfig';
 // Import the logo directly
 import logoImage from '../assets/Logo1.png';
+// Import ThemeContext
+import { ThemeContext } from '../context/ThemeContext';
 
 const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} }) => {
   const [isExporting, setIsExporting] = useState(false);
+  // Get the current theme
+  const { theme } = useContext(ThemeContext);
 
-  const THEME = {
-    colors: {
-      background: '1A2333',    
-      primary: '4A90E2',      
-      secondary: '2D5A9E',    
-      text: 'FFFFFF',        
-      textLight: 'B0BEC5',    
-      accent: '64B5F6',        // Light blue accent
-      version:'21f359'
+  // Define themes for both light and dark mode
+  const THEMES = {
+    light: {
+      colors: {
+        background: 'FAF4EE',    // Light beige
+        primary: 'A55233',       // Terracotta
+        secondary: '556052',     // Sage green
+        text: '0A3B25',          // Dark green
+        textLight: '5A544A',     // Muted brown
+        accent: '8B4513',        // Dark brown
+        version: '556052'        // Sage green
+      },
+      fonts: {
+        heading: 'Arial',
+        body: 'Arial'
+      }
     },
-    fonts: {
-      heading: 'Arial',
-      body: 'Arial'
+    dark: {
+      colors: {
+        background: '1A2333',    // Dark blue
+        primary: '4A90E2',       // Blue
+        secondary: '2D5A9E',     // Dark blue
+        text: 'FFFFFF',          // White
+        textLight: 'B0BEC5',     // Light gray
+        accent: '64B5F6',        // Light blue accent
+        version: '21F359'        // Green
+      },
+      fonts: {
+        heading: 'Arial',
+        body: 'Arial'
+      }
     }
   };
 
-  const styles = {
+  // Select the appropriate theme based on current UI theme
+  const currentTheme = theme === 'dark' ? THEMES.dark : THEMES.light;
+
+  const getStyles = (themeObj) => ({
     title: {
-      fontFace: THEME.fonts.heading,
+      fontFace: themeObj.fonts.heading,
       fontSize: 32,
-      color: THEME.colors.text,
+      color: themeObj.colors.text,
       bold: true,
       align: 'left',
       x: '5%',
@@ -38,9 +65,9 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
       h: '15%'
     },
     metadata: {
-      fontFace: THEME.fonts.body,
+      fontFace: themeObj.fonts.body,
       fontSize: 16,
-      color: THEME.colors.text,
+      color: themeObj.colors.text,
       align: 'left',
       x: '5%',
       y: '25%',
@@ -48,16 +75,18 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
       h: '65%'
     },
     version: {
-      fontFace: THEME.fonts.body,
+      fontFace: themeObj.fonts.body,
       fontSize: 14,
-      color: THEME.colors.textLight,
+      color: themeObj.colors.textLight,
       align: 'right',
       x: '65%',
       y: '7%',
       w: '30%',
       h: '5%'
     }
-  };
+  });
+
+  const styles = getStyles(currentTheme);
 
   const addLogoToSlide = (slide) => {
     try {
@@ -76,7 +105,7 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
 
   const createTitleSlide = async (pptx) => {
     const slide = pptx.addSlide();
-    slide.background = { color: THEME.colors.background };
+    slide.background = { color: currentTheme.colors.background };
     
     // Add logo to the title slide
     addLogoToSlide(slide);
@@ -87,7 +116,7 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
       fontSize: 44,
       align: 'center',
       y: '35%',
-      color: THEME.colors.primary
+      color: currentTheme.colors.primary
     });
   
     // Subtitle with date
@@ -127,16 +156,16 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
       // Create slides for each version
       for (const version of allVersions) {
         const slide = pptx.addSlide();
-        slide.background = { color: '1A2333' };  // Dark blue background
+        slide.background = { color: currentTheme.colors.background };
         
         // Add logo to slide
         addLogoToSlide(slide);
         
         // Add title
         slide.addText(idea.product_name || 'Untitled Product', {
-          fontFace: THEME.fonts.heading,
+          fontFace: currentTheme.fonts.heading,
           fontSize: 20,
-          color: THEME.colors.text,
+          color: currentTheme.colors.primary,
           bold: true,
           align: 'center',
           x: '3%',
@@ -145,21 +174,30 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
           h: '10%'
         });
   
+        // For light theme, we'll use lighter container colors
+        const containerFill = theme === 'dark' 
+          ? '1B2B44' // Dark blue for dark theme
+          : 'F5E6D8'; // Light beige for light theme
+        
+        const containerBorder = theme === 'dark'
+          ? '2A4165' // Dark blue border for dark theme
+          : 'D6CBBF'; // Light brown border for light theme
+  
         // Description container
         slide.addShape(pptx.ShapeType.rect, {
           x: '3%',
           y: '15%',
           w: '45%',
           h: '80%',
-          fill: { color: '1B2B44' },
-          line: { color: '2A4165', width: 1 }
+          fill: { color: containerFill },
+          line: { color: containerBorder, width: 1 }
         });
   
         // Description text
         slide.addText(idea.description || 'No description available', {
-          fontFace: THEME.fonts.body,
+          fontFace: currentTheme.fonts.body,
           fontSize: 14,
-          color: THEME.colors.text,
+          color: currentTheme.colors.text,
           align: 'justify',
           x: '5%',
           y: '17%',
@@ -175,8 +213,8 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
           y: '15%',
           w: '45%',
           h: '80%',
-          fill: { color: '1B2B44' },
-          line: { color: '2A4165', width: 1 }
+          fill: { color: containerFill },
+          line: { color: containerBorder, width: 1 }
         });
   
         // Add image
@@ -195,9 +233,9 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
         slide.addText(
           `${version.versionLabel} • ${format(new Date(version.created_at), 'MMM d, yyyy')}`, 
           {
-            fontFace: THEME.fonts.body,
+            fontFace: currentTheme.fonts.body,
             fontSize: 14,
-            color: THEME.colors.version,
+            color: currentTheme.colors.version,
             align: 'center',
             x: '52%',
             y: '82%',
@@ -206,13 +244,13 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
           }
         );
   
-        // Decorative line
+        // Decorative line - use theme's accent color
         slide.addShape(pptx.ShapeType.line, {
           x: '3%',
           y: '12%',
           w: '94%',
           h: 0,
-          line: { color: '3B82F6', width: 1 }
+          line: { color: currentTheme.colors.accent, width: 1 }
         });
       }
     } catch (error) {
@@ -226,7 +264,7 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
     try {
       const pptx = new pptxgen();
       pptx.layout = 'LAYOUT_16x9';
-      pptx.background = { color: THEME.colors.background };
+      pptx.background = { color: currentTheme.colors.background };
       
       await createTitleSlide(pptx);
 
@@ -262,7 +300,7 @@ const PowerPointExport = ({ ideas = [], generatedImages = {}, ideaMetadata = {} 
       onClick={generatePowerPoint}
       disabled={isExporting}
       title="Download"
-      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-md transition-colors"
+      className="inline-flex items-center gap-2 px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] disabled:bg-[#ccb09e] text-white dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-blue-800 rounded-md transition-colors"
     >
       <Download size={16} className={isExporting ? 'animate-bounce' : ''} />
       {isExporting ? 'Exporting...' : 'Export Ideas'}

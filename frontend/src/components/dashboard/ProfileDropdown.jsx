@@ -132,12 +132,12 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
   return (
     <div 
       onClick={handlePasswordFormClick}
-      className="fixed right-4 top-16 w-80 bg-gray-900 rounded-xl shadow-2xl border border-gray-700 p-6 space-y-4 overflow-hidden"
+      className="fixed right-4 top-16 w-80 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-[#d6cbbf] dark:border-gray-700 p-6 space-y-4 overflow-hidden"
     >
       {/* Profile Header */}
-      <div className="flex items-center space-x-4 pb-4 border-b border-gray-700">
+      <div className="flex items-center space-x-4 pb-4 border-b border-[#e3d5c8] dark:border-gray-700">
         <div className="relative group cursor-pointer" onClick={handleImageClick}>
-          <div className="relative w-20 h-20 rounded-full overflow-hidden ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900">
+          <div className="relative w-20 h-20 rounded-full overflow-hidden ring-2 ring-[#a55233] dark:ring-blue-500 ring-offset-2 ring-offset-[#faf4ee] dark:ring-offset-gray-900">
             <img 
               src={previewImage || profileImage} 
               alt="Profile" 
@@ -165,11 +165,11 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
           )}
         </div>
         <div className="flex-1">           
-          <h3 className="text-white text-lg font-medium">{username}</h3>           
-          <p className="text-gray-300 text-sm truncate">{userDetails.email}</p>           
+          <h3 className="text-[#0a3b25] dark:text-white text-lg font-medium">{username}</h3>           
+          <p className="text-[#5a544a] dark:text-gray-300 text-sm truncate">{userDetails.email}</p>           
           <button              
             onClick={handleImageClick}             
-            className="mt-2 text-blue-400 text-sm hover:text-blue-300 transition-colors"           
+            className="mt-2 text-[#a55233] dark:text-blue-400 text-sm hover:text-[#8b4513] dark:hover:text-blue-300 transition-colors"           
           >             
             Change Picture           
           </button>
@@ -179,34 +179,34 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
       
       {/* User Details */}
       <div className="space-y-3">
-        <div className="flex items-center space-x-3 text-gray-200 p-2 rounded-lg hover:bg-gray-800 transition-colors">
-          <Mail className="w-4 h-4" />
+        <div className="flex items-center space-x-3 text-[#5e4636] dark:text-gray-200 p-2 rounded-lg hover:bg-[#f5e6d8] dark:hover:bg-gray-800 transition-colors">
+          <Mail className="w-4 h-4 text-[#a55233] dark:text-inherit" />
           <span className="text-sm truncate">{userDetails.email}</span>
         </div>
-        <div className="flex items-center space-x-3 text-gray-200 p-2 rounded-lg hover:bg-gray-800 transition-colors">
-          <Calendar className="w-4 h-4" />
+        <div className="flex items-center space-x-3 text-[#5e4636] dark:text-gray-200 p-2 rounded-lg hover:bg-[#f5e6d8] dark:hover:bg-gray-800 transition-colors">
+          <Calendar className="w-4 h-4 text-[#a55233] dark:text-inherit" />
           <span className="text-sm">Joined: {userDetails.joinedDate}</span>
         </div>
       </div>
-
+  
       {/* Admin Panel Button - Only shown for admin users */}
       {username === 'admin' && (
-        <div className="pt-4 border-t border-gray-700">
+        <div className="pt-4 border-t border-[#e3d5c8] dark:border-gray-700">
           <button
             onClick={handleAdminPanelClick}
-            className="flex items-center space-x-2 text-white bg-purple-600 hover:bg-purple-700 transition-colors w-full p-2 rounded-lg"
+            className="flex items-center space-x-2 text-white bg-[#556052] hover:bg-[#425142] dark:bg-purple-600 dark:hover:bg-purple-700 transition-colors w-full p-2 rounded-lg"
           >
             <Settings className="w-4 h-4" />
             <span className="text-sm font-medium">Open Admin Panel</span>
           </button>
         </div>
       )}
-
+  
       {/* Change Password Section */}
-      <div className="pt-4 border-t border-gray-700">
+      <div className="pt-4 border-t border-[#e3d5c8] dark:border-gray-700">
         <button
           disabled={true}
-          className="flex items-center space-x-2 text-gray-500 w-full p-2 rounded-lg bg-gray-800 opacity-50 cursor-not-allowed"
+          className="flex items-center space-x-2 text-[#5a544a] dark:text-gray-500 w-full p-2 rounded-lg bg-[#d6cbbf] dark:bg-gray-800 opacity-50 cursor-not-allowed"
         >
           <Lock className="w-4 h-4" />
           <span className="text-sm">Change Password</span>
@@ -223,7 +223,7 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
               placeholder="Current Password"
               value={passwordData.currentPassword}
               onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
-              className="w-full px-4 py-2 bg-gray-800 rounded-lg text-white text-sm border border-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full px-4 py-2 bg-white/80 dark:bg-gray-800 rounded-lg text-[#5e4636] dark:text-white text-sm border border-[#d6cbbf] dark:border-gray-700 focus:border-[#a55233] dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-[#a55233] dark:focus:ring-blue-500 transition-colors"
               required
             />
             <input
@@ -231,7 +231,7 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
               placeholder="New Password"
               value={passwordData.newPassword}
               onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
-              className="w-full px-4 py-2 bg-gray-800 rounded-lg text-white text-sm border border-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full px-4 py-2 bg-white/80 dark:bg-gray-800 rounded-lg text-[#5e4636] dark:text-white text-sm border border-[#d6cbbf] dark:border-gray-700 focus:border-[#a55233] dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-[#a55233] dark:focus:ring-blue-500 transition-colors"
               required
             />
             <input
@@ -239,37 +239,37 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
               placeholder="Confirm New Password"
               value={passwordData.confirmPassword}
               onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
-              className="w-full px-4 py-2 bg-gray-800 rounded-lg text-white text-sm border border-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full px-4 py-2 bg-white/80 dark:bg-gray-800 rounded-lg text-[#5e4636] dark:text-white text-sm border border-[#d6cbbf] dark:border-gray-700 focus:border-[#a55233] dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-[#a55233] dark:focus:ring-blue-500 transition-colors"
               required
             />
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm transition-colors"
+              className="w-full bg-[#a55233] hover:bg-[#8b4513] dark:bg-blue-600 dark:hover:bg-blue-700 text-white py-2 rounded-lg text-sm transition-colors"
             >
               Update Password
             </button>
           </form>
         )}
       </div>
-
-      {/* Logout Button - Added here */}
-      <div className="pt-4 border-t border-gray-700">
+  
+      {/* Logout Button */}
+      <div className="pt-4 border-t border-[#e3d5c8] dark:border-gray-700">
         <button
           onClick={onLogout}
-          className="flex items-center space-x-2 text-gray-200 hover:text-red-400 transition-colors w-full p-2 rounded-lg hover:bg-gray-800 group"
+          className="flex items-center space-x-2 text-[#5e4636] hover:text-[#a55233] dark:text-gray-200 dark:hover:text-red-400 transition-colors w-full p-2 rounded-lg hover:bg-[#f5e6d8] dark:hover:bg-gray-800 group"
         >
           <LogOut className="w-4 h-4 group-hover:rotate-12 transition-transform" />
           <span className="text-sm">Logout</span>
         </button>
       </div>
-
+  
       {/* Upload Instructions */}
-      <div className="text-xs text-gray-300 space-y-1 bg-gray-800 p-3 rounded-lg">
+      <div className="text-xs text-[#5a544a] dark:text-gray-300 space-y-1 bg-[#e9dcc9] dark:bg-gray-800 p-3 rounded-lg">
         <p>• Click profile picture to upload a new image</p>
         <p>• Maximum size: 2MB</p>
         <p>• Supported formats: JPG, PNG, GIF</p>
       </div>
-
+  
       <input
         ref={fileInputRef}
         type="file"

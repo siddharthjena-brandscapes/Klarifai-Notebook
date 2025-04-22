@@ -1,8 +1,7 @@
 
-
 //Document Q/A parent component
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { Menu, ChevronRight, ChevronLeft, X } from 'lucide-react';
@@ -11,13 +10,13 @@ import Sidebar from '../../components/dashboard/Sidebar';
 import MainContent from '../../components/dashboard/MainContent';
 import backgroundImage from '../../assets/bg-main.jpg';
 import FaqButton from '../../components/faq/FaqButton';
-
+import { ThemeContext } from '../../context/ThemeContext'; // Import ThemeContext
 
 const Dashboard = () => {
   const { mainProjectId } = useParams();
   const navigate = useNavigate();
   // Change default sidebar state to closed
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedChat, setSelectedChat] = useState(null);
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -25,6 +24,15 @@ const Dashboard = () => {
   const [followUpQuestions, setFollowUpQuestions] = useState([]);
   const [isSummaryPopupOpen, setIsSummaryPopupOpen] = useState(false);
   const [selectedDocuments, setSelectedDocuments] = useState([]);
+  const [chatInputFocused, setChatInputFocused] = useState(false);
+  const { theme } = useContext(ThemeContext); // Get current theme from context
+
+  // Pass this event handler to MainContent
+  const handleChatInputFocus = () => {
+    setChatInputFocused(true);
+    // Reset after a short delay
+    setTimeout(() => setChatInputFocused(false), 100);
+  };
 
   // Stable callback for setting follow-up questions
   const stableSetFollowUpQuestions = useCallback((questions) => {
@@ -68,9 +76,7 @@ const Dashboard = () => {
       // Only close sidebar on mobile, keep it open on desktop
       if (mobile) {
         setIsSidebarOpen(false);
-      } else {
-        setIsSidebarOpen(true); // Keep sidebar open on desktop
-      }
+      } 
     };
 
     // Check initial screen size
@@ -122,55 +128,49 @@ const Dashboard = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
+  useEffect(() => {
+    // Listen for custom sidebar toggle events
+    const handleSidebarToggle = () => {
+      setIsSidebarOpen(!isSidebarOpen);
+    };
+    
+    document.addEventListener('toggle-sidebar', handleSidebarToggle);
+    
+    return () => {
+      document.removeEventListener('toggle-sidebar', handleSidebarToggle);
+    };
+  }, [isSidebarOpen]);
+
   return (
-    <div className="flex flex-col min-h-screen bg-black overflow-hidden">
-      <div 
-        className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
-        style={{
-          backgroundImage: `url(${backgroundImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-        role="img"
-        aria-label="Background"
-      />
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"></div>
+    <div className={`flex flex-col min-h-screen ${theme === 'dark' ? 'dark:bg-black' : 'bg-[#f0efea]/50'} overflow-hidden`}>
+      {/* Apply background only in dark theme */}
+      {theme === 'dark' && (
+        <>
+          <div 
+            className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
+            style={{
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+            role="img"
+            aria-label="Background"
+          />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"></div>
+        </>
+      )}
+      
       <Header />
       
       <div className="flex flex-1 relative">
         {/* Mobile Overlay for Sidebar */}
         {isMobile && isSidebarOpen && (
           <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-40" 
+            className={`fixed inset-0 ${theme === 'dark' ? 'bg-black' : 'bg-[#5e4636]'} bg-opacity-50 z-40`} 
             onClick={() => setIsSidebarOpen(false)}
             aria-hidden="true"
           />
         )}
-
-        {/* Sidebar Toggle Button */}
-        <button
-          onClick={toggleSidebar}
-          className={`
-            fixed z-50 
-            top-20  
-            text-white p-2 
-            ${isMobile 
-              ? 'left-0 rounded-r-lg' 
-              : isSidebarOpen 
-                ? 'left-[330px] rounded-l-none' 
-                : 'left-0 rounded-r-lg'}
-            shadow-lg
-            transition-all duration-300 ease-in-out
-            focus:outline-none focus:ring-2 focus:ring-blue-500
-            hover:opacity-90
-          `}
-          aria-label={isSidebarOpen ? "Close Sidebar" : "Open Sidebar"}
-        >
-          {isSidebarOpen ? 
-            (isMobile ? <X size={24} /> : <ChevronLeft size={24} className="text-gray-300" />) : 
-            <Menu size={24} />
-          }
-        </button>
 
         {/* Responsive Layout Container */}
         <div className="flex flex-1 overflow-hidden w-full">
@@ -186,6 +186,7 @@ const Dashboard = () => {
             selectedDocuments={selectedDocuments}
             onToggle={toggleSidebar}
             onNewChat={handleNewChat}
+            chatInputFocused={chatInputFocused}
             
           />
           
@@ -236,12 +237,13 @@ const Dashboard = () => {
                 setSelectedDocuments={setSelectedDocuments}
                 selectedDocuments={selectedDocuments}
                 className="w-full"
+                onChatInputFocus={handleChatInputFocus}
               />
             </div>
           </div>
         </div>
       </div>
-      <FaqButton />
+     
     </div>
   );
 };

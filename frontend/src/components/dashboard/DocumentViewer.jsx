@@ -1,229 +1,4 @@
-// // DocumentViewer.jsx
-// import React, { useState, useEffect } from 'react';
-// import PropTypes from 'prop-types';
-// import { X, Download, ExternalLink, Maximize2, Minimize2 } from 'lucide-react';
-// import { documentService } from '../../utils/axiosConfig';
 
-// const DocumentViewer = ({ documentId, filename, onClose }) => {
-//   const [documentUrl, setDocumentUrl] = useState(null);
-//   const [loading, setLoading] = useState(true);
-//   const [error, setError] = useState(null);
-//   const [isFullscreen, setIsFullscreen] = useState(false);
-
-//   useEffect(() => {
-//     const fetchDocument = async () => {
-//       if (!documentId) return;
-      
-//       try {
-//         setLoading(true);
-//         const response = await documentService.getOriginalDocument(documentId);
-        
-//         // Create a blob URL for the document
-//         const blob = new Blob([response.data], { type: getContentType(filename) });
-//         const url = URL.createObjectURL(blob);
-//         setDocumentUrl(url);
-//         setLoading(false);
-//       } catch (err) {
-//         console.error('Error fetching original document:', err);
-//         setError('Failed to load document. Please try again.');
-//         setLoading(false);
-//       }
-//     };
-
-//     fetchDocument();
-
-//     // Clean up the blob URL when the component unmounts
-//     return () => {
-//       if (documentUrl) {
-//         URL.revokeObjectURL(documentUrl);
-//       }
-//     };
-//   }, [documentId, filename]);
-
-//   const getContentType = (filename) => {
-//     const extension = filename.split('.').pop().toLowerCase();
-//     const contentTypes = {
-//       'pdf': 'application/pdf',
-//       'doc': 'application/msword',
-//       'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-//       'xls': 'application/vnd.ms-excel',
-//       'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-//       'ppt': 'application/vnd.ms-powerpoint',
-//       'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-//       'txt': 'text/plain',
-//       'csv': 'text/csv',
-//       'jpg': 'image/jpeg',
-//       'jpeg': 'image/jpeg',
-//       'png': 'image/png',
-//       'gif': 'image/gif'
-//     };
-    
-//     return contentTypes[extension] || 'application/octet-stream';
-//   };
-
-//   const downloadDocument = () => {
-//     if (documentUrl) {
-//       const a = document.createElement('a');
-//       a.href = documentUrl;
-//       a.download = filename;
-//       document.body.appendChild(a);
-//       a.click();
-//       document.body.removeChild(a);
-//     }
-//   };
-
-//   const toggleFullscreen = () => {
-//     setIsFullscreen(!isFullscreen);
-//   };
-
-//   const renderDocumentPreview = () => {
-//     if (loading) {
-//       return (
-//         <div className="flex items-center justify-center h-full">
-//           <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
-//           <p className="ml-2 text-gray-200">Loading document...</p>
-//         </div>
-//       );
-//     }
-
-//     if (error) {
-//       return (
-//         <div className="flex flex-col items-center justify-center h-full text-center p-4">
-//           <div className="text-red-500 mb-2 text-lg">⚠️ {error}</div>
-//           <p className="text-gray-300">
-//             The document could not be loaded. It may be in a format that cannot be displayed in the browser.
-//           </p>
-//           <button
-//             onClick={downloadDocument}
-//             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
-//           >
-//             <Download size={16} className="mr-2" />
-//             Download Instead
-//           </button>
-//         </div>
-//       );
-//     }
-
-//     if (!documentUrl) {
-//       return <div className="text-center text-gray-300">No document selected</div>;
-//     }
-
-//     const extension = filename.split('.').pop().toLowerCase();
-    
-//     // PDF viewer
-//     if (extension === 'pdf') {
-//       return (
-//         <iframe 
-//           src={`${documentUrl}#view=FitH`}
-//           className="w-full h-full border-none"
-//           title={filename}
-//         />
-//       );
-//     }
-    
-//     // Images
-//     if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
-//       return (
-//         <div className="flex items-center justify-center h-full">
-//           <img 
-//             src={documentUrl} 
-//             alt={filename} 
-//             className="max-w-full max-h-full object-contain"
-//           />
-//         </div>
-//       );
-//     }
-    
-//     // Text files
-//     if (extension === 'txt' || extension === 'csv') {
-//       return (
-//         <iframe 
-//           src={documentUrl} 
-//           className="w-full h-full bg-white text-black p-4"
-//           title={filename}
-//         />
-//       );
-//     }
-    
-//     // For other formats, offer download option
-//     return (
-//       <div className="flex flex-col items-center justify-center h-full text-center p-4">
-//         <p className="text-gray-300 mb-4">
-//           This document format ({extension.toUpperCase()}) cannot be previewed directly in the browser.
-//         </p>
-//         <button
-//           onClick={downloadDocument}
-//           className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
-//         >
-//           <Download size={16} className="mr-2" />
-//           Download Document
-//         </button>
-//         <a 
-//           href={documentUrl} 
-//           target="_blank" 
-//           rel="noopener noreferrer" 
-//           className="mt-4 px-4 py-2 bg-gray-700 text-white rounded-lg flex items-center"
-//         >
-//           <ExternalLink size={16} className="mr-2" />
-//           Open in New Tab
-//         </a>
-//       </div>
-//     );
-//   };
-
-//   return (
-//     <div 
-//       className={`
-//         fixed z-50 transition-all duration-300 
-//         ${isFullscreen 
-//           ? 'inset-0 bg-gray-900' 
-//           : 'top-20 left-1/2 -translate-x-1/2 w-4/5 max-w-4xl h-3/4 bg-gray-800 rounded-xl shadow-2xl'
-//         }
-//       `}
-//     >
-//       {/* Header */}
-//       <div className="flex items-center justify-between bg-gray-700 p-3 border-b border-gray-600 rounded-t-xl">
-//         <h3 className="text-white font-semibold truncate flex-1">{filename}</h3>
-//         <div className="flex items-center space-x-2">
-//           <button
-//             onClick={downloadDocument}
-//             className="p-2 text-gray-300 hover:text-white rounded-full hover:bg-gray-600"
-//             title="Download document"
-//           >
-//             <Download size={18} />
-//           </button>
-//           <button
-//             onClick={toggleFullscreen}
-//             className="p-2 text-gray-300 hover:text-white rounded-full hover:bg-gray-600"
-//             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-//           >
-//             {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-//           </button>
-//           <button
-//             onClick={onClose}
-//             className="p-2 text-gray-300 hover:text-white rounded-full hover:bg-gray-600"
-//             title="Close viewer"
-//           >
-//             <X size={18} />
-//           </button>
-//         </div>
-//       </div>
-      
-//       {/* Document Viewer Content */}
-//       <div className="h-[calc(100%-4rem)] overflow-auto bg-gray-900">
-//         {renderDocumentPreview()}
-//       </div>
-//     </div>
-//   );
-// };
-
-// DocumentViewer.propTypes = {
-//   documentId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
-//   filename: PropTypes.string.isRequired,
-//   onClose: PropTypes.func.isRequired
-// };
-
-// export default DocumentViewer;
 
 // DocumentViewer.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -545,22 +320,22 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
     if (loading) {
       return (
         <div className="flex items-center justify-center h-full">
-          <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
-          <p className="ml-2 text-gray-200">Loading document...</p>
+          <div className="animate-spin h-8 w-8 border-4 border-[#a55233] dark:border-blue-500 rounded-full border-t-transparent"></div>
+          <p className="ml-2 text-[#5e4636] dark:text-gray-200">Loading document...</p>
         </div>
       );
     }
-
+  
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-center p-4">
-          <div className="text-red-500 mb-2 text-lg">⚠️ {error}</div>
-          <p className="text-gray-300">
+          <div className="text-red-600 mb-2 text-lg">⚠️ {error}</div>
+          <p className="text-[#5a544a] dark:text-gray-300">
             The document could not be loaded. It may be in a format that cannot be displayed in the browser.
           </p>
           <button
             onClick={downloadDocument}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
+            className="mt-4 px-4 py-2 bg-[#a55233] dark:bg-blue-600 text-white rounded-lg flex items-center hover:bg-[#8b4513] dark:hover:bg-blue-700 transition-colors"
           >
             <Download size={16} className="mr-2" />
             Download Instead
@@ -568,36 +343,36 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
         </div>
       );
     }
-
+  
     if (!documentUrl) {
-      return <div className="text-center text-gray-300">No document selected</div>;
+      return <div className="text-center text-[#5a544a] dark:text-gray-300">No document selected</div>;
     }
-
+  
     const extension = filename.split('.').pop().toLowerCase();
     
     // PDF viewer
     if (extension === 'pdf') {
       return (
         <div className="h-full w-full relative">
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 space-x-2 z-10 shadow-lg">
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-[#e9dcc9]/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 space-x-2 z-10 shadow-lg">
             <button 
               onClick={zoomOut} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Zoom Out (Ctrl -)"
             >
               <ZoomOut size={18} />
             </button>
-            <span className="text-white text-sm">{Math.round(zoomLevel * 100)}%</span>
+            <span className="text-[#5e4636] dark:text-white text-sm">{Math.round(zoomLevel * 100)}%</span>
             <button 
               onClick={zoomIn} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Zoom In (Ctrl +)"
             >
               <ZoomIn size={18} />
             </button>
             <button 
               onClick={rotateDocument} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Rotate 90° (R)"
             >
               <RotateCcw size={18} />
@@ -623,32 +398,32 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
     if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
       return (
         <div className="flex flex-col items-center justify-center h-full relative">
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 space-x-2 z-10 shadow-lg">
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-[#e9dcc9]/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 space-x-2 z-10 shadow-lg">
             <button 
               onClick={zoomOut} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Zoom Out (Ctrl -)"
             >
               <ZoomOut size={18} />
             </button>
-            <span className="text-white text-sm">{Math.round(zoomLevel * 100)}%</span>
+            <span className="text-[#5e4636] dark:text-white text-sm">{Math.round(zoomLevel * 100)}%</span>
             <button 
               onClick={zoomIn} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Zoom In (Ctrl +)"
             >
               <ZoomIn size={18} />
             </button>
             <button 
               onClick={rotateDocument} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Rotate 90° (R)"
             >
               <RotateCcw size={18} />
             </button>
             <button 
               onClick={resetView} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Reset View (Ctrl 0)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -681,18 +456,18 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
     if (extension === 'txt' || extension === 'csv') {
       return (
         <div className="h-full w-full relative">
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 space-x-2 z-10 shadow-lg">
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-[#e9dcc9]/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 space-x-2 z-10 shadow-lg">
             <button 
               onClick={zoomOut} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Zoom Out (Ctrl -)"
             >
               <ZoomOut size={18} />
             </button>
-            <span className="text-white text-sm">{Math.round(zoomLevel * 100)}%</span>
+            <span className="text-[#5e4636] dark:text-white text-sm">{Math.round(zoomLevel * 100)}%</span>
             <button 
               onClick={zoomIn} 
-              className="p-1.5 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white"
+              className="p-1.5 rounded-md hover:bg-[#f5e6d8] dark:hover:bg-gray-700 text-[#5a544a] dark:text-gray-300 hover:text-[#5e4636] dark:hover:text-white"
               title="Zoom In (Ctrl +)"
             >
               <ZoomIn size={18} />
@@ -701,7 +476,7 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
           
           <iframe 
             src={documentUrl} 
-            className="w-full h-full bg-white text-black p-4"
+            className="w-full h-full bg-white text-[#5e4636] dark:text-black p-4"
             title={filename}
             style={{
               transform: `scale(${zoomLevel})`,
@@ -716,12 +491,12 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
     // For other formats, offer download option
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-4">
-        <p className="text-gray-300 mb-4">
+        <p className="text-[#5a544a] dark:text-gray-300 mb-4">
           This document format ({extension.toUpperCase()}) cannot be previewed directly in the browser.
         </p>
         <button
           onClick={downloadDocument}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
+          className="px-4 py-2 bg-[#a55233] dark:bg-blue-600 text-white rounded-lg flex items-center hover:bg-[#8b4513] dark:hover:bg-blue-700 transition-colors"
         >
           <Download size={16} className="mr-2" />
           Download Document
@@ -730,7 +505,7 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
           href={documentUrl} 
           target="_blank" 
           rel="noopener noreferrer" 
-          className="mt-4 px-4 py-2 bg-gray-700 text-white rounded-lg flex items-center"
+          className="mt-4 px-4 py-2 bg-[#e9dcc9] dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg flex items-center hover:bg-[#f5e6d8] dark:hover:bg-gray-600 transition-colors"
         >
           <ExternalLink size={16} className="mr-2" />
           Open in New Tab
@@ -761,16 +536,16 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
         }}
       >
         <div 
-          className="minimized-icon bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full p-3 shadow-lg flex items-center justify-center cursor-pointer hover:from-blue-500 hover:to-indigo-600 transition-all duration-300"
+          className="minimized-icon bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-indigo-700 rounded-full p-3 shadow-lg flex items-center justify-center cursor-pointer hover:from-[#8b4513] hover:to-[#5e4636] dark:hover:from-blue-500 dark:hover:to-indigo-600 transition-all duration-300"
           onClick={handleMinimizedClick}
           title={filename}
         >
           <FileIcon extension={filename.split('.').pop().toLowerCase()} />
-          <span className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-xs text-white border-2 border-gray-800">
+          <span className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-xs text-white border-2 border-[#faf4ee] dark:border-gray-800">
             {loading ? '⟳' : ''}
           </span>
         </div>
-        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-xs text-white py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-lg border border-gray-700">
+        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-[#e9dcc9] dark:bg-gray-800 text-xs text-[#5e4636] dark:text-white py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-lg border border-[#d6cbbf] dark:border-gray-700">
           {filename.length > 15 ? filename.substring(0, 15) + '...' : filename}
         </div>
       </div>
@@ -791,7 +566,7 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
   return (
     <div 
       ref={viewerRef}
-      className={`fixed bg-gray-800 shadow-2xl border border-gray-600 flex flex-col 
+      className={`fixed bg-white dark:bg-gray-800 shadow-lg border border-[#d6cbbf] dark:border-gray-600 flex flex-col 
         ${isFullscreen ? 'inset-0 w-full h-full rounded-none' : 'rounded-xl'} 
         ${isClosing ? 'viewer-container closing' : 'viewer-container'}
       `}
@@ -812,19 +587,19 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
       {/* Header with drag handle */}
       <div 
         className={`
-          flex items-center justify-between bg-gray-700 p-3 border-b border-gray-600 
+          flex items-center justify-between bg-[#e9dcc9] dark:bg-gray-700 p-3 border-b border-[#d6cbbf] dark:border-gray-600 
           ${isFullscreen ? '' : 'rounded-t-xl cursor-move'}
         `}
         onMouseDown={isFullscreen ? null : handleStartDrag}
       >
         <div className="flex items-center">
-          {!isFullscreen && <Move size={16} className="text-gray-400 mr-2" />}
-          <h3 className="text-white font-semibold truncate max-w-md">{filename}</h3>
+          {!isFullscreen && <Move size={16} className="text-[#5a544a] dark:text-gray-400 mr-2" />}
+          <h3 className="text-[#0a3b25] dark:text-white font-serif truncate max-w-md">{filename}</h3>
         </div>
         <div className="flex items-center space-x-2">
           {/* Quick positioning buttons */}
           {!isFullscreen && !isMinimized && (
-            <div className="flex items-center mr-2 bg-gray-800/60 rounded-md p-1">
+            <div className="flex items-center mr-2 bg-[#f5e6d8]/60 dark:bg-gray-800/60 rounded-md p-1">
               <button
                 onClick={() => {
                   // Position to left half
@@ -834,7 +609,7 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
                     height: `${window.innerHeight - 100}px` 
                   });
                 }}
-                className="p-1 text-gray-400 hover:text-white rounded-sm hover:bg-gray-700/50"
+                className="p-1 text-[#5a544a] dark:text-gray-400 hover:text-[#5e4636] dark:hover:text-white rounded-sm hover:bg-[#e8ddcc]/50 dark:hover:bg-gray-700/50"
                 title="Snap to left"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -852,7 +627,7 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
                     height: `${window.innerHeight - 100}px` 
                   });
                 }}
-                className="p-1 text-gray-400 hover:text-white rounded-sm hover:bg-gray-700/50"
+                className="p-1 text-[#5a544a] dark:text-gray-400 hover:text-[#5e4636] dark:hover:text-white rounded-sm hover:bg-[#e8ddcc]/50 dark:hover:bg-gray-700/50"
                 title="Snap to right"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -869,7 +644,7 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
                   });
                   setSize({ width: '800px', height: '600px' });
                 }}
-                className="p-1 text-gray-400 hover:text-white rounded-sm hover:bg-gray-700/50"
+                className="p-1 text-[#5a544a] dark:text-gray-400 hover:text-[#5e4636] dark:hover:text-white rounded-sm hover:bg-[#e8ddcc]/50 dark:hover:bg-gray-700/50"
                 title="Center"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -881,28 +656,28 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
           
           <button
             onClick={downloadDocument}
-            className="p-2 text-gray-300 hover:text-white rounded-full hover:bg-gray-600"
+            className="p-2 text-[#a55233] dark:text-gray-300 hover:text-[#8b4513] dark:hover:text-white rounded-full hover:bg-[#f5e6d8] dark:hover:bg-gray-600"
             title="Download document"
           >
             <Download size={18} />
           </button>
           <button
             onClick={toggleMinimize}
-            className="p-2 text-gray-300 hover:text-white rounded-full hover:bg-gray-600"
+            className="p-2 text-[#a55233] dark:text-gray-300 hover:text-[#8b4513] dark:hover:text-white rounded-full hover:bg-[#f5e6d8] dark:hover:bg-gray-600"
             title="Minimize"
           >
             <Minimize2 size={18} />
           </button>
           <button
             onClick={toggleFullscreen}
-            className="p-2 text-gray-300 hover:text-white rounded-full hover:bg-gray-600"
+            className="p-2 text-[#a55233] dark:text-gray-300 hover:text-[#8b4513] dark:hover:text-white rounded-full hover:bg-[#f5e6d8] dark:hover:bg-gray-600"
             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
             {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
           <button
             onClick={handleClose}
-            className="p-2 text-gray-300 hover:text-white rounded-full hover:bg-gray-600"
+            className="p-2 text-[#a55233] dark:text-gray-300 hover:text-[#8b4513] dark:hover:text-white rounded-full hover:bg-[#f5e6d8] dark:hover:bg-gray-600"
             title="Close viewer"
           >
             <X size={18} />
@@ -911,14 +686,14 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
       </div>
       
       {/* Document Viewer Content */}
-      <div className="h-[calc(100%-4rem)] overflow-auto bg-gray-900">
+      <div className="h-[calc(100%-4rem)] overflow-auto bg-[#faf4ee] dark:bg-gray-900">
         {renderDocumentPreview()}
       </div>
       
       {/* Resize handle indicator - only show when not fullscreen */}
       {!isFullscreen && !isMinimized && (
         <div 
-          className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-center justify-center hover:bg-gray-700/50 rounded-tl-md transition-colors"
+          className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-center justify-center hover:bg-[#f5e6d8]/50 dark:hover:bg-gray-700/50 rounded-tl-md transition-colors"
           onMouseDown={(e) => {
             e.preventDefault();
             setIsResizing(true);
@@ -933,16 +708,14 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
             });
           }}
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-400">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-[#5a544a] dark:text-gray-400">
             <path d="M22 22L12 12M22 12L12 22" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </div>
       )}
       
       {/* Resize handles for edges */}
-      {/* Resize handles for edges */}
       {!isFullscreen && !isMinimized && (
-      
         <>
           {/* Right edge resize handle */}
           <div
@@ -998,7 +771,7 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
         
         .minimized-icon {
           animation: popIn 0.3s ease-out forwards, floatAnimation 2s ease-in-out infinite;
-          box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5);
+          box-shadow: 0 10px 25px -5px rgba(165, 82, 51, 0.5);
         }
         
         .viewer-container {
@@ -1013,48 +786,42 @@ const DocumentViewer = ({ documentId, filename, onClose, zIndex = 50, onBringToF
   );
 };
 // Component for file icon in minimized state
+// Add this component in your file or in a separate component file
 const FileIcon = ({ extension }) => {
-  // Set color based on file extension
-  let color = '#4F46E5'; // Default blue
-  let icon = '📄';
-  
-  switch(extension) {
-    case 'pdf':
-      color = '#DC2626'; // Red
-      icon = '📕';
-      break;
-    case 'doc':
-    case 'docx':
-      color = '#2563EB'; // Blue
-      icon = '📝';
-      break;
-    case 'xls':
-    case 'xlsx':
-    case 'csv':
-      color = '#059669'; // Green
-      icon = '📊';
-      break;
-    case 'ppt':
-    case 'pptx':
-      color = '#D97706'; // Orange
-      icon = '📊';
-      break;
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-    case 'gif':
-      color = '#7C3AED'; // Purple
-      icon = '🖼️';
-      break;
-    case 'txt':
-      color = '#6B7280'; // Gray
-      icon = '📄';
-      break;
-  }
-  
+  // Map file extensions to appropriate colors
+  const extensionColors = {
+    pdf: 'text-red-500',
+    doc: 'text-blue-600',
+    docx: 'text-blue-700',
+    xls: 'text-green-600',
+    xlsx: 'text-green-700',
+    ppt: 'text-orange-600',
+    pptx: 'text-orange-700',
+    txt: 'text-gray-600',
+    csv: 'text-green-500',
+    jpg: 'text-purple-500',
+    jpeg: 'text-purple-500',
+    png: 'text-purple-600',
+    gif: 'text-pink-500',
+    // Add more extensions as needed
+  };
+
+  const color = extensionColors[extension] || 'text-gray-500';
+
   return (
-    <div className="text-xl" style={{ color: 'white' }}>
-      {icon}
+    <div className="flex items-center justify-center">
+      <div className={`${color}`}>
+        {/* Generic file icon */}
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          {extension && (
+            <text x="12" y="16" textAnchor="middle" fontSize="5" fill="currentColor" fontWeight="bold">
+              {extension.toUpperCase().substring(0, 3)}
+            </text>
+          )}
+        </svg>
+      </div>
     </div>
   );
 };

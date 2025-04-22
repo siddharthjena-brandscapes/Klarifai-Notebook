@@ -1,7 +1,8 @@
 
 
+
 //IdeaForm.jsx
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, useContext } from "react";
 import { ideaService } from "../utils/axiosConfig";
 import AdvancedRegenControls from "../components/AdvancedRegenControls";
 import Header from "./dashboard/Header";
@@ -20,6 +21,7 @@ import HighlightedDescription from "./IdeaGenerator/HighlightedDescription";
 import ComparisonModeToggle from "./IdeaGenerator/ComparisonModeToggle";
 import IdeaTitle from "./IdeaGenerator/IdeaTitle";
 import { useLocation } from 'react-router-dom';
+import { ThemeContext } from "../context/ThemeContext";
 
 import {
   PlusCircle,
@@ -111,6 +113,7 @@ const IdeaForm = () => {
 
   // Add additional state to track project loading source
   const [projectSource, setProjectSource] = useState(null);
+  const { theme } = useContext(ThemeContext);
 
   // Effect to scroll to top when ideas are generated or added
   useEffect(() => {
@@ -391,6 +394,7 @@ const IdeaForm = () => {
     setSelectedIdeaForHistory(idea);
     setShowVersionHistory(true);
     setSelectedImage(null); // Reset selected image when opening history
+    
   };
 
   const handleImageVersionSelect = (imageVersion, fullVersion = null) => {
@@ -1042,8 +1046,8 @@ const IdeaForm = () => {
     if (!showVersionHistory || !selectedIdeaForHistory) return null;
 
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-        <div className="bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex">
+      <div className="fixed inset-0 bg-[#5e4636]/20 dark:bg-black/50 flex items-start justify-center pt-20 p-4 z-50">
+      <div className="bg-[#faf4ee] dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[80vh] flex border border-[#d6cbbf] dark:border-gray-700">
           {/* Version History Panel */}
           <div className="flex-1 max-w-4xl">
             <VersionHistory
@@ -1056,50 +1060,52 @@ const IdeaForm = () => {
               }}
               onSelectImage={handleImageVersionSelect}
             />
-          </div>
+             </div>
+          
 
           {/* Image Preview Panel */}
           {selectedImage && (
-            <div className="w-96 border-l border-gray-700 p-4 flex flex-col">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Image Preview
-                </h3>
-                <button
-                  onClick={() => setSelectedImage(null)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  <X size={20} />
-                </button>
+          <div className="w-96 border-l border-[#e3d5c8] dark:border-gray-700 p-4 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-white">
+                Image Preview
+              </h3>
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="text-[#5a544a] hover:text-[#a55233] dark:text-gray-400 dark:hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              <div className="aspect-square rounded-lg overflow-hidden bg-[#f5e6d8] dark:bg-gray-900 mb-4 border border-[#d6cbbf] dark:border-gray-700">
+                <img
+                  src={`data:image/png;base64,${selectedImage.image_url}`}
+                  alt="Selected version"
+                  className="w-full h-full object-cover"
+                />
               </div>
 
-              <div className="flex-1 overflow-y-auto">
-                <div className="aspect-square rounded-lg overflow-hidden bg-gray-900 mb-4">
-                  <img
-                    src={`data:image/png;base64,${selectedImage.image_url}`}
-                    alt="Selected version"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                {selectedImage.parameters && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-white">Parameters</h4>
-                    <div className="text-sm text-gray-400">
-                      {Object.entries(JSON.parse(selectedImage.parameters)).map(
-                        ([key, value]) => (
-                          <div key={key} className="flex justify-between">
-                            <span className="capitalize">
-                              {key.replace("_", " ")}:
-                            </span>
-                            <span>{value}</span>
-                          </div>
-                        )
-                      )}
-                    </div>
+              {selectedImage.parameters && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-[#5e4636] dark:text-white">
+                    Parameters
+                  </h4>
+                  <div className="text-sm text-[#5a544a] dark:text-gray-400">
+                    {Object.entries(
+                      JSON.parse(selectedImage.parameters)
+                    ).map(([key, value]) => (
+                      <div key={key} className="flex justify-between">
+                        <span className="capitalize">
+                          {key.replace("_", " ")}:
+                        </span>
+                        <span>{value}</span>
+                      </div>
+                    ))}
                   </div>
-                )}
-
+                </div>
+              )}
                 <div className="mt-4 text-sm text-gray-400">
                   Created: {format(new Date(selectedImage.created_at), "PPpp")}
                 </div>
@@ -1508,119 +1514,186 @@ const fillFormWithDocParams = () => {
     console.log("Document parameters for modal:", docParams.idea_parameters);
     
     return (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl shadow-xl max-w-lg w-full border border-purple-500/30 overflow-hidden">
-          <div className="p-5 bg-gradient-to-r from-purple-600/30 to-blue-600/30 border-b border-purple-500/20 flex justify-between items-center">
-            <h3 className="text-xl font-bold text-white">
-              Document Parameters Detected
-            </h3>
-            <button 
-              onClick={() => setShowDocParamsModal(false)}
-              className="text-gray-300 hover:text-white transition-colors"
-              aria-label="Close modal"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          <div className="p-6">
-            <p className="text-gray-300 mb-4">
-              Parameters have been extracted from <span className="font-semibold text-purple-300">"{docParams.document_name}"</span>.
-            </p>
+      <div className="fixed inset-0 bg-[#faf4ee]/70 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+  <div className="bg-white shadow-lg dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 rounded-xl shadow-xl max-w-lg w-full border border-[#e8ddcc] dark:border-purple-500/30 overflow-hidden">
+    <div className="p-5 bg-gradient-to-r from-[#f5e6d8] to-[#e9dcc9] dark:from-purple-600/30 dark:to-blue-600/30 border-b border-[#d6cbbf] dark:border-purple-500/20 flex justify-between items-center">
+      <h3 className="text-xl font-bold text-[#0a3b25] dark:text-white">
+        Document Parameters Detected
+      </h3>
+      <button 
+        onClick={() => setShowDocParamsModal(false)}
+        className="text-[#5e4636] hover:text-[#a55233] dark:text-gray-300 dark:hover:text-white transition-colors"
+        aria-label="Close modal"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    
+    <div className="p-6">
+      <p className="text-[#5e4636] dark:text-gray-300 mb-4">
+        Parameters have been extracted from <span className="font-semibold text-[#a55233] dark:text-purple-300">"{docParams.document_name}"</span>.
+      </p>
+      
+      <div className="bg-[#faf4ee] dark:bg-gray-800/50 rounded-lg p-4 mb-6 border border-[#e8ddcc] dark:border-gray-700/50">
+        <h4 className="text-sm font-medium text-[#5a544a] dark:text-gray-300 mb-2">Detected parameters:</h4>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {Object.entries(docParams.idea_parameters).map(([key, value]) => {
+            // Check if value exists and convert to string safely
+            const displayValue = value ? 
+              (typeof value === 'string' ? 
+                value : 
+                JSON.stringify(value)) 
+              : '';
             
-            <div className="bg-gray-800/50 rounded-lg p-4 mb-6 border border-gray-700/50">
-              <h4 className="text-sm font-medium text-gray-300 mb-2">Detected parameters:</h4>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {Object.entries(docParams.idea_parameters).map(([key, value]) => {
-                  // Check if value exists and convert to string safely
-                  const displayValue = value ? 
-                    (typeof value === 'string' ? 
-                      value : 
-                      JSON.stringify(value)) 
-                    : '';
-                  
-                  // Only render if there's a value
-                  return displayValue ? (
-                    <div key={key} className="flex flex-col">
-                      <span className="text-xs text-purple-400">{key}</span>
-                      <span className="text-white truncate">
-                        {displayValue.length > 30 ? 
-                          `${displayValue.substring(0, 30)}...` : 
-                          displayValue}
-                      </span>
-                    </div>
-                  ) : null;
-                })}
+            // Only render if there's a value
+            return displayValue ? (
+              <div key={key} className="flex flex-col">
+                <span className="text-xs text-[#556052] dark:text-purple-400">{key}</span>
+                <span className="text-[#5e4636] dark:text-white truncate">
+                  {displayValue.length > 30 ? 
+                    `${displayValue.substring(0, 30)}...` : 
+                    displayValue}
+                </span>
               </div>
-            </div>
-            
-            <p className="text-gray-400 mb-6 text-sm">
-              Would you like to use these parameters to pre-fill the idea generation form?
-            </p>
-            
-            <div className="flex justify-end gap-4">
-              <button
-                onClick={() => setShowDocParamsModal(false)}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors border border-gray-600"
-              >
-                No, Start Fresh
-              </button>
-              
-              <button
-                onClick={fillFormWithDocParams}
-                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-xl"
-              >
-                Yes, Auto-Fill Form
-              </button>
-            </div>
-          </div>
+            ) : null;
+          })}
         </div>
       </div>
+      
+      <p className="text-[#5a544a] dark:text-gray-400 mb-6 text-sm">
+        Would you like to use these parameters to pre-fill the idea generation form?
+      </p>
+      
+      <div className="flex justify-end gap-4">
+        <button
+          onClick={() => setShowDocParamsModal(false)}
+          className="px-4 py-2 bg-white hover:bg-[#f5e6d8] text-[#5e4636] rounded-lg transition-colors border border-[#d6cbbf] dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white dark:border-gray-600"
+        >
+          No, Start Fresh
+        </button>
+        
+        <button
+          onClick={fillFormWithDocParams}
+          className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-gradient-to-r dark:from-purple-600 dark:to-blue-500 dark:hover:from-purple-700 dark:hover:to-blue-600 rounded-lg transition-colors shadow-md hover:shadow-lg"
+        >
+          Yes, Auto-Fill Form
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
     );
   };
 
   return (
-    <div
-      ref={contentRef}
-      className="min-h-screen relative"
-      style={{
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        backgroundAttachment: "fixed",
-      }}
-    >
+    <div className={`flex flex-col min-h-screen ${theme === 'dark' ? 'dark:bg-black' : 'bg-[#faf4ee]'} overflow-hidden`}>
+      {/* Apply background only in dark theme */}
+      {theme === 'dark' && (
+        <>
+          <div
+            className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
+            style={{
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+            role="img"
+            aria-label="Background"
+          />
+          {/* <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"></div> */}
+        </>
+      )}
+
+ 
       {/* Add an overlay to ensure content readability */}
-      <div className="absolute inset-0 bg-black/50" />
+      <div className="absolute inset-0 bg-[#faf4ee]/90 dark:bg-black/50 backdrop-blur-sm" />
       <ScrollNavigationButtons />
       {/* Wrap all content in a relative container to appear above the overlay */}
       <div className="relative">
         <nav className="navbar">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <Header />
-
-            <div className="flex items-center justify-center h-16">
-              <h1 className="text-xl font-bold text-white">Idea Generator</h1>
+  
+            <div className="flex items-center justify-center h-14">
+              <h1 className="text-xl font-bold text-[#0a3b25] dark:text-white">Idea Generator</h1>
             </div>
           </div>
         </nav>
-
-        <main className="  container mx-auto px-4 py-8 pt-2">
+  
+        <main className="container mx-auto px-4 py-8 pt-2">
           <div className="max-w-4xl mx-auto space-y-8">
-            {renderNavigation()}
+            {/* Navigation Section */}
+            <div className="sticky top-[4rem] z-40 bg-white/80 dark:bg-gray-800 border border-[#d6cbbf] hover:border-[#a68a70] dark:border-gray-700 dark:hover:border-green-500/50 p-4 rounded-lg shadow-lg">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                <div className="flex flex-wrap lg:flex-nowrap items-center gap-4">
+                  <button
+                    onClick={() => setShowProjectList(true)}
+                    className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 border border-[#d6cbbf] dark:border-gray-600 hover:border-[#a68a70] dark:hover:border-green-500/50 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <ArrowLeft size={16} />
+                    All Idea Projects
+                  </button>
+                  <input
+                    type="text"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    className="flex-1 min-w-[200px] px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500 dark:focus:ring-opacity-50 transition-all"
+                    placeholder="Project Name"
+                  />
+                </div>
+                {showImageGeneration ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={handleBackToIdeas}
+                      className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap border border-[#d6cbbf] dark:border-gray-600"
+                    >
+                      <ArrowLeft size={16} />
+                      Back to Ideas
+                    </button>
+                    <PowerPointExport
+                      ideas={acceptedIdeas}
+                      generatedImages={generatedImages}
+                      versionHistory={rawVersionHistory}
+                    />
+                  </div>
+                ) : (
+                  !showForm && (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={handleBackToForm}
+                        className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap border border-[#d6cbbf] dark:border-gray-600"
+                      >
+                        <ArrowLeft size={16} />
+                        Back to Form
+                      </button>
+                      <button
+                        onClick={handleProceedToImages}
+                        className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                        disabled={acceptedIdeas.length === 0}
+                      >
+                        <Image size={20} />
+                        Generate Images
+                        <ArrowRight size={16} />
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+  
+            {/* Form View */}
             {showForm ? (
-              <div className=" top-4 z-10 form-card animate-fade-in bg-gray-900/90 backdrop-blur-sm">
-                <h2 className="text-2xl font-bold text-white text-center mb-8">
+              <div className={`top-4 z-10 animate-fade-in ${theme === 'dark' ? 'bg-gray-900/90' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-700' : 'border-[#e8ddcc]'} rounded-lg p-6 shadow-lg`}>
+                <h2 className={`text-2xl font-serif ${theme === 'dark' ? 'text-white' : 'text-[#0a3b25]'} text-center mb-8`}>
                   Generate Ideas
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-8">
                   {/* Base Fields */}
                   <div className="space-y-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-300 mb-2">
                         Concept / Idea<span className="text-red-500">*</span>
                       </label>
                       <input
@@ -1630,12 +1703,12 @@ const fillFormWithDocParams = () => {
                         value={formData.product}
                         onChange={handleBaseFieldChange}
                         required
-                        className="input-field w-full"
+                        className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500"
                         placeholder="Enter concept or idea..."
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-300 mb-2">
                         Area / Category <span className="text-red-500">*</span>
                       </label>
                       <input
@@ -1645,12 +1718,12 @@ const fillFormWithDocParams = () => {
                         value={formData.category}
                         onChange={handleBaseFieldChange}
                         required
-                        className="input-field w-full"
+                        className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500"
                         placeholder="Enter area or category..."
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-300 mb-2">
                         Brand
                       </label>
                       <input
@@ -1659,21 +1732,21 @@ const fillFormWithDocParams = () => {
                         name="brand"
                         value={formData.brand}
                         onChange={handleBaseFieldChange}
-                        className="input-field w-full"
+                        className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500"
                         placeholder="Enter brand name"
                       />
                     </div>
                   </div>
-
+  
                   {/* Dynamic Fields Section */}
                   <div className="space-y-6">
-                    <div className="border-t border-gray-700 pt-6">
-                      <h3 className="text-lg font-medium text-white mb-4">
+                    <div className="border-t border-[#e3d5c8] dark:border-gray-700 pt-6">
+                      <h3 className="text-lg font-medium text-[#0a3b25] dark:text-white mb-4">
                         Dynamic Fields
                       </h3>
-
+  
                       {/* Custom Field Addition */}
-                      <div className="bg-gray-700/50 p-4 rounded-lg space-y-4">
+                      <div className="bg-[#e9dcc9]/50 dark:bg-gray-700/50 p-4 rounded-lg space-y-4">
                         {/* Custom Field Manager */}
                         <FieldManager
                           predefinedFieldTypes={predefinedFieldTypes}
@@ -1689,21 +1762,21 @@ const fillFormWithDocParams = () => {
                         />
                       </div>
                     </div>
-
+  
                     {/* Dynamic Field Inputs */}
                     <div className="space-y-4 mt-6">
                       {Object.entries(dynamicFields).map(([fieldId, field]) => (
-                        <div key={fieldId} className="flex gap-2 item-center">
-                          <div className="flex-1 ">
+                        <div key={fieldId} className="flex gap-2 items-center">
+                          <div className="flex-1">
                             <div className="flex flex-1 gap-2">
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                              <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-300 mb-2">
                                 {field.type}
                               </label>
                               {/* Activation Toggle */}
                               <button
                                 type="button"
                                 onClick={() => toggleFieldActivation(fieldId)}
-                                className="text-gray-400 hover:text-white transition-colors mb-2"
+                                className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors mb-2"
                                 title={
                                   fieldActivation[fieldId]
                                     ? "Deactivate"
@@ -1713,12 +1786,12 @@ const fillFormWithDocParams = () => {
                                 {fieldActivation[fieldId] ? (
                                   <ToggleRight
                                     size={24}
-                                    className="text-green-500"
+                                    className="text-[#556052] dark:text-green-500"
                                   />
                                 ) : (
                                   <ToggleLeft
                                     size={24}
-                                    className="text-gray-600"
+                                    className="text-[#d6cbbf] dark:text-gray-600"
                                   />
                                 )}
                               </button>
@@ -1732,7 +1805,7 @@ const fillFormWithDocParams = () => {
                                   e.target.value
                                 )
                               }
-                              className={`input-field ${
+                              className={`w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500 ${
                                 fieldActivation[fieldId] === false
                                   ? "opacity-50"
                                   : ""
@@ -1741,11 +1814,11 @@ const fillFormWithDocParams = () => {
                               disabled={fieldActivation[fieldId] === false}
                             />
                           </div>
-
+  
                           <button
                             type="button"
                             onClick={() => removeField(fieldId)}
-                            className="btn btn-danger self-end"
+                            className="px-3 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg self-end flex items-center justify-center"
                           >
                             <X size={20} />
                           </button>
@@ -1755,32 +1828,32 @@ const fillFormWithDocParams = () => {
                   </div>
                   <div className="mt-6">
                     <div className="flex items-center mb-2">
-                      <label className="block text-sm font-medium text-gray-300 mr-2">
+                      <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-300 mr-2">
                         Negative Prompt
                       </label>
-
-                      <AlertTriangle size={16} className="text-blue-400" />
+  
+                      <AlertTriangle size={16} className="text-[#556052] dark:text-blue-400" />
                     </div>
                     <textarea
                       value={negativePrompt}
                       onChange={(e) => setNegativePrompt(e.target.value)}
-                      className="input-field w-full"
+                      className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500"
                       placeholder="Enter terms or concepts to exclude (comma-separated)"
                       rows={3}
                     />
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-xs text-[#5a544a] dark:text-gray-400 mt-2">
                       Separate multiple terms with commas for best results
                     </p>
                   </div>
-                  <div className="border-t border-gray-700 pt-6">
+                  <div className="border-t border-[#e3d5c8] dark:border-gray-700 pt-6">
                     <div className="flex flex-col md:flex-row md:gap-6">
                       {/* Number of Ideas Field */}
                       <div className="flex-1 mb-4 md:mb-0">
                         <div className="flex items-center justify-between mb-2">
-                          <label className="block text-sm font-medium text-gray-300">
+                          <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-300">
                             Number of Ideas
                             {hasManuallySetIdeas && (
-                              <span className="text-xs text-gray-500 ml-2">
+                              <span className="text-xs text-[#8c715f] dark:text-gray-500 ml-2">
                                 (Manual)
                               </span>
                             )}
@@ -1789,7 +1862,7 @@ const fillFormWithDocParams = () => {
                             <button
                               type="button"
                               onClick={resetNumberOfIdeas}
-                              className="text-xs text-indigo-400 hover:text-indigo-300"
+                              className="text-xs text-[#a55233] hover:text-[#8b4513] dark:text-indigo-400 dark:hover:text-indigo-300"
                             >
                               Reset to Auto
                             </button>
@@ -1804,20 +1877,20 @@ const fillFormWithDocParams = () => {
                             min="1"
                             max="20"
                             required
-                            className="input-field w-full"
+                            className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500"
                           />
                           {!hasManuallySetIdeas && (
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-[#5a544a] dark:text-gray-400">
                               Auto-calculated
                             </span>
                           )}
                         </div>
                       </div>
-
+  
                       {/* Idea Description Length Field */}
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
-                          <label className="block text-sm font-medium text-gray-300">
+                          <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-300">
                             Idea's Length (words)
                           </label>
                         </div>
@@ -1830,25 +1903,25 @@ const fillFormWithDocParams = () => {
                             min="60"
                             max="250"
                             required
-                            className="input-field w-full"
+                            className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500"
                           />
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-[#5a544a] dark:text-gray-400">
                             Range: 60-250
                           </span>
                         </div>
                       </div>
                     </div>
                   </div>
-
+  
                   {/* Generate Button */}
                   <div className="flex justify-center pt-6 space-x-4">
                     <button
                       type="submit"
                       disabled={!hasFormChanged}
-                      className={`btn btn-primary px-12 py-3 text-lg bg-gradient-to-r from-blue-500 to-emerald-500 text-white rounded-lg transition-all ${
+                      className={`px-12 py-3 text-lg rounded-lg transition-all ${
                         !hasFormChanged
-                          ? "opacity-50 cursor-not-allowed"
-                          : "hover:from-blue-600 hover:to-emerald-600"
+                          ? "bg-[#d6cbbf] text-[#5e4636] dark:opacity-50 dark:cursor-not-allowed dark:bg-gray-600 dark:text-gray-400"
+                          : "bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-gradient-to-r dark:from-blue-500 dark:to-emerald-500 dark:hover:from-blue-600 dark:hover:to-emerald-600 dark:text-white"
                       }`}
                     >
                       {isLoading ? (
@@ -1864,7 +1937,7 @@ const fillFormWithDocParams = () => {
                       <button
                         type="button"
                         onClick={handleNavigateToIdeas}
-                        className="btn btn-secondary px-12 py-3 text-lg bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all"
+                        className="px-12 py-3 text-lg bg-white hover:bg-[#f5e6d8] text-[#5e4636] border border-[#d6cbbf] dark:bg-gray-600 dark:hover:bg-gray-700 dark:text-white rounded-lg transition-all"
                       >
                         View Existing Ideas
                       </button>
@@ -1875,12 +1948,12 @@ const fillFormWithDocParams = () => {
             ) : showImageGeneration ? (
               <div
                 style={{ marginTop: "0.5rem" }}
-                className="  sticky top-4 z-10 rounded-lg border border-gray-700 p-6 animate-fade-in bg-gray-900/90 backdrop-blur-sm"
+                className="sticky top-4 z-10 rounded-lg border border-[#e8ddcc] dark:border-gray-700 p-6 animate-fade-in bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm shadow-lg"
               >
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="flex items-center gap-2 text-2xl font-bold text-emerald-400">
+                  <h3 className="flex items-center gap-2 text-2xl font-serigoe text-emerald-900 dark:text-emerald-400">
                     Image Generation
-                    <span className="px-3 py-1 bg-indigo-600/50 border border-indigo-500/50 rounded-full text-sm font-medium text-white">
+                    <span className="px-3 py-1 bg-[#556052]/20 dark:bg-indigo-600/50 border border-[#556052]/30 dark:border-indigo-500/50 rounded-full text-sm font-medium text-[#556052] dark:text-white">
                       {acceptedIdeas.length}{" "}
                       {acceptedIdeas.length === 1 ? "idea" : "ideas"}
                     </span>
@@ -1890,17 +1963,16 @@ const fillFormWithDocParams = () => {
                     onToggle={() => setIsComparisonMode((prev) => !prev)}
                   />
                 </div>
-
+  
                 <div className="space-y-6">
                   {acceptedIdeas.map((idea) => {
-                    console.log('Image Generation Page - Full Idea Object:', JSON.stringify(idea, null, 2));
                     const ideaId = idea.idea_id.toString();
                     const isEditing = editingIdea === idea.idea_id;
-                    console.log("Rendering accepted idea:", idea);
+                    
                     return (
                       <div
                         key={ideaId}
-                        className="idea-card idea-card-accepted"
+                        className="p-6 rounded-lg border border-[#e8ddcc] hover:border-[#a68a70] dark:border-gray-700 dark:hover:border-green-500 bg-white/80 dark:bg-gray-800/80 shadow-md hover:shadow-lg transition-all"
                       >
                         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                           <div className="flex-1">
@@ -1915,10 +1987,9 @@ const fillFormWithDocParams = () => {
                               />
                             ) : (
                               <>
-                              
                                 <IdeaTitle idea={idea} />
-
-                                <p className="text-gray-300 mb-4 text-justify leading-relaxed">
+  
+                                <p className="text-[#5e4636] dark:text-gray-300 mb-4 text-justify leading-relaxed">
                                   <HighlightedDescription
                                     description={idea.description}
                                     dynamicFields={dynamicFields}
@@ -1933,7 +2004,7 @@ const fillFormWithDocParams = () => {
                                     isComparisonMode={isComparisonMode}
                                   />
                                 </p>
-
+  
                                 <div className="flex flex-wrap gap-2">
                                   {generatedImages[ideaId] && (
                                     <AdvancedRegenControls
@@ -1942,17 +2013,17 @@ const fillFormWithDocParams = () => {
                                       isLoading={loadingStates[ideaId]}
                                     />
                                   )}
-
+  
                                   <button
                                     onClick={() => handleViewHistory(idea)}
-                                    className="btn btn-secondary bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white"
+                                    className="px-4 py-2 bg-white hover:bg-[#f5e6d8] text-[#5e4636] border border-[#d6cbbf] dark:bg-gradient-to-r dark:from-purple-500 dark:to-indigo-600 dark:hover:from-purple-600 dark:hover:to-indigo-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
                                     title="Versions History"
                                   >
                                     <Clock size={16} />
                                   </button>
                                   <button
                                     onClick={() => handleEdit(idea)}
-                                    className="btn btn-warning"
+                                    className="px-4 py-2 bg-[#f5e6d8] hover:bg-[#e9dcc9] text-[#5e4636] border border-[#d6cbbf] dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
                                     title="Edit ideas"
                                   >
                                     <Edit2 size={16} />
@@ -1964,10 +2035,10 @@ const fillFormWithDocParams = () => {
                               </>
                             )}
                           </div>
-
+  
                           <div className="w-full md:w-1/2 lg:w-1/3">
                             {generatedImages[ideaId] ? (
-                              <div className="relative aspect-square rounded-lg overflow-hidden">
+                              <div className="relative aspect-square rounded-lg overflow-hidden border border-[#d6cbbf] dark:border-gray-700">
                                 <img
                                   src={generatedImages[ideaId]}
                                   alt={idea.product_name}
@@ -1979,11 +2050,11 @@ const fillFormWithDocParams = () => {
                                 />
                               </div>
                             ) : (
-                              <div className="flex items-center justify-center h-full">
+                              <div className="flex items-center justify-center h-full aspect-square bg-[#f5e6d8] dark:bg-gray-700 rounded-lg border border-[#d6cbbf] dark:border-gray-600">
                                 {loadingStates[ideaId] ? (
                                   <div className="loading-spinner"></div>
                                 ) : (
-                                  <span className="text-gray-400">
+                                  <span className="text-[#5a544a] dark:text-gray-400">
                                     Image pending generation
                                   </span>
                                 )}
@@ -1999,12 +2070,12 @@ const fillFormWithDocParams = () => {
             ) : (
               <div
                 style={{ marginTop: "0.5rem" }}
-                className="  sticky top-2 z-10 rounded-lg border border-gray-700 p-6 animate-fade-in bg-gray-900/90 backdrop-blur-sm"
+                className="sticky top-2 z-10 rounded-lg border border-[#e8ddcc] dark:border-gray-700 p-6 animate-fade-in bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm shadow-lg"
               >
                 <div className="flex justify-between items-center mb-6 gap-2">
-                  <h3 className="flex items-center gap-2 text-2xl font-bold text-emerald-400">
-                    Generate Ideas
-                    <span className="px-3 py-1 bg-indigo-600/50 border border-indigo-500/50 rounded-full text-sm font-medium text-white">
+                  <h3 className="flex items-center gap-2 text-2xl font-sergoe text-[#0c393b] dark:text-emerald-400">
+                    Ideas List
+                    <span className="px-3 py-1 bg-[#556052]/20 dark:bg-indigo-600/50 border border-[#556052]/30 dark:border-indigo-500/50 rounded-full text-sm font-medium text-[#556052] dark:text-white">
                       {ideas.length} {ideas.length === 1 ? "idea" : "ideas"}
                     </span>
                   </h3>
@@ -2014,24 +2085,23 @@ const fillFormWithDocParams = () => {
                     onToggle={() => setIsComparisonMode((prev) => !prev)}
                   />
                 </div>
-
+  
                 <div className="space-y-6">
                   {ideas.map((idea) => {
-                    console.log('Generate Ideas Page - Full Idea Object:', JSON.stringify(idea, null, 2));
                     const ideaId = idea.idea_id.toString();
                     const isEditing = editingIdea === idea.idea_id;
                     const isAccepted = acceptedIdeas.some(
                       (accepted) => accepted.idea_id === idea.idea_id
                     );
-                    console.log("Rendering idea:", idea);
+                    
                     return (
                       <div
                         key={ideaId}
-                        className={`idea-card ${
-                          isAccepted
-                            ? "idea-card-accepted"
-                            : "idea-card-pending"
-                        }`}
+                        className={`p-6 rounded-lg border ${
+                          isAccepted 
+                            ? "border-[#3f4f54] border-l-4 bg-white/90 dark:bg-gray-800/90 shadow-md" 
+                            : "border-[#e8ddcc] hover:border-[#a68a70] bg-white/80 dark:bg-gray-800/80 dark:border-gray-700 dark:hover:border-green-500"
+                        } transition-all hover:shadow-lg`}
                       >
                         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                           <div className="flex-1">
@@ -2047,10 +2117,10 @@ const fillFormWithDocParams = () => {
                             ) : (
                               <>
                                 <div className="flex flex-1 gap-2">
-                                <IdeaTitle idea={idea} />
+                                  <IdeaTitle idea={idea} />
                                 </div>
-
-                                <p className="text-gray-300 mb-4 text-justify leading-relaxed">
+  
+                                <p className="text-[#5e4636] dark:text-gray-300 mb-4 text-justify leading-relaxed">
                                   <HighlightedDescription
                                     description={idea.description}
                                     dynamicFields={dynamicFields}
@@ -2065,37 +2135,37 @@ const fillFormWithDocParams = () => {
                                     isComparisonMode={isComparisonMode}
                                   />
                                 </p>
-
+  
                                 <div className="flex flex-wrap gap-2">
                                   <button
                                     onClick={() => handleEdit(idea)}
-                                    className="btn btn-warning"
+                                    className="px-4 py-2 bg-[#f8fbe5] hover:bg-[#ebf4b8] text-[#5e4636] border border-[#d6cbbf] dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
                                     title="Edit idea"
                                   >
                                     <Edit2 size={16} />
                                   </button>
-
+  
                                   {isAccepted ? (
                                     <button
                                       onClick={() =>
                                         handleUnaccept(idea.idea_id)
                                       }
-                                      className=" w-32 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                      className="w-32 bg-[#ace000] hover:bg-[#d2e660] text-white dark:bg-emerald-600 dark:hover:bg-emerald-700 px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
                                     >
                                       <Check size={16} /> Accepted
                                     </button>
                                   ) : (
                                     <button
                                       onClick={() => handleAccept(idea.idea_id)}
-                                      className=" w-32 bg-gray-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                      className="w-32 bg-white hover:bg-[#f5e6d8] text-[#5e4636] border border-[#d6cbbf] dark:bg-gray-600 dark:hover:bg-emerald-700 dark:text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
                                     >
                                       Accept
                                     </button>
                                   )}
-
+  
                                   <button
                                     onClick={() => handleReject(idea.idea_id)}
-                                    className="btn btn-danger"
+                                    className="px-4 py-2 bg-red-500 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 transition-colors"
                                   >
                                     <X size={16} /> Reject
                                   </button>
@@ -2113,54 +2183,54 @@ const fillFormWithDocParams = () => {
                 </div>
               </div>
             )}
-
+  
             {error && (
               <div
-                className="bg-red-900 text-white px-4 py-3 rounded-lg"
+                className="bg-red-100 dark:bg-red-900 text-red-600 dark:text-white px-4 py-3 rounded-lg border border-red-200 dark:border-transparent"
                 role="alert"
               >
                 <p className="font-medium">{error}</p>
               </div>
             )}
-
+  
             {showVersionHistory && selectedIdeaForHistory && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex">
+              <div className="fixed inset-0 dark:bg-black/50  flex items-center justify-center p-4 z-50">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex border border-[#d6cbbf] dark:border-gray-700">
                   {/* Version History Panel */}
                   <div className="flex-1 max-w-4xl">
                     {renderVersionHistoryModal()}
                   </div>
-
-                  {/* Image Preview Panel */}
+  
+                  {/* Image Preview Panel
                   {selectedImage && (
-                    <div className="w-96 border-l border-gray-700 p-4 flex flex-col">
+                    <div className="w-96 border-l border-[#e3d5c8] dark:border-gray-700 p-4 flex flex-col">
                       <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-white">
+                        <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-white">
                           Image Preview
                         </h3>
                         <button
                           onClick={() => setSelectedImage(null)}
-                          className="text-gray-400 hover:text-white"
+                          className="text-[#5a544a] hover:text-[#a55233] dark:text-gray-400 dark:hover:text-white"
                         >
                           <X size={20} />
                         </button>
                       </div>
-
+  
                       <div className="flex-1 overflow-y-auto">
-                        <div className="aspect-square rounded-lg overflow-hidden bg-gray-900 mb-4">
+                        <div className="aspect-square rounded-lg overflow-hidden bg-[#f5e6d8] dark:bg-gray-900 mb-4 border border-[#d6cbbf] dark:border-gray-700">
                           <img
                             src={`data:image/png;base64,${selectedImage.image_url}`}
                             alt="Selected version"
                             className="w-full h-full object-cover"
                           />
                         </div>
-
+  
                         {selectedImage.parameters && (
                           <div className="space-y-2">
-                            <h4 className="font-medium text-white">
+                            <h4 className="font-medium text-[#5e4636] dark:text-white">
                               Parameters
                             </h4>
-                            <div className="text-sm text-gray-400">
+                            <div className="text-sm text-[#5a544a] dark:text-gray-400">
                               {Object.entries(
                                 JSON.parse(selectedImage.parameters)
                               ).map(([key, value]) => (
@@ -2174,12 +2244,12 @@ const fillFormWithDocParams = () => {
                             </div>
                           </div>
                         )}
-
-                        <div className="mt-4 text-sm text-gray-400">
+  
+                        <div className="mt-4 text-sm text-[#5a544a] dark:text-gray-400">
                           Created:{" "}
                           {format(new Date(selectedImage.created_at), "PPpp")}
                         </div>
-
+  
                         <button
                           onClick={() => {
                             handleRegenerateImage({
@@ -2190,14 +2260,14 @@ const fillFormWithDocParams = () => {
                             setSelectedIdeaForHistory(null);
                             setSelectedImage(null);
                           }}
-                          className="w-full mt-4 btn btn-primary"
+                          className="w-full mt-4 px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-blue-600 dark:hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2 transition-colors"
                         >
                           <RotateCw size={16} />
                           Regenerate with these parameters
                         </button>
                       </div>
                     </div>
-                  )}
+                  )} */}
                 </div>
               </div>
             )}

@@ -23,6 +23,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from chat.models import UserAPITokens
+from core.utils import update_project_timestamp
 
 
 # HF_API_TOKEN = "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"
@@ -106,6 +107,9 @@ def generate_ideas(request):
                 dynamic_fields=dynamic_fields,
                 negative_prompt=negative_prompt
             )
+
+            update_project_timestamp(project_id, request.user)
+            
             user_tokens = UserAPITokens.objects.get(user=request.user)
             GOOGLE_API_KEY = user_tokens.gemini_token 
            # hf_api_token = user_tokens.huggingface_token 
@@ -689,6 +693,8 @@ def update_idea(request):
 
             # Get the original idea
             original_idea = get_object_or_404(Idea, id=idea_id)
+
+            project_id = original_idea.product_idea.project_id
             
             # Generate new visualization prompt for updated content
             idea_data = {
@@ -721,6 +727,8 @@ def update_idea(request):
                 visualization_prompt=visualization_prompt,
                 original_idea_id=original_idea.id
             )
+
+            update_project_timestamp(project_id, request.user)
 
             response = JsonResponse({
                 "success": True,
@@ -758,7 +766,10 @@ def delete_idea(request):
             
             # Get and delete the idea (this will also delete related images due to CASCADE)
             idea = get_object_or_404(Idea, id=idea_id)
+            project_id = idea.product_idea.project_id
             idea.delete()
+
+            update_project_timestamp(project_id, request.user)
             
             return JsonResponse({
                 "success": True,
@@ -1121,7 +1132,7 @@ def generate_product_image(request):
             HF_API_TOKEN = user_tokens.huggingface_token
             
             hf_client = InferenceClient(
-                model="black-forest-labs/FLUX.1-schnell",
+                model="black-forest-labs/FLUX.1-dev",
                 token=HF_API_TOKEN
             )
             
@@ -1173,6 +1184,12 @@ def generate_product_image(request):
                 generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
                 generated_image.generation_status = 'success'
                 generated_image.save()
+
+                # Get project_id for updating timestamp
+                project_id = idea.product_idea.project_id
+                
+                
+                update_project_timestamp(project_id, request.user)
                 
                 # Convert to base64 for response
                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
@@ -1250,7 +1267,7 @@ def regenerate_product_image(request):
             HF_API_TOKEN = user_tokens.huggingface_token
             
             hf_client = InferenceClient(
-                model="black-forest-labs/FLUX.1-schnell",
+                model="black-forest-labs/FLUX.1-dev",
                 token=HF_API_TOKEN
             )
             
@@ -1300,6 +1317,11 @@ def regenerate_product_image(request):
                 generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
                 generated_image.generation_status = 'success'
                 generated_image.save()
+
+                # Get project_id for updating timestamp
+                project_id = idea.product_idea.project_id
+                
+                update_project_timestamp(project_id, request.user)
                 
                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
                 
@@ -1449,6 +1471,9 @@ def restore_idea_version(request):
         # Get the version to restore and its associated image
         version_idea = get_object_or_404(Idea, id=version_id)
         current_idea = get_object_or_404(Idea, id=current_id)
+
+        # For updating project timestamp
+        project_id = current_idea.product_idea.project_id
         
         # Create a new version with restored data
         restored_idea = Idea.objects.create(
@@ -1487,6 +1512,8 @@ def restore_idea_version(request):
                 with open(restored_image.image.path, 'rb') as img_file:
                     restored_image_base64 = base64.b64encode(img_file.read()).decode('utf-8')
         
+        update_project_timestamp(project_id, request.user)
+
         # Prepare image versions for response
         image_versions = []
         for img in restored_images:
@@ -1663,6 +1690,9 @@ def project_operations(request, project_id=None):
                 user=request.user,
                 main_project_id=main_project_id,
             )
+
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             
             # Create initial response data
             project_data = {
@@ -1701,7 +1731,10 @@ def project_operations(request, project_id=None):
         try:
             # Filter by user
             project = get_object_or_404(Project, id=project_id, user=request.user)
+            main_project_id = project.main_project_id
             project.delete()
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             return JsonResponse({
                 'success': True,
                 'message': 'Project deleted successfully'
@@ -1728,6 +1761,12 @@ def project_operations(request, project_id=None):
             project.name = new_name
             project.last_modified = timezone.now()
             project.save()
+
+            # Get main_project_id for timestamp update
+            main_project_id = project.main_project_id
+            
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             
             return JsonResponse({
                 'success': True,
@@ -1978,6 +2017,13 @@ def generate_ideas_from_document(request):
             source_document_id=document_id,
             source_document_name=document_name
         )
+
+        update_project_timestamp(project_id, request.user)
+        
+        # Get main project ID and update its timestamp too
+        main_project_id = project.main_project_id
+        if main_project_id:
+            update_project_timestamp(main_project_id, request.user)
        
 
         user_tokens = UserAPITokens.objects.get(user=request.user)

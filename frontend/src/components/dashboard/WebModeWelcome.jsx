@@ -1,5 +1,4 @@
 import { Globe, X } from "lucide-react";
-import PropTypes from "prop-types";
 import { useState, useEffect } from "react";
 
 const WebModeWelcome = ({ className = "" }) => {
@@ -21,53 +20,50 @@ const WebModeWelcome = ({ className = "" }) => {
   return (
     <div 
       className={`
-        flex items-start
-        text-center
+        relative
         mx-auto
         my-4
         max-w-md
         transition-all
         duration-500
-        p-2
-        border border-blue-400/30 rounded-xl
+        p-4
+        border dark:border-blue-400/30 border-[#1a535c] rounded-xl
         ${isAnimating ? 'opacity-0 transform translate-y-2' : 'opacity-100 transform translate-y-0'}
         ${className}
       `}
     >
-      <div className="flex items-center">
+      {/* Close button positioned in the top right */}
+      <button 
+        onClick={() => setIsVisible(false)}
+        className="absolute top-2 right-2 text-gray-500 hover:text-gray-300 transition-colors p-1"
+        aria-label="Dismiss"
+      >
+        <X className="h-4 w-4 dark:text-blue-400" />
+      </button>
+      
+      {/* Centered content */}
+      <div className="flex flex-col items-center text-center">
         <Globe 
           className={`
-            h-4 w-4 text-blue-400 mt-1
+            h-5 w-5 dark:text-blue-400 text-[#1a535c] mb-2
             transition-all duration-700
             ${isAnimating ? 'opacity-0 scale-50' : 'opacity-100 scale-100'}
           `}
         />
-      </div>
-      
-      <div className="flex-1 text-left ml-2.5">
-        <div className="flex items-center justify-between">
-          <span 
-            className={`
-              text-sm font-medium text-blue-400
-              transition-all duration-500 delay-100
-              ${isAnimating ? 'opacity-0 transform -translate-x-2' : 'opacity-100 transform translate-x-0'}
-            `}
-          >
-            Web Search Mode Active
-          </span>
-          
-          <button 
-            onClick={() => setIsVisible(false)}
-            className="text-gray-500 hover:text-gray-300 transition-colors p-1"
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4 text-blue-400" />
-          </button>
-        </div>
+        
+        <span 
+          className={`
+            text-lg font-semibold tracking-normal dark:text-blue-400 font-serif text-[#1a535c]
+            transition-all duration-500 delay-100
+            ${isAnimating ? 'opacity-0 transform -translate-x-2' : 'opacity-100 transform translate-x-0'}
+          `}
+        >
+          Web Search Mode Active
+        </span>
         
         <p 
           className={`
-            text-sm text-gray-400 mt-0.5 leading-snug
+            text-sm dark:text-gray-400 text-[#374700] mt-2 leading-snug
             transition-all duration-500 delay-200
             ${isAnimating ? 'opacity-0 transform -translate-y-1' : 'opacity-100 transform translate-y-0'}
           `}
@@ -77,10 +73,6 @@ const WebModeWelcome = ({ className = "" }) => {
       </div>
     </div>
   );
-};
-
-WebModeWelcome.propTypes = {
-  className: PropTypes.string
 };
 
 export default WebModeWelcome;

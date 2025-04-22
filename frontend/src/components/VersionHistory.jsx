@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { Clock, RotateCcw, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
@@ -7,20 +9,20 @@ const CustomTooltip = ({ children }) => {
   return (
     <div className="group relative">
       {children}
-      <div className="absolute left-1/2 -translate-x-1/2 -top-10 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap">
+      <div className="absolute left-1/2 -translate-x-1/2 -top-10 px-3 py-2 bg-[#5e4636] dark:bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap">
         Click to view details
-        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 transform rotate-45 w-2 h-2 bg-gray-900"></div>
+        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 transform rotate-45 w-2 h-2 bg-[#5e4636] dark:bg-gray-900"></div>
       </div>
     </div>
   );
 };
 
 const ErrorMessage = ({ message, onDismiss }) => (
-  <div className="fixed top-4 right-4 max-w-sm bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-red-400 flex items-center justify-between z-50">
+  <div className="fixed top-4 right-4 max-w-sm bg-red-100 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg p-4 text-red-600 dark:text-red-400 flex items-center justify-between z-50">
     <span>{message}</span>
     <button 
       onClick={onDismiss}
-      className="ml-4 p-1 hover:bg-red-500/20 rounded-full"
+      className="ml-4 p-1 hover:bg-red-200 dark:hover:bg-red-500/20 rounded-full"
     >
       <X size={16} />
     </button>
@@ -53,7 +55,7 @@ const ImageCarousel = ({ images, onSelect }) => {
   return (
     <div className="relative group">
       <CustomTooltip>
-        <div className="aspect-square bg-gray-900 rounded-lg overflow-hidden cursor-pointer transition-transform hover:scale-[1.02] max-w-xl mx-auto">
+        <div className="aspect-square bg-[#f5e6d8] dark:bg-gray-900 rounded-lg overflow-hidden cursor-pointer transition-transform hover:scale-[1.02] max-w-xl mx-auto border border-[#d6cbbf] dark:border-none">
           <img
             src={`data:image/png;base64,${images[currentIndex].image_url}`}
             alt="Generated product"
@@ -66,17 +68,17 @@ const ImageCarousel = ({ images, onSelect }) => {
         <>
           <button
             onClick={handlePrevious}
-            className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 rounded-full text-white hover:bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-[#5e4636]/50 dark:bg-black/50 rounded-full text-white hover:bg-[#5e4636]/75 dark:hover:bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity"
           >
             <ChevronLeft size={24} />
           </button>
           <button
             onClick={handleNext}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 rounded-full text-white hover:bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-[#5e4636]/50 dark:bg-black/50 rounded-full text-white hover:bg-[#5e4636]/75 dark:hover:bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity"
           >
             <ChevronRight size={24} />
           </button>
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1.5 rounded-full text-sm text-white">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#5e4636]/50 dark:bg-black/50 px-3 py-1.5 rounded-full text-sm text-white">
             {currentIndex + 1} / {images.length}
           </div>
         </>
@@ -183,7 +185,7 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
     return (
       <div className="flex-1 p-6">
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-blue-500"></div>
         </div>
       </div>
     );
@@ -198,49 +200,49 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
         />
       )}
 
-      <div className="flex items-center justify-between p-6 md:p-8 border-b border-gray-700">
+      <div className="flex items-center justify-between p-4 md:p-5 border-b border-[#e3d5c8] dark:border-gray-700">
         <div className="flex items-center gap-3">
-          <Clock className="text-gray-400" size={24} />
-          <h2 className="text-2xl font-semibold text-white">Version History</h2>
+          <Clock className="text-[#5a544a] dark:text-gray-400" size={24} />
+          <h2 className="text-2xl font-semibold text-[#0a3b25] dark:text-white">Version History</h2>
         </div>
         <button 
           onClick={onClose}
-          className="p-2 hover:bg-gray-700 rounded-full transition-colors"
+          className="p-2 hover:bg-[#f5e6d8] dark:hover:bg-gray-700 rounded-full transition-colors"
         >
-          <X className="text-gray-400 hover:text-white" size={24} />
+          <X className="text-[#5a544a] hover:text-[#a55233] dark:text-gray-400 dark:hover:text-white" size={24} />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
-        <div className="space-y-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="space-y-6">
           {history?.map((version) => (
             <div
               key={version.id}
               className={`p-6 ${
                 version.is_current 
-                  ? 'bg-blue-900/20 border-blue-500/30' 
-                  : 'bg-gray-800 border-gray-700'
-              } border rounded-xl hover:border-gray-600 transition-colors`}
+                  ? 'bg-[#556052]/10 border-[#556052]/30 dark:bg-blue-900/20 dark:border-blue-500/30' 
+                  : 'bg-white dark:bg-gray-800 border-[#e3d5c8] dark:border-gray-700'
+              } border rounded-xl hover:border-[#a68a70] dark:hover:border-gray-600 transition-colors shadow-sm`}
             >
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-xl text-white mb-2 break-words">
+                    <h3 className="font-medium text-xl text-[#0a3b25] dark:text-white mb-2 break-words">
                       {version.product_name}
                     </h3>
-                    <p className="text-gray-300 text-base mb-4 break-words">
+                    <p className="text-[#5e4636] dark:text-gray-300 text-base mb-4 break-words">
                       {version.description}
                     </p>
-                    <div className="flex items-center flex-wrap gap-3 text-sm text-gray-400">
+                    <div className="flex items-center flex-wrap gap-3 text-sm text-[#5a544a] dark:text-gray-400">
                       <Clock size={16} />
                       {format(new Date(version.created_at), 'MMM d, yyyy h:mm a')}
                       {version.is_current && (
-                        <span className="px-3 py-1 text-sm bg-blue-500/20 text-blue-400 rounded-full">
+                        <span className="px-3 py-1 text-sm bg-[#556052]/20 text-[#556052] dark:bg-blue-500/20 dark:text-blue-400 rounded-full">
                           Current Version
                         </span>
                       )}
                       {version.is_original && (
-                        <span className="px-3 py-1 text-sm bg-purple-500/20 text-purple-400 rounded-full">
+                        <span className="px-3 py-1 text-sm bg-[#a55233]/20 text-[#a55233] dark:bg-purple-500/20 dark:text-purple-400 rounded-full">
                           Original Version
                         </span>
                       )}
@@ -249,7 +251,7 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
                   {version.show_restore && (
                     <button
                       onClick={() => handleRestore(version)}
-                      className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20 transition-colors"
+                      className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm bg-[#556052]/10 text-[#556052] dark:bg-blue-500/10 dark:text-blue-400 rounded-lg hover:bg-[#556052]/20 dark:hover:bg-blue-500/20 transition-colors"
                     >
                       <RotateCcw size={16} />
                       Restore Version
@@ -260,8 +262,8 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
                 {version.images?.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-4">
-                      <ImageIcon size={18} className="text-gray-400" />
-                      <span className="text-sm text-gray-400">
+                      <ImageIcon size={18} className="text-[#5a544a] dark:text-gray-400" />
+                      <span className="text-sm text-[#5a544a] dark:text-gray-400">
                         Generated Images ({version.images.length})
                       </span>
                     </div>
@@ -275,7 +277,7 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
             </div>
           ))}
           {(!history || history.length === 0) && (
-            <div className="text-center text-gray-400 py-12 text-lg">
+            <div className="text-center text-[#5a544a] dark:text-gray-400 py-12 text-lg">
               No version history available yet
             </div>
           )}
@@ -286,4 +288,3 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
 };
 
 export default VersionHistory;
-

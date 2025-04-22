@@ -16,9 +16,9 @@ const IdeaTitle = ({ idea }) => {
   const { setLabel } = getSetInfo();
 
   return (
-    <h4 className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+    <h4 className="text-xl font-meidum tracking-tight dark:text-white mb-2 flex items-center gap-2">
       <span>{idea.product_name}</span>
-      <span className="text-sm text-emerald-400">({setLabel})</span>
+      <span className="text-sm dark:text-emerald-400 text-[#d17a56]">({setLabel})</span>
     </h4>
   );
 };

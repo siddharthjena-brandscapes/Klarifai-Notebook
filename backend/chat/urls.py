@@ -21,7 +21,7 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
     AdminUserProjectsView,
     AdminUserUploadPermissionsView,
     CheckUploadPermissionsView,
-    # ProcessCitationsView,
+    ProcessCitationsView,
      ChatExportView
     
 )
@@ -44,7 +44,7 @@ urlpatterns = [
     path('chat/', ChatView.as_view(), name='chat'),
 
     # # Citation processing endpoint
-    # path('process-citations/', ProcessCitationsView.as_view(), name='process-citations'),
+    path('process-citations/', ProcessCitationsView.as_view(), name='process-citations'),
     
     # Chat history endpoints
     path('chat-history/', GetChatHistoryView.as_view(), name='chat-history'),

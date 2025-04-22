@@ -1,22 +1,23 @@
 
+
 //IdeaGeneartor parent component
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Plus, FolderOpen, Clock, Eye, Trash2, ChevronRight, Loader, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import Header from './dashboard/Header';
 import backgroundImage from '../assets/bg-main.jpg';
 import { ideaService } from "../utils/axiosConfig";
-
+import { ThemeContext } from '../context/ThemeContext';
 
 const Alert = ({ title, description, onConfirm, onCancel }) => (
-  <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-    <div className="w-96 bg-gray-800 border border-red-500/50 rounded-lg shadow-2xl text-white p-6 animate-in zoom-in-95">
-      <h4 className="text-xl font-bold mb-3 text-red-400">{title}</h4>
-      <p className="text-gray-300 mb-6">{description}</p>
+  <div className="fixed inset-0 z-[100] bg-[#faf4ee]/80 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="w-96 bg-white dark:bg-gray-800 border border-red-500/50 rounded-lg shadow-2xl text-[#5e4636] dark:text-white p-6 animate-in zoom-in-95">
+      <h4 className="text-xl font-bold mb-3 text-red-500 dark:text-red-400">{title}</h4>
+      <p className="text-[#5a544a] dark:text-gray-300 mb-6">{description}</p>
       <div className="flex justify-end gap-3">
         <button
           onClick={onCancel}
-          className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500"
+          className="px-4 py-2 bg-white dark:bg-gray-700 text-[#5e4636] dark:text-white border border-[#d6cbbf] dark:border-gray-600 rounded-lg hover:bg-[#f5e6d8] dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-[#d6cbbf] dark:focus:ring-gray-500"
         >
           Cancel
         </button>
@@ -58,14 +59,14 @@ const ProjectNameModal = ({ onSubmit, onCancel }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
-      <div className="bg-gray-800/95 rounded-xl p-8 w-full max-w-md mx-4 shadow-2xl border border-gray-700 animate-in slide-in-from-bottom-4">
-        <h3 className="text-2xl font-bold text-white mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+    <div className="fixed inset-0 bg-[#faf4ee]/80 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+      <div className="bg-white/90 dark:bg-gray-800/95 rounded-xl p-8 w-full max-w-md mx-4 shadow-2xl border border-[#d6cbbf] dark:border-gray-700 animate-in slide-in-from-bottom-4">
+        <h3 className="text-2xl font-serif text-[#0a3b25] dark:text-white mb-6 dark:bg-clip-text dark:text-transparent dark:bg-gradient-to-r dark:from-blue-400 dark:to-emerald-400">
           Create New Idea Project
         </h3>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-serif text-[#5e4636] dark:text-gray-300 mb-2">
               Idea Project Name
             </label>
             <input
@@ -76,13 +77,13 @@ const ProjectNameModal = ({ onSubmit, onCancel }) => {
                 if (error) setError(''); // Clear error when typing
               }}
               placeholder="Enter Idea project name"
-              className={`w-full px-4 py-3 bg-gray-700/50 border ${
-                error ? 'border-red-500' : 'border-gray-600'
-              } rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+              className={`w-full px-4 py-3 bg-white/80 dark:bg-gray-700/50 border ${
+                error ? 'border-red-500' : 'border-[#d6cbbf] dark:border-gray-600'
+              } rounded-lg text-[#5e4636] dark:text-white placeholder-[#5a544a] dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
               autoFocus
             />
             {error && (
-              <p className="mt-2 text-sm text-red-400 bg-red-900/20 p-2 rounded border border-red-500/50">
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20 p-2 rounded border border-red-500/50">
                 {error}
               </p>
             )}
@@ -91,7 +92,7 @@ const ProjectNameModal = ({ onSubmit, onCancel }) => {
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all duration-200 focus:ring-2 focus:ring-gray-400 focus:outline-none"
+              className="px-4 py-2 bg-white dark:bg-gray-700 text-[#5e4636] dark:text-white border border-[#d6cbbf] dark:border-gray-600 rounded-lg hover:bg-[#f5e6d8] dark:hover:bg-gray-600 transition-all duration-200 focus:ring-2 focus:ring-[#d6cbbf] dark:focus:ring-gray-400 focus:outline-none"
               disabled={isSubmitting}
             >
               Cancel
@@ -99,7 +100,7 @@ const ProjectNameModal = ({ onSubmit, onCancel }) => {
             <button
               type="submit"
               disabled={!projectName.trim() || isSubmitting}
-              className="px-6 py-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-lg flex items-center gap-2"
+              className="px-6 py-2 bg-[#a55233] dark:bg-gradient-to-r dark:from-blue-500 dark:to-emerald-500 text-white rounded-lg hover:bg-[#8b4513] dark:hover:from-blue-600 dark:hover:to-emerald-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400 focus:outline-none shadow-lg flex items-center gap-2"
             >
               {isSubmitting ? (
                 <>
@@ -155,8 +156,8 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
 
   if (loading) {
     return (
-      <div className="bg-gray-800/80 rounded-xl p-6 border border-gray-700 flex items-center justify-center">
-        <div className="flex items-center gap-2 text-gray-400">
+      <div className="bg-white/80 dark:bg-gray-800/80 rounded-xl p-6 border border-[#d6cbbf] dark:border-gray-700 flex items-center justify-center shadow-md">
+        <div className="flex items-center gap-2 text-[#5a544a] dark:text-gray-400">
           <Loader className="animate-spin" size={16} />
           <span>Loading project details...</span>
         </div>
@@ -166,12 +167,12 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
 
   if (error) {
     return (
-      <div className="bg-gray-800/80 rounded-xl p-6 border border-red-500/50">
-        <div className="text-red-400">{error}</div>
+      <div className="bg-white/80 dark:bg-gray-800/80 rounded-xl p-6 border border-red-500/50 shadow-md">
+        <div className="text-red-500 dark:text-red-400">{error}</div>
         <div className="mt-4 flex justify-end gap-3">
           <button
             onClick={handleViewClick}
-            className="px-4 py-2 bg-blue-600/90 text-white rounded-lg hover:bg-blue-500 transition-all duration-200 flex items-center gap-2"
+            className="px-4 py-2 bg-[#a55233] dark:bg-blue-600/90 text-white rounded-lg hover:bg-[#8b4513] dark:hover:bg-blue-500 transition-all duration-200 flex items-center gap-2"
           >
             <Eye size={16} />
             View Basic Details
@@ -204,7 +205,7 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
   };
 
   return (
-    <div className="group bg-gray-800/80 rounded-xl p-6 transition-all duration-300 border border-gray-700 hover:border-green-500/50 shadow-lg hover:shadow-xl hover:bg-gray-750 hover:scale-[1.02]">
+    <div className="group bg-white/80 dark:bg-gray-800/80 rounded-xl p-6 transition-all duration-300 border border-[#e8ddcc] dark:border-gray-700 hover:border-[#ddd9c5] dark:hover:border-green-500/50 shadow-lg hover:shadow-xl hover:bg-[#ddd9c5] dark:hover:bg-gray-750 hover:scale-[1.02]">
       <div className="flex justify-between items-start gap-6">
         <div className="flex-1 space-y-4">
         {isEditing ? (
@@ -213,16 +214,16 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700/50 border border-[#d6cbbf] dark:border-gray-600 rounded-lg text-[#5e4636] dark:text-white placeholder-[#5a544a] dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-500"
                 placeholder="Project name"
               />
               {updateError && (
-                <p className="text-sm text-red-400">{updateError}</p>
+                <p className="text-sm text-red-500 dark:text-red-400">{updateError}</p>
               )}
               <div className="flex gap-2">
                 <button
                   onClick={handleUpdateName}
-                  className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="px-3 py-1 bg-[#556052] dark:bg-green-600 text-white rounded-lg hover:bg-[#425142] dark:hover:bg-green-700 transition-colors"
                 >
                   Save
                 </button>
@@ -232,7 +233,7 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
                     setNewName(project.name);
                     setUpdateError(null);
                   }}
-                  className="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  className="px-3 py-1 bg-white dark:bg-gray-600 text-[#5e4636] dark:text-white border border-[#d6cbbf] dark:border-gray-500 rounded-lg hover:bg-[#f5e6d8] dark:hover:bg-gray-700 transition-colors"
                 >
                   Cancel
                 </button>
@@ -240,34 +241,31 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <h3 className="text-xl font-bold text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-blue-400 group-hover:to-emerald-400 transition-all duration-300">
+              <h3 className="text-xl font-medium text-[#5e4636] dark:text-white group-hover:text-[#0a3b25] dark:group-hover:text-transparent dark:group-hover:bg-clip-text dark:group-hover:bg-gradient-to-r dark:group-hover:from-blue-400 dark:group-hover:to-emerald-400 transition-all duration-300">
                 {project.name}
               </h3>
               <button
                 onClick={() => setIsEditing(true)}
-                className="p-1 text-gray-400 hover:text-white transition-colors"
+                className="p-1 text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors"
               >
                 <Edit size={16} />
               </button>
             </div>
           )}
           <div>
-           
-            <p className="text-gray-400 text-sm mt-1">
+            <p className="text-[#5a544a] dark:text-gray-400 text-sm mt-1">
               {displayData.formData?.product || 'No product specified'}
             </p>
           </div>
           
-          <div className="space-y-3 text-gray-400 text-sm">
+          <div className="space-y-3 text-[#5a544a] dark:text-gray-400 text-sm">
             <p className="flex items-center gap-2">
-              <Clock size={14} className="text-gray-500" />
+              <Clock size={14} className="text-[#8c715f] dark:text-gray-500" />
               Created at: {format(new Date(displayData.lastModified), 'MMM d, yyyy')}
             </p>
             
-            
-
             <p className="flex items-center gap-2">
-              <Eye size={14} className="text-gray-500" />
+              <Eye size={14} className="text-[#8c715f] dark:text-gray-500" />
               {displayData.acceptedIdeas?.length 
                 ? `${displayData.acceptedIdeas.length} Generated ideas` 
                 : 'No generated ideas yet'}
@@ -278,7 +276,7 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
         <div className="flex flex-col gap-3">
           <button
             onClick={handleViewClick}
-            className="px-4 py-2 bg-blue-600/90 text-white rounded-lg hover:bg-blue-500 transition-all duration-200 flex items-center gap-2 group/btn"
+            className="px-4 py-2 bg-[#556052] dark:bg-blue-600/90 text-white rounded-lg hover:bg-[#887d4e] dark:hover:bg-blue-500 transition-all duration-200 flex items-center gap-2 group/btn"
           >
             <Eye size={16} />
             View
@@ -286,19 +284,16 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
           </button>
           <button
             onClick={() => onDelete(displayData.id)}
-            className="px-4 py-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-all duration-200 flex items-center justify-center gap-2"
+            className="px-4 py-2 bg-red-100 dark:bg-red-600/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-600 hover:text-white dark:hover:bg-red-600 dark:hover:text-white transition-all duration-200 flex items-center justify-center gap-2"
           >
             <Trash2 size={16} />
             Delete
           </button>
         </div>
       </div>
-      
-      
     </div>
   );
 };
-
 
 const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
   const [projects, setProjects] = useState([]);
@@ -307,6 +302,7 @@ const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
     if (mainProjectId) {
@@ -387,70 +383,74 @@ const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-white">Loading projects...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#faf4ee] dark:bg-gray-900">
+        <div className="text-[#5e4636] dark:text-white">Loading projects...</div>
       </div>
     );
   }
 
   if (!mainProjectId) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-white">Invalid project reference</div>
+      <div className="flex items-center justify-center min-h-screen bg-[#faf4ee] dark:bg-black">
+        <div className="text-[#5e4636] dark:text-white">Invalid project reference</div>
       </div>
     );
   }
 
   return (
-    <div 
-      className="min-h-screen relative overflow-hidden"
-      style={{
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundColor: '#111827', // Fallback color
-      }}
-    >
-      
-    <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"></div>
+    <div className={`flex flex-col min-h-screen bg-[#faf4ee] dark:bg-black overflow-hidden`}>
+      {/* Apply background only in dark theme */}
+      {theme === 'dark' && (
+        <>
+          <div 
+            className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
+            style={{
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+            role="img"
+            aria-label="Background"
+          />
+          {/* <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"></div> */}
+        </>
+      )}
     
-    <div className="relative z-10 p-14">
-      <Header />
-    
+      <div className="relative z-10 p-14">
+        <Header />
       
-      <div className="max-w-4xl mx-auto p-8 space-y-8">
-        <div className="flex justify-between items-center">
-          <h2 className="text-4xl pb-1 font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
-            My Idea Projects
-          </h2>
-          <button 
-            onClick={() => setShowNameModal(true)}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-emerald-500 text-white rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105"
-          >
-            <Plus size={20} />
-            New Idea Project
-          </button>
-        </div>
+        <div className="max-w-4xl mx-auto p-8 space-y-8">
+          <div className="flex justify-between items-center">
+            <h2 className="text-4xl pb-1 text-[#0a3b25] font-serif dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-blue-400 dark:to-emerald-400">
+              My Idea Projects
+            </h2>
+            <button 
+              onClick={() => setShowNameModal(true)}
+              className="px-6 py-3 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-500 dark:to-emerald-500 text-white rounded-lg dark:hover:from-blue-600 dark:hover:to-emerald-600 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105"
+            >
+              <Plus size={20} />
+              New Idea Project
+            </button>
+          </div>
 
-        <div className="grid gap-6">
-          {projects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onNavigate={(p) => onSelectProject({ ...p, skipToIdeas: true })}
-              onDelete={confirmDelete}
-            />
-          ))}
+          <div className="grid gap-6">
+            {projects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onNavigate={(p) => onSelectProject({ ...p, skipToIdeas: true })}
+                onDelete={confirmDelete}
+              />
+            ))}
 
-          {projects.length === 0 && (
-            <div className="text-center py-16 bg-gray-800/30 rounded-xl border-2 border-dashed border-gray-700 hover:border-gray-600 transition-all duration-200">
-              <FolderOpen size={48} className="mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-400 text-lg">No projects yet. Start by creating a new one!</p>
-            </div>
-          )}
+            {projects.length === 0 && (
+              <div className="text-center py-16 bg-white/80 dark:bg-gray-800/30 rounded-xl border-2 border-dashed border-[#d6cbbf] dark:border-gray-700 hover:border-[#a68a70] dark:hover:border-gray-600 transition-all duration-200">
+                <FolderOpen size={48} className="mx-auto mb-4 text-[#5a544a] dark:text-gray-400" />
+                <p className="text-[#5a544a] dark:text-gray-400 text-lg">No projects yet. Start by creating a new one!</p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
       </div>
 
       {showNameModal && (

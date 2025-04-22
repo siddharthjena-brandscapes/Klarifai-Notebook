@@ -28,27 +28,26 @@ Deforestation: Causes, Effects and Control Strategies
 
 deforestation are maintained. Indeed some 31 countries do not even make the list because they have already removed most of their forests and even if that remain are seriously fragmented and degraded. The changes in area of forest by region and subregion are shown in table 1.
 
-| Region/subregion\<br/>1 000 ha/year | 1990-2000\<br/>% | 1990-2000\<br/>2000-2010\<br/>1 000 ha/year | 2000-2010\<br/>% | |
-| - | - | - | - | - |
-| Eastern and Southern Africa | -1841 | -0.62 | -1839 | -0.66 |
-| Northern Africa | -590 | -0.72 | -41 | -0.05 |
-| Western and Central Africa | -1637 | -0.46 | -1535 | -0.46 |
-| Total Africa | -4067 | -0.56 | -3414 | -0.49 |
-| East Asia | 1762 | 0.81 | 2781 | 1.16 |
-| South and Southeast Asia | -2428 | -0.77 | -677 | -0.23 |
-| Western and Central Asia | 72 | 0.17 | 131 | 0.31 |
-| Total Asia | -595 | -0.10 | 2235 | 0.39 |
-| Russian Federation (RF) | 32 | n.s. | -18 | n.s. |
-| Europe excluding RF | 845 | 0.46 | 694 | 0.36 |
-| Total Europe | 877 | 0.09 | 676 | 0.07 |
-| Caribbean | 53 | 0.87 | 50 | 0.75 |
-| Central America | -374 | -1.56 | -248 | -1.19 |
-| North America | 32 | n.s. | 188 | 0.03 |
-| Total North and Central America | -289 | -0.04 | -10 | 0.00 |
-| Total Oceania | -41 | -0.02 | -700 | -0.36 |
-| Total South America | -4213 | -0.45 | -3997 | -0.45 |
-| World | -8327 | -0.20 | -5211 | -0.13 |
-
+| Region/subregion\<br/>1 000 ha/year | 1990-2000\<br/>% | 1990-2000\<br/>2000-2010\<br/>1 000 ha/year | 2000-2010\<br/>% |       |
+| ----------------------------------- | ---------------- | ------------------------------------------- | ---------------- | ----- |
+| Eastern and Southern Africa         | -1841            | -0.62                                       | -1839            | -0.66 |
+| Northern Africa                     | -590             | -0.72                                       | -41              | -0.05 |
+| Western and Central Africa          | -1637            | -0.46                                       | -1535            | -0.46 |
+| Total Africa                        | -4067            | -0.56                                       | -3414            | -0.49 |
+| East Asia                           | 1762             | 0.81                                        | 2781             | 1.16  |
+| South and Southeast Asia            | -2428            | -0.77                                       | -677             | -0.23 |
+| Western and Central Asia            | 72               | 0.17                                        | 131              | 0.31  |
+| Total Asia                          | -595             | -0.10                                       | 2235             | 0.39  |
+| Russian Federation (RF)             | 32               | n.s.                                        | -18              | n.s.  |
+| Europe excluding RF                 | 845              | 0.46                                        | 694              | 0.36  |
+| Total Europe                        | 877              | 0.09                                        | 676              | 0.07  |
+| Caribbean                           | 53               | 0.87                                        | 50               | 0.75  |
+| Central America                     | -374             | -1.56                                       | -248             | -1.19 |
+| North America                       | 32               | n.s.                                        | 188              | 0.03  |
+| Total North and Central America     | -289             | -0.04                                       | -10              | 0.00  |
+| Total Oceania                       | -41              | -0.02                                       | -700             | -0.36 |
+| Total South America                 | -4213            | -0.45                                       | -3997            | -0.45 |
+| World                               | -8327            | -0.20                                       | -5211            | -0.13 |
 
 Table 1. Annual change in forest area by region and subregion, 1990-2010
 (Source: Anon., 2010)
@@ -58,28 +57,25 @@ Global Perspectives on Sustainable Forest Management
 
 annual net loss for 2000-2010 AD were Comoros (-9.3 per cent), Togo (-5.1 per cent), Nigeria (-3.7 per cent), Mauritania (-2.7 per cent) and Uganda (-2.6 per cent). The area of other wooded land globally decreased by about 3.1 million hectares per year during 1990-2000 AD and by about 1.9 million hectares per year during the last decade. The area of other wooded land also decreased during the past two decades in Africa, Asia and South America.
 
-| Country\<br/> | Annual change 1990-2000\<br/>1 000 ha/year | Annual change 1990-2000\<br/>Country\<br/>% | Annual change 1990-2000\<br/> | Annual change 1990-2000\<br/>1 000 ha/year | % |
-| - | - | - | - | - | - |
-| Brazil | -2890 | -0.51 | Brazil | -2642 | -0.49 |
-| Indonesia | -1914 | -1.75 | Australia | -562 | -0.37 |
-| Sudan | -589 | -0.80 | Indonesia | -498 | -0.51 |
-| Myanmar | -435 | -1.17 | Nigeria | -410 | -3.67 |
-| Nigeria | -410 | -2.68 | Tanzania | -403 | -1.13 |
-| Tanzania | -403 | -1.02 | Zimbabwe | -327 | -1.88 |
-| Mexico | -354 | -0.52 | the Congo | -311 | -0.20 |
-| Zimbabwe | -327 | -1.58 | Myanmar | -310 | -0.93 |
-| Congo | -311 | -0.20 | Bolivia | -290 | -0.49 |
-| Argentina | -293 | -0.88 | Venezuela | -288 | -0.60 |
-| Total | -7926 | -0.71 | Total | -6040 | -0.53 |
-
+| Country\<br/> | Annual change 1990-2000\<br/>1 000 ha/year | Annual change 1990-2000\<br/>Country\<br/>% | Annual change 1990-2000\<br/> | Annual change 1990-2000\<br/>1 000 ha/year | %     |
+| ------------- | ------------------------------------------ | ------------------------------------------- | ----------------------------- | ------------------------------------------ | ----- |
+| Brazil        | -2890                                      | -0.51                                       | Brazil                        | -2642                                      | -0.49 |
+| Indonesia     | -1914                                      | -1.75                                       | Australia                     | -562                                       | -0.37 |
+| Sudan         | -589                                       | -0.80                                       | Indonesia                     | -498                                       | -0.51 |
+| Myanmar       | -435                                       | -1.17                                       | Nigeria                       | -410                                       | -3.67 |
+| Nigeria       | -410                                       | -2.68                                       | Tanzania                      | -403                                       | -1.13 |
+| Tanzania      | -403                                       | -1.02                                       | Zimbabwe                      | -327                                       | -1.88 |
+| Mexico        | -354                                       | -0.52                                       | the Congo                     | -311                                       | -0.20 |
+| Zimbabwe      | -327                                       | -1.58                                       | Myanmar                       | -310                                       | -0.93 |
+| Congo         | -311                                       | -0.20                                       | Bolivia                       | -290                                       | -0.49 |
+| Argentina     | -293                                       | -0.88                                       | Venezuela                     | -288                                       | -0.60 |
+| Total         | -7926                                      | -0.71                                       | Total                         | -6040                                      | -0.53 |
 
 Table 2. Countries with largest annual net loss of forest area, 1990-2010 (Source: Anon., 2010)
 
 ## 3. The causes of deforestation
 
-As Myers pointed out, "we still have half of all tropical forests that ever existed" (Myers, 1992). The struggle to save the world's rainforests and other forests continues and there is a growing worldwide concern about the issue. In order to save forests, we need to know why they are being destroyed. Distinguishing between the agents of deforestation and its causes is very important in order to understand the major determinants of deforestation. The agents of deforestation are those slash and burn farmers, commercial farmers, ranchers, loggers, firewood collectors, infra-structure developers and others who are cutting down the forests. Causes of deforestation are the forces that motivate the agents to clear the forests.
-
-However, most of the existing literature typically distinguishes between two levels of specific factors: direct and indirect causes of deforestation. Direct agents and causes of deforestation, also typically referred to as sources of deforestation, first level or proximate causes (Panayotou, 1990; Barbier et al., 1994; Caviglia, 1999) are relatively easy to identify but the indirect causes which are usually the main divers of deforestation are the ones that cause most disagreement and the ones that are hardest to quantify (Bhatnagar, 1991; Mather, 1991; Humphreys, 2006; Sands, R. 2005).
+As Myers pointed out, "we still have half of all tropical forests that ever existed" (Myers, 1992). The struggle to save the world's rainforests and other forests continues and there is a growing worldwide concern about the issue. In order to save forests, we need to know why they are being destroyed. Distinguishing between the agents of deforestation and its causes is very important in order to understand the major determinants of deforestation. The agents of deforestation are those slash and burn farmers, commercial farmers, ranchers, loggers, firewood collectors, infra-structure developers and others who are cutting down the forests. Causes of deforestation are the forces that motivate the agents to clear the forests. However, most of the existing literature typically distinguishes between two levels of specific factors: direct and indirect causes of deforestation. Direct agents and causes of deforestation, also typically referred to as sources of deforestation, first level or proximate causes (Panayotou, 1990; Barbier et al., 1994; Caviglia, 1999) are relatively easy to identify but the indirect causes which are usually the main divers of deforestation are the ones that cause most disagreement and the ones that are hardest to quantify (Bhatnagar, 1991; Mather, 1991; Humphreys, 2006; Sands, R. 2005).
 
 Similarly, Pearce and Brown (1994) identified two main forces affecting deforestation. They are:
 
@@ -161,7 +157,7 @@ Global Perspectives on Sustainable Forest Management
 
 exploit their rich natural resources including their forests partly to earn foreign exchange for servicing their debts. For instance, construction of roads for logging operations in some South-east Asian countries was funded by Japanese aid which allowed the Japanese timber companies to exploit the forests of these countries. Understandably, these timber companies profitably exploited the forests while the South-east Asian countries were left owing Japan money for construction of their roads (Colchester and Lohmann, 1993).
 
-## 3.2.4 Overpopulation and poverty
+### 3.2.4 Overpopulation and poverty
 
 The role of population in deforestation is a contentious issue (Mather, 1991; Colchester and Lohmann, 1993; Cropper and Griffiths, 1994; Ehrhardt-Martinez, 1998; Sands, 2005). The impact of population density on deforestation has been a subject of controversy. Poverty and overpopulation are believed to be the main causes of forest loss according to the international agencies such as FAO and intergovernmental bodies. It is generally believed by these organizations that they can solve the problem by encouraging development and trying to reduce population growth. Conversely, the World Rainforest Movement and many other NGOs hold unrestrained development and the excessive consumption habits of rich industrialized countries directly responsible for most forest loss. However there is good evidence that rapid population growth is a major indirect and over-arching cause of deforestation. More people require more food and space which requires more land for agriculture and habitation. This in turn results in more clearing of forests. Arguably increasing population is the biggest challenge of all to achieve sustainable management of human life support systems and controlling population growth is perhaps the best single thing that can be done to promote sustainability. Overpopulation is not a problem exclusive to Third World countries. An individual in an industrialized country is likely to consume in the order of sixty times as much of the world's resources as a person in a poor country. The growing population in rich industrialized nations are therefore responsible for much of the exploitation of the earth and there is a clear link between the overconsumption in rich countries and deforestation in the tropics (Colchester and Lohmann, 1993).
 
@@ -190,7 +186,7 @@ Poor farm households or commercial loggers have little incentive to care about t
 ## 3.2.8 Undervaluing the forest
 
 Forests gain value only when they are cleared for obtaining legal title through 'improvement' (Mather, 1991; Sands, 2005). The extraction of non-wood forest products has been suggested as a way to add value to the forest but it is not economical when compared to clearing options. If some means could be devised where those who benefit from the environmental values could pay the forest owners or agents of deforestation for them, then the option to not clear would become more competitive. Alternatively, if the national governments value the environmental benefits, it could apply a tax or disincentives to clear. However, even though maintenance of the environmental services is essential for sustained economic development, deforesting nations usually have more immediate goals and are unprepared to take this step.
-Deforestation: Causes, Effects and Control Strategies
+Deforestation: Causes, Effects and Control Strategies                                   15
 
 ### 3.2.9 Corruption and political cause
 
@@ -203,13 +199,13 @@ The FAO identified forest crime and corruption as one of the main causes of defo
 It is essential to distinguish between microclimates, regional climate and global climate while assessing the effects of forest on climate (Gupta et al., 2005) especially the effect of tropical deforestation on climate (Dickinson, 1981). Deforestation can change the global change of energy not only through the micrometeorological processes but also by increasing the concentration of carbon dioxide in the atmosphere (Pinker, 1980) because carbon dioxide absorbs thermal infrared radiation in the atmosphere. Moreover deforestation can lead to increase in the albedo of the land surface and hence affects the radiation budget of the region (Charney, 1975; Rowntree, 1988; Gupta et al., 2005). Deforestation affects wind flows, water vapour flows and absorption of solar energy thus clearly influencing local and global climate (Chomitz et al., 2007). Deforestation on lowland plains moves cloud formation and rainfall to higher elevations (Lawton et al., 2001). Deforestation disrupts normal weather patterns creating hotter and drier weather thus increasing drought and desertification, crop failures, melting of the polar ice caps, coastal flooding and displacement of major vegetation regimes. In the dry forest zones, land degradation has become an increasingly serious problem resulting in extreme cases in desertification (Dregne, 1983). Desertification is the consequence of extremes in climatic variation and unsustainable land use practices including overcutting of forest cover (Anon., 1994b).
 
 Global warming or global change includes anthropogenically produced climatic and ecological problems such as recent apparent climatic temperature shifts and precipitation regimes in some areas, sea level rise, stratospheric ozone depletion, atmospheric pollution and forest decline. Tropical forests are shrinking at a rate of about five per cent per decade as forests are logged and cleared to supply local, regional, national and global markets for wood products, cattle, agricultural produce and biofuels (Anon., 2007; 2010). One of the most important ramifications of deforestation is its effect on the global atmosphere. Deforestation contributes to global warming which occurs from increased atmospheric concentrations of greenhouse gases (GHG) leading to net increase in the global mean temperature as the forests are primary terrestrial sink of carbon. Thus deforestation disrupts the global carbon cycle increasing the concentration of atmospheric carbon dioxide. Tropical deforestation is responsible for the emission of roughly two billion tonnes of carbon (as CO₂) to the atmosphere per year (Houghton, 2005). Release of the carbon dioxide due to global deforestation is equivalent to an estimated 25 per cent of emissions from combustion of fossil fuels (Asdrasko, 1990).
-Global Perspectives on Sustainable Forest Management
+16                                        Global Perspectives on Sustainable Forest Management
 
 ## 4.2 Water and soil resources loss and flooding
 
-Deforestation also disrupts the global water cycle (Bruijnzeel, 2004). With removal of part of the forest, the area cannot hold as much water creating a drier climate. Water resources affected by deforestation include drinking water, fisheries and aquatic habitats, flood/drought control, waterways and dams affected by siltation, less appealing water-related recreation, and damage to crops and irrigation systems from erosion and turbidity (Anon., 1994ₐ; Bruijnzeel et al., 2005). Urban water protection is potentially one of the most important services that forest provides (Chomitz et al., 2007). Filtering and treating water is expensive. Forests can reduce the costs of doing so either actively by filtering runoff or passively by substituting for housing or farms that generate runoff (Dudley and Stolton, 2003). Deforestation can also result into watersheds that are no longer able to sustain and regulate water flows from rivers and streams. Once they are gone, too much water can result into downstream flooding, many of which have caused disasters in many parts of the world. This downstream flow causes soil erosion thus also silting of water courses, lakes and dams.
+Deforestation also disrupts the global water cycle (Bruijnzeel, 2004). With removal of part of the forest, the area cannot hold as much water creating a drier climate. Water resources affected by deforestation include drinking water, fisheries and aquatic habitats, flood/drought control, waterways and dams affected by siltation, less appealing water-related recreation, and damage to crops and irrigation systems from erosion and turbidity (Anon., 1994ₐ; Bruijnzeel et al., 2005). Urban water protection is potentially one of the most important services that forest provides (Chomitz et al., 2007). Filtering and treating water is expensive. Forests can reduce the costs of doing so either actively by filtering runoff or passively by substituting for housing or farms that generate runoff (Dudley and Stolton, 2003). Deforestation can also result into watersheds that are no longer able to sustain and regulate water flows from rivers and streams. Once they are gone, too much water can result into downstream flooding, many of which have caused disasters in many parts of the world.
 
-Deforestation increases flooding mainly for two reasons. First, with a smaller 'tree fountain' effect, soils are more likely to be fully saturated with water. The 'sponge' fills up earlier in wet season, causing additional precipitation to run off and increasing flood risk. Second, deforestation often results in soil compaction unable to absorb rain. Locally, this causes a faster response of stream flows to rainfall and thus potential flash flooding (Chomitz et al., 2007). Moreover deforestation also decrease dry season flows.
+This downstream flow causes soil erosion thus also silting of water courses, lakes and dams. Deforestation increases flooding mainly for two reasons. First, with a smaller 'tree fountain' effect, soils are more likely to be fully saturated with water. The 'sponge' fills up earlier in wet season, causing additional precipitation to run off and increasing flood risk. Second, deforestation often results in soil compaction unable to absorb rain. Locally, this causes a faster response of stream flows to rainfall and thus potential flash flooding (Chomitz et al., 2007). Moreover deforestation also decrease dry season flows.
 
 The long term effect of deforestation on the soil resource can be severe. Clearing the vegetative cover for slash and burn farming exposes the soil to the intensity of the tropical sun and torrential rains. Forest floors with their leaf litter and porous soils easily accommodate intense rainfall. The effects of deforestation on water availability, flash floods and dry season flows depend on what happens to these countervailing influences of infiltration and evapotranspiration- the sponge versus the fountain (Bruijnzeel, 2004). Deforestation and other land use changes have increased the proportion of the basin subject to erosion and so over the long run have contributed to siltation. Heavy siltation has raised the river bed increasing the risk of flooding especially in Yangtze river basin in China, the major river basins of humid tropics in East Asia and the Amazonian basin (Yin and Li, 2001; Bruijnzeel, 2004; Aylward, 2005, Bruijnzeel et al., 2005; van Noordwijk et al., 2006).
 
@@ -254,7 +250,7 @@ The most serious impediment to sustainable forest management is the lack of dedi
 There are several ways of achieving increasing the perceived and actual value of forests. Governments can impose realistic prices on stumpage and forest rent and can invest in improving the sustainable productivity of the forest. National and international beneficiaries of the environmental services of forests have to pay for such services (Chomitz et al., 2007). There has been some success in devising schemes to collect payments for environmental services like carbon sequestration, biodiversity conservation, catchment protection and
 
 www.intechopen.com
-Deforestation: Causes, Effects and Control Strategies                                 19
+Deforestation: Causes, Effects and Control Strategies
 
 ecotourism. This success can further be more realized by integrating participatory mode of management with these collection schemes to ensure rights and tenure with equity in resource and benefit sharing for improving the livelihood of the rural poors who actually are the primary stakeholders of conservation and management.
 
@@ -352,43 +348,43 @@ Anonymous. 2002. Forest certification and biodiversity: opposites or complements
 www.intechopen.com
 Deforestation: Causes, Effects and Control Strategies                                        23
 
-Anonymous. 2005. *Ecosystems and Human well-being: synthesis*. Millennium ecosystem Assessment. Island Press, Washington DC.
+Anonymous. 2005. Ecosystems and Human well-being: synthesis. Millennium ecosystem Assessment. Island Press, Washington DC.
 
 Anonymous. 2007. Three Essential Strategies for Reducing Deforestation. Alianca da Terra, Amigos da Terra, Instituto Centro de Vida, IMAZON, Instituto de Pesquisa da Amazonia, Instituto Socio Ambiental, Nucleo de Estudos e Pratica Juridica Ambiental, Faculdade de Direito- Universidade Federal de Mato Grosso, Woods Hole Research Center and David and Lucile Packard Foundation.
 
 Anonymous. 2008. Mexico: Mining causes ecocide in Coahuayana, Michoacan. WRM's bulletin Nº 136, November 2008.
 
-Anonymous, 2010. *Global Forest Resources Assessment, 2010-Main Report*. FAO Forestry Paper 163. Rome, Italy. 340p.
+Anonymous, 2010. Global Forest Resources Assessment, 2010-Main Report. FAO Forestry Paper 163. Rome, Italy. 340p.
 
-Anonymous, 2011ₐ. *State of the World's Forest*. FAO, Rome. 163p.
+Anonymous, 2011ₐ. State of the World's Forest. FAO, Rome. 163p.
 
 Anonymous. 2011b. Mining, deforestation cause severe drought. March 5 The Asian Age, New Delhi.
 
 Ascher, W. 1993. Political economy and problematic forestry policies in Indonesia: obstacles to incorporating sound economics and science. The Center for Tropical Conservation, Duke University.
 
-Asdrasko, K. 1990. *Climate Change and Global Forests: Current Knowledge of Political Effects, Adaptation and Mitigation Options*. FAO, Rome.
+Asdrasko, K. 1990. Climate Change and Global Forests: Current Knowledge of Political Effects, Adaptation and Mitigation Options. FAO, Rome.
 
-Aylward, B. 2005. Land use, hydrological function and economic valuation. In: *Forest, water and people in the humid tropics*, eds. Bonell, M. and Bruijnzeel, L. A. Cambridge University Press, Cambridge United Kingdom.
+Aylward, B. 2005. Land use, hydrological function and economic valuation. In: Forest, water and people in the humid tropics, eds. Bonell, M. and Bruijnzeel, L. A. Cambridge University Press, Cambridge United Kingdom.
 
-Barbier, E. B. and Cox, M. 2004. An economic analysis of Shrimp farm expansion and mangrove conversion in Thailand. *Land Economics* 80: 389-407.
+Barbier, E. B. and Cox, M. 2004. An economic analysis of Shrimp farm expansion and mangrove conversion in Thailand. Land Economics 80: 389-407.
 
-Barbier, E. B.; Burgess, J. C. and Folke, C. 1994. *Paradise lost? The ecological economics of biodiversity*. Earthscan.
+Barbier, E. B.; Burgess, J. C. and Folke, C. 1994. Paradise lost? The ecological economics of biodiversity. Earthscan.
 
 Barbier, E. B.; Bockstael, N.; Burgess, J. C.; and Strand, I. 1993. The timber trade and tropical deforestation in Indonesia. LEEC Paper DP 93-01. Environmental Economics Centre, London.
 
-Barraclough, S. and Ghimire, K. B. 2000. *Agricultural Expansion and Tropical Deforestation*. Earthscan.
+Barraclough, S. and Ghimire, K. B. 2000. Agricultural Expansion and Tropical Deforestation. Earthscan.
 
-Bawa, K. S.; Nadkarni, N.; Lele, S.; Raven, P.; Janzen, A.; Lugo, A.; Ashton, P. and Lovejoy, T. 2004. Tropical ecosystems into the 21ˢᵗ Century. *Science* 306: 227-230.
+Bawa, K. S.; Nadkarni, N.; Lele, S.; Raven, P.; Janzen, A.; Lugo, A.; Ashton, P. and Lovejoy, T. 2004. Tropical ecosystems into the 21ˢᵗ Century. Science 306: 227-230.
 
-Bhatnagar, P. 1991. *The Problem of Afforestation in India*. International Book Distributors, Dehra Dun.
+Bhatnagar, P. 1991. The Problem of Afforestation in India. International Book Distributors, Dehra Dun.
 
-Bruijnzeel, L. A. 2004. Hydrological functions of tropical forests: not seeing the soils for the trees? *Agriculture, Ecosystems and Environment* 104: 185-228.
+Bruijnzeel, L. A. 2004. Hydrological functions of tropical forests: not seeing the soils for the trees? Agriculture, Ecosystems and Environment 104: 185-228.
 
-Bruijnzeel, L. A.; Bonell, M.; Gilmour, D. A. and Lamb, D. 2005. Forest, water and people in the humid tropics: an emerging view. In: *Forest, Water and People in the humid tropics*, eds. Bonell, M. and Bruijnzeel, L. A. Cambridge University Pres, Cambridge United Kingdom.
+Bruijnzeel, L. A.; Bonell, M.; Gilmour, D. A. and Lamb, D. 2005. Forest, water and people in the humid tropics: an emerging view. In: Forest, Water and People in the humid tropics, eds. Bonell, M. and Bruijnzeel, L. A. Cambridge University Pres, Cambridge United Kingdom.
 
-Bryant, D.; Nielsen, D. and Tangley, L. 1997. *The last frontier forests- Ecosystems and Economies on the Edge*. World Resource Institute, Washington DC.
+Bryant, D.; Nielsen, D. and Tangley, L. 1997. The last frontier forests- Ecosystems and Economies on the Edge. World Resource Institute, Washington DC.
 
-Capistrano, A. D. 1994. Tropical forest depletion and the changing macroeconomy 1967-85. In: *The Causes of Tropical of Tropical Deforestation. The economic and statistical analysis*
+Capistrano, A. D. 1994. Tropical forest depletion and the changing macroeconomy 1967-85. In: The Causes of Tropical of Tropical Deforestation. The economic and statistical analysis
 
 www.intechopen.com
 Global Perspectives on Sustainable Forest Management
@@ -469,7 +465,7 @@ Lambin, E. F. and Meyfroidt, P. 2011. Global land use change, economic globaliza
 Lawton, R. O.; Nair, U. S.; Pielke Sr., R. A. and Welch, R. M. 2001. Climatic impact of tropical lowland deforestation on nearby Montane Cloud Forests. Science 294: 584-587.
 
 Lean, G. 1990. World Wildlife Fund Atlas of the Environment. Prentice Hall, New York.
-Global Perspectives on Sustainable Forest Management
+26                                         Global Perspectives on Sustainable Forest Management
 
 Levang, P. 2002. People's dependencies on forests. In Technical Report, Phase I 1997-2001. ITTO Project PD 12/97 Rev. 1 (F) - Forest, Science and Sustainability: the Bulungan model forest, pp 109-130. CIFOR, Bogor Indonesia.
 
@@ -545,7 +541,8 @@ Van Noordwijk, M.; Agus, F.; Verbist, B.; Hairiah, K. and Tomich, T. P. 2006. Ma
 Wilkie, D.; Shaw, E.; Rotberg, F.; Morelli, G. and Auzels, P. 2000. Roads, development and conservation in the Congo Basin. Conservation Biology 14:1614-1622.
 28                                       Global Perspectives on Sustainable Forest Management
 
-Yin, H. and Li, C. 2001. Human impacts on floods and flood disasters on the Yangtze River. Geomorphology 41: 105-109.
+Yin, H. and Li, C. 2001. Human impacts on floods and flood disasters on the Yangtze River.
+Geomorphology 41: 105-109.
 Global Perspectives on Sustainable Forest Management
 
 Edited by Dr. Dr. Clement A. Okia
@@ -558,17 +555,14 @@ Published in print edition April, 2012
 
 This book is dedicated to global perspectives on sustainable forest management. It focuses on a need to move away from purely protective management of forests to innovative approaches for multiple use and management of forest resources. The book is divided into two sections; the first section, with thirteen chapters deals with the forest management aspects while the second section, with five chapters is dedicated to forest utilization. This book will fill the existing gaps in the knowledge about emerging perspectives on sustainable forest management. It will be an interesting and helpful resource to managers, specialists and students in the field of forestry and natural resources management.
 
-How to reference
+## How to reference
 
 In order to correctly reference this scholarly work, feel free to copy and paste the following:
 
 Sumit Chakravarty, S. K. Ghosh, C. P. Suresh, A. N. Dey and Gopal Shukla (2012). Deforestation: Causes, Effects and Control Strategies, Global Perspectives on Sustainable Forest Management, Dr. Dr. Clement A. Okia (Ed.), ISBN: 978-953-51-0569-5, InTech, Available from: http://www.intechopen.com/books/global-perspectives-on-sustainable-forest-management/deforestation-causes-effects-and-control-strategies
 
-INTECH
-open science | open minds
-
-| InTech Europe | InTech China |
-| - | - |
+| InTech Europe                                                                                                                             | InTech China                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | University Campus STeP Ri Slavka Krautzeka 83/A 51000 Rijeka, Croatia Phone: +385 (51) 770 447 Fax: +385 (51) 686 166 www\.intechopen.com | Unit 405, Office Block, Hotel Equatorial Shanghai No.65, Yan An Road (West), Shanghai, 200040, China Phone: +86-21-62489820 Fax: +86-21-62489821 |
 
 © 2012 The Author(s). Licensee IntechOpen. This is an open access article distributed under the terms of the Creative Commons Attribution 3.0 License, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited.

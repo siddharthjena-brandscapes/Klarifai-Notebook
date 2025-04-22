@@ -7,6 +7,248 @@ from django.db import transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
+from .utils import update_project_timestamp
+
+import tempfile
+import os
+import fitz  # PyMuPDF for PDF handling
+from pptx import Presentation
+import google.generativeai as genai
+ 
+ 
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def archive_project(request, project_id):
+    """Archive a project by setting is_active to False"""
+    try:
+        project = get_object_or_404(Project, id=project_id, user=request.user)
+        project.is_active = False
+        project.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Project "{project.name}" has been archived successfully',
+            'project_id': project.id
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def unarchive_project(request, project_id):
+    """Restore a project from archive by setting is_active to True"""
+    try:
+        # Find the project even if it's archived (is_active=False)
+        project = get_object_or_404(Project, id=project_id, user=request.user)
+        project.is_active = True
+        project.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Project "{project.name}" has been restored successfully',
+            'project_id': project.id
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def archived_projects(request):
+    """Get a list of all archived projects"""
+    projects = Project.objects.filter(user=request.user, is_active=False)
+    return JsonResponse({
+        'projects': [{
+            'id': project.id,
+            'name': project.name,
+            'description': project.description,
+            'category': project.category,
+            'created_at': project.created_at.isoformat(),
+            'updated_at': project.updated_at.isoformat(),
+            'selected_modules': project.selected_modules,
+        } for project in projects]
+    })
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def enhance_prompt_with_ai(request):
+    try:
+        # Get the user-written prompt from the request
+        data = request.data
+        user_prompt = data.get('prompt', '')
+       
+        if not user_prompt or len(user_prompt.strip()) < 10:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Please provide a more detailed initial description (at least 10 characters).'
+            }, status=400)
+       
+        # Initialize Gemini model
+        model = initialize_gemini()
+        if not model:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Failed to initialize AI model.'
+            }, status=500)
+       
+        # Create prompt for enhancing the user's input
+        ai_prompt = f"""
+        You are an expert at improving and enhancing text descriptions for AI projects.
+        Please enhance and expand the following project description to make it more detailed,
+        well-structured, and effective. Maintain the original intent and key points, but
+        make it more professional, clear, and comprehensive.
+       
+        Original description:
+        ---
+        {user_prompt}
+        ---
+       
+        Please provide an enhanced version that:
+        1. Is well-organized with clear structure
+        2. Expands on key concepts
+        3. Uses professional language
+        4. Provides more context where helpful
+        5. Is comprehensive but concise
+        """
+       
+        # Generate the enhanced prompt
+        try:
+            response = model.generate_content(ai_prompt)
+            enhanced_prompt = response.text
+           
+            return JsonResponse({
+                'status': 'success',
+                'enhanced_prompt': enhanced_prompt
+            })
+        except Exception as e:
+            print(f"Error generating enhanced prompt: {str(e)}")
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Failed to enhance the prompt. Please try again or use the original description.'
+            }, status=500)
+           
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+ 
+ 
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def upload_document_for_prompt(request):
+    try:
+        if 'document' not in request.FILES:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No document file provided'
+            }, status=400)
+       
+        document_file = request.FILES['document']
+       
+        # Extract text based on file type
+        if document_file.name.lower().endswith('.pdf'):
+            document_text = extract_text_from_pdf(document_file)
+        elif document_file.name.lower().endswith(('.pptx', '.ppt')):
+            document_text = extract_text_from_ppt(document_file)
+        else:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Unsupported file format. Please upload PDF or PPTX files.'
+            }, status=400)
+       
+        # Generate prompt from document content
+        generated_prompt = generate_prompt(document_text)
+       
+        return JsonResponse({
+            'status': 'success',
+            'prompt': generated_prompt
+        })
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+ 
+# Helper functions for document processing
+ 
+def extract_text_from_pdf(pdf_file):
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+        tmp_file.write(pdf_file.read())
+        tmp_path = tmp_file.name
+   
+    doc = fitz.open(tmp_path)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+   
+    os.unlink(tmp_path)  # Delete temp file
+    return text
+ 
+def extract_text_from_ppt(ppt_file):
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pptx') as tmp_file:
+        tmp_file.write(ppt_file.read())
+        tmp_path = tmp_file.name
+   
+    presentation = Presentation(tmp_path)
+    text = ""
+   
+    for slide in presentation.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text += shape.text + "\n"
+   
+    os.unlink(tmp_path)  # Delete temp file
+    return text
+ 
+def initialize_gemini():
+    api_key = "AIzaSyC5Dqjx0DLbkRXH9YWqWZ1SPTK0w0C4oFY"  # In production, get this from settings or env vars
+   
+    if not api_key:
+        return None
+   
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel('gemini-1.5-pro')
+ 
+def generate_prompt(document_text):
+    model = initialize_gemini()
+    if not model:
+        return "Failed to initialize AI model. Please provide a description manually."
+   
+    prompt = """
+    You are an assistant that creates effective prompts based on document content.
+    Create a detailed, well-structured prompt that captures the key information from the document.
+    The prompt should be designed to help a chatbot provide relevant and accurate responses about the document's content.
+    Structure the prompt in a way that guides the chatbot to understand the document's main topics, key points, and important details.
+    dont write anything like prmopt for chatbot: (in the heading ), just write the prompt
+   
+    Create a prompt based on the following document content:
+   
+    """
+   
+    prompt += document_text[:8000]
+   
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        print(f"Error generating prompt: {str(e)}")
+        return "Failed to generate prompt. Please provide a description manually."
 
 
 
@@ -70,6 +312,7 @@ def create_project(request):
                     'description': project.description,
                     'category': project.category,
                     'created_at': project.created_at.isoformat(),
+                    'updated_at': project.updated_at.isoformat(),
                     'selected_modules': project.selected_modules
                 }
             })
@@ -95,6 +338,7 @@ def project_list(request):
             'description': project.description,
             'category': project.category,
             'created_at': project.created_at.isoformat(),
+            'updated_at': project.updated_at.isoformat(),
             'selected_modules': project.selected_modules,
         } for project in projects]
     })
@@ -115,6 +359,7 @@ def project_detail(request, project_id):
             'description': project.description,
             'category': project.category,
             'created_at': project.created_at.isoformat(),
+            'updated_at': project.updated_at.isoformat(),
             'selected_modules': project.selected_modules,
             'modules': [{
                 'type': module.module_type,
@@ -184,6 +429,8 @@ def update_project(request, project_id):
             project.selected_modules = request.data['selected_modules']
             
         project.save()
+
+        update_project_timestamp(project_id, request.user)
         
         return JsonResponse({
             'status': 'success',
@@ -193,6 +440,7 @@ def update_project(request, project_id):
                 'description': project.description,
                 'category': project.category,
                 'created_at': project.created_at.isoformat(),
+                'updated_at': project.updated_at.isoformat(),
                 'selected_modules': project.selected_modules
             }
         })
