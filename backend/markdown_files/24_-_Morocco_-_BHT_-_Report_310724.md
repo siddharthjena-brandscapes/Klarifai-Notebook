@@ -23,12 +23,12 @@ This report provides brand metrics on Visa and its competitors: consumer percept
 
 ### Key Segments (FY2023)
 
-| Segment Name                                                                       | Segment Size |
-| ---------------------------------------------------------------------------------- | ------------ |
-| Gen Z (18-26)\*\*                                                                  | 164          |
-| Trailing Millennials (ages 18-35)                                                  | 200          |
-| International Travelers (Traveled internationally at least once in past 12 months) | 140          |
-| eComm Shoppers (P1M online purchasers)                                             | 233          |
+| Segment Name                                                                           | Segment Size |
+| -------------------------------------------------------------------------------------- | ------------ |
+| Gen Z (18-26)\*\*                                                                      | 164          |
+| Trailing Millennials (ages 18-35)                                                      | 200          |
+| International Travelers<br/>(Traveled internationally at least once in past 12 months) | 140          |
+| eComm Shoppers<br/>(P1M online purchasers)                                             | 233          |
 
 ### Brands Included
 
@@ -123,8 +123,8 @@ Among its BHS components, Visa has significantly declined across components.
 | ---------- | ---- | ----- | ----- |
 | Visa       | 81   | 78    | 64 🔻 |
 | Mastercard | 31   | 38 🔼 | 43    |
-| PayPal     | 29   | 33 🔼 | 31    |
-| CMI        | 17   | 32 🔼 | 12 🔻 |
+| PayPal     | 29   | 32 🔼 | 31    |
+| CMI        | 17   | 33    | 12 🔻 |
 
 ## VISA BHS Components
 
@@ -144,13 +144,13 @@ Base: All Respondents
 Visa performs strongly among international travelers and non-Gen Z.
 Mastercard and PayPal are performing better among Gen Z and eCommerce shoppers.
 
-| Segment                                                    |        |        |        |       |
-| ---------------------------------------------------------- | ------ | ------ | ------ | ----- |
-| TOTAL                                                      | 64     | 43     | 31     | 12    |
-| Gen Z (GZ) \[Non Gen Z (NGZ)]                              | 58 NGZ | 50 NGZ | 42 NGZ | 7 NGZ |
-| Trailing Millennials (ML) \[Non Trailing Millennials (NM)] | 61     | 47     | 37 NTM | 11    |
-| International Travelers (IT) \[Non-Travelers = (NIT)]      | 71 NIT | 54 NIT | 47 NIT | 12    |
-| eComm Shoppers (ES) \[Non-eComm Shoppers (NES)]            | 65     | 50 NES | 39 NES | 13    |
+| Segment                                                        |        |        |        |       |
+| -------------------------------------------------------------- | ------ | ------ | ------ | ----- |
+| TOTAL                                                          | 64     | 43     | 31     | 12    |
+| Gen Z (GZ)<br/>\[Non Gen Z (NGZ)]                              | 58 NGZ | 50 NGZ | 42 NGZ | 7 NGZ |
+| Trailing Millennials (ML)<br/>\[Non Trailing Millennials (NM)] | 61     | 47     | 37 NTM | 11    |
+| International Travelers (IT)<br/>\[Non-Travelers = (NIT)]      | 71 NIT | 54 NIT | 47 NIT | 12    |
+| eComm Shoppers (ES)<br/>\[Non-eComm Shoppers (NES)]            | 65     | 50 NES | 39 NES | 13    |
 
 Base: All Respondents
 
@@ -199,13 +199,13 @@ Gen Z: Random + Boosters
 Visa excels across key segments, particularly among international travelers.
 Visa's preference is stronger among older generations and non-eCommerce shoppers.
 
-|                                                            | Overall Brand Health Score | Prominence (T2B) | Brand Preferred (Solo) | Affinity (T2B) | Reputation (T2B) |
-| ---------------------------------------------------------- | -------------------------- | ---------------- | ---------------------- | -------------- | ---------------- |
-| TOTAL                                                      | 64                         | 75               | 34                     | 81             | 77               |
-| Gen Z (GZ) Non- Gen Z (NGZ)]                               | 58                         | 67 NGZ           | 26 NGZ                 | 74 NGZ         | 73               |
-| Trailing Millennials (ML) \[Non Trailing Millennials (NM)] | 61                         | 73               | 30 NTM                 | 79             | 77               |
-| International Travelers (IT) \[Non-Travelers = (NIT)]      | 71                         | 85 NIT           | 26 NIT                 | 89 NIT         | 86 NIT           |
-| eComm Shoppers (ES) \[Non-eComm Shoppers (NES)]            | 65                         | 79 NES           | 30 NES                 | 82             | 78               |
+|                                                                | Overall Brand Health Score | Prominence (T2B) | Brand Preferred (Solo) | Affinity (T2B) | Reputation (T2B) |
+| -------------------------------------------------------------- | -------------------------- | ---------------- | ---------------------- | -------------- | ---------------- |
+| TOTAL                                                          | 64                         | 75               | 34                     | 81             | 77               |
+| Gen Z (GZ)<br/>Non- Gen Z (NGZ)]                               | 58                         | 67 NGZ           | 26 NGZ                 | 74 NGZ         | 73               |
+| Trailing Millennials (ML)<br/>\[Non Trailing Millennials (NM)] | 61                         | 73               | 30 NTM                 | 79             | 77               |
+| International Travelers (IT)<br/>\[Non-Travelers = (NIT)]      | 71                         | 85 NIT           | 26 NIT                 | 89 NIT         | 86 NIT           |
+| eComm Shoppers (ES)<br/>\[Non-eComm Shoppers (NES)]            | 65                         | 79 NES           | 30 NES                 | 82             | 78               |
 
 Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1).; Where segments are shown, scores are tested against the segments in the category- notation next to a segment value (NM, NAF, NIT etc.) indicates that the noted segment value is significantly higher or lower than the segment value shown, so Millennials (ML) are tested against Non-Millennials (NM), Gen Z (GZ) are tested against Non-Gen Z (NGZ), International Travelers (IT) are tested against Non-Travelers (NIT), and eComm Shoppers (ES) are tested against Non-eComm Shoppers.
 
@@ -217,12 +217,12 @@ Gen Z: Random + Boosters
 Visa BHS declined across both age cohorts.
 Decline experienced across BHS components.
 
-| Gen Z (18-26)                                                                                            | Gen Z (18-26)                                                                                                    | Gen Z (18-26)                                                                                                      | Gen Z (18-26)                                                                        |
-| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| FY22                                                                                                     | FY23                                                                                                             | FY24                                                                                                               | Legend                                                                               |
-| NA                                                                                                       | Prominence (T2B): 77 Brand Preferred (Solo): 36 Affinity (T2B): 90 Reputation (T2B): 96 Brand Health: 73         | Prominence (T2B): 67 ↓ Brand Preferred (Solo): 26 ↓ Affinity (T2B): 74 ↓ Reputation (T2B): 73 ↓ Brand Health: 58 ↓ |                                                                                      |
-| Trailing Millennials (18-35)                                                                             |                                                                                                                  |                                                                                                                    |                                                                                      |
-| Prominence (T2B): 91 Brand Preferred (Solo): 48 Affinity (T2B): 93 Reputation (T2B): 93 Brand Health: 79 | Prominence (T2B): 84 ↓ Brand Preferred (Solo): 44 ↓ Affinity (T2B): 93 Reputation (T2B): 90 ↓ Brand Health: 76 ↓ | Prominence (T2B): 73 ↓ Brand Preferred (Solo): 30 ↓ Affinity (T2B): 79 ↓ Reputation (T2B): 77 ↓ Brand Health: 61 ↓ | Prominence (T2B) Brand Preferred (Solo) Affinity (T2B) Reputation (T2B) Brand Health |
+| Gen Z (18-26)                                                                                                            | Gen Z (18-26)                                                                                                                    | Gen Z (18-26)                                                                                                                      | Gen Z (18-26)                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| FY22                                                                                                                     | FY23                                                                                                                             | FY24                                                                                                                               | Legend                                                                                               |
+| NA                                                                                                                       | Prominence (T2B): 77<br/>Brand Preferred (Solo): 36<br/>Affinity (T2B): 90<br/>Reputation (T2B): 96<br/>Brand Health: 73         | Prominence (T2B): 67 ↓<br/>Brand Preferred (Solo): 26 ↓<br/>Affinity (T2B): 74 ↓<br/>Reputation (T2B): 73 ↓<br/>Brand Health: 58 ↓ |                                                                                                      |
+| Trailing Millennials (18-35)                                                                                             |                                                                                                                                  |                                                                                                                                    |                                                                                                      |
+| Prominence (T2B): 91<br/>Brand Preferred (Solo): 48<br/>Affinity (T2B): 93<br/>Reputation (T2B): 93<br/>Brand Health: 79 | Prominence (T2B): 84 ↓<br/>Brand Preferred (Solo): 44 ↓<br/>Affinity (T2B): 93<br/>Reputation (T2B): 90 ↓<br/>Brand Health: 76 ↓ | Prominence (T2B): 73 ↓<br/>Brand Preferred (Solo): 30 ↓<br/>Affinity (T2B): 79 ↓<br/>Reputation (T2B): 77 ↓<br/>Brand Health: 61 ↓ | Prominence (T2B)<br/>Brand Preferred (Solo)<br/>Affinity (T2B)<br/>Reputation (T2B)<br/>Brand Health |
 
 Brand Health Score (BHS) is a composite value derived from performance across four metrics – Prominence, Brand Preferred (Solo), Affinity and Reputation (see Appendix 1); BHS and component scores are statistically tested over previous quarter highlighting Positive ↑ / Negative ↓ trends at 90%.
 
@@ -233,11 +233,11 @@ Gen Z: Random + Boosters
 
 BHS declined across both segments, with international travelers losing the momentum in prominence and affinity gained last year. Reputation remained stable among international travelers.
 
-| International Traveler | International Traveler | International Traveler | International Traveler                                                               |
-| ---------------------- | ---------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
-| FY22                   | FY23                   | FY24                   | Prominence (T2B) Brand Preferred (Solo) Affinity (T2B) Reputation (T2B) Brand Health |
-| 84 41 88 85            | 95 40 95 90            | 85 26 89 86            |                                                                                      |
-| 72 → 78 → 71           |                        |                        |                                                                                      |
+| International Traveler | International Traveler | International Traveler | International Traveler                                                                               |
+| ---------------------- | ---------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| FY22                   | FY23                   | FY24                   | Prominence (T2B)<br/>Brand Preferred (Solo)<br/>Affinity (T2B)<br/>Reputation (T2B)<br/>Brand Health |
+| 84 41 88 85            | 95 40 95 90            | 85 26 89 86            |                                                                                                      |
+| 72 → 78 → 71           |                        |                        |                                                                                                      |
 
 | eComm Shoppers | eComm Shoppers | eComm Shoppers | eComm Shoppers |
 | -------------- | -------------- | -------------- | -------------- |
@@ -250,7 +250,7 @@ Brand Health Score (BHS) is a composite value derived from performance across fo
 Base: All Respondents
 # Key Indicators, Imagery and Prominence
 
-[The content of this slide is simply the title of a section or presentation. The slide has a blue background with white text for the main heading. At the bottom right corner, there is a Visa logo and copyright information.]
+[The content of this slide is simply the title of a section or presentation, displayed on a blue background. At the bottom right corner, there is a Visa logo and copyright information.]
 
 ©2021 Visa. All rights reserved. Visa Confidential  13
 # Funnel Measures
@@ -304,19 +304,19 @@ The relative strength threshold is basis the standard deviation.
 
 Visa has the strongest associations across various attributes, but Mastercard competes closely among Gen Z, particularly as a 'brand for someone like me.'
 
-| Attribute\<br/>                         | Overall\<br/> | Overall\<br/>Gen Z\<br/> | Overall\<br/>Gen Z\<br/> | Gen Z\<br/> |     |    |
-| --------------------------------------- | ------------- | ------------------------ | ------------------------ | ----------- | --- | -- |
-| Base                                    | 394           | 355                      | 200                      | 156         | 139 | 60 |
-| I'm proud to be seen using this brand   | 53            | 30                       | 10                       | 49          | 38  | 10 |
-| Is a brand for someone like me          | 57            | 39                       | 16                       | 47          | 46  | 10 |
-| Helps me build financial well-being     | 47            | 28                       | 12                       | 41          | 35  | 13 |
-| Helps me make progress in life          | 53            | 32                       | 13                       | 48          | 40  | 12 |
-| I feel connected to the brand           | 57            | 33                       | 13                       | 46          | 40  | 12 |
-| Understands my needs                    | 61            | 35                       | 16                       | 51          | 42  | 13 |
-| Is a brand I trust                      | 72            | 43                       | 21                       | 55          | 50  | 18 |
-| The brands actions match its words      | 57            | 39                       | 16                       | 57          | 43  | 17 |
-| Shares values that inspire me           | 45            | 28                       | 9                        | 41          | 39  | 7  |
-| Helps the communities that matter to me | 51            | 34                       | 19                       | 48          | 40  | 13 |
+| Attribute                               | Overall | Overall | Overall | Gen Z | Gen Z | Gen Z |
+| --------------------------------------- | ------- | ------- | ------- | ----- | ----- | ----- |
+| Base                                    | 394     | 355     | 200     | 156   | 139   | 60    |
+| I'm proud to be seen using this brand   | 53      | 30      | 10      | 49    | 38    | 10    |
+| Is a brand for someone like me          | 57      | 39      | 16      | 47    | 46    | 10    |
+| Helps me build financial well-being     | 47      | 28      | 12      | 41    | 35    | 13    |
+| Helps me make progress in life          | 53      | 32      | 13      | 48    | 40    | 12    |
+| I feel connected to the brand           | 57      | 33      | 13      | 46    | 40    | 12    |
+| Understands my needs                    | 61      | 35      | 16      | 51    | 42    | 13    |
+| Is a brand I trust                      | 72      | 43      | 21      | 55    | 50    | 18    |
+| The brands actions match its words      | 57      | 39      | 16      | 57    | 43    | 17    |
+| Shares values that inspire me           | 45      | 28      | 9       | 41    | 39    | 7     |
+| Helps the communities that matter to me | 51      | 34      | 19      | 48    | 40    | 13    |
 
 Base: Brand Aware
 
@@ -332,20 +332,20 @@ Visa leads in CEPs, outperforming the competition.
 
 ## Brand comes to mind immediately when think of ...
 
-| Category                                              | VISA FY24 | vs. Competition in FY24                                | | |
-| ----------------------------------------------------- | --------- | ------------------------------------------------------ |---|---|
-| .. contactless Payments                               | 63%       | 34% 🔻 (Mastercard) \| 13% 🔻 (PayPal) \| 10% 🔻 (CMI) |
-| ...eComm Payments                                     | 60%       | 37% 🔻 (Mastercard) \| 31% 🔻 (PayPal) \| 3% 🔻 (CMI)  |
-| ...XB Travel Payments                                 | 59%       | 31% 🔻 (Mastercard) \| 9% 🔻 (PayPal) \| 5% 🔻 (CMI)   |
-| ...everyday spend payments                            | 59%       | 33% 🔻 (Mastercard) \| 15% 🔻 (PayPal) \| 6% 🔻 (CMI)  |
-| ...XB eComm Payments                                  | 57%       | 35% 🔻 (Mastercard) \| 40% 🔻 (PayPal) \| 4% 🔻 (CMI)  |
-| ...acquiring new debit or credit Card                 | 56%       | 29% 🔻 (Mastercard) \| 12% 🔻 (PayPal) \| 6% 🔻 (CMI)  |
-| ...relevant benefits & offers on debit / credit cards | 56%       | 33% 🔻 (Mastercard) \| 41% 🔻 (PayPal) \| 6% 🔻 (CMI)  |
+| Category                                              | VISA FY24 | Mastercard | PayPal | CMI   |
+| ----------------------------------------------------- | --------- | ---------- | ------ | ----- |
+| .. contactless Payments                               | 63%       | 34% ↓      | 13% ↓  | 10% ↓ |
+| ...eComm Payments                                     | 60%       | 37% ↓      | 31% ↓  | 3% ↓  |
+| ...XB Travel Payments                                 | 59%       | 31% ↓      | 9% ↓   | 5% ↓  |
+| ...everyday spend payments                            | 59%       | 33% ↓      | 15% ↓  | 6% ↓  |
+| ...XB eComm Payments                                  | 57%       | 35% ↓      | 40% ↓  | 4% ↓  |
+| ...acquiring new debit or credit Card                 | 56%       | 29% ↓      | 12% ↓  | 6% ↓  |
+| ...relevant benefits & offers on debit / credit cards | 56%       | 33% ↓      | 41% ↓  | 6% ↓  |
 
 Base: All Respondents
 
-🔺 Brand Trending higher than Visa
-🔻 Brand Trending lower than Visa
+↑ Brand Trending higher than Visa
+↓ Brand Trending lower than Visa
 
 ©2021 Visa. All rights reserved. Visa Confidential
 # Visa's standing Vs. competition across different card types
@@ -400,30 +400,30 @@ Awareness and ownership of Visa's premium cards have significantly declined, whi
 
 ## Premium Card KPI – Overall
 
-|               | VISA\<br/>FY22 | VISA\<br/>MasterCard\<br/>FY23 | VISA\<br/>MasterCard\<br/>FY24 | MasterCard\<br/>FY22 | FY23  | FY24  |
-| ------------- | -------------- | ------------------------------ | ------------------------------ | -------------------- | ----- | ----- |
-| Awareness NET | 53%            | 66% ↑                          | 50% ↓                          | 29%                  | 53% ↑ | 67% ↑ |
-| Ownership NET | 14%            | 32% ↑                          | 23% ↓                          | 1%                   | 15% ↑ | 25% ↑ |
+|               | Visa<br/>FY22 | Visa<br/>FY23 | Visa<br/>FY24 | Mastercard<br/>FY22 | Mastercard<br/>FY23 | Mastercard<br/>FY24 |
+| ------------- | ------------- | ------------- | ------------- | ------------------- | ------------------- | ------------------- |
+| Awareness NET | 53%           | 66% ↑         | 50% ↓         | 29%                 | 53% ↑               | 67% ↑               |
+| Ownership NET | 14%           | 32% ↑         | 23% ↓         | 1%                  | 15% ↑               | 25% ↑               |
 
 Base: All Respondents
 
 ## Intent to use (among brand holders)
 T2B Scores: Very Likely + Somewhat likely
 
-|                       | VISA\<br/>FY22 | VISA\<br/>MasterCard\<br/>FY23 | VISA\<br/>MasterCard\<br/>FY24 | MasterCard\<br/>FY22 | FY23     | FY24     |
-| --------------------- | -------------- | ------------------------------ | ------------------------------ | -------------------- | -------- | -------- |
-| Platinum              | Low Base       | 84%                            | 75% ↓                          | Low Base             | 86%      | Low Base |
-| Infinite/World        | Low Base       | Low Base                       | 84%                            | NA                   | Low Base | 77%      |
-| Signature/World Elite | Low Base       | Low Base                       | Low Base                       | NA                   | NA       | Low Base |
+|                       | Visa<br/>FY22 | Visa<br/>FY23 | Visa<br/>FY24 | Mastercard<br/>FY22 | Mastercard<br/>FY23 | Mastercard<br/>FY24 |
+| --------------------- | ------------- | ------------- | ------------- | ------------------- | ------------------- | ------------------- |
+| Platinum              | Low Base      | 84%           | 75% ↓         | Low Base            | 86%                 | Low Base            |
+| Infinite/World        | Low Base      | Low Base      | 84%           | NA                  | Low Base            | 77%                 |
+| Signature/World Elite | Low Base      | Low Base      | Low Base      | NA                  | NA                  | Low Base            |
 
 ## Intent to acquire (among non-brand holders)
 T2B Scores: Very Likely + Somewhat likely
 
-|                       | VISA\<br/>FY22 | VISA\<br/>MasterCard\<br/>FY23 | VISA\<br/>MasterCard\<br/>FY24 | MasterCard\<br/>FY22 | FY23  | FY24  |
-| --------------------- | -------------- | ------------------------------ | ------------------------------ | -------------------- | ----- | ----- |
-| Platinum              | 57%            | 62%                            | 59%                            | 11%                  | 39% ↑ | 42%   |
-| Infinite/World        | 37%            | 39%                            | 72% ↑                          | 13%                  | 32% ↑ | 52% ↑ |
-| Signature/World Elite | 21%            | 33% ↑                          | Low Base                       | 12%                  | 20%   | 60% ↑ |
+|                       | Visa<br/>FY22 | Visa<br/>FY23 | Visa<br/>FY24 | Mastercard<br/>FY22 | Mastercard<br/>FY23 | Mastercard<br/>FY24 |
+| --------------------- | ------------- | ------------- | ------------- | ------------------- | ------------------- | ------------------- |
+| Platinum              | 57%           | 62%           | 59%           | 11%                 | 39% ↑               | 42%                 |
+| Infinite/World        | 37%           | 39%           | 72% ↑         | 13%                 | 32% ↑               | 52% ↑               |
+| Signature/World Elite | 21%           | 33% ↑         | Low Base      | 12%                 | 20%                 | 60% ↑               |
 
 Base: Answering base
 
@@ -434,28 +434,28 @@ Scores are statistically tested over previous wave highlighting Positive ↑ / N
 
 Visa's travel card ownership higher than Mastercard across segments; however, intent to use is higher for Mastercard.
 
-| VISA Travel Card Ownership – Overall |      |      | MasterCard Travel Card Ownership – Overall |      |      |
-| ------------------------------------ | ---- | ---- | ------------------------------------------ | ---- | ---- |
-|                                      | FY23 | FY24 |                                            | FY23 | FY24 |
-| Overall                              | NA   | 43%  | Overall                                    | NA   | 22%  |
-| Gen Z                                | NA   | 40%  | Gen Z                                      | NA   | 33%  |
-| Trailing Millennials                 | NA   | 42%  | Trailing Millennials                       | NA   | 27%  |
-| International Travelers              | NA   | 60%  | International Travelers                    | NA   | 31%  |
-| eComm Shoppers                       | NA   | 46%  | eComm Shoppers                             | NA   | 27%  |
+| VISA Travel Card Ownership – Overall | VISA Travel Card Ownership – Overall | VISA Travel Card Ownership – Overall | MasterCard Travel Card Ownership – Overall | MasterCard Travel Card Ownership – Overall | MasterCard Travel Card Ownership – Overall |
+| ------------------------------------ | ------------------------------------ | ------------------------------------ | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
+|                                      | FY23                                 | FY24                                 |                                            | FY23                                       | FY24                                       |
+| Overall                              | NA                                   | 43%                                  | Overall                                    | NA                                         | 22%                                        |
+| Gen Z                                | NA                                   | 40%                                  | Gen Z                                      | NA                                         | 33%                                        |
+| Trailing Millennials                 | NA                                   | 42%                                  | Trailing Millennials                       | NA                                         | 27%                                        |
+| International Travelers              | NA                                   | 60%                                  | International Travelers                    | NA                                         | 31%                                        |
+| eComm Shoppers                       | NA                                   | 46%                                  | eComm Shoppers                             | NA                                         | 27%                                        |
 
-| VISA Intent to use (among brand holders)       |      |      | MasterCard Intent to use (among brand holders) |      |      |
-| ---------------------------------------------- | ---- | ---- | ---------------------------------------------- | ---- | ---- |
-| T2B Scores: Very Likely + Somewhat likely      |      |      | T2B Scores: Very Likely + Somewhat likely      |      |      |
-| Base: All Respondents Gen Z: Random + Boosters |      |      | Base: All Respondents Gen Z: Random + Boosters |      |      |
-|                                                | FY23 | FY24 |                                                | FY23 | FY24 |
-| VISA                                           | NA   | 88%  | MasterCard                                     | NA   | 93%  |
+| VISA                                                                              | VISA | VISA | MasterCard                                                                        | MasterCard | MasterCard |
+| --------------------------------------------------------------------------------- | ---- | ---- | --------------------------------------------------------------------------------- | ---------- | ---------- |
+| Intent to use (among brand holders)<br/>T2B Scores: Very Likely + Somewhat likely |      |      | Intent to use (among brand holders)<br/>T2B Scores: Very Likely + Somewhat likely |            |            |
+|                                                                                   | FY23 | FY24 |                                                                                   | FY23       | FY24       |
+|                                                                                   | NA   | 88%  |                                                                                   | NA         | 93%        |
+| Base: All Respondents<br/>Gen Z: Random + Boosters                                |      |      | Base: All Respondents<br/>Gen Z: Random + Boosters                                |            |            |
 
-| VISA Intent to acquire (among non-brand holders) |      |      | MasterCard Intent to acquire (among non-brand holders) |      |      |
-| ------------------------------------------------ | ---- | ---- | ------------------------------------------------------ | ---- | ---- |
-| T2B Scores: Very Likely + Somewhat likely        |      |      | T2B Scores: Very Likely + Somewhat likely              |      |      |
-|                                                  | FY23 | FY24 |                                                        | FY23 | FY24 |
-| VISA                                             | NA   | 71%  | MasterCard                                             | NA   | 62%  |
-| Base: Answering base                             |      |      | Base: Answering base                                   |      |      |
+| VISA                                                                                      | VISA | VISA | MasterCard                                                                                | MasterCard | MasterCard |
+| ----------------------------------------------------------------------------------------- | ---- | ---- | ----------------------------------------------------------------------------------------- | ---------- | ---------- |
+| Intent to acquire (among non-brand holders)<br/>T2B Scores: Very Likely + Somewhat likely |      |      | Intent to acquire (among non-brand holders)<br/>T2B Scores: Very Likely + Somewhat likely |            |            |
+|                                                                                           | FY23 | FY24 |                                                                                           | FY23       | FY24       |
+|                                                                                           | NA   | 71%  |                                                                                           | NA         | 62%        |
+| Base: Answering base                                                                      |      |      | Base: Answering base                                                                      |            |            |
 
 Scores are statistically tested over previous wave highlighting Positive / Negative trends at 90%.
 
@@ -541,8 +541,8 @@ Scores are statistically tested over Visa highlighting Positive / Negative trend
 
 Visa leads both in-store and online presence.
 
-| Brand                               | Cashier counter / in-store(retail, dining and services, etc.) | When you made a paymentonline (e.g. websites and apps etc.) | Payment via digital wallets\* |
-| ----------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------- |
+| Brand                                   | Cashier counter / in-store(retail, dining and services, etc.) | When you made a paymentonline (e.g. websites and apps etc.) | Payment via digital wallets\* |
+| --------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------- |
 | !VISA logo             | 62%                                                           | 58%                                                         | 35%                           |
 | !Mastercard logo | 38%                                                           | 40%                                                         | 20%                           |
 | !PayPal logo         | 10%                                                           | 33%                                                         | NA                            |
@@ -575,27 +575,23 @@ The figures above represents those who said that they have loaded Visa/ Masterca
 Base: Wallet/ card owned
 
 Base: Those wallet owners who currently don't have Visa loaded in their wallet
-
-©2021 Visa. All rights reserved. Visa Confidential
 # Events Interested vs. Sponsorship - Association
 
 Level of interest declined significantly for AFCON, UEFA Champions League and Winter Olympics.
 Visa's association with FIFA World Cup increased.
 
-| Events\<br/>                          | Last season date\<br/> | Interested(% of consumers)\<br/> | Brand Association with...\<br/> | Brand Association with...\<br/> | Brand Association with...\<br/> | Brand Association with...\<br/> |
-| ------------------------------------- | ---------------------- | -------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
-| FIFA World Cup                        | Nov 2022               | 78%                              | 47% ↑                           | 35%                             | 19% ↑                           | 5% ↓                            |
-| The CAF Africa Cup of Nations (AFCON) | Jan 2024               | 67% ↓                            | 36%                             | 27%                             | 11%                             | 10% ↓                           |
-| UEFA Champions League                 | Jun 2023               | 54% ↓                            | 33%                             | 34% ↑                           | 21% ↑                           | 6%                              |
-| Summer Olympics                       | July 2021              | 29%                              | 17% ↓                           | 16% ↓                           | 13% ↑                           | 3% ↓                            |
-| FIFA Women's World Cup                | July 2023              | 18%                              | 20% ↓                           | 17% ↓                           | 10%                             | 3% ↓                            |
-| Winter Olympics                       | Feb 2022               | 10% ↓                            | 14% ↓                           | 15% ↓                           | 10%                             | 2% ↓                            |
+| Events                                | Last season date | Interested(% of consumers) | Brand Association with...<br/>VISA | Brand Association with...<br/>mastercard | Brand Association with...<br/>PayPal | Brand Association with...<br/>cmi |
+| ------------------------------------- | ---------------- | -------------------------- | ---------------------------------- | ---------------------------------------- | ------------------------------------ | --------------------------------- |
+| FIFA World Cup                        | Nov 2022         | 78%                        | 47% ↑                              | 35%                                      | 19% ↑                                | 5% ↓                              |
+| The CAF Africa Cup of Nations (AFCON) | Jan 2024         | 67% ↓                      | 36%                                | 27%                                      | 11%                                  | 10% ↓                             |
+| UEFA Champions League                 | Jun 2023         | 54% ↓                      | 33%                                | 34% ↑                                    | 21% ↑                                | 6%                                |
+| Summer Olympics                       | July 2021        | 29%                        | 17% ↓                              | 16% ↓                                    | 13% ↑                                | 3% ↓                              |
+| FIFA Women's World Cup                | July 2023        | 18%                        | 20% ↓                              | 17% ↓                                    | 10%                                  | 3% ↓                              |
+| Winter Olympics                       | Feb 2022         | 10% ↓                      | 14% ↓                              | 15% ↓                                    | 10%                                  | 2% ↓                              |
 
 Base: All Respondents
 
 Scores are statistically tested over previous wave highlighting Positive ↑ / Negative ↓ trends at 90%.
-
-©2021 Visa. All rights reserved. Visa Confidential
 VISA
 
 Thank
@@ -613,8 +609,8 @@ you
 |         | MasterCard   | 8%  | 27%     | 87%   |
 |         | PayPal       | 3%  | 11%     | 78%   |
 |         | Orange Money | 0%  | 1%      | 27%   |
-| Wallets | CMI          | 1%  | 4%      | 49%   |
-|         | Inwi Money   | 1%  | 1%      | 30%   |
+|         | CMI          | 1%  | 4%      | 49%   |
+| Wallets | Inwi Money   | 1%  | 1%      | 30%   |
 |         | BPAY         | 0%  | 0%      | 7%    |
 |         | M-Wallet     | 0%  | 0%      | 10%   |
 |         | CashPlus     | 1%  | 3%      | 82%   |
@@ -644,47 +640,47 @@ Morocco SOW for the total base also includes Cash (41), Cheque (3), Others (5)
 Visa strengths lies in 'global acceptance', 'everyday payments', 'trust' and 'brand that family & friends use'.
 Visa is weak on 'online purchases' and 'helping communities grow'.
 
-|                |                   |    |    |     |    |
-| -------------- | ----------------- | -- | -- | --- | -- |
-| Security       | Secure            | -2 | 0  | -1  | 3  |
-|                | Data              | -1 | 0  | 1   | 0  |
-|                | Protection        | -1 | 0  | 1   | 0  |
-|                | Alert             | 1  | 1  | 1   | -2 |
-|                | Personal data     | -4 | 0  | 0   | 4  |
-| Convenience    | Acceptance        | 11 | 7  | -15 | -4 |
-|                | Receive           | 3  | 1  | -4  | 0  |
-|                | Wallet            | -4 | -4 | 8   | 0  |
-|                | Everyday payments | 5  | 0  | -11 | 6  |
-|                | Experience        | -2 | 0  | 1   | 1  |
-|                | Budget            | 3  | 1  | -2  | -2 |
-|                | I travel          | 1  | 4  | 3   | -7 |
-|                | Retailer          | 2  | -1 | -12 | 12 |
-|                | Online            | -6 | -2 | 13  | -5 |
-| Small business | -2                | -1 | 0  | 3   |    |
-| Gaming         | -1                | -2 | 7  | -5  |    |
-| No cost        | -4                | 2  | 1  | 2   |    |
+|                    | !VISA | !Mastercard | !PayPal | !CMI |
+| ------------------ | ---------------------- | ---------------------------------- | -------------------------- | -------------------- |
+| Security           | Secure: -2             | 0                                  | -1                         | 3                    |
+|                    | Data: -1               | 0                                  | 1                          | 0                    |
+|                    | Protection: -1         | 0                                  | 1                          | 0                    |
+|                    | Alert: 1               | 1                                  | 1                          | -2                   |
+|                    | Personal data: -4      | 0                                  | 0                          | 4                    |
+| Convenience        | Acceptance: 11         | 7                                  | -15                        | -4                   |
+|                    | Receive: 3             | 1                                  | -4                         | 0                    |
+|                    | Wallet: -4             | -4                                 | 8                          | 0                    |
+|                    | Everyday payments: 5   | 0                                  | -11                        | 6                    |
+|                    | Experience: -2         | 0                                  | 1                          | 1                    |
+|                    | Budget: 3              | 1                                  | -2                         | -2                   |
+|                    | I travel: 1            | 4                                  | 3                          | -7                   |
+|                    | Retailer: 2            | -1                                 | -12                        | 12                   |
+|                    | Online: -6             | -2                                 | 13                         | -5                   |
+| Small business: -2 | -1                     | 0                                  | 3                          |                      |
+| Gaming: -1         | -2                     | 7                                  | -5                         |                      |
+| No cost: -4        | 2                      | 1                                  | 2                          |                      |
 
-|              |              |    |    |     |    |
-| ------------ | ------------ | -- | -- | --- | -- |
-| Lifestyle    | Family       | 5  | 3  | -13 | 5  |
-|              | Needs        | 4  | -1 | -3  | 0  |
-|              | Connected    | 3  | -2 | 1   | -3 |
-|              | Personalized | 3  | 0  | 0   | -3 |
-|              | Like         | -2 | 2  | 2   | -1 |
-|              | Proud        | 3  | -2 | 4   | -5 |
-|              | Progress     | 1  | -1 | 3   | -2 |
-|              | Well- being  | 0  | -2 | 4   | -2 |
-| Reliability  | Trust        | 5  | 0  | -6  | 1  |
-|              | Technology   | -3 | 2  | 7   | -7 |
-|              | Brands       | -3 | -2 | 10  | -6 |
-|              | Everyone     | -4 | -3 | 4   | 2  |
-|              | Action       | -1 | 2  | 0   | -1 |
-| Brand values | Empower      | -3 | 2  | -7  | 8  |
-|              | Uplifting    | 0  | 0  | 1   | -1 |
-|              | Growth       | -2 | -1 | -4  | 7  |
-|              | Community    | -4 | -1 | 3   | 2  |
-|              | Support      | -1 | -2 | -2  | 5  |
-|              | Values       | 1  | 0  | 3   | -4 |
+|              | !VISA | !Mastercard | !PayPal | !CMI |
+| ------------ | ---------------------- | ---------------------------------- | -------------------------- | -------------------- |
+| Lifestyle    | Family: 5              | 3                                  | -13                        | 5                    |
+|              | Needs: 4               | -1                                 | -3                         | 0                    |
+|              | Connected: 3           | -2                                 | 1                          | -3                   |
+|              | Personalized: 3        | 0                                  | 0                          | -3                   |
+|              | Like: -2               | 2                                  | 2                          | -1                   |
+|              | Proud: 3               | -2                                 | 4                          | -5                   |
+|              | Progress: 1            | -1                                 | 3                          | -2                   |
+|              | Well-being: 0          | -2                                 | 4                          | -2                   |
+| Reliability  | Trust: 5               | 0                                  | -6                         | 1                    |
+|              | Technology: -3         | 2                                  | 7                          | -7                   |
+|              | Brands: -3             | -2                                 | 10                         | -6                   |
+|              | Everyone: -4           | -3                                 | 4                          | 2                    |
+| Brand values | Action: -1             | 2                                  | 0                          | -1                   |
+|              | Empower: -3            | 2                                  | -7                         | 8                    |
+|              | Uplifting: 0           | 0                                  | 1                          | -1                   |
+|              | Growth: -2             | -1                                 | -4                         | 7                    |
+|              | Community: -4          | -1                                 | 3                          | 2                    |
+|              | Support: -1            | -2                                 | -2                         | 5                    |
+|              | Values: 1              | 0                                  | 3                          | -4                   |
 
 Base: Brand Aware
 
@@ -693,6 +689,8 @@ Relative Weakness of the Brand (<-4)
 
 Values indicate observed associations minus expected associations
 The relative strength threshold is basis the standard deviation.
+
+©2021 Visa. All rights reserved. Visa Confidential
 # Brand Image Attributes – Total
 
 Visa outperforms all the brands on brand imagery attributes.
@@ -774,13 +772,13 @@ At an absolute level, Visa outperforms key competition on brand imagery attribut
 |              | Like              | 57   | 39         | 16  |
 |              | Proud             | 53   | 30         | 10  |
 |              | Progress          | 53   | 32         | 13  |
-|              | Well- being       | 47   | 28         | 12  |
-| Reliability  | Trust             | 72   | 43         | 21  |
-|              | Technology        | 61   | 43         | 12  |
+|              | Well-being        | 47   | 28         | 12  |
+|              | Trust             | 72   | 43         | 21  |
+| Reliability  | Technology        | 61   | 43         | 12  |
 |              | Brands            | 53   | 34         | 11  |
 |              | Everyone          | 60   | 38         | 21  |
-| Brand values | Action            | 57   | 39         | 16  |
-|              | Empower           | 54   | 38         | 24  |
+|              | Action            | 57   | 39         | 16  |
+| Brand values | Empower           | 54   | 38         | 24  |
 |              | Uplifting         | 53   | 34         | 15  |
 |              | Growth            | 52   | 33         | 22  |
 |              | Community         | 51   | 34         | 19  |
@@ -811,25 +809,28 @@ While Visa leads across most attributes, Mastercard competes, perform better amo
 | Small business | 47                     | 47                                 | 18                   |    |
 | Gaming         | 46                     | 44                                 | 10                   |    |
 | No cost        | 36                     | 42                                 | 12                   |    |
-| Lifestyle      | Family                 | 64                                 | 52                   | 17 |
-|                | Needs                  | 51                                 | 42                   | 13 |
-|                | Connected              | 46                                 | 40                   | 12 |
-|                | Personalized           | 51                                 | 36                   | 12 |
-|                | Like                   | 47                                 | 46                   | 10 |
-|                | Proud                  | 49                                 | 38                   | 10 |
-| Progress       | 48                     | 40                                 | 12                   |    |
-| Well-being     | 41                     | 35                                 | 13                   |    |
-| Reliability    | Trust                  | 55                                 | 50                   | 18 |
-|                | Technology             | 53                                 | 44                   | 8  |
-|                | Brands                 | 44                                 | 36                   | 12 |
-|                | Everyone               | 47                                 | 47                   | 18 |
-|                | Action                 | 57                                 | 43                   | 17 |
-| Brand values   | Empower                | 50                                 | 45                   | 23 |
-|                | Uplifting              | 46                                 | 36                   | 8  |
-|                | Growth                 | 47                                 | 40                   | 18 |
-|                | Community              | 48                                 | 40                   | 13 |
-|                | Support                | 47                                 | 39                   | 18 |
-|                | Values                 | 41                                 | 39                   | 7  |
+
+|              | !VISA | !mastercard | !cmi |    |
+| ------------ | ---------------------- | ---------------------------------- | -------------------- | -- |
+| Lifestyle    | Family                 | 64                                 | 52                   | 17 |
+|              | Needs                  | 51                                 | 42                   | 13 |
+|              | Connected              | 46                                 | 40                   | 12 |
+|              | Personalized           | 51                                 | 36                   | 12 |
+|              | Like                   | 47                                 | 46                   | 10 |
+|              | Proud                  | 49                                 | 38                   | 10 |
+|              | Progress               | 48                                 | 40                   | 12 |
+|              | Well-being             | 41                                 | 35                   | 13 |
+| Reliability  | Trust                  | 55                                 | 50                   | 18 |
+|              | Technology             | 53                                 | 44                   | 8  |
+|              | Brands                 | 44                                 | 36                   | 12 |
+|              | Everyone               | 47                                 | 47                   | 18 |
+|              | Action                 | 57                                 | 43                   | 17 |
+| Brand values | Empower                | 50                                 | 45                   | 23 |
+|              | Uplifting              | 46                                 | 36                   | 8  |
+|              | Growth                 | 47                                 | 40                   | 18 |
+|              | Community              | 48                                 | 40                   | 13 |
+|              | Support                | 47                                 | 39                   | 18 |
+|              | Values                 | 41                                 | 39                   | 7  |
 
 Base: Brand Aware
 Gen Z: random + Boosters
@@ -837,44 +838,47 @@ Gen Z: random + Boosters
 
 While Visa leads across most attributes, Mastercard and PayPal compete, perform better among a few.
 
-| Category     | Attribute         |    |    |    |    |
-| ------------ | ----------------- | -- | -- | -- | -- |
-| Security     | Secure            | 62 | 51 | 46 | 18 |
-|              | Data              | 53 | 50 | 38 | 13 |
-|              | Protection        | 53 | 47 | 35 | 13 |
-|              | Alert             | 45 | 46 | 32 | 17 |
-|              | Personal data     | 46 | 42 | 31 | 20 |
-| Convenience  | Acceptance        | 64 | 56 | 26 | 13 |
-|              | Receive           | 59 | 48 | 33 | 18 |
-|              | Wallet            | 50 | 43 | 50 | 15 |
-|              | Everyday payments | 53 | 44 | 28 | 15 |
-|              | Experience        | 57 | 48 | 33 | 17 |
-|              | Budget            | 51 | 52 | 36 | 15 |
-|              | I travel          | 50 | 45 | 40 | 8  |
-|              | Retailer          | 54 | 44 | 26 | 23 |
-|              | Online            | 51 | 45 | 54 | 8  |
-| Other        | Small business    | 47 | 47 | 35 | 18 |
-|              | Gaming            | 46 | 44 | 48 | 10 |
-| No cost      |                   | 36 | 42 | 30 | 12 |
-| Lifestyle    | Family            | 64 | 52 | 26 | 17 |
-|              | Needs             | 51 | 42 | 30 | 13 |
-|              | Connected         | 46 | 40 | 31 | 12 |
-|              | Personalized      | 51 | 36 | 30 | 12 |
-|              | Like              | 47 | 46 | 35 | 10 |
-|              | Proud             | 49 | 38 | 36 | 10 |
-|              | Progress          | 48 | 40 | 35 | 12 |
-|              | Well-being        | 41 | 35 | 32 | 13 |
-| Reliability  | Trust             | 55 | 50 | 33 | 18 |
-|              | Technology        | 53 | 44 | 41 | 8  |
-|              | Brands            | 44 | 36 | 45 | 12 |
-| Brand values | Everyone          | 47 | 47 | 43 | 18 |
-|              | Action            | 57 | 43 | 38 | 17 |
-|              | Empower           | 50 | 45 | 23 | 23 |
-|              | Uplifting         | 46 | 36 | 33 | 8  |
-|              | Growth            | 47 | 40 | 28 | 18 |
-|              | Community         | 48 | 40 | 41 | 13 |
-|              | Support           | 47 | 39 | 32 | 18 |
-|              | Values            | 41 | 39 | 27 | 7  |
+|                | !VISA | !mastercard | !PayPal | !cmi |    |
+| -------------- | ---------------------- | ---------------------------------- | -------------------------- | -------------------- | -- |
+| Security       | Secure                 | 62                                 | 51                         | 46                   | 18 |
+|                | Data                   | 53                                 | 50                         | 38                   | 13 |
+|                | Protection             | 53                                 | 47                         | 35                   | 13 |
+|                | Alert                  | 45                                 | 46                         | 32                   | 17 |
+|                | Personal data          | 46                                 | 42                         | 31                   | 20 |
+| Convenience    | Acceptance             | 64                                 | 56                         | 26                   | 13 |
+|                | Receive                | 59                                 | 48                         | 33                   | 18 |
+|                | Wallet                 | 50                                 | 43                         | 50                   | 15 |
+|                | Everyday payments      | 53                                 | 44                         | 28                   | 15 |
+|                | Experience             | 57                                 | 48                         | 33                   | 17 |
+|                | Budget                 | 51                                 | 52                         | 36                   | 15 |
+|                | I travel               | 50                                 | 45                         | 40                   | 8  |
+|                | Retailer               | 54                                 | 44                         | 26                   | 23 |
+|                | Online                 | 51                                 | 45                         | 54                   | 8  |
+| Small business | 47                     | 47                                 | 35                         | 18                   |    |
+| Gaming         | 46                     | 44                                 | 48                         | 10                   |    |
+| No cost        | 36                     | 42                                 | 30                         | 12                   |    |
+
+|              | !VISA | !mastercard | !PayPal | !cmi |    |
+| ------------ | ---------------------- | ---------------------------------- | -------------------------- | -------------------- | -- |
+| Lifestyle    | Family                 | 64                                 | 52                         | 26                   | 17 |
+|              | Needs                  | 51                                 | 42                         | 30                   | 13 |
+|              | Connected              | 46                                 | 40                         | 31                   | 12 |
+|              | Personalized           | 51                                 | 36                         | 30                   | 12 |
+|              | Like                   | 47                                 | 46                         | 35                   | 10 |
+|              | Proud                  | 49                                 | 38                         | 36                   | 10 |
+|              | Progress               | 48                                 | 40                         | 35                   | 12 |
+|              | Well-being             | 41                                 | 35                         | 32                   | 13 |
+| Reliability  | Trust                  | 55                                 | 50                         | 33                   | 18 |
+|              | Technology             | 53                                 | 44                         | 41                   | 8  |
+|              | Brands                 | 44                                 | 36                         | 45                   | 12 |
+| Brand values | Everyone               | 47                                 | 47                         | 43                   | 18 |
+|              | Action                 | 57                                 | 43                         | 38                   | 17 |
+|              | Empower                | 50                                 | 45                         | 23                   | 23 |
+|              | Uplifting              | 46                                 | 36                         | 33                   | 8  |
+|              | Growth                 | 47                                 | 40                         | 28                   | 18 |
+|              | Community              | 48                                 | 40                         | 41                   | 13 |
+|              | Support                | 47                                 | 39                         | 32                   | 18 |
+|              | Values                 | 41                                 | 39                         | 27                   | 7  |
 
 Base: Brand Aware
 Gen Z: random + Boosters
@@ -934,8 +938,8 @@ Base: Brand Aware
 |              | Alert             | 62 | 43 | 43 | 19 |
 |              | Personal data     | 62 | 50 | 41 | 26 |
 |              | Acceptance        | 77 | 52 | 28 | 19 |
-| Convenience  | Receive           | 69 | 44 | 42 | 21 |
-|              | Wallet            | 65 | 42 | 54 | 20 |
+|              | Receive           | 69 | 44 | 42 | 21 |
+| Convenience  | Wallet            | 65 | 42 | 54 | 20 |
 |              | Everyday payments | 69 | 38 | 32 | 23 |
 |              | Experience        | 65 | 47 | 43 | 24 |
 |              | Budget            | 58 | 43 | 43 | 14 |
@@ -943,7 +947,7 @@ Base: Brand Aware
 |              | Retailer          | 64 | 40 | 25 | 31 |
 |              | Online            | 57 | 44 | 61 | 23 |
 |              | Small business    | 55 | 41 | 42 | 29 |
-| Other        | Gaming            | 61 | 38 | 54 | 14 |
+|              | Gaming            | 61 | 38 | 54 | 14 |
 |              | No cost           | 42 | 34 | 28 | 14 |
 | Lifestyle    | Family            | 69 | 50 | 34 | 33 |
 |              | Needs             | 63 | 42 | 35 | 21 |
@@ -963,7 +967,7 @@ Base: Brand Aware
 |              | Growth            | 60 | 43 | 30 | 31 |
 |              | Community         | 56 | 40 | 41 | 19 |
 |              | Support           | 54 | 38 | 33 | 21 |
-| Values       | Values            | 51 | 33 | 32 | 14 |
+|              | Values            | 51 | 33 | 32 | 14 |
 
 Base: Brand Aware
 
@@ -1014,31 +1018,30 @@ Base: Brand Aware
 ©2021 Visa. All rights reserved. Visa Confidential 39
 # Brand Image Attributes – Definition
 
-| Security       |                                                                          | Lifestyle    |                                                                    |
-| -------------- | ------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------ |
-| Alert          | Actively alerts me about potential fraudulent transactions               | Connected    | I feel connected to the brand                                      |
-| Data           | Actively protects my personal data                                       | Family       | Is what my friends / families are using                            |
-| Personal data  | Never sells my personal data                                             | Like         | Is a brand for someone like me                                     |
-| Protection     | Proactively protects my payments                                         | Needs        | Understands my needs                                               |
-| Secure         | Is a secure way to pay                                                   | Personalized | Offers me relevant benefits, privileges, and personalized features |
-|                |                                                                          | Progress     | Helps me make progress in life                                     |
-| Convenience    |                                                                          | Proud        | I'm proud to be seen using this brand                              |
-| Acceptance     | Is accepted wherever and whenever I need it                              | Well-being   | Helps me build financial well-being                                |
-| Budget         | Helps me feel in control of my spending                                  |              |                                                                    |
-| Everyday       | Is best for paying everyday small amounts                                | Reliability  |                                                                    |
-| Experience     | Enables a seamless payment experience                                    | Brands       | Is distinct from other payment brands                              |
-| Gaming         | Is easy to make purchases while gaming                                   | Technology   | Is always improving the technology behind my payments              |
-| I Travel       | Is the best way to make purchases while traveling internationally        | Trust        | Is a brand I trust                                                 |
-| No cost        | There is no cost to use                                                  |              |                                                                    |
-| Online         | Is best for online transactions                                          | Brand values |                                                                    |
-| Receive        | Is the best way to get paid                                              | Action       | The brands actions match its words                                 |
-| Retailer       | Is a brand that retailers prefer I use                                   | Community    | Helps the communities that matter to me make progress              |
-| Small business | Is best for sending and receiving money between people, small businesses | Empower      | Is a brand that empowers small and micro businesses                |
-| Wallet         | Easy to use with my smartphone or digital wallets                        | Everyone     | Opens doors to opportunities for everyone                          |
-|                |                                                                          | Growth       | Supports small business growth                                     |
-|                |                                                                          | Support      | Is a brand that supports small business                            |
-|                |                                                                          | Uplifting    | Cares about uplifting people                                       |
-|                |                                                                          | Values       | Shares values that inspire me                                      |
+| Attribute       | Definition                                                               | Attribute        | Definition                                                         |
+| --------------- | ------------------------------------------------------------------------ | ---------------- | ------------------------------------------------------------------ |
+| **Security**    |                                                                          | **Lifestyle**    |                                                                    |
+| Alert           | Actively alerts me about potential fraudulent transactions               | Connected        | I feel connected to the brand                                      |
+| Data            | Actively protects my personal data                                       | Family           | Is what my friends / families are using                            |
+| Personal data   | Never sells my personal data                                             | Like             | Is a brand for someone like me                                     |
+| Protection      | Proactively protects my payments                                         | Needs            | Understands my needs                                               |
+| Secure          | Is a secure way to pay                                                   | Personalized     | Offers me relevant benefits, privileges, and personalized features |
+| **Convenience** |                                                                          | Progress         | Helps me make progress in life                                     |
+| Acceptance      | Is accepted wherever and whenever I need it                              | Proud            | I'm proud to be seen using this brand                              |
+| Budget          | Helps me feel in control of my spending                                  | Well-being       | Helps me build financial well-being                                |
+| Everyday        | Is best for paying everyday small amounts                                | **Reliability**  |                                                                    |
+| Experience      | Enables a seamless payment experience                                    | Brands           | Is distinct from other payment brands                              |
+| Gaming          | Is easy to make purchases while gaming                                   | Technology       | Is always improving the technology behind my payments              |
+| I Travel        | Is the best way to make purchases while traveling internationally        | Trust            | Is a brand I trust                                                 |
+| No cost         | There is no cost to use                                                  | **Brand values** |                                                                    |
+| Online          | Is best for online transactions                                          | Action           | The brands actions match its words                                 |
+| Receive         | Is the best way to get paid                                              | Community        | Helps the communities that matter to me make progress              |
+| Retailer        | Is a brand that retailers prefer I use                                   | Empower          | Is a brand that empowers small and micro businesses                |
+| Small business  | Is best for sending and receiving money between people, small businesses | Everyone         | Opens doors to opportunities for everyone                          |
+| Wallet          | Easy to use with my smartphone or digital wallets                        | Growth           | Supports small business growth                                     |
+|                 |                                                                          | Support          | Is a brand that supports small business                            |
+|                 |                                                                          | Uplifting        | Cares about uplifting people                                       |
+|                 |                                                                          | Values           | Shares values that inspire me                                      |
 
 # Our Brand Health Score is a derived metric
 
@@ -1070,7 +1073,7 @@ L --> K
 | Affinity | Love/Hate | 25% | Emotional |
 | Reputation | Great Company | 25% | Emotional |
 
-The Brand Health Score is influenced by both Rational and Emotional factors, which are in turn based on Ownership/Usage and External market factors.
+The Brand Health Score is based on a combination of rational and emotional factors, which are influenced by ownership/usage and external market factors.
 
 VISA
 
@@ -1079,12 +1082,12 @@ VISA
 
 The Brand Health Score is a composite score of four individual questions.
 
-| Question Wording                                                         | 4 Questions    | 2 Dimensions  | 1 Metric           |
-| ------------------------------------------------------------------------ | -------------- | ------------- | ------------------ |
-| Which payment brand(s) do you prefer?                                    | Preference 60% | Rational 50%  | Brand Health Score |
-| When I think about ways to pay, this brand comes to my mind immediately. | Prominence 40% |               |                    |
-| Is a great company in all respects.                                      | Reputation 50% | Emotional 50% |                    |
-| How do you feel about each brand?                                        | Affinity 50%   |               |                    |
+| Question Wording                                                         | 4 Questions        | 2 Dimensions      | 1 Metric           |
+| ------------------------------------------------------------------------ | ------------------ | ----------------- | ------------------ |
+| Which payment brand(s) do you prefer?                                    | Preference<br/>60% | Rational<br/>50%  | Brand Health Score |
+| When I think about ways to pay, this brand comes to my mind immediately. | Prominence<br/>40% |                   |                    |
+| Is a great company in all respects.                                      | Reputation<br/>50% | Emotional<br/>50% |                    |
+| How do you feel about each brand?                                        | Affinity<br/>50%   |                   |                    |
 
 Brand Health Score is calculated at the respondent level
 # Components of the Brand & Campaign Survey
@@ -1142,16 +1145,14 @@ The components are further categorized into:
 **Brand Performance** (includes Funnel Measures and Brand Attributes)
 
 **Campaign Performance** (includes Advertising Effectiveness and Global & Market KPIs)
-
-Morocco
 # CEMEA Coverage & frequency
 
 Morocco
 
 ## Brand Health Study
 
-| Global Managed & Funded                                                                                                           | Regional Managed & Funded (FY21+)                                                                                                                  |
-| --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Continues/Quarterly** 1. UAE 2. KSA (FY22 & Prior was Annual) **Annual:** 1. Ukraine 2. South Africa 3. Nigeria 4. Saudi Arabia | 1. Belarus, 2. Kazakhstan 3. Serbia 4. Pakistan 5. Qatar, 6. Egypt, 7. Ethiopia, 8. Morocco, 9. Ivory Coast, 10. Kenya, 11. Cameroon, 12. DR Congo |
+| Global Managed & Funded                                                                                                                                            | Regional Managed & Funded (FY21+)                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Continues/Quarterly**<br/>1. UAE<br/>2. KSA (FY22 & Prior was Annual)<br/><br/>**Annual:**<br/>1. Ukraine<br/>2. South Africa<br/>3. Nigeria<br/>4. Saudi Arabia | 1. Belarus,<br/>2. Kazakhstan<br/>3. Serbia<br/>4. Pakistan<br/>5. Qatar,<br/>6. Egypt,<br/>7. Ethiopia,<br/>8. Morocco,<br/>9. Ivory Coast,<br/>10. Kenya,<br/>11. Cameroon,<br/>12. DR Congo |
 
 ©2021 Visa. All rights reserved. Visa Confidential  44

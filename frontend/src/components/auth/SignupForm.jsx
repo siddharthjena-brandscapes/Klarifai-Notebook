@@ -74,7 +74,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                     placeholder='User Name'
                     value={username} 
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
     
@@ -86,7 +86,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                     value={email} 
                     onChange={(e) => setEmail(e.target.value)} 
                     required
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
           
@@ -98,7 +98,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)} 
                     required
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
 
@@ -109,7 +109,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                     placeholder="Hugging Face API Token" 
                     value={huggingfaceToken} 
                     onChange={(e) => setHuggingfaceToken(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
 
@@ -120,7 +120,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                     placeholder="Gemini API Token" 
                     value={geminiToken} 
                     onChange={(e) => setGeminiToken(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
 
@@ -131,7 +131,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                     placeholder="Llama API Token" 
                     value={llamaToken} 
                     onChange={(e) => setLlamaToken(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-3 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
 

@@ -38,7 +38,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
                     value={username} 
                     onChange={(e) => setUsername(e.target.value)} 
                     required
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-4 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
             
@@ -50,7 +50,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)} 
                     required
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none dark:text-black focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>
             {error && <p className="text-red-500">{error}</p>}
