@@ -1207,7 +1207,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
               {sortedProjects.map((project) => (
                 <div
                 key={project.id}
-                className="group dark:bg-gray-800/40 bg-white/80 dark:backdrop-blur-sm backdrop-blur-sm rounded-xl border dark:border-gray-700/50 border-[#e8ddcc] dark:hover:border-emerald-500/30 hover:border-[#a68a70] dark:hover:shadow-none hover:shadow-lg transition-all duration-300 overflow-hidden"
+                className="group dark:bg-gray-800/40 bg-white dark:backdrop-blur-sm backdrop-blur-sm rounded-xl border dark:border-gray-700/50 border-[#e8ddcc] dark:hover:border-emerald-500/30 hover:border-[#a68a70] dark:hover:shadow-none hover:shadow-lg transition-all duration-300 overflow-hidden"
               >
                   <div className="p-6 flex flex-col h-full">
                     {/* Card header with title and menu */}
@@ -1273,7 +1273,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
                     </h3>
 
                     {/* Project description - with better spacing */}
-                    <p className="dark:text-gray-400 text-gray-700 text-sm dark:font-light font-normal tracking-wide leading-relaxed mb-5 flex-grow line-clamp-3">
+                    <p className="dark:text-gray-400 text-gray-700 text-sm dark:font-normal font-medium tracking-wide leading-relaxed mb-5 flex-grow line-clamp-3">
                       {project.description || "No description provided"}
                     </p>
 
