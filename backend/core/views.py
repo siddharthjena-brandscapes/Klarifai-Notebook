@@ -268,7 +268,7 @@ def create_project(request):
             selected_modules = data.get('selected_modules', [])
             
             # Validate required fields
-            if not all([name, description, category]):
+            if not all([name, category]):
                 return JsonResponse({
                     'status': 'error',
                     'message': 'Missing required fields'

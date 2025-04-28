@@ -58,6 +58,14 @@ try:
 except LookupError:
     nltk.download('punkt')
 
+from moviepy import VideoFileClip
+
+import tempfile
+from django.core.files import File
+
+from chat.models import UserAPITokens
+
+
 
 load_dotenv()
 
@@ -415,6 +423,154 @@ class ManageConversationView(APIView):
 class DocumentProcessingMixin:
 
 
+    def convert_video_to_audio(self, video_path):
+        """
+        Convert video files to audio format using MoviePy.
+        Returns the path to the created audio file.
+        
+        Args:
+            video_path: Path to the video file
+        """
+        import tempfile
+        from moviepy import VideoFileClip
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        # Set up the audio directory
+        AUDIO_DIR = "audio_files"
+        os.makedirs(AUDIO_DIR, exist_ok=True)
+        
+        try:
+            # Generate output path for the audio file
+            base_name = os.path.splitext(os.path.basename(video_path))[0]
+            output_path = os.path.join(AUDIO_DIR, f"{base_name}.mp3")
+            
+            logger.info(f"Loading video: {video_path}")
+            video = VideoFileClip(video_path)
+            
+            logger.info("Extracting audio...")
+            audio = video.audio
+            
+            if audio is None:
+                logger.warning(f"No audio stream found in video: {video_path}")
+                return None
+            
+            logger.info(f"Converting to MP3: {output_path}")
+            audio.write_audiofile(output_path, codec='mp3')
+            
+            # Close files
+            audio.close()
+            video.close()
+            
+            logger.info(f"Video-to-audio conversion complete: {output_path}")
+            return output_path
+        
+        except Exception as e:
+            logger.error(f"Error during video-to-audio conversion: {str(e)}")
+            return None
+    def extract_text_from_video(self, file_path, user=None):
+        """
+        Extract text from video files by first converting to audio, then transcribing.
+        Returns the transcribed text.
+        
+        Args:
+            file_path: Path to the video file
+            user: Django user object to get API token
+        """
+        
+        logger = logging.getLogger(__name__)
+        print(f"Starting video-to-text extraction for: {file_path}")
+        
+        try:
+            # First convert video to audio
+            print("Attempting to convert video to audio...")
+            audio_path = self.convert_video_to_audio(file_path)
+            
+            if not audio_path:
+                print(f"Failed to convert video to audio: {file_path}")
+                logger.error(f"Failed to convert video to audio: {file_path}")
+                return f"Error: Failed to extract audio from video file."
+            
+            print(f"Successfully converted video to audio: {audio_path}")
+            
+            # Then extract text from the resulting audio file
+            print(f"Starting audio transcription...")
+            extracted_text = self.extract_text_from_audio(audio_path, user)
+            
+            print(f"Audio transcription completed, text length: {len(extracted_text) if extracted_text else 0}")
+            
+            #Clean up the temporary audio file if needed
+            #Uncomment if you want to delete the audio file after processing
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+            
+            return extracted_text
+        
+        except Exception as e:
+            print(f"Exception in extract_text_from_video: {str(e)}")
+            logger.error(f"Error extracting text from video: {str(e)}")
+            return f"Error transcribing video: {str(e)}"
+
+    def process_document_from_text(self, text, filename, user):
+        """
+        Process document directly from provided text.
+        For use with transcripts that are already extracted.
+        """
+        
+        try:
+            # Clean the text
+            cleaned_text = self.clean_text(text)
+            
+            # Create document record for processing
+            doc = {
+                'text': cleaned_text,
+                'name': filename
+            }
+            
+            all_chunks = []
+            # Split text into chunks, with smaller size for transcripts
+            chunks = self.split_text_into_chunks(doc['text'], chunk_size=800, chunk_overlap=200)
+            
+            for i, chunk in enumerate(chunks):
+                all_chunks.append({
+                    'text': chunk,
+                    'source': doc['name'],
+                    'source_file': doc['name'],
+                    'chunk_id': i,
+                    'is_transcript': True  # Mark this as a transcript
+                })
+            
+            # Get embeddings for all chunks
+            text_chunks = [chunk['text'] for chunk in all_chunks]
+            print(f"Getting embeddings for {len(text_chunks)} text chunks")
+            embeddings = self.get_embeddings(text_chunks)
+            
+            if not embeddings:
+                raise ValueError("Failed to generate embeddings for document chunks")
+            
+            # Create FAISS index
+            index = self.create_faiss_index(embeddings)
+            
+            # Generate a unique session ID for this document
+            session_id = uuid.uuid4().hex
+            
+            # Save the index and chunks
+            index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
+            
+            print(f"Transcript processed successfully: {len(all_chunks)} chunks created")
+            
+            return {
+                'index_path': index_file,
+                'metadata_path': pickle_file,
+                'full_text': doc['text']
+            }
+            
+        except Exception as e:
+            print(f"Error in process_document_from_text: {str(e)}")
+            raise
+
+
     def extract_text_from_audio(self, file_path, user=None):
         """
         Extract text from audio files using Google's Gemini API.
@@ -424,11 +580,6 @@ class DocumentProcessingMixin:
             file_path: Path to the audio file
             user: Django user object to get API token
         """
-        import os
-        import tempfile
-        from google import generativeai as genai
-        import uuid
-        import logging
         
         logger = logging.getLogger(__name__)
         
@@ -448,7 +599,6 @@ class DocumentProcessingMixin:
                     if not gemini_api_key:
                         logger.warning(f"No Gemini API token found for user {user.username}")
                         # Optional: You could implement a fallback or use an environment variable
-                        import os
                         gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
                         if not gemini_api_key:
                             raise ValueError("Gemini API token is required for processing audio files")
@@ -458,7 +608,7 @@ class DocumentProcessingMixin:
                     raise ValueError("User API tokens not configured")
             else:
                 # Fallback to environment variable if no user provided
-                import os
+                
                 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
                 if not gemini_api_key:
                     raise ValueError("Gemini API token is required for processing audio files")
@@ -979,14 +1129,13 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
                 'detail': 'An error occurred while generating the consolidated summary'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
+    
     def post(self, request):
         files = request.FILES.getlist('files')
         user = request.user
         main_project_id = request.data.get('main_project_id')
-
         target_user_id = request.data.get('target_user_id')
         
         if target_user_id and request.user.username == 'admin':
@@ -1017,73 +1166,157 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             processed_data = None  # Initialize processed_data outside the loop
 
             for file in files:
-                # Check for existing document
+                file_ext = os.path.splitext(file.name)[1].lower()
+                is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
+                is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm']
+                is_media_file = is_audio_file or is_video_file
+                
+                # Check for existing document with the same name
                 existing_doc = Document.objects.filter(
                     user=user, 
                     filename=file.name,
                     main_project=main_project
                 ).first()
 
-                if existing_doc:
+                # If this is an audio/video file, handle it specially
+                if is_media_file:
+                    # Process the media file to get transcript
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
+                        for chunk in file.chunks():
+                            tmp_file.write(chunk)
+                        file_path = tmp_file.name
+                    
                     try:
-                        processed_index = ProcessedIndex.objects.get(document=existing_doc)
-                        uploaded_docs.append({
-                            'id': existing_doc.id,
-                            'filename': existing_doc.filename,
+                        # Extract text based on file type
+                        if is_video_file:
+                            print(f"Processing video file: {file.name}")
+                            extracted_text = self.extract_text_from_video(file_path, user)
+                        else:  # audio file
+                            print(f"Processing audio file: {file.name}")
+                            extracted_text = self.extract_text_from_audio(file_path, user)
+                        
+                        if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
+                            return Response({
+                                'error': f'Failed to extract text from media file: {file.name}'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # Create transcript filename based on original file
+                        base_name = os.path.splitext(file.name)[0]
+                        file_type = "video" if is_video_file else "audio"
+                        transcript_filename = f"{base_name}_{file_type}_transcript.txt"
+                        
+                        # Create a temporary file with the transcript
+                        transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
+                        with open(transcript_file_path, 'w', encoding='utf-8') as f:
+                            f.write(extracted_text)
+                        
+                        # Create a Django File object from the transcript
+                        with open(transcript_file_path, 'rb') as f:
+                            from django.core.files import File
+                            django_file = File(f, name=transcript_filename)
                             
-                        })
-                        last_processed_doc_id = existing_doc.id
+                            # Now create or update document with transcript instead of media
+                            if existing_doc:
+                                # Update existing document
+                                existing_doc.file = django_file
+                                existing_doc.filename = transcript_filename
+                                existing_doc.save()
+                                document = existing_doc
+                            else:
+                                # Create new document with transcript
+                                document = Document.objects.create(
+                                    user=user,
+                                    file=django_file,
+                                    filename=transcript_filename,
+                                    main_project=main_project
+                                )
                         
-                    except ProcessedIndex.DoesNotExist:
-                        # Process the document if no existing index
-                        processed_data = self.process_document(file, user)  # Pass user to process_document
+                        # Delete the temporary transcript file
+                        os.unlink(transcript_file_path)
                         
-                        # Create ProcessedIndex with markdown_path if available
+                        # Process the document for RAG
+                        processed_data = self.process_document_from_text(extracted_text, transcript_filename, user)
+                        
+                        # Create ProcessedIndex
                         ProcessedIndex.objects.create(
-                            document=existing_doc,
+                            document=document,
                             faiss_index=processed_data['index_path'],
                             metadata=processed_data['metadata_path'],
                             summary="",
-                            markdown_path=processed_data.get('markdown_path', '')  # Use empty string if not available
+                            markdown_path=processed_data.get('markdown_path', '')
                         )
-
-                        uploaded_docs.append({
-                            'id': existing_doc.id,
-                            'filename': existing_doc.filename,
-                            
-                        })
-                        last_processed_doc_id = existing_doc.id
-                else:
-                    # Create new document first
-                    document = Document.objects.create(
-                        user=user, 
-                        file=file, 
-                        filename=file.name,
-                        main_project=main_project
-                    )
-                    
-                    # Then process it
-                    processed_data = self.process_document(file, user)  # Pass user to process_document
-                    
-                    # Create ProcessedIndex with markdown_path if available
-                    ProcessedIndex.objects.create(
-                        document=document,
-                        faiss_index=processed_data['index_path'],
-                        metadata=processed_data['metadata_path'],
-                        summary="",
-                        markdown_path=processed_data.get('markdown_path', '')  # Use empty string if not available
-                    )
-
-                    uploaded_docs.append({
-                        'id': document.id,
-                        'filename': document.filename,
                         
-                    })
-                    last_processed_doc_id = document.id
-
-                    print(f"Uploaded Document - ID: {document.id}")
-                    print(f"Filename: {document.filename}")
+                        uploaded_docs.append({
+                            'id': document.id,
+                            'filename': transcript_filename,
+                            'original_media_type': file_type
+                        })
+                        
+                        last_processed_doc_id = document.id
                     
+                    finally:
+                        # Clean up temporary file
+                        if os.path.exists(file_path):
+                            os.unlink(file_path)
+                
+                # Regular file processing (non-media)
+                else:
+                    if existing_doc:
+                        try:
+                            processed_index = ProcessedIndex.objects.get(document=existing_doc)
+                            uploaded_docs.append({
+                                'id': existing_doc.id,
+                                'filename': existing_doc.filename
+                            })
+                            last_processed_doc_id = existing_doc.id
+                            
+                        except ProcessedIndex.DoesNotExist:
+                            # Process the document if no existing index
+                            processed_data = self.process_document(file, user)
+                            
+                            # Create ProcessedIndex
+                            ProcessedIndex.objects.create(
+                                document=existing_doc,
+                                faiss_index=processed_data['index_path'],
+                                metadata=processed_data['metadata_path'],
+                                summary="",
+                                markdown_path=processed_data.get('markdown_path', '')
+                            )
+                            
+                            uploaded_docs.append({
+                                'id': existing_doc.id,
+                                'filename': existing_doc.filename
+                            })
+                            last_processed_doc_id = existing_doc.id
+                    else:
+                        # Create new document
+                        document = Document.objects.create(
+                            user=user, 
+                            file=file, 
+                            filename=file.name,
+                            main_project=main_project
+                        )
+                        
+                        # Process it
+                        processed_data = self.process_document(file, user)
+                        
+                        # Create ProcessedIndex
+                        ProcessedIndex.objects.create(
+                            document=document,
+                            faiss_index=processed_data['index_path'],
+                            metadata=processed_data['metadata_path'],
+                            summary="",
+                            markdown_path=processed_data.get('markdown_path', '')
+                        )
+                        
+                        uploaded_docs.append({
+                            'id': document.id,
+                            'filename': document.filename
+                        })
+                        last_processed_doc_id = document.id
+                        
+                        print(f"Uploaded Document - ID: {document.id}")
+                        print(f"Filename: {document.filename}")
 
             # Store the last processed document ID in the session
             request.session['active_document_id'] = last_processed_doc_id
@@ -1099,16 +1332,12 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
 
             return Response({
                 'message': 'Documents uploaded successfully',
-                'documents': [{
-                    'id': doc['id'],
-                    'filename': doc['filename'],
-                } for doc in uploaded_docs],
+                'documents': uploaded_docs,
                 'active_document_id': last_processed_doc_id
             }, status=status.HTTP_201_CREATED)
 
-
         except Exception as e:
-            print(f"Error processing document: {str(e)}")  # Add this for debugging
+            print(f"Error processing document: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while processing the document'
@@ -1140,7 +1369,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         import numpy as np
         import faiss
         import pickle
-        import os
         from llama_parse import LlamaParse
         
         try:
@@ -1303,7 +1531,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         return index
 
     def save_faiss_index(self, index, chunks, session_id):
-        import os
         import pickle
         import faiss
         
@@ -1340,7 +1567,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         Now integrates complex document handling with LlamaParse and user-specific API tokens.
         """
         import tempfile
-        import os
         import uuid
         import numpy as np
         import faiss
@@ -1358,6 +1584,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 file_ext = os.path.splitext(file_path)[1].lower()
 
                 if file_ext == '.pptx':
+                    return self.process_complex_document_with_llamaparse(file_path, file.name, user)
+
+                if file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
                     return self.process_complex_document_with_llamaparse(file_path, file.name, user)
                 
 
@@ -1483,6 +1712,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error in process_document: {str(e)}")
             raise
+
 
 
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
@@ -3180,20 +3410,20 @@ class ChatView(APIView):
         project_description = self._get_project_description(query)
 
         project_guidance = ""
-        if project_description:
+        if project_description and len(project_description.strip()) > 5:
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
-           
+       
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
-           
+       
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
-           
+       
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
        
@@ -3415,20 +3645,20 @@ class ChatView(APIView):
         project_description = self._get_project_description(query)
         
         project_guidance = ""
-        if project_description:
+        if project_description and len(project_description.strip()) > 5:
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
-           
+       
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
-           
+       
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
-           
+       
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
        

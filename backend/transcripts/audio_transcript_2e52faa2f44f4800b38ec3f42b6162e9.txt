@@ -1,0 +1,40 @@
+00:01 Right? So this is completely editable, you can add, remove, reorient staff, add more context if you want to some of the questions and then now you upload the transcripts, right?
+00:12 You submit.
+00:13 Right?
+00:15 That's us 24 to 48 hours is our researchers speak, you can see that the content analysis was actually done in 4.57 minutes and it will come into your inbox.
+00:27 Uh the content analysis is is very uh very simple.
+00:31 It is an excel sheet format because all we've done is done like a first level analysis of data right here.
+00:37 Now a couple of things that I want to highlight is this is specifically tuned not to hallucinate.
+00:43 So in case you have a particular question that the respondent has not answered or if a particular question is not relevant to that particular respondent and therefore you've not asked, but you've asked somebody else, then the information isn't available in the provided document will be a very very clear um, will be very clearly provided in the content analysis to tell you that, hey, this information is not there.
+01:13 It's not been asked or the respondent has not answered this particular question.
+01:18 And that that is a massive guard rail because we don't want the engine to assume this is what the answer is going to be for a specific question based on the other responses that the audience has given.
+01:32 So this is a massive guard rail other than that it pretty much classifies exactly as how um it is presented, it has been conversed in the DI or the FGD.
+01:44 The other thing that happens here is let's say you ask a particular question later on in the DG, right?
+01:49 It's question number 15 in for one interview, question number four for another interview, simply because of the way the conversations are flowing, it will still be able to pick it up and put it in the under the right theme and under the right classification.
+02:03 So we don't have to worry about keeping the actual um flow of the DG exactly the same for every interview, that doesn't matter.
+02:13 It has enough intelligence to be able to pick it up and place it in the right place.
+02:16 And I'm assuming that this will happen for all usership criteria if I had to put, right, I will be able to see it by age group and gender.
+02:24 Yeah, yeah, yeah, yeah, absolutely.
+02:26 So we we also you need to give us the um in this particular case, the RQ and the customer information is was part of the transcripts which were uploaded itself, but otherwise we do ask you for the RQ and the customer information so that that is mapped.
+02:42 As soon as that is mapped, uh as part of the content analysis, you can get it by any filter that you want.
+02:48 Yeah.
+02:49 Clear.
+02:50 Right.
+02:51 Uh yes Sharath.
+02:54 Uh what happens to the content that cannot be mapped to any of the uh you know, the guidelines that you have in your DG.
+03:01 So there could be discussions or conversations which are not really part of the DG, but could be important.
+03:05 Correct.
+03:07 No, that's a great question.
+03:09 So the DG is used as a reference for the engine to classify, right?
+03:14 Because we don't this can actually even classify it without a DG because it will just take an open-ended classification of themes and it will give the themes its own names.
+03:22 So the DG is to make sure that hey, it is classifying it in the form in in a broad structure or format in which we have asked the questions.
+03:30 Now if something does not fit in with any of the relevant themes that already exist, it will add a theme and populate that information as a as a separate column for that particular respondent, right?
+03:42 And then we can choose to either keep it or remove it from the content analysis as we want.
+03:46 Also, I assume this can be done at that stage when we are editing, right?
+03:50 Where we can probably add the earlier stage, yeah, where we can add the theme if we feel that's important for us to.
+03:58 Correct.
+04:00 That is exactly where you know, a lot of times what will happen is you'll have a brand team, the client's brand team sitting with you when you're when the interviews are happening and that they'll say that hey, in the in further interviews I want to explore this particular topic further.
+04:12 So you will have to ask a few more questions on that topic which is not there in the original DG.
+04:17 So all of those things can get added when you are editing.
+04:20 If let's say in a particular interview someone's talking about something which is beyond all of this, right?
+04:25 Beyond even what you have asked as a question, those can also be, those will also get mapped as uh as specific themes except that the AI will choose to name the theme however it it thinks is the right thing.

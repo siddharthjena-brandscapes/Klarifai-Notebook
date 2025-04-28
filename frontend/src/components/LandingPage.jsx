@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from "react";
 import {
   FileSearch,
@@ -522,7 +520,7 @@ function App() {
         : projectData.category;
 
     // Validate required fields
-    if (!projectData.name || !projectData.description || !finalCategory) {
+    if (!projectData.name || !finalCategory) {
       setError("Please fill in all required fields");
       setLoading(false);
       return;
@@ -1486,7 +1484,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
       id="description"
       rows={4}
       className="w-full px-4 py-2 bg-white/80 dark:bg-white/5 border border-gray-700 dark:border-gray-300/20 rounded-lg text-gray-800 dark:text-white focus:ring-2 focus:ring-[#a55233] dark:focus:ring-teal-500 focus:border-transparent"
-      placeholder="Describe your project's purpose and goals"
+      placeholder="Describe your project's purpose and goals (optional)"
       value={projectData.description}
       onChange={(e) =>
         setProjectData((prev) => ({
@@ -1494,7 +1492,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
           description: e.target.value,
         }))
       }
-      required
+      
     ></textarea>
     
     {/* File upload status and error messages */}
@@ -1533,7 +1531,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
           id="documentUpload"
           className="hidden"
           onChange={handleDocumentChange}
-          accept=".pdf,.pptx"
+          accept=".pdf,.pptx, .txt"
         />
         <label
           htmlFor="documentUpload"
@@ -1596,8 +1594,38 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
             </option>
           ))}
         </select>
+        {projectData.category === "Other" && (
+                <div className="mt-4">
+                  <label
+                    htmlFor="customCategory"
+                    className="block text-sm font-medium dark:text-gray-200 mb-2"
+                  >
+                    Custom Category Name
+                  </label>
+                  <input
+                    type="text"
+                    id="customCategory"
+                    className="w-full px-4 py-2 dark:bg-white/5 border dark:border-gray-300/20 rounded-lg dark:text-white text-[#5e4636]  focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
+                    placeholder="Enter your custom category"
+                    value={projectData.customCategory}
+                    onChange={(e) =>
+                      setProjectData((prev) => ({
+                        ...prev,
+                        customCategory: e.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+                
+              )}
+              {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-300">
+              {error}
+            </div>
+          )}
       </div>
-
+          
       {/* Module selection */}
       <div>
         <h3 className="text-xl font-semibold text-[#0a3b25] dark:text-white mb-4">

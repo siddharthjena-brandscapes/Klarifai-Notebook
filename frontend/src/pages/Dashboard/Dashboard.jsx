@@ -16,7 +16,7 @@ const Dashboard = () => {
   const { mainProjectId } = useParams();
   const navigate = useNavigate();
   // Change default sidebar state to closed
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedChat, setSelectedChat] = useState(null);
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -25,7 +25,8 @@ const Dashboard = () => {
   const [isSummaryPopupOpen, setIsSummaryPopupOpen] = useState(false);
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [chatInputFocused, setChatInputFocused] = useState(false);
-  const { theme } = useContext(ThemeContext); // Get current theme from context
+  const { theme } = useContext(ThemeContext); // Get current theme from context\
+  const [forceResetKey, setForceResetKey] = useState(0);
 
   // Pass this event handler to MainContent
   const handleChatInputFocus = () => {
@@ -106,18 +107,27 @@ const Dashboard = () => {
   };
 
   const handleNewChat = (e) => {
-    // Prevent default behavior (page refresh)
+    // Prevent default behavior if called from a link or form
     if (e && e.preventDefault) {
       e.preventDefault();
     }
     
-    // Reset relevant states
+    console.log("Dashboard: Starting new chat, preserving documents:", selectedDocuments);
+    
+    // CRITICAL: Reset the selectedChat state to null
     setSelectedChat(null);
+    
+    // Reset other chat-related states
     setSelectedDocument(null);
     setSummary('');
     setFollowUpQuestions([]);
-    setSelectedDocuments([]);
-  };
+
+     // Force a reset by incrementing the key
+  setForceResetKey(prev => prev + 1);
+  console.log("Incremented reset key to force MainContent reset");
+    
+   
+  }
 
   const handleSendMessage = async (message, documents) => {
     console.log('Sending message:', message);
@@ -223,6 +233,7 @@ const Dashboard = () => {
               `}
             >
               <MainContent
+                key={`chat-${forceResetKey}`} 
                 selectedChat={selectedChat}
                 mainProjectId={mainProjectId}
                 selectedDocument={selectedDocument}
