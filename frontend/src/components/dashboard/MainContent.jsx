@@ -2381,13 +2381,18 @@ const MainContent = ({
   const [textSize, setTextSize] = useState("medium");
 
   // Add this inside your MainContent component
-useEffect(() => {
-  // Configure DOMPurify
-  DOMPurify.setConfig({
-    ALLOWED_TAGS: ['p', 'b', 'strong', 'i', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'code', 'pre', 'blockquote', 'br', 'hr', 'span', 'div'],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
-  });
-}, []);
+  useEffect(() => {
+    // Configure DOMPurify to allow standard HTML tags but sanitize potentially dangerous content
+    DOMPurify.setConfig({
+      ALLOWED_TAGS: [
+        'p', 'b', 'strong', 'i', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
+        'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 
+        'code', 'pre', 'blockquote', 'br', 'hr', 'span', 'div'
+      ],
+      ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
+      ALLOW_DATA_ATTR: false
+    });
+  }, []);
 
   useEffect(() => {
     // Save to localStorage whenever textSize changes
@@ -3946,28 +3951,33 @@ const renderSummaryView = () => {
       });
   };
 
-  const cleanResponseText = (text) => {
-    // If the text doesn't contain any HTML tags, just return it
-    if (!text.includes('<') || !text.includes('>')) {
-      return text;
+  const cleanAndFormatHTML = (content) => {
+    // If content doesn't have HTML tags, return it as is
+    if (!content.includes('<li>') && !content.includes('<p>') && !content.includes('<b>')) {
+      return content;
+    }
+  
+    // Handle incomplete or malformed lists
+    let cleanedContent = content;
+    
+    // Check if there are any <li> tags without an enclosing <ul> or <ol>
+    if ((cleanedContent.includes('<li>') || cleanedContent.includes('</li>')) && 
+        !cleanedContent.includes('<ul>') && !cleanedContent.includes('<ol>')) {
+      // Wrap all the content in a <ul> if it contains list items but no list container
+      cleanedContent = '<ul>' + cleanedContent + '</ul>';
     }
     
-    // If it already has HTML tags, clean it up
-    return text
-      // Fix any broken tag sequences that might appear in the API response
-      .replace(/<\/li>\s*<li>/g, '</li><li>')
-      .replace(/<\/p>\s*<p>/g, '</p><p>')
-      .replace(/<\/b>\s*<b>/g, '</b><b>')
-      // Make sure all li elements are inside ul elements
-      .replace(/<li>(.*?)<\/li>/g, function(match) {
-        if (!text.includes('<ul>')) {
-          return '<ul>' + match + '</ul>';
-        }
-        return match;
-      })
-      // Add any other cleanup logic you need
-      ;
-  }
+    // Make sure all list items are properly closed
+    cleanedContent = cleanedContent.replace(/<li>(.*?)(?!<\/li>)(<li>|$)/g, '<li>$1</li>$2');
+    
+    // Make sure all paragraphs are properly closed
+    cleanedContent = cleanedContent.replace(/<p>(.*?)(?!<\/p>)(<p>|$)/g, '<p>$1</p>$2');
+    
+    // Make sure all bold tags are properly closed
+    cleanedContent = cleanedContent.replace(/<b>(.*?)(?!<\/b>)(<b>|$)/g, '<b>$1</b>$2');
+    
+    return cleanedContent;
+  };
 
   return (
     <div
@@ -4153,12 +4163,10 @@ const renderSummaryView = () => {
                         className={`message-content ${getTextSizeClass(textSize)}`}
                         dangerouslySetInnerHTML={{
                           __html: DOMPurify.sanitize(
-                            marked.parse(cleanResponseText (msg.content), {
-                              breaks: true,
-                              gfm: true,
-                              smartypants: true,
-                              sanitize: false,
-                            })
+                            // If the content has HTML list, paragraph, or formatting tags, process it as HTML
+                            msg.content.includes('<li>') || msg.content.includes('<p>') || msg.content.includes('<b>') 
+                              ? cleanAndFormatHTML(msg.content)  // Clean and format the HTML
+                              : marked.parse(msg.content)        // Otherwise parse as markdown
                           )
                             // Remove code block markers
                             .replace(/```html/g, "")
