@@ -158,16 +158,19 @@ def upload_document_for_prompt(request):
             }, status=400)
        
         document_file = request.FILES['document']
+        file_name = document_file.name.lower()
        
         # Extract text based on file type
-        if document_file.name.lower().endswith('.pdf'):
+        if file_name.endswith('.pdf'):
             document_text = extract_text_from_pdf(document_file)
-        elif document_file.name.lower().endswith(('.pptx', '.ppt')):
+        elif file_name.endswith(('.pptx', '.ppt')):
             document_text = extract_text_from_ppt(document_file)
+        elif file_name.endswith('.txt'):
+            document_text = extract_text_from_txt(document_file)
         else:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Unsupported file format. Please upload PDF or PPTX files.'
+                'message': 'Unsupported file format. Please upload PDF, PPTX, or TXT files.'
             }, status=400)
        
         # Generate prompt from document content
@@ -214,6 +217,16 @@ def extract_text_from_ppt(ppt_file):
                 text += shape.text + "\n"
    
     os.unlink(tmp_path)  # Delete temp file
+    return text
+
+def extract_text_from_txt(txt_file):
+    # For text files, we can simply read the content directly
+    text = txt_file.read()
+    
+    # Decode bytes to string if necessary
+    if isinstance(text, bytes):
+        text = text.decode('utf-8', errors='replace')
+        
     return text
  
 def initialize_gemini():

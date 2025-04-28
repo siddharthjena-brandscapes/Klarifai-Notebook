@@ -420,36 +420,38 @@ function App() {
   };
 
   // Add these handler functions for document uploads
-  const handleDocumentChange = (e) => {
-    const selectedFile = e.target.files[0];
+ // In the handleDocumentChange function, update the file type check to include .txt files
+const handleDocumentChange = (e) => {
+  const selectedFile = e.target.files[0];
 
-    if (!selectedFile) {
-      setDocumentFile(null);
-      return;
-    }
+  if (!selectedFile) {
+    setDocumentFile(null);
+    return;
+  }
 
-    // Check file type
-    const fileType = selectedFile.type;
-    const fileExtension = selectedFile.name.split(".").pop().toLowerCase();
+  // Check file type
+  const fileType = selectedFile.type;
+  const fileExtension = selectedFile.name.split(".").pop().toLowerCase();
 
-    if (
-      !(
-        fileType === "application/pdf" ||
-        fileExtension === "pdf" ||
-        fileType ===
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-        fileExtension === "pptx"
-      )
-    ) {
-      setUploadError("Please upload a PDF or PowerPoint (PPTX) file.");
-      setDocumentFile(null);
-      return;
-    }
+  if (
+    !(
+      fileType === "application/pdf" ||
+      fileExtension === "pdf" ||
+      fileType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+      fileExtension === "pptx" ||
+      fileType === "text/plain" ||
+      fileExtension === "txt"
+    )
+  ) {
+    setUploadError("Please upload a PDF, PowerPoint (PPTX), or text (TXT) file.");
+    setDocumentFile(null);
+    return;
+  }
 
-    // Clear any previous errors and set the file
-    setUploadError(null);
-    setDocumentFile(selectedFile);
-  };
+  // Clear any previous errors and set the file
+  setUploadError(null);
+  setDocumentFile(selectedFile);
+};
 
   const cleanDescription = (text) => {
     if (!text) return text;
@@ -1531,7 +1533,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
           id="documentUpload"
           className="hidden"
           onChange={handleDocumentChange}
-          accept=".pdf,.pptx, .txt"
+          accept=".pdf,.pptx,.txt"
         />
         <label
           htmlFor="documentUpload"
