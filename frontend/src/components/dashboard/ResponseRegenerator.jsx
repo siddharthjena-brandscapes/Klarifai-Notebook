@@ -83,21 +83,21 @@ const ResponseRegenerator = ({
       
       {/* Navigation controls - only show if there are multiple responses */}
       {showNavigation && (
-        <div className="flex items-center space-x-1 backdrop-blur-sm rounded-md px-2 py-1">
+        <div className="flex items-center space-x-1 px-2 py-1">
           <button
             onClick={handlePrevious}
             disabled={currentIndex === 0}
             className={`p-1 rounded-md transition-colors ${
               currentIndex === 0 
-                ? 'text-[#d6cbbf] cursor-not-allowed' 
-                : 'text-[#8c715f] hover:text-[#a55233] hover:bg-[#f5e6d8]'
+                ? 'text-[#d6cbbf] dark:text-gray-600 cursor-not-allowed' 
+                : 'text-[#8c715f] dark:text-gray-400 dark:hover:text-blue-400 dark:hover:bg-gray-700/40 hover:text-[#a55233] hover:bg-[#f5e6d8]'
             }`}
             title="Previous response"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           
-          <span className="text-xs text-[#8c715f] font-light">
+          <span className="text-xs text-[#8c715f] dark:text-gray-400 font-light">
             {currentIndex + 1}/{responseCount}
           </span>
           
@@ -106,8 +106,8 @@ const ResponseRegenerator = ({
             disabled={currentIndex === responseCount - 1}
             className={`p-1 rounded-md transition-colors ${
               currentIndex === responseCount - 1 
-                ? 'text-[#d6cbbf] cursor-not-allowed' 
-                : 'text-[#8c715f] dark:hover:text-blue-400 dark:hover:bg-gray-700/40 hover:text-[#a55233] hover:bg-[#f5e6d8]'
+                ? 'text-[#d6cbbf] dark:text-gray-600 cursor-not-allowed' 
+                : 'text-[#8c715f] dark:text-gray-400 dark:hover:text-blue-400 dark:hover:bg-gray-700/40 hover:text-[#a55233] hover:bg-[#f5e6d8]'
             }`}
             title="Next response"
           >
@@ -144,7 +144,7 @@ const ResponseRegenerator = ({
               onClick={() => setSelectedLength('short')}
               className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
                 selectedLength === 'short'
-                  ? 'bg-gradient-to-r from-[#f5e6d8] to-[#faf4ee] border border-[#a68a70] text-[#0a3b25] dark:bg-gradient-to-r dark:from-blue-800/10 dark:to-blue-900/10 dark:border-blue-800/90 dark:text-blue-100'
+                  ? 'bg-gradient-to-r from-[#f5e6d8] to-[#faf4ee] border border-[#a68a70] text-[#0a3b25] dark:bg-gradient-to-r dark:from-[#1570ef] dark:to-blue-900 dark:border-blue-800/90 dark:text-blue-100'
                   : 'hover:bg-[#faf4ee] text-[#5e4636] dark:hover:bg-gray-800/70 dark:text-gray-300'
               }`}
             >
@@ -156,7 +156,7 @@ const ResponseRegenerator = ({
               onClick={() => setSelectedLength('comprehensive')}
               className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
                 selectedLength === 'comprehensive'
-                  ? 'bg-gradient-to-r from-[#f5e6d8] to-[#faf4ee] border border-[#a68a70] text-[#0a3b25] dark:bg-gradient-to-r dark:from-blue-800/10 dark:to-blue-900/10 dark:border-blue-800/90 dark:text-blue-100'
+                  ? 'bg-gradient-to-r from-[#f5e6d8] to-[#faf4ee] border border-[#a68a70] text-[#0a3b25] dark:bg-gradient-to-r dark:from-[#1570ef] dark:to-blue-900 dark:border-blue-800/90 dark:text-blue-100'
                   : 'hover:bg-[#faf4ee] text-[#5e4636] dark:hover:bg-gray-800/70 dark:text-gray-300'
               }`}
             >

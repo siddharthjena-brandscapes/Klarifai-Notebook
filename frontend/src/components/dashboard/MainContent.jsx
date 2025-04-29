@@ -2381,13 +2381,18 @@ const MainContent = ({
   const [textSize, setTextSize] = useState("medium");
 
   // Add this inside your MainContent component
-useEffect(() => {
-  // Configure DOMPurify
-  DOMPurify.setConfig({
-    ALLOWED_TAGS: ['p', 'b', 'strong', 'i', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'code', 'pre', 'blockquote', 'br', 'hr', 'span', 'div'],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
-  });
-}, []);
+  useEffect(() => {
+    // Configure DOMPurify to allow standard HTML tags but sanitize potentially dangerous content
+    DOMPurify.setConfig({
+      ALLOWED_TAGS: [
+        'p', 'b', 'strong', 'i', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
+        'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 
+        'code', 'pre', 'blockquote', 'br', 'hr', 'span', 'div'
+      ],
+      ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
+      ALLOW_DATA_ATTR: false
+    });
+  }, []);
 
   useEffect(() => {
     // Save to localStorage whenever textSize changes
@@ -2602,7 +2607,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
   }}
   className="
     appearance-none
-    dark:bg-gray-900/10
+    dark:bg-gray-900
     dark:hover:bg-gray-800/90
     bg-white 
     border border-[#d6cbbf]
@@ -2649,7 +2654,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
           }}
           className="
            appearance-none
-    dark:bg-gray-900/10
+    dark:bg-gray-900
     dark:hover:bg-gray-800/90
     bg-white 
     border border-[#d6cbbf]
@@ -3658,10 +3663,17 @@ const renderSummaryView = () => {
     // If selectedChat becomes null (e.g., when a chat is deleted),
     // reset the conversation state
     if (selectedChat === null) {
+      console.log("MainContent: selectedChat is null, resetting conversation state");
       setConversation([]);
       setConversationId(null);
       setMessage("");
       setCurrentFollowUpQuestions([]);
+
+      // Reset any message history or version tracking
+    setMessageVersions({});
+    setCurrentVersionIndex({});
+    setRegeneratedResponses({});
+    setCurrentResponseIndex({});
 
       // Reset any other chat-specific states as needed
       // For example, you might want to keep document selections
@@ -3939,6 +3951,34 @@ const renderSummaryView = () => {
       });
   };
 
+  const cleanAndFormatHTML = (content) => {
+    // If content doesn't have HTML tags, return it as is
+    if (!content.includes('<li>') && !content.includes('<p>') && !content.includes('<b>')) {
+      return content;
+    }
+  
+    // Handle incomplete or malformed lists
+    let cleanedContent = content;
+    
+    // Check if there are any <li> tags without an enclosing <ul> or <ol>
+    if ((cleanedContent.includes('<li>') || cleanedContent.includes('</li>')) && 
+        !cleanedContent.includes('<ul>') && !cleanedContent.includes('<ol>')) {
+      // Wrap all the content in a <ul> if it contains list items but no list container
+      cleanedContent = '<ul>' + cleanedContent + '</ul>';
+    }
+    
+    // Make sure all list items are properly closed
+    cleanedContent = cleanedContent.replace(/<li>(.*?)(?!<\/li>)(<li>|$)/g, '<li>$1</li>$2');
+    
+    // Make sure all paragraphs are properly closed
+    cleanedContent = cleanedContent.replace(/<p>(.*?)(?!<\/p>)(<p>|$)/g, '<p>$1</p>$2');
+    
+    // Make sure all bold tags are properly closed
+    cleanedContent = cleanedContent.replace(/<b>(.*?)(?!<\/b>)(<b>|$)/g, '<b>$1</b>$2');
+    
+    return cleanedContent;
+  };
+
   return (
     <div
       className="flex-1 h-screen w-full overflow-hidden backdrop-blur-lg relative
@@ -4123,12 +4163,10 @@ const renderSummaryView = () => {
                         className={`message-content ${getTextSizeClass(textSize)}`}
                         dangerouslySetInnerHTML={{
                           __html: DOMPurify.sanitize(
-                            marked.parse(msg.content, {
-                              breaks: true,
-                              gfm: true,
-                              smartypants: true,
-                              sanitize: false,
-                            })
+                            // If the content has HTML list, paragraph, or formatting tags, process it as HTML
+                            msg.content.includes('<li>') || msg.content.includes('<p>') || msg.content.includes('<b>') 
+                              ? cleanAndFormatHTML(msg.content)  // Clean and format the HTML
+                              : marked.parse(msg.content)        // Otherwise parse as markdown
                           )
                             // Remove code block markers
                             .replace(/```html/g, "")
@@ -4354,7 +4392,7 @@ const renderSummaryView = () => {
       </div>
       {isFollowUpQuestionsMinimized &&
       currentFollowUpQuestions.length > 0 ? (
-        <div className="text-xs text-center text-[#887d4e] dark:text-gray-400 py-1 animate-pulse">
+        <div className="text-xs text-center text-[#292928] dark:text-gray-400 py-1 animate-pulse">
           {currentFollowUpQuestions.length} follow-up question
           {currentFollowUpQuestions.length > 1 ? "s" : ""} available
         </div>
@@ -4433,7 +4471,7 @@ const renderSummaryView = () => {
             onChange={handleFileChange}
             multiple
             className="hidden"
-            accept=".pdf,.docx,.txt,.pptx,.xlsx,.mp3"
+            accept=".pdf,.docx,.txt,.pptx, .jpg, .jpeg, .bmp, .png, .mp3, .mp4, .wav, .mpeg"
           />
         </div>
 
@@ -4517,7 +4555,7 @@ const renderSummaryView = () => {
                   ${
                     useWebKnowledge
                       ? "bg-[#caeaf9] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70  dark:text-white shadow-sm"
-                      : "appearance-none bg-white/80 dark:bg-gray-900/10 text-[#381c0f] dark:text-gray-300 dark:hover:bg-gray-800/90 hover:bg-[#ddd9c5]/10 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
+                      : "appearance-none bg-white/80 dark:bg-gray-900 text-[#381c0f] dark:text-gray-300 dark:hover:bg-gray-800/90 hover:bg-[#ddd9c5]/10 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
                   }
                 `}
               >
