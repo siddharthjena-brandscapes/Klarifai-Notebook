@@ -24,12 +24,12 @@ import { useLocation } from 'react-router-dom';
 import { ThemeContext } from "../context/ThemeContext";
 
 import {
-  PlusCircle,
+
   X,
   Check,
   Edit2,
   Image,
-  RotateCw,
+
   ArrowLeft,
   Clock,
   ArrowRight,
@@ -282,65 +282,7 @@ const IdeaForm = () => {
     customFieldTypes,
   ]);
 
-  const renderNavigation = () => (
-    <div className="sticky top-[4rem] z-40 bg-gray-800 border border-gray-700 hover:border-green-500/50 p-4 rounded-lg shadow-lg">
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4">
-          <button
-            onClick={() => setShowProjectList(true)}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 hover:border-green-500/50 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-          >
-            <ArrowLeft size={16} />
-            All Idea Projects
-          </button>
-          <input
-            type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            className="flex-1 min-w-[200px] px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-all"
-            placeholder="Project Name"
-          />
-        </div>
-        {showImageGeneration ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleBackToIdeas}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-            >
-              <ArrowLeft size={16} />
-              Back to Ideas
-            </button>
-            <PowerPointExport
-              ideas={acceptedIdeas}
-              generatedImages={generatedImages}
-              versionHistory={rawVersionHistory}
-            />
-          </div>
-        ) : (
-          !showForm && (
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={handleBackToForm}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-              >
-                <ArrowLeft size={16} />
-                Back to Form
-              </button>
-              <button
-                onClick={handleProceedToImages}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-                disabled={acceptedIdeas.length === 0}
-              >
-                <Image size={20} />
-                Generate Images
-                <ArrowRight size={16} />
-              </button>
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  );
+ 
 
   // Add this function to fetch version history for all ideas
   const fetchAllVersionHistories = async () => {
