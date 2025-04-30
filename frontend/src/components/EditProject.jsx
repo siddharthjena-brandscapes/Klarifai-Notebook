@@ -161,7 +161,7 @@ const EditProject = ({ project, modules, onClose, onUpdate }) => {
                   rows={3}
                   value={projectData.description}
                   onChange={(e) => setProjectData(prev => ({ ...prev, description: e.target.value }))}
-                  required
+                
                 />
               </div>
   
