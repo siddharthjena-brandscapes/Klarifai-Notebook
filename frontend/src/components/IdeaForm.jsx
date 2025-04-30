@@ -3663,7 +3663,7 @@ const fillFormWithDocParams = () => {
 
  
       {/* Add an overlay to ensure content readability */}
-      <div className="absolute inset-0 bg-[#faf4ee]/90 dark:bg-black/50 backdrop-blur-sm" />
+      {/* <div className="absolute inset-0 bg-[#faf4ee]/90 dark:bg-black/50" /> */}
       <ScrollNavigationButtons />
       {/* Wrap all content in a relative container to appear above the overlay */}
       <div className="relative">
