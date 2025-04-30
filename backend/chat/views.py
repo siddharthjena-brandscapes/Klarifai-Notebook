@@ -6,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated, AllowAny  
+from moviepy import VideoFileClip, AudioFileClip
+import time
 import faiss
 import numpy as np
 import os
@@ -64,6 +66,20 @@ import tempfile
 from django.core.files import File
 
 from chat.models import UserAPITokens
+from io import BytesIO
+from datetime import datetime, timedelta
+from docx import Document as DocxDocument
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.style import WD_STYLE_TYPE
+from bs4 import BeautifulSoup, NavigableString
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from rest_framework.response import Response
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -574,19 +590,27 @@ class DocumentProcessingMixin:
     def extract_text_from_audio(self, file_path, user=None):
         """
         Extract text from audio files using Google's Gemini API.
+        For large files, chunks the audio before transcription.
         Returns the transcribed text.
-        
+       
         Args:
             file_path: Path to the audio file
             user: Django user object to get API token
         """
-        
+ 
+       
         logger = logging.getLogger(__name__)
-        
+       
         # Set up the transcripts directory
         TRANSCRIPT_DIR = "transcripts"
         os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
-        
+       
+        # Audio chunking settings
+        CHUNK_LENGTH_MINUTES = 5
+        CHUNK_THRESHOLD_MB = 20
+        DURATION_THRESHOLD_MINUTES = 10
+        MAX_RETRIES = 3
+       
         try:
             # Get the user's Gemini API token
             gemini_api_key = None
@@ -594,7 +618,7 @@ class DocumentProcessingMixin:
                 try:
                     user_api_tokens = UserAPITokens.objects.get(user=user)
                     gemini_api_key = user_api_tokens.gemini_token
-                    
+                   
                     # If no token is saved for the user, use a fallback mechanism or raise an error
                     if not gemini_api_key:
                         logger.warning(f"No Gemini API token found for user {user.username}")
@@ -602,53 +626,153 @@ class DocumentProcessingMixin:
                         gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
                         if not gemini_api_key:
                             raise ValueError("Gemini API token is required for processing audio files")
-                        
+                       
                 except UserAPITokens.DoesNotExist:
                     logger.error(f"No API tokens record found for user {user.username}")
                     raise ValueError("User API tokens not configured")
             else:
                 # Fallback to environment variable if no user provided
-                
                 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
                 if not gemini_api_key:
                     raise ValueError("Gemini API token is required for processing audio files")
-            
+           
             # Configure the Gemini API with the retrieved key
+            from google import generativeai as genai
             genai.configure(api_key=gemini_api_key)
-            
+           
             # Create a generative model instance
             model = genai.GenerativeModel("gemini-2.0-flash")
-            
-            # Upload the file to Gemini
-            uploaded_file = genai.upload_file(path=file_path)
-            
-            # Define the prompt for transcription
-            prompt = """Transcribe this audio. Include:
-            - Exact words spoken
-            - Speaker labels
-            - Timestamps only at speaker change
-            
-            Do not summarize or expand."""
-            
-            # Generate the transcription
-            response = model.generate_content([prompt, uploaded_file])
-            transcription = response.text
-            
-            # Generate a unique filename
+           
+            # Generate a unique base filename for this transcription
             base_filename = f"audio_transcript_{uuid.uuid4().hex}"
-            
-            # Save the transcription as a text file
+            full_transcript = ""
+            temp_files = []
+           
+            # Check if audio file needs chunking
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+           
+            # Load audio file to check duration using MoviePy
+            audio_clip = AudioFileClip(file_path)
+            duration_minutes = audio_clip.duration / 60  # Convert seconds to minutes
+           
+            logger.info(f"Audio file: {file_path}, Size: {file_size_mb:.2f}MB, Duration: {duration_minutes:.2f} minutes")
+           
+            # Determine if chunking is needed
+            need_chunking = False
+            if file_size_mb > CHUNK_THRESHOLD_MB or duration_minutes > DURATION_THRESHOLD_MINUTES:
+                need_chunking = True
+                logger.info(f"File exceeds size/duration thresholds, will chunk for processing")
+           
+            if need_chunking:
+                # Calculate parameters for chunking
+                chunk_length_seconds = CHUNK_LENGTH_MINUTES * 60
+                overlap_seconds = 5  # 5 second overlap
+                total_chunks = int(audio_clip.duration / chunk_length_seconds) + (1 if audio_clip.duration % chunk_length_seconds > 0 else 0)
+               
+                logger.info(f"Splitting audio into {total_chunks} chunks of {CHUNK_LENGTH_MINUTES} minutes each")
+               
+                for i in range(total_chunks):
+                    # Calculate start and end times with overlap
+                    start_time = max(0, i * chunk_length_seconds - overlap_seconds) if i > 0 else 0
+                    end_time = min(audio_clip.duration, (i + 1) * chunk_length_seconds + overlap_seconds)
+                   
+                    # Create a subclip
+                    chunk = audio_clip.subclipped(start_time, end_time)
+                   
+                    # Export the chunk to a temporary file
+                    chunk_filename = f"{os.path.splitext(file_path)[0]}_chunk_{i}.mp3"
+                    chunk.write_audiofile(chunk_filename, codec='mp3')
+                    temp_files.append(chunk_filename)
+                    chunk.close()  # Close the subclip to free resources
+                   
+                    # Process the chunk
+                    logger.info(f"Processing chunk {i + 1}/{total_chunks}")
+                   
+                    # Transcribe each chunk with retry logic
+                    retry_count = 0
+                    success = False
+                   
+                    while retry_count < MAX_RETRIES and not success:
+                        try:
+                            uploaded_file = genai.upload_file(path=chunk_filename)
+                           
+                            # Define the prompt for transcription
+                            prompt = """Transcribe this audio. Include:
+                            - Exact words spoken
+                            - Translate everything to English
+                            - Maintain the same speaker labels and timestamps
+                            - Ensure 100% of the content is translated
+                            - Keep the translation accurate and complete
+ 
+                            Important:
+                            - Include ALL content from beginning to end
+                            - Be precise with speaker identification
+                            - Maintain consistent speaker numbering throughout both sections
+                           
+                            Do not summarize or expand."""
+                           
+                            # Generate the transcription
+                            response = model.generate_content([prompt, uploaded_file])
+                            chunk_transcription = response.text
+                           
+                            # Add a separator between chunks
+                            if i > 0:
+                                full_transcript += "\n\n--- NEXT SEGMENT ---\n\n"
+                           
+                            full_transcript += chunk_transcription
+                            success = True
+                           
+                        except Exception as e:
+                            retry_count += 1
+                            logger.error(f"Error in chunk transcription (attempt {retry_count}): {str(e)}")
+                            if retry_count >= MAX_RETRIES:
+                                full_transcript += f"\n\n[Error transcribing segment {i + 1}: {str(e)}]\n\n"
+                            else:
+                                time.sleep(2)  # Wait before retry
+               
+                # Close the main audio clip
+                audio_clip.close()
+                   
+            else:
+                # Process the entire file at once if it's small enough
+                logger.info("Processing audio file in a single pass")
+                audio_clip.close()  # Close the clip since we're not using it for chunking
+               
+                uploaded_file = genai.upload_file(path=file_path)
+               
+                # Define the prompt for transcription
+                prompt = """Transcribe this audio. Include:
+                - Exact words spoken
+                - Speaker labels
+                - Timestamps only at speaker change
+               
+                Do not summarize or expand."""
+               
+                # Generate the transcription
+                response = model.generate_content([prompt, uploaded_file])
+                full_transcript = response.text
+           
+            # Save the full transcription as a text file
             txt_path = os.path.join(TRANSCRIPT_DIR, f"{base_filename}.txt")
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(transcription)
-            
+                f.write(full_transcript)
+           
+            # Clean up temporary chunk files
+            for temp_file in temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                        logger.info(f"Removed temporary file: {temp_file}")
+                except Exception as e:
+                    logger.error(f"Error removing file {temp_file}: {str(e)}")
+           
             # Extract the text from the saved text file using the existing method
             extracted_text = self.extract_text_from_txt(txt_path)
-            
+           
             return extracted_text
-        
+       
         except Exception as e:
-            print(f"Error transcribing audio file: {str(e)}")
+            logger.error(f"Error transcribing audio file: {str(e)}")
             return f"Error transcribing audio: {str(e)}"
         
     def extract_text_from_file(self, file_path):
@@ -5688,13 +5812,7 @@ class ProcessCitationsView(APIView):
 
 
 # codes for chat download
-from io import BytesIO
-from datetime import datetime, timedelta
-from docx import Document as DocxDocument
-from docx.shared import Pt, Inches, RGBColor
-from docx.enum.style import WD_STYLE_TYPE
-from bs4 import BeautifulSoup, NavigableString
-from django.http import HttpResponse
+
 
 class ChatExportView(APIView):
     permission_classes = [IsAuthenticated]
@@ -5702,16 +5820,15 @@ class ChatExportView(APIView):
     def post(self, request):
         try:
             # Extract parameters from request
-            conversation_id = request.data.get('conversation_id')
+            chats = request.data.get('chats', [])
             date_range = request.data.get('date_range')
             main_project_id = request.data.get('main_project_id')
             options = request.data.get('options', {})
-            export_format = request.data.get('format', 'docx')  # Default to docx
             
             # Validate inputs
-            if not conversation_id and not (date_range and main_project_id):
+            if not chats and not (date_range and main_project_id):
                 return Response({
-                    'error': 'Either conversation_id or date_range with main_project_id is required'
+                    'error': 'Either chat data or date_range with main_project_id is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Default options
@@ -5720,28 +5837,14 @@ class ChatExportView(APIView):
             include_follow_ups = options.get('includeFollowUpQuestions', True)
             format_code = options.get('formatCode', True)
             
-            # Get conversation(s) based on input parameters
-            if conversation_id:
-                # Get a single conversation
-                try:
-                    conversation = ChatHistory.objects.get(
-                        conversation_id=conversation_id,
-                        user=request.user
-                    )
-                    conversations = [conversation]
-                except ChatHistory.DoesNotExist:
-                    return Response({
-                        'error': 'Conversation not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-            else:
-                # Get conversations by date range
+            # If we have date_range but no chats, fetch the chats from database
+            if date_range and main_project_id and not chats:
                 try:
                     start_date = datetime.fromisoformat(date_range.get('startDate').replace('Z', '+00:00'))
                     end_date = datetime.fromisoformat(date_range.get('endDate').replace('Z', '+00:00'))
+                    end_date = end_date + timedelta(days=1)  # Include the entire end day
                     
-                    # Add one day to end_date to include the entire end day
-                    end_date = end_date + timedelta(days=1)
-                    
+                    # Fetch conversations from database
                     conversations = ChatHistory.objects.filter(
                         user=request.user,
                         main_project_id=main_project_id,
@@ -5753,6 +5856,20 @@ class ChatExportView(APIView):
                         return Response({
                             'error': 'No conversations found in the specified date range'
                         }, status=status.HTTP_404_NOT_FOUND)
+                    
+                    # Convert to the same format as frontend-processed chats
+                    chats = [{
+                        'conversation_id': conv.conversation_id,
+                        'title': conv.title,
+                        'created_at': conv.created_at.strftime('%Y-%m-%d %H:%M'),
+                        'messages': [{
+                            'role': msg.role,
+                            'content': msg.content,
+                            'created_at': msg.created_at.strftime('%Y-%m-%d %H:%M')
+                        } for msg in conv.messages.all().order_by('created_at')],
+                        'follow_up_questions': conv.follow_up_questions or []
+                    } for conv in conversations]
+                    
                 except Exception as e:
                     return Response({
                         'error': f'Invalid date format: {str(e)}'
@@ -5775,12 +5892,12 @@ class ChatExportView(APIView):
             heading2_style.font.bold = True
             heading2_style.font.color.rgb = RGBColor(0, 0, 100)  # Slightly darker blue
             
-            # Create normal style with improved formatting
+            # Normal style
             normal_style = styles['Normal']
             normal_style.font.size = Pt(11)
             normal_style.font.name = 'Calibri'
             
-            # Update list styles to ensure proper bullet and number positioning
+            # List styles
             if 'List Bullet' in styles:
                 bullet_style = styles['List Bullet']
                 bullet_style.paragraph_format.left_indent = Inches(0.25)
@@ -5791,7 +5908,7 @@ class ChatExportView(APIView):
                 number_style.paragraph_format.left_indent = Inches(0.25)
                 number_style.paragraph_format.first_line_indent = Inches(-0.25)
             
-            # Create code style for code blocks
+            # Code style
             if 'Code' not in styles:
                 code_style = styles.add_style('Code', WD_STYLE_TYPE.PARAGRAPH)
                 code_style.font.name = 'Consolas'
@@ -5801,70 +5918,63 @@ class ChatExportView(APIView):
                 code_style.paragraph_format.left_indent = Inches(0.25)
                 code_style.font.color.rgb = RGBColor(50, 50, 50)
             
-            # Set proper document margins
+            # Set document margins
             sections = doc.sections
             for section in sections:
-                section.left_margin = Inches(1.0)  # 1 inch left margin
-                section.right_margin = Inches(1.0)  # 1 inch right margin
-                section.top_margin = Inches(1.0)  # 1 inch top margin
-                section.bottom_margin = Inches(1.0)  # 1 inch bottom margin
+                section.left_margin = Inches(1.0)
+                section.right_margin = Inches(1.0)
+                section.top_margin = Inches(1.0)
+                section.bottom_margin = Inches(1.0)
             
             # Document title 
-            if len(conversations) == 1:
-                doc.add_heading(f"Chat Conversation: {conversations[0].title}", level=0)
+            if len(chats) == 1:
+                doc.add_heading(f"Chat Conversation: {chats[0]['title']}", level=0)
             else:
-                start_date_adjusted = start_date + timedelta(days=1)  # Add one day to start_date
-                doc.add_heading(f"Chat Conversations: {start_date_adjusted.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", level=0)
+                # Get the start date and add one day
+                start_date_str = date_range.get('startDate').split('T')[0] if date_range else chats[-1]['created_at'].split(' ')[0]
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d') + timedelta(days=1)
+                start_date_str = start_date.strftime('%Y-%m-%d')
+                
+                # Get the end date and add one day 
+                end_date_str = date_range.get('endDate').split('T')[0] if date_range else chats[0]['created_at'].split(' ')[0]
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1)
+                end_date_str = end_date.strftime('%Y-%m-%d')
+                
+                doc.add_heading(f"Chat Conversations: {start_date_str} to {end_date_str}", level=0)
             
             # Process each conversation
-            for i, conversation in enumerate(conversations):
+            for i, chat in enumerate(chats):
                 # Add conversation title
-                section_heading = doc.add_heading(conversation.title, level=1)
+                section_heading = doc.add_heading(chat['title'], level=1)
                 
                 # Add metadata if requested
                 if include_metadata:
                     metadata_para = doc.add_paragraph(style='Intense Quote')
-                    metadata_para.add_run(f"Created: {conversation.created_at.strftime('%Y-%m-%d %H:%M')}")
-                    
-                    # Add document references if any
-                    documents = conversation.documents.all()
-                    if documents:
-                        doc_names = ", ".join([d.filename for d in documents])
-                        metadata_para.add_run(f"\nReferenced Documents: {doc_names}")
-                
-                # Get all messages in this conversation
-                messages = conversation.messages.all().order_by('created_at')
+                    metadata_para.add_run(f"Created: {chat['created_at']}")
                 
                 # Process each message
-                for message in messages:
+                for message in chat['messages']:
                     # Message role as heading
-                    role_heading = "User Question:" if message.role == 'user' else "Assistant Answer:"
+                    role_heading = "User Question:" if message['role'] == 'user' else "Assistant Answer:"
                     doc.add_heading(role_heading, level=2)
                     
                     # Add timestamp if requested
                     if include_timestamps:
                         timestamp = doc.add_paragraph(style='Subtitle')
-                        timestamp.add_run(f"{message.created_at.strftime('%Y-%m-%d %H:%M')}")
+                        timestamp.add_run(f"{message['created_at']}")
                     
-                    # Process content based on role
-                    if message.role == 'user':
-                        # User messages are plain text
-                        doc.add_paragraph(message.content)
-                    else:
-                        # Assistant messages may contain HTML
-                        self.add_html_to_docx(doc, message.content, format_code)
-                        
-                        # Citations are explicitly excluded as requested
+                    # Add the content (already processed by frontend)
+                    self.add_html_to_docx(doc, message['content'], format_code)
                 
                 # Add follow-up questions if requested
-                if include_follow_ups and conversation.follow_up_questions:
+                if include_follow_ups and chat.get('follow_up_questions'):
                     doc.add_heading("Suggested Follow-up Questions:", level=2)
-                    for question in conversation.follow_up_questions:
+                    for question in chat['follow_up_questions']:
                         p = doc.add_paragraph(style='List Bullet')
                         p.add_run(question)
                 
                 # Add page break between conversations if multiple
-                if i < len(conversations) - 1:  # Only add page break if not the last conversation
+                if i < len(chats) - 1:
                     doc.add_page_break()
             
             # Save document to a BytesIO object
@@ -5872,17 +5982,19 @@ class ChatExportView(APIView):
             doc.save(docx_file)
             docx_file.seek(0)
 
-            # Update project timestamp to track activity
+            # Update project timestamp if needed
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
             
             # Create response with file
-            if len(conversations) == 1:
-                safe_title = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in conversation.title)
+            if len(chats) == 1:
+                safe_title = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in chat['title'])
                 safe_title = '_'.join(safe_title.split()[:3])
                 filename = f"Chat_{safe_title}.docx"
             else:
-                filename = f"Chats_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.docx"
+                start_date = date_range.get('startDate').split('T')[0] if date_range else chats[-1]['created_at'].split(' ')[0]
+                end_date = date_range.get('endDate').split('T')[0] if date_range else chats[0]['created_at'].split(' ')[0]
+                filename = f"Chats_{start_date.replace('-', '')}_to_{end_date.replace('-', '')}.docx"
             
             response = HttpResponse(
                 docx_file.getvalue(),
@@ -5918,83 +6030,61 @@ class ChatExportView(APIView):
             self.process_inline_elements(p, element)
         
         elif element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            # Determine heading level (h1 = level 1, h2 = level 2, etc.)
             level = int(element.name[1])
             doc.add_heading(element.get_text(), level=min(level, 9))
         
         elif element.name == 'ul':
             for li in element.find_all('li', recursive=False):
-                # Create bullet list item with appropriate indentation
                 p = doc.add_paragraph(style='List Bullet')
-                # Set proper indentation to ensure bullets stay within margins
-                # First level starts with 0.25 inches, subsequent levels add 0.25 each
                 p.paragraph_format.left_indent = Inches(0.25 + (0.25 * list_level))
-                # Set proper first line indent to make bullets appear properly
                 p.paragraph_format.first_line_indent = Inches(-0.25)
                 
-                # Process li content excluding nested lists
                 has_nested_list = False
                 nested_list = None
                 
-                # Check if li contains a nested list
                 for child in li.children:
                     if child.name in ['ul', 'ol']:
                         has_nested_list = True
                         nested_list = child
                         break
                 
-                # If there's a nested list, temporarily remove it
                 if has_nested_list and nested_list:
-                    nested_list.extract()  # Remove from li
+                    nested_list.extract()
                 
-                # Process the li content without nested list
                 self.process_inline_elements(p, li)
                 
-                # If there was a nested list, process it with increased indentation
                 if has_nested_list and nested_list:
                     self.process_element(doc, nested_list, format_code, list_level + 1)
         
         elif element.name == 'ol':
             for i, li in enumerate(element.find_all('li', recursive=False), 1):
-                # Create numbered list item with appropriate indentation
                 p = doc.add_paragraph(style='List Number')
-                # Set proper indentation to ensure numbers stay within margins
-                # First level starts with 0.25 inches, subsequent levels add 0.25 each
                 p.paragraph_format.left_indent = Inches(0.25 + (0.25 * list_level))
-                # Set proper first line indent to make numbers appear properly
                 p.paragraph_format.first_line_indent = Inches(-0.25)
                 
-                # Process li content excluding nested lists
                 has_nested_list = False
                 nested_list = None
                 
-                # Check if li contains a nested list
                 for child in li.children:
                     if child.name in ['ul', 'ol']:
                         has_nested_list = True
                         nested_list = child
                         break
                 
-                # If there's a nested list, temporarily remove it
                 if has_nested_list and nested_list:
-                    nested_list.extract()  # Remove from li
+                    nested_list.extract()
                 
-                # Process the li content without nested list
                 self.process_inline_elements(p, li)
                 
-                # If there was a nested list, process it with increased indentation
                 if has_nested_list and nested_list:
                     self.process_element(doc, nested_list, format_code, list_level + 1)
         
         elif element.name == 'pre' and format_code:
-            # Handle code blocks - extract code
             code_element = element.find('code')
             code_text = code_element.get_text() if code_element else element.get_text()
-            # Add formatted code paragraph
             doc.add_paragraph(code_text, style='Code')
         
         elif element.name == 'code' and element.parent.name != 'pre' and format_code:
-            # Inline code - add as a run with special formatting
             p = doc.add_paragraph()
             code_run = p.add_run(element.get_text())
             code_run.font.name = 'Consolas'
@@ -6003,19 +6093,15 @@ class ChatExportView(APIView):
         elif element.name == 'table':
             rows = element.find_all('tr')
             if rows:
-                # Count the maximum number of cells in any row
                 max_cols = max(len(row.find_all(['td', 'th'])) for row in rows)
                 if max_cols > 0:
-                    # Create table
                     table = doc.add_table(rows=len(rows), cols=max_cols)
                     table.style = 'Table Grid'
                     
-                    # Process each row
                     for i, row in enumerate(rows):
                         cells = row.find_all(['td', 'th'])
                         for j, cell in enumerate(cells):
-                            if j < max_cols:  # Ensure we don't exceed table dimensions
-                                # Bold for header cells
+                            if j < max_cols:
                                 cell_para = table.cell(i, j).paragraphs[0]
                                 if cell.name == 'th':
                                     run = cell_para.add_run(cell.get_text())
@@ -6028,7 +6114,6 @@ class ChatExportView(APIView):
             self.process_inline_elements(p, element)
         
         elif element.name == 'div':
-            # Process children of div
             for child in element.children:
                 if isinstance(child, NavigableString) and child.strip():
                     doc.add_paragraph(child.strip())
@@ -6036,18 +6121,15 @@ class ChatExportView(APIView):
                     self.process_element(doc, child, format_code)
         
         else:
-            # Default handling for other elements
             text = element.get_text(strip=True)
             if text:
                 doc.add_paragraph(text)
     
     def process_inline_elements(self, paragraph, element):
         """Process inline elements like bold, italic, etc. within a paragraph."""
-        # Skip if the element is None
         if element is None:
             return
             
-        # Process each child node
         for child in element.children:
             if isinstance(child, NavigableString):
                 if str(child).strip():
@@ -6064,16 +6146,14 @@ class ChatExportView(APIView):
             elif child.name == 'a':
                 run = paragraph.add_run(child.get_text())
                 run.underline = True
-                run.font.color.rgb = RGBColor(0, 0, 255)  # Blue for links
+                run.font.color.rgb = RGBColor(0, 0, 255)
             elif child.name == 'code':
                 run = paragraph.add_run(child.get_text())
                 run.font.name = 'Consolas'
                 run.font.size = Pt(10)
             elif child.name == 'br':
                 paragraph.add_run("\n")
-            # Skip nested list elements as they are handled separately
             elif child.name not in ['ul', 'ol']:
-                # Recursively process other elements
                 self.process_inline_elements(paragraph, child)
 
 

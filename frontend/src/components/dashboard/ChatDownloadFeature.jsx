@@ -1,9 +1,11 @@
+// ChatDownloadFeature.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { Download, X, Settings, ChevronDown, ChevronUp, Calendar, FileText, Check } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import { toast } from 'react-toastify';
 import { chatService } from '../../utils/axiosConfig';
+import { processChatContent } from '../../utils/chatContentProcessor';
 import PropTypes from 'prop-types';
 
 // Custom date picker styles - to make the calendar smaller
@@ -112,59 +114,56 @@ const ChatDownloadFeature = ({
       toast.error('Please select at least one chat');
       return;
     }
-
+  
     setIsLoading(true);
     toast.info(`Exporting ${selectedChats.length} chats...`);
-
+  
     try {
       // Process all selected chats
-      const downloadPromises = selectedChats.map(async (chatId) => {
+      const processedChats = selectedChats.map(chatId => {
         const chat = chatHistory.find(c => c.conversation_id === chatId);
         
         if (!chat) {
           console.error(`Chat with ID ${chatId} not found in history`);
-          return;
+          return null;
         }
         
-        try {
-          const response = await chatService.exportChatAsDocx({
-            conversation_id: chatId,
-            options
-          }, { responseType: 'blob' });
-          
-          // Create a URL for the blob
-          const url = window.URL.createObjectURL(new Blob([response.data]));
-          
-          // Create a temporary link element
-          const link = document.createElement('a');
-          link.href = url;
-          
-          // Set the download filename
-          const chatTitle = chat.title || 'Chat';
-          const safeTitle = chatTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-          const date = new Date(chat.created_at).toISOString().split('T')[0];
-          link.setAttribute('download', `${safeTitle}_${date}.docx`);
-          
-          // Append to the document body and click
-          document.body.appendChild(link);
-          link.click();
-          
-          // Clean up
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-          
-          // Small delay to avoid browser issues with multiple downloads
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
-        } catch (error) {
-          console.error(`Error downloading chat ${chatId}:`, error);
-          throw error;
-        }
-      });
+        // Process each message in the chat
+        const processedMessages = chat.messages.map(msg => {
+          return {
+            ...msg,
+            // Only process assistant messages (keep user messages as-is)
+            content: msg.role === 'assistant' ? processChatContent(msg.content) : msg.content
+          };
+        });
+        
+        return {
+          ...chat,
+          messages: processedMessages
+        };
+      }).filter(chat => chat !== null);
+  
+      // Send the processed chats to the backend
+      const response = await chatService.exportChatAsDocx({
+        chats: processedChats,
+        options
+      }, { responseType: 'blob' });
       
-      // Wait for all downloads to complete
-      await Promise.all(downloadPromises);
+      // Rest of the download handling remains the same...
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
       
+      const chatTitle = processedChats[0].title || 'Chat';
+      const safeTitle = chatTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const date = new Date(processedChats[0].created_at).toISOString().split('T')[0];
+      link.setAttribute('download', `${safeTitle}_${date}.docx`);
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+  
       toast.success(`Successfully exported ${selectedChats.length} chats`);
       setIsDownloadMenuOpen(false);
       setSelectedChats([]);
@@ -183,10 +182,11 @@ const ChatDownloadFeature = ({
       toast.error('Please select a date range');
       return;
     }
-
+  
     try {
       setIsLoading(true);
       
+      // Get the chats in the date range
       const response = await chatService.exportChatAsDocx({
         date_range: {
           startDate: startDate.toISOString(),
@@ -196,28 +196,22 @@ const ChatDownloadFeature = ({
         options
       }, { responseType: 'blob' });
       
-      // Create a URL for the blob
+      // Rest of the download handling remains the same...
       const url = window.URL.createObjectURL(new Blob([response.data]));
-      
-      // Create a temporary link element
       const link = document.createElement('a');
       link.href = url;
       
-      // Set the download filename
       const adjustedStartDate = new Date(startDate);
       adjustedStartDate.setDate(adjustedStartDate.getDate() + 1);
       const adjustedEndDate = new Date(endDate);
       adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
-
+  
       const startDateStr = adjustedStartDate.toISOString().split('T')[0];
       const endDateStr = adjustedEndDate.toISOString().split('T')[0];
       link.setAttribute('download', `Chats_${startDateStr}_to_${endDateStr}.docx`);
       
-      // Append to the document body and click
       document.body.appendChild(link);
       link.click();
-      
-      // Clean up
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       

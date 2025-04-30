@@ -2142,12 +2142,12 @@ import { useLocation } from 'react-router-dom';
 import { ThemeContext } from "../context/ThemeContext";
 
 import {
-  PlusCircle,
+
   X,
   Check,
   Edit2,
   Image,
-  RotateCw,
+
   ArrowLeft,
   Clock,
   ArrowRight,
@@ -3991,14 +3991,14 @@ const fillFormWithDocParams = () => {
         </span>
         {acceptedIdeas.length > 0 && (
           <span className="px-3 py-1 ml-2 bg-[#3f4f54]/20 dark:bg-emerald-600/50 border border-[#3f4f54]/30 dark:border-emerald-500/50 rounded-full text-sm font-medium text-[#3f4f54] dark:text-white">
-            {acceptedIdeas.length} selected
+            {acceptedIdeas.length} generated
           </span>
         )}
       </h3>
-      <ComparisonModeToggle
+      {/* <ComparisonModeToggle
         isEnabled={isComparisonMode}
         onToggle={() => setIsComparisonMode((prev) => !prev)}
-      />
+      /> */}
     </div>
     {/* Modified idea cards with integrated image generation */}
     <div className="space-y-6">
