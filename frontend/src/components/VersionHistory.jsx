@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Clock, RotateCcw, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
@@ -114,10 +112,31 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
     }
   };
 
+  // Helper function to check for duplicate images
+  const removeDuplicateImages = (images) => {
+    const uniqueImages = [];
+    const seenImageHashes = new Set();
+    
+    for (const img of images) {
+      // Use image_url as a unique identifier
+      // If the server doesn't guarantee unique image_urls, you might want to use
+      // a combination of other properties or create a hash from the image data
+      if (!seenImageHashes.has(img.image_url)) {
+        seenImageHashes.add(img.image_url);
+        uniqueImages.push(img);
+      }
+    }
+    
+    return uniqueImages;
+  };
+
   const processVersionHistory = (rawHistory, currentIdea) => {
     let versions = [];
     
     if (!rawHistory.idea_versions || rawHistory.idea_versions.length === 0) {
+      const currentImages = rawHistory.image_versions || [];
+      const uniqueImages = removeDuplicateImages(currentImages);
+      
       const currentVersion = {
         id: currentIdea.idea_id,
         product_name: currentIdea.product_name,
@@ -125,7 +144,7 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
         created_at: new Date().toISOString(),
         is_current: true,
         is_original: true,
-        images: rawHistory.image_versions || [],
+        images: uniqueImages,
         show_restore: false
       };
       versions = [currentVersion];
@@ -139,11 +158,14 @@ const VersionHistory = ({ idea, onRestoreVersion, onClose, onSelectImage }) => {
           img => img.idea_id === version.id
         );
         
+        // Remove duplicate images for each version
+        const uniqueImages = removeDuplicateImages(versionImages);
+        
         return {
           ...version,
           is_current: index === 0,
           is_original: index === sortedVersions.length - 1,
-          images: versionImages,
+          images: uniqueImages,
           show_restore: index !== 0
         };
       });

@@ -2523,50 +2523,25 @@ const IdeaForm = () => {
     setError(null);
   };
 
-  const generateImageForIdea = async (idea) => {
-    const ideaId = idea.idea_id.toString();
-    
-    // Skip if already loading or if image exists
-    if (loadingStates[ideaId] || generatedImages[ideaId]) {
-      return;
-    }
-    
-    setLoadingStates(prev => ({
-      ...prev,
-      [ideaId]: true
-    }));
-    
-    try {
-      await handleRegenerateImage({
-        idea_id: idea.idea_id,
-        description: idea.visualization_prompt || `${idea.product_name}: ${idea.description}`,
-        size: 768,
-        steps: 30,
-        guidance_scale: 7.5,
-      });
-    } catch (err) {
-      console.error("Error generating image for idea:", ideaId, err);
-      setError(`Failed to generate image for "${idea.product_name}"`);
-    } finally {
-      setLoadingStates(prev => ({
-        ...prev,
-        [ideaId]: false
-      }));
-    }
-  };
+  
+  
   const handleAccept = (ideaId) => {
     const ideaToAccept = ideas.find((idea) => idea.idea_id === ideaId);
     if (ideaToAccept) {
       setAcceptedIdeas((prev) => {
-        // Check if the idea is already in acceptedIdeas
+        // Only add if not already in acceptedIdeas
         if (!prev.some(idea => idea.idea_id === ideaId)) {
           const newAcceptedIdeas = [ideaToAccept, ...prev];
           
-          // Queue this single idea for image generation if no image exists
-          if (!generatedImages[ideaId] && !loadingStates[ideaId]) {
-            // Use a small timeout to ensure state updates first
+          // Only trigger generation if:
+          // 1. No image exists AND
+          // 2. Not already loading AND
+          // 3. Not in the middle of batch generation
+          if (!generatedImages[ideaId] && 
+              !loadingStates[ideaId] && 
+              !imageGenerationInProgress) {
             setTimeout(() => {
-              generateImageForIdea(ideaToAccept);
+              generateImagesSequentially();
             }, 100);
           }
           
@@ -3016,33 +2991,18 @@ const IdeaForm = () => {
     imageGenerationInProgress,
     loadingStates
   ]);
-  // Trigger batch image generation when acceptedIdeas changes
-useEffect(() => {
-  // Check if there are any ideas without images
-  const hasIdeasWithoutImages = acceptedIdeas.some(
-    idea => !generatedImages[idea.idea_id] && !loadingStates[idea.idea_id]
-  );
   
-  // Only trigger batch generation if there are multiple ideas without images
-  if (
-    acceptedIdeas.length > 1 && 
-    hasIdeasWithoutImages && 
-    !imageGenerationInProgress
-  ) {
-    // Optional: Add a confirmation or auto-notification here
-    // if you don't want to automatically generate multiple images
-    
-    generateImagesSequentially();
-  }
-}, [
-  acceptedIdeas,
-  generateImagesSequentially,
-  imageGenerationInProgress,
-  generatedImages,
-  loadingStates
-]);
 
+  useEffect(() => {
+    // Get only ideas that truly need images (no image AND not loading)
+    const ideasNeedingImages = acceptedIdeas.filter(
+      idea => !generatedImages[idea.idea_id] && !loadingStates[idea.idea_id]
+    );
   
+    if (ideasNeedingImages.length > 0 && !imageGenerationInProgress) {
+      generateImagesSequentially();
+    }
+  }, [acceptedIdeas, imageGenerationInProgress, generatedImages, loadingStates]);
 
   const handleRestoreVersion = (restoredData) => {
     // Handle both complete version restore and single image restore
@@ -4032,22 +3992,18 @@ const fillFormWithDocParams = () => {
              <div className="flex flex-1 gap-2 items-center">
               
             
-    <input
-      type="checkbox"
-      checked={isAccepted}
-      onChange={() => {
-        if (isAccepted) {
-          handleUnaccept(idea.idea_id);
-        } else {
-          handleAccept(idea.idea_id);
-          // Auto-trigger image generation if not already generated
-          if (!generatedImages[ideaId] && !loadingStates[ideaId]) {
-            generateImageForIdea(idea);
-          }
-        }
-      }}
-      className="w-4 h-4 accent-[#ace000] dark:accent-emerald-600 mt-0 mb-1"
-    />
+             <input
+  type="checkbox"
+  checked={isAccepted}
+  onChange={() => {
+    if (isAccepted) {
+      handleUnaccept(idea.idea_id);
+    } else {
+      handleAccept(idea.idea_id);
+    }
+  }}
+  className="w-4 h-4 accent-[#ace000] dark:accent-emerald-600 mt-0 mb-1"
+/>
 
                      
                       <div className="flex-1 flex items-center mt-0.5">
@@ -4103,7 +4059,7 @@ const fillFormWithDocParams = () => {
             ) : (
               <div className="flex items-center justify-center h-full aspect-square bg-[#f5e6d8] dark:bg-gray-700 rounded-lg border border-[#d6cbbf] dark:border-gray-600">
                 {loadingStates[ideaId] ? (
-                  <div className="loading-spinner"></div>
+                  <div className="loader"></div>
                 ) : (
                   <span className="text-[#5a544a] dark:text-gray-400">
                     Generating image...
@@ -4177,6 +4133,70 @@ const fillFormWithDocParams = () => {
         </main>
       </div>
       <DocumentParamsModal />
+      <style>{`
+      .loader {
+    animation: rotate 1s infinite;
+    height: 50px;
+    width: 50px;
+  }
+
+  .loader:before,
+  .loader:after {
+    border-radius: 50%;
+    content: "";
+    display: block;
+    height: 20px;
+    width: 20px;
+  }
+  .loader:before {
+    animation: ball1 1s infinite;
+    background-color: #fff;
+    box-shadow: 30px 0 0 #ff3d00;
+    margin-bottom: 10px;
+  }
+  .loader:after {
+    animation: ball2 1s infinite;
+    background-color: #ff3d00;
+    box-shadow: 30px 0 0 #fff;
+  }
+
+  @keyframes rotate {
+    0% { transform: rotate(0deg) scale(0.8) }
+    50% { transform: rotate(360deg) scale(1.2) }
+    100% { transform: rotate(720deg) scale(0.8) }
+  }
+
+  @keyframes ball1 {
+    0% {
+      box-shadow: 30px 0 0 #ff3d00;
+    }
+    50% {
+      box-shadow: 0 0 0 #ff3d00;
+      margin-bottom: 0;
+      transform: translate(15px, 15px);
+    }
+    100% {
+      box-shadow: 30px 0 0 #ff3d00;
+      margin-bottom: 10px;
+    }
+  }
+
+  @keyframes ball2 {
+    0% {
+      box-shadow: 30px 0 0 #fff;
+    }
+    50% {
+      box-shadow: 0 0 0 #fff;
+      margin-top: -20px;
+      transform: translate(15px, 15px);
+    }
+    100% {
+      box-shadow: 30px 0 0 #fff;
+      margin-top: 0;
+    }
+  }
+  
+      `}</style>
     </div>
   );
 };
