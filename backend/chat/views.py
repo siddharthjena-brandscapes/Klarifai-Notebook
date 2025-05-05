@@ -697,19 +697,32 @@ class DocumentProcessingMixin:
                             uploaded_file = genai.upload_file(path=chunk_filename)
                            
                             # Define the prompt for transcription
-                            prompt = """Transcribe this audio. Include:
-                            - Exact words spoken
-                            - Translate everything to English
-                            - Maintain the same speaker labels and timestamps
-                            - Ensure 100% of the content is translated
-                            - Keep the translation accurate and complete
- 
-                            Important:
-                            - Include ALL content from beginning to end
-                            - Be precise with speaker identification
-                            - Maintain consistent speaker numbering throughout both sections
-                           
-                            Do not summarize or expand."""
+                            prompt = """You are a transcription and translation assistant.
+
+                                    Your job is to:
+                                    1. Transcribe spoken content from audio.
+                                    2. Translate everything fully into English.
+                                    3. Output only the translated English version.
+                                    4. Format it exactly like this:
+
+                                    [HH:MM:SS] Speaker X: [Translated English sentence]
+
+                                    **Instructions:**
+                                    - Do not include the original language (e.g., Hindi).
+                                    - Do not use JSON or structured formats.
+                                    - Do not paraphrase or summarize. Translate every word accurately.
+                                    - Keep speaker labels consistent (Speaker 1, Speaker 2, etc.).
+                                    - Include all timestamps (HH:MM:SS) for each spoken segment.
+                                    - Only output clean, human-readable translated English dialogue.
+
+                                    **Example Output:**
+                                    00:00:00 Speaker 1: Please tell me four things — your name, what you do, where you live, and a little about your family.
+                                    00:00:05 Speaker 2: My name is Khushboo Sahu. I'm 25 years old, and I'm currently a teacher.
+                                    00:00:10 Speaker 2: I teach 8th standard in a government school.
+
+                                    Only output the above format. Nothing else.
+
+                                    """
                            
                             # Generate the transcription
                             response = model.generate_content([prompt, uploaded_file])
@@ -1292,7 +1305,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             for file in files:
                 file_ext = os.path.splitext(file.name)[1].lower()
                 is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
-                is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm']
+                is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
                 is_media_file = is_audio_file or is_video_file
                 
                 # Check for existing document with the same name
@@ -2643,166 +2656,258 @@ class ChatView(APIView):
             logger.info(f"Original query: {query}")
             logger.info(f"Enhanced query: {enhanced_query}")
             
-            # Step 2: Search the web using the enhanced query
-            web_results = self.search_web(enhanced_query, max_results=5)
-            
-            if not web_results:
-                return "I couldn't find relevant information on the web for your query.", []
-            
-            # Step 3: Scrape content from the top search results
-            scraped_contents = []
-            web_sources = []
-            
-            for result in web_results:
-                try:
-                    # Extract content from the webpage
-                    scraped_content = self.scrape_webpage(result['href'])
-                    
-                    if scraped_content and scraped_content.get('content'):
-                        scraped_contents.append(scraped_content)
-                        
-                        # Store source information
-                        web_sources.append({
-                            'title': scraped_content.get('title', result.get('title', 'Unknown')),
-                            'url': result.get('href', ''),
-                            'snippet': result.get('body', '')[:300]  # First 300 chars of snippet
-                        })
-                except Exception as e:
-                    logger.error(f"Error scraping {result.get('href')}: {str(e)}")
-                    continue
-            
-            if not scraped_contents:
-                return "I found search results but couldn't extract useful content from the webpages.", []
-            
-            # Step 4: Generate a response using the scraped content and document context
-            # Prepare context from scraped contents
-            web_context = ""
-            for i, item in enumerate(scraped_contents, 1):
-                web_context += f"Source {i} ({self.extract_domain(item['url'])}):\n"
-                web_context += f"Title: {item['title']}\n"
-                web_context += f"Content: {item['content'][:2500]}...\n\n"  # Limit each source content
-            
-            # Prepare document context section if available
-            doc_context_section = ""
-            if doc_context_text:
-                doc_context_section = f"""
-                KEY DOCUMENT PASSAGES:
-                {doc_context_text}
+            # Step 2: Directly use Google Genai API to search and generate response
+            try:
+                # Import required libraries
+                import os
+                from google.genai.types import Tool, GoogleSearch, GenerateContentConfig
+                from google import genai
                 
-                Use this document information to better understand the context of the question and ensure relevance in your response.
-                If the web sources provide different or contradictory information to what's in the documents, highlight this in your response.
-                If the web sources expand on concepts mentioned in the documents, explain how they add to the understanding.
-                """
-            
-            # Create the prompt for OpenAI
-            prompt = f"""
-            You are a research assistant analyzing information from both web sources and existing document knowledge.
-
-            QUESTION: {query}
-
-            {doc_context_section}
-
-            INFORMATION FROM WEB SOURCES:
-            {web_context}
-
-            INSTRUCTIONS:
-            1. Primarily use the web sources to provide information relevant to the question.
-            2. When applicable, connect web information with document context to provide a comprehensive answer.
-            3. The web information should complement, expand, or update what's known from the documents.
-            4. If the web sources don't directly address aspects of the question that were covered in the documents, acknowledge this.
-            5. If the web sources contradict information from the documents, present both perspectives.
-            6. Structure your response with clear sections differentiating document and web information.
-
-            FORMAT:
-            - Use <b> tags for headings
-            - Use <p> tags for paragraphs
-            - Use <ul> and <li> tags for lists
-            - Organize information logically and clearly
-            """
-            
-            system_message = "You are an expert research analyst who synthesizes information from multiple sources to provide comprehensive answers."
-            
-            # Generate response using OpenAI
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=2000
-            )
-            
-            web_response = response.choices[0].message.content
-            
-            # Add source information
-            source_domains = [self.extract_domain(source['url']) for source in web_sources]
-            source_info = ", ".join(source_domains)
-            
-            return f"{web_response}\n\n*Sources: {source_info}*", web_sources
+                # Get API key from environment
+                GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
+                if not GOOGLE_API_KEY:
+                    logger.error("GEMINI_API_KEY not found in environment variables.")
+                    return "I couldn't access web search. API key is missing.", []
+                
+                # Initialize Google Genai client
+                genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+                model_id = "gemini-2.0-flash-exp"
+                
+                # Configure search tool
+                search_tool = Tool(google_search=GoogleSearch())
+                
+                # Prepare document context if available
+                doc_context_section = ""
+                if doc_context_text:
+                    doc_context_section = f"""
+                    Consider this additional context when searching:
+                    {doc_context_text}
+                    """
+                
+                # Configure system instruction
+                system_instruction = (
+                    f"You are a helpful assistant that provides up-to-date information about: {enhanced_query}. "
+                    f"{doc_context_section}"
+                    "Format your response with appropriate headings (<b>), paragraphs (<p>), and lists (<ul>, <li>) for readability. "
+                    "Include specific details and cite the sources of information when possible."
+                )
+                
+                # Set up the configuration
+                config = GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    tools=[search_tool],
+                    response_modalities=["TEXT"],
+                    temperature=0.3,
+                    candidate_count=1
+                )
+                
+                # Generate content with search
+                logger.info(f"Sending query to Google Genai: {enhanced_query}")
+                response = genai_client.models.generate_content(
+                    model=model_id,
+                    contents=f"Find and provide detailed information about: {enhanced_query}",
+                    config=config
+                )
+                
+                # Get the response text
+                web_response = response.text
+                logger.info("Successfully received response from Google Genai")
+                
+                # Extract URLs to use as sources
+                import re
+                url_pattern = r'https?://[^\s\)\]\"\']+' 
+                urls = re.findall(url_pattern, web_response)
+                
+                # Create sources from extracted URLs
+                web_sources = []
+                domains_seen = set()
+                
+                # Process extracted URLs
+                for url in urls[:5]:
+                    domain = self.extract_domain(url)
+                    if domain not in domains_seen:
+                        domains_seen.add(domain)
+                        web_sources.append({
+                            'title': f"Information from {domain}",
+                            'url': url,
+                            'snippet': f"Content retrieved from {domain}"
+                        })
+                
+                # If no URLs found in response, add a generic source
+                if not web_sources:
+                    web_sources = [{
+                        'title': 'Information from Google Search',
+                        'url': 'https://www.google.com',
+                        'snippet': 'Information retrieved via Google Search API'
+                    }]
+                
+                # Format source information for display
+                source_domains = list(domains_seen) if domains_seen else ["Google Search"]
+                source_info = ", ".join(source_domains)
+                
+                return f"{web_response}\n\n*Sources: {source_info}*", web_sources
+                
+            except Exception as search_error:
+                logger.error(f"Error using Google Genai: {str(search_error)}", exc_info=True)
+                
+                # Fall back to search_web method
+                web_results = self.search_web(enhanced_query, max_results=5)
+                
+                if not web_results:
+                    return "I couldn't find relevant information on the web for your query.", []
+                    
+                # Create a fallback response using OpenAI (simplified from original implementation)
+                prompt = f"Please provide information about {enhanced_query}. Be concise and factual."
+                
+                fallback_response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant providing factual information."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=500
+                )
+                
+                web_sources = []
+                for result in web_results:
+                    web_sources.append({
+                        'title': result.get('title', 'Unknown Source'),
+                        'url': result.get('href', 'https://www.google.com'),
+                        'snippet': result.get('body', 'No description available')[:300]
+                    })
+                
+                return f"{fallback_response.choices[0].message.content}\n\n*Note: This response was generated without direct web access.*", web_sources
             
         except Exception as e:
             logger.error(f"Error in web knowledge search: {str(e)}", exc_info=True)
             return f"An error occurred while searching the web: {str(e)}", []
-    
-    def search_web(self, query, max_results=5):
-        """Search the web using DuckDuckGo and return results"""
-        try:
-            results = DDGS().text(query, max_results=max_results)
-            if not results:
-                logger.warning("No search results found for query: " + query)
-                return []
-            return list(results)
-        except Exception as e:
-            logger.error(f"Error searching the web: {str(e)}")
-            return []
-    
-    def scrape_webpage(self, url):
-        """Scrape content from a webpage"""
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
-            }
 
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
+    def search_web(self, query, max_results=5):
+        """Search the web using Google Genai and return results"""
+        try:
+            # Initialize Google Genai client and tools
+            import os
+            from google.genai.types import Tool, GoogleSearch, GenerateContentConfig
+            from google import genai
             
-            soup = BeautifulSoup(response.text, 'html.parser')
+            # Get API key from environment
+            GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
+            if not GOOGLE_API_KEY:
+                logger.error("GEMINI_API_KEY not found in environment variables.")
+                return []
             
-            # Remove script and style elements
-            for script_or_style in soup(['script', 'style', 'header', 'footer', 'nav']):
-                script_or_style.decompose()
+            # Initialize Google Genai client
+            genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+            model_id = "gemini-2.0-flash-exp"
+            
+            # Configure search tool
+            search_tool = Tool(google_search=GoogleSearch())
+            
+            # Configure generation parameters specifically for search results extraction
+            config = GenerateContentConfig(
+                system_instruction=(
+                    f"You are a search assistant that finds and extracts web search results."
+                    f"Search the web for information about: {query}. "
+                    f"Return the top {max_results} search results in a structured format."
+                    f"For each result, include the title, URL, and a brief description/snippet."
+                    f"Format each result as a separate JSON object."
+                ),
+                tools=[search_tool],
+                response_modalities=["TEXT"],
+                temperature=0.1,
+                candidate_count=1
+            )
+            
+            # Generate search results using Gemini
+            logger.info(f"Searching for: {query}")
+            response = genai_client.models.generate_content(
+                model=model_id,
+                contents=f"Find and list the most relevant web search results for: {query}",
+                config=config
+            )
+            
+            # Get the response text
+            result_text = response.text
+            logger.info("Received search response from Google Genai")
+            
+            # Extract results using both JSON parsing and URL extraction
+            import re
+            import json
+            
+            results = []
+            
+            # First try to find JSON objects in the response
+            json_pattern = r'\{[^{}]*"(?:url|href)"[^{}]*\}'
+            json_matches = re.findall(json_pattern, result_text, re.DOTALL)
+            
+            for json_str in json_matches[:max_results]:
+                try:
+                    # Clean up the JSON string - remove line breaks, etc.
+                    clean_json = re.sub(r'\s+', ' ', json_str)
+                    # Make sure it's valid JSON
+                    clean_json = re.sub(r'([{,])\s*([a-zA-Z0-9_]+):', r'\1"\2":', clean_json)
+                    
+                    # Parse the JSON
+                    result = json.loads(clean_json)
+                    
+                    # Check if it has a URL/href
+                    if 'url' in result or 'href' in result:
+                        # Normalize the result structure
+                        normalized_result = {
+                            'title': result.get('title', 'No title'),
+                            'href': result.get('href', result.get('url', '')),
+                            'body': result.get('body', result.get('snippet', result.get('description', 'No description')))
+                        }
+                        results.append(normalized_result)
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning(f"Failed to parse JSON: {e}")
+                    continue
+            
+            # If we don't have enough results, extract URLs directly
+            if len(results) < max_results:
+                url_pattern = r'https?://[^\s\)\]\"\']+' 
+                urls = re.findall(url_pattern, result_text)
                 
-            # Extract title
-            title = soup.title.string if soup.title else "No title found"
+                # Filter URLs that are already in results
+                existing_urls = [r.get('href') for r in results]
+                new_urls = [url for url in urls if url not in existing_urls]
+                
+                # Add URL-only results
+                for url in new_urls[:max_results - len(results)]:
+                    domain = self.extract_domain(url)
+                    results.append({
+                        'title': f"Information from {domain}",
+                        'href': url,
+                        'body': f"Search result from {domain}"
+                    })
             
-            # Extract main content - focus on article, main, or div with content
-            content_elements = soup.select('article, main, .content, #content, .post, .entry')
-            
-            if not content_elements:
-                # If no specific content elements, get all paragraphs
-                paragraphs = soup.find_all('p')
-                content = ' '.join([p.get_text() for p in paragraphs])
+            if results:
+                logger.info(f"Found {len(results)} search results")
+                return results
             else:
-                # Use the first content element found
-                content = content_elements[0].get_text()
-            
-            # Clean the content
-            content = re.sub(r'\s+', ' ', content).strip()
-            
-            return {
-                'title': title,
-                'content': content[:15000],  # Limit content length
-                'url': url
-            }
+                # If still no results, try one more approach - extract titles and URLs
+                title_url_pattern = r'(?:Title|Source):\s*(.*?)\s*(?:URL|Link):\s*(https?://[^\s]+)'
+                title_url_matches = re.findall(title_url_pattern, result_text, re.IGNORECASE)
+                
+                for title, url in title_url_matches[:max_results]:
+                    results.append({
+                        'title': title.strip(),
+                        'href': url.strip(),
+                        'body': f"Source: {self.extract_domain(url)}"
+                    })
+                
+                if results:
+                    logger.info(f"Extracted {len(results)} results using title-URL pattern")
+                    return results
+                else:
+                    logger.warning("No structured results could be extracted from Gemini response")
+                    return []
+                
         except Exception as e:
-            logger.error(f"Error scraping webpage {url}: {str(e)}")
-            return {
-                'title': 'Error scraping page',
-                'content': f"Could not retrieve content: {str(e)}",
-                'url': url
-            }
-    
+            logger.error(f"Error searching the web via Google Genai: {str(e)}", exc_info=True)
+            return []
+
     def extract_domain(self, url):
         """Extract a readable domain name from URL"""
         try:
@@ -3983,49 +4088,12 @@ class ChatView(APIView):
             try:
                 # Step 1: Search the web using DuckDuckGo
                 print(f"Searching web for: {query}")
-                web_results = self.search_web(query, max_results=5)
+                web_results = self.get_web_knowledge_response(query, document_context=None )
                 
                 if not web_results:
                     return "I couldn't find relevant information on the web for your query."
                 
-                # Step 2: Scrape content from the top search results
-                print(f"Found {len(web_results)} search results, scraping content...")
-                scraped_contents = []
-                web_sources = []
-                
-                for result in web_results:
-                    try:
-                        # Extract content from the webpage
-                        scraped_content = self.scrape_webpage(result['href'])
-                        
-                        if scraped_content and scraped_content.get('content'):
-                            scraped_contents.append(scraped_content)
-                            
-                            # Store source information
-                            web_sources.append({
-                                'title': scraped_content.get('title', result.get('title', 'Unknown')),
-                                'url': result.get('href', ''),
-                                'snippet': result.get('body', '')[:300]  # First 300 chars of snippet
-                            })
-                    except Exception as e:
-                        logger.error(f"Error scraping {result.get('href')}: {str(e)}")
-                        continue
-                
-                if not scraped_contents:
-                    return "I found search results but couldn't extract useful content from the webpages."
-                
-                # Step 3: Generate a response using the scraped content
-                print(f"Generating response from {len(scraped_contents)} scraped sources...")
-                
-                # Prepare context from scraped contents
-                context = ""
-                for i, item in enumerate(scraped_contents, 1):
-                    domain = self.extract_domain(item['url'])
-                    context += f"Source {i} ({domain}):\n"
-                    context += f"Title: {item['title']}\n"
-                    # Limit content based on response length
-                    content_limit = 2000 if response_length == 'comprehensive' else 1000
-                    context += f"Content: {item['content'][:content_limit]}...\n\n"
+
                 
                 # Get format-specific guidance
                 format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
@@ -4052,7 +4120,7 @@ class ChatView(APIView):
                 QUESTION: {query}
 
                 INFORMATION FROM WEB SOURCES:
-                {context}
+                {web_results}
 
                 RESPONSE FORMAT REQUIREMENTS:
                 1. Follow with detailed elaboration on each relevant point.
@@ -4088,11 +4156,7 @@ class ChatView(APIView):
 
                 web_response = response.choices[0].message.content
 
-                # Add source information
-                source_domains = [self.extract_domain(source['url']) for source in web_sources]
-                source_info = ", ".join(source_domains)
-
-                return f"{web_response}\n\n*Sources: {source_info}*"
+                return f"{web_response}"
 
                 
             except Exception as e:
