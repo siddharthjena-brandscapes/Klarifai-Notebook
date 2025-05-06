@@ -24,12 +24,12 @@
 // import { ThemeContext } from "../context/ThemeContext";
 
 // import {
-//   PlusCircle,
+
 //   X,
 //   Check,
 //   Edit2,
 //   Image,
-//   RotateCw,
+
 //   ArrowLeft,
 //   Clock,
 //   ArrowRight,
@@ -405,16 +405,31 @@
 //     setError(null);
 //   };
 
-
+  
+  
 //   const handleAccept = (ideaId) => {
 //     const ideaToAccept = ideas.find((idea) => idea.idea_id === ideaId);
 //     if (ideaToAccept) {
-//       setAcceptedIdeas((prev) => [ideaToAccept, ...prev]);
-//       // Clear any existing generated image when accepting again
-//       setGeneratedImages((prev) => {
-//         const newImages = { ...prev };
-//         delete newImages[ideaId];
-//         return newImages;
+//       setAcceptedIdeas((prev) => {
+//         // Only add if not already in acceptedIdeas
+//         if (!prev.some(idea => idea.idea_id === ideaId)) {
+//           const newAcceptedIdeas = [ideaToAccept, ...prev];
+          
+//           // Only trigger generation if:
+//           // 1. No image exists AND
+//           // 2. Not already loading AND
+//           // 3. Not in the middle of batch generation
+//           if (!generatedImages[ideaId] && 
+//               !loadingStates[ideaId] && 
+//               !imageGenerationInProgress) {
+//             setTimeout(() => {
+//               generateImagesSequentially();
+//             }, 100);
+//           }
+          
+//           return newAcceptedIdeas;
+//         }
+//         return prev;
 //       });
 //     }
 //   };
@@ -521,35 +536,7 @@
 //     }
 //   };
 
-//   const handleReject = async (ideaId) => {
-//     try {
-//       const response = await ideaService.deleteIdea(ideaId);
-
-//       if (response.data.success) {
-//         // Remove the idea from both ideas and acceptedIdeas arrays
-//         setIdeas(ideas.filter((idea) => idea.idea_id !== ideaId));
-//         setAcceptedIdeas(
-//           acceptedIdeas.filter((idea) => idea.idea_id !== ideaId)
-//         );
-
-//         // Remove the generated image for this idea
-//         setGeneratedImages((prev) => {
-//           const newImages = { ...prev };
-//           delete newImages[ideaId];
-//           return newImages;
-//         });
-
-//         // If we're in image generation view and there are no more accepted ideas, go back to ideas view
-//         if (showImageGeneration && acceptedIdeas.length <= 1) {
-//           setShowImageGeneration(false);
-//         }
-//       } else {
-//         setError(response.data.error || "Failed to delete idea");
-//       }
-//     } catch (err) {
-//       setError(err.response?.data?.error || "Failed to connect to the server");
-//     }
-//   };
+ 
 
 //   const handleRegenerateImage = useCallback(
 //     async (params) => {
@@ -819,30 +806,35 @@
 //   };
 
 
-//   // Update generateImagesSequentially to use the new callback
-//   // Simplified sequential image generation
 //   const generateImagesSequentially = useCallback(async () => {
 //     if (imageGenerationInProgress) return;
-
+    
 //     setImageGenerationInProgress(true);
 //     setError(null);
-
+    
 //     try {
-//       for (const idea of acceptedIdeas) {
-//         if (!generatedImages[idea.idea_id]) {
-//           await handleRegenerateImage({
-//             idea_id: idea.idea_id,
-//             description: idea.visualization_prompt || `${idea.product_name}: ${idea.description}`,
-//             size: 768,
-//             steps: 30,
-//             guidance_scale: 7.5,
-//           });
-//           // Add a delay between image generations
+//       // Get only the ideas that don't have images yet
+//       const ideasNeedingImages = acceptedIdeas.filter(
+//         idea => !generatedImages[idea.idea_id] && !loadingStates[idea.idea_id]
+//       );
+      
+//       for (const idea of ideasNeedingImages) {
+//         await handleRegenerateImage({
+//           idea_id: idea.idea_id,
+//           description: idea.visualization_prompt || `${idea.product_name}: ${idea.description}`,
+//           size: 768,
+//           steps: 30,
+//           guidance_scale: 7.5,
+//         });
+        
+//         // Add a delay between image generations
+//         if (ideasNeedingImages.length > 1) {
 //           await new Promise((resolve) => setTimeout(resolve, 6000)); // 6 seconds delay
 //         }
 //       }
 //     } catch (err) {
 //       setError("Error generating images sequentially");
+//       console.error("Sequential generation error:", err);
 //     } finally {
 //       setImageGenerationInProgress(false);
 //     }
@@ -851,38 +843,20 @@
 //     generatedImages,
 //     handleRegenerateImage,
 //     imageGenerationInProgress,
+//     loadingStates
 //   ]);
+  
 
-//   // Auto-generate images when entering image generation view
 //   useEffect(() => {
-//     if (
-//       showImageGeneration &&
-//       acceptedIdeas.length > 0 &&
-//       !imageGenerationInProgress &&
-//       Object.keys(generatedImages).length < acceptedIdeas.length
-//     ) {
+//     // Get only ideas that truly need images (no image AND not loading)
+//     const ideasNeedingImages = acceptedIdeas.filter(
+//       idea => !generatedImages[idea.idea_id] && !loadingStates[idea.idea_id]
+//     );
+  
+//     if (ideasNeedingImages.length > 0 && !imageGenerationInProgress) {
 //       generateImagesSequentially();
 //     }
-//   }, [
-//     showImageGeneration,
-//     acceptedIdeas.length,
-//     generateImagesSequentially,
-//     imageGenerationInProgress,
-//     generatedImages,
-//   ]);
-
-//   const handleProceedToImages = () => {
-//     if (acceptedIdeas.length > 0) {
-//       setShowImageGeneration(true);
-//       generateImagesSequentially();
-//     } else {
-//       setError("Please accept at least one idea before proceeding");
-//     }
-//   };
-
-//   const handleBackToIdeas = () => {
-//     setShowImageGeneration(false);
-//   };
+//   }, [acceptedIdeas, imageGenerationInProgress, generatedImages, loadingStates]);
 
 //   const handleRestoreVersion = (restoredData) => {
 //     // Handle both complete version restore and single image restore
@@ -1503,7 +1477,7 @@
 
  
 //       {/* Add an overlay to ensure content readability */}
-//       <div className="absolute inset-0 bg-[#faf4ee]/90 dark:bg-black/50 backdrop-blur-sm" />
+//       {/* <div className="absolute inset-0 bg-[#faf4ee]/90 dark:bg-black/50" /> */}
 //       <ScrollNavigationButtons />
 //       {/* Wrap all content in a relative container to appear above the overlay */}
 //       <div className="relative">
@@ -1521,63 +1495,41 @@
 //           <div className="max-w-4xl mx-auto space-y-8">
 //             {/* Navigation Section */}
 //             <div className="sticky top-[4rem] z-40 bg-white/80 dark:bg-gray-800 border border-[#d6cbbf] hover:border-[#a68a70] dark:border-gray-700 dark:hover:border-green-500/50 p-4 rounded-lg shadow-lg">
-//               <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-//                 <div className="flex flex-wrap lg:flex-nowrap items-center gap-4">
-//                   <button
-//                     onClick={() => setShowProjectList(true)}
-//                     className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 border border-[#d6cbbf] dark:border-gray-600 hover:border-[#a68a70] dark:hover:border-green-500/50 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-//                   >
-//                     <ArrowLeft size={16} />
-//                     All Idea Projects
-//                   </button>
-//                   <input
-//                     type="text"
-//                     value={projectName}
-//                     onChange={(e) => setProjectName(e.target.value)}
-//                     className="flex-1 min-w-[200px] px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500 dark:focus:ring-opacity-50 transition-all"
-//                     placeholder="Project Name"
-//                   />
-//                 </div>
-//                 {showImageGeneration ? (
-//                   <div className="flex flex-wrap items-center gap-3">
-//                     <button
-//                       onClick={handleBackToIdeas}
-//                       className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap border border-[#d6cbbf] dark:border-gray-600"
-//                     >
-//                       <ArrowLeft size={16} />
-//                       Back to Ideas
-//                     </button>
-//                     <PowerPointExport
-//                       ideas={acceptedIdeas}
-//                       generatedImages={generatedImages}
-//                       versionHistory={rawVersionHistory}
-//                     />
-//                   </div>
-//                 ) : (
-//                   !showForm && (
-//                     <div className="flex flex-wrap items-center gap-3">
-//                       <button
-//                         onClick={handleBackToForm}
-//                         className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap border border-[#d6cbbf] dark:border-gray-600"
-//                       >
-//                         <ArrowLeft size={16} />
-//                         Back to Form
-//                       </button>
-//                       <button
-//                         onClick={handleProceedToImages}
-//                         className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-//                         disabled={acceptedIdeas.length === 0}
-//                       >
-//                         <Image size={20} />
-//                         Generate Images
-//                         <ArrowRight size={16} />
-//                       </button>
-//                     </div>
-//                   )
-//                 )}
-//               </div>
-//             </div>
-  
+//   <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+//     <div className="flex flex-wrap lg:flex-nowrap items-center gap-4">
+//       <button
+//         onClick={() => setShowProjectList(true)}
+//         className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 border border-[#d6cbbf] dark:border-gray-600 hover:border-[#a68a70] dark:hover:border-green-500/50 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+//       >
+//         <ArrowLeft size={16} />
+//         All Idea Projects
+//       </button>
+//       <input
+//         type="text"
+//         value={projectName}
+//         onChange={(e) => setProjectName(e.target.value)}
+//         className="flex-1 min-w-[200px] px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500 dark:focus:ring-opacity-50 transition-all"
+//         placeholder="Project Name"
+//       />
+//     </div>
+//     {!showForm && (
+//       <div className="flex flex-wrap items-center gap-3">
+//         <button
+//           onClick={handleBackToForm}
+//           className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-[#f5e6d8] dark:hover:bg-gray-600 text-[#5e4636] dark:text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap border border-[#d6cbbf] dark:border-gray-600"
+//         >
+//           <ArrowLeft size={16} />
+//           Back to Form
+//         </button>
+//         <PowerPointExport
+//           ideas={acceptedIdeas}
+//           generatedImages={generatedImages}
+//           versionHistory={rawVersionHistory}
+//         />
+//       </div>
+//     )}
+//   </div>
+// </div>
 //             {/* Form View */}
 //             {showForm ? (
 //               <div className={`top-4 z-10 animate-fade-in ${theme === 'dark' ? 'bg-gray-900/90' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-700' : 'border-[#e8ddcc]'} rounded-lg p-6 shadow-lg`}>
@@ -1840,245 +1792,162 @@
 //                   </div>
 //                 </form>
 //               </div>
-//             ) : showImageGeneration ? (
+//             ) :  (
 //               <div
-//                 style={{ marginTop: "0.5rem" }}
-//                 className="sticky top-4 z-10 rounded-lg border border-[#e8ddcc] dark:border-gray-700 p-6 animate-fade-in bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm shadow-lg"
-//               >
-//                 <div className="flex justify-between items-center mb-6">
-//                   <h3 className="flex items-center gap-2 text-2xl font-serigoe text-emerald-900 dark:text-emerald-400">
-//                     Image Generation
-//                     <span className="px-3 py-1 bg-[#556052]/20 dark:bg-indigo-600/50 border border-[#556052]/30 dark:border-indigo-500/50 rounded-full text-sm font-medium text-[#556052] dark:text-white">
-//                       {acceptedIdeas.length}{" "}
-//                       {acceptedIdeas.length === 1 ? "idea" : "ideas"}
-//                     </span>
-//                   </h3>
-//                   <ComparisonModeToggle
-//                     isEnabled={isComparisonMode}
-//                     onToggle={() => setIsComparisonMode((prev) => !prev)}
-//                   />
-//                 </div>
-  
-//                 <div className="space-y-6">
-//                   {acceptedIdeas.map((idea) => {
-//                     const ideaId = idea.idea_id.toString();
-//                     const isEditing = editingIdea === idea.idea_id;
-                    
-//                     return (
-//                       <div
-//                         key={ideaId}
-//                         className="p-6 rounded-lg border border-[#e8ddcc] hover:border-[#a68a70] dark:border-gray-700 dark:hover:border-green-500 bg-white/80 dark:bg-gray-800/80 shadow-md hover:shadow-lg transition-all"
-//                       >
-//                         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-//                           <div className="flex-1">
-//                             {isEditing ? (
-//                               <EditIdeaPanel
-//                                 editForm={editForm}
-//                                 handleEditChange={handleEditChange}
-//                                 handleUpdateIdea={handleUpdateIdea}
-//                                 setEditingIdea={setEditingIdea}
-//                                 ideaId={idea.idea_id}
-//                                 className="mb-4"
-//                               />
-//                             ) : (
-//                               <>
-//                                 <IdeaTitle idea={idea} />
-  
-//                                 <p className="text-[#5e4636] dark:text-gray-300 mb-4 text-justify leading-relaxed">
-//                                   <HighlightedDescription
-//                                     description={idea.description}
-//                                     dynamicFields={dynamicFields}
-//                                     formData={formData}
-//                                     isComparisonMode={isComparisonMode}
-//                                   />
-//                                   {/* Add the IdeaAnalysis component here */}
-//                                   <IdeaAnalysis
-//                                     idea={idea}
-//                                     dynamicFields={dynamicFields}
-//                                     formData={formData}
-//                                     isComparisonMode={isComparisonMode}
-//                                   />
-//                                 </p>
-  
-//                                 <div className="flex flex-wrap gap-2">
-//                                   {generatedImages[ideaId] && (
-//                                     <AdvancedRegenControls
-//                                       idea={idea}
-//                                       onRegenerate={handleRegenerateImage}
-//                                       isLoading={loadingStates[ideaId]}
-//                                     />
-//                                   )}
-  
-//                                   <button
-//                                     onClick={() => handleViewHistory(idea)}
-//                                     className="px-4 py-2 bg-white hover:bg-[#f5e6d8] text-[#5e4636] border border-[#d6cbbf] dark:bg-gradient-to-r dark:from-purple-500 dark:to-indigo-600 dark:hover:from-purple-600 dark:hover:to-indigo-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
-//                                     title="Versions History"
-//                                   >
-//                                     <Clock size={16} />
-//                                   </button>
-//                                   <button
-//                                     onClick={() => handleEdit(idea)}
-//                                     className="px-4 py-2 bg-[#f5e6d8] hover:bg-[#e9dcc9] text-[#5e4636] border border-[#d6cbbf] dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
-//                                     title="Edit ideas"
-//                                   >
-//                                     <Edit2 size={16} />
-//                                   </button>
-//                                   <IdeaMetadata
-//                                     ideaMetadata={ideaMetadata[idea.idea_id]}
-//                                   />
-//                                 </div>
-//                               </>
-//                             )}
-//                           </div>
-  
-//                           <div className="w-full md:w-1/2 lg:w-1/3">
-//                             {generatedImages[ideaId] ? (
-//                               <div className="relative aspect-square rounded-lg overflow-hidden border border-[#d6cbbf] dark:border-gray-700">
-//                                 <img
-//                                   src={generatedImages[ideaId]}
-//                                   alt={idea.product_name}
-//                                   className="object-cover w-full h-full"
-//                                   onClick={() => {
-//                                     setZoomImageUrl(generatedImages[ideaId]);
-//                                     setIsZoomOpen(true);
-//                                   }}
-//                                 />
-//                               </div>
-//                             ) : (
-//                               <div className="flex items-center justify-center h-full aspect-square bg-[#f5e6d8] dark:bg-gray-700 rounded-lg border border-[#d6cbbf] dark:border-gray-600">
-//                                 {loadingStates[ideaId] ? (
-//                                   <div className="loading-spinner"></div>
-//                                 ) : (
-//                                   <span className="text-[#5a544a] dark:text-gray-400">
-//                                     Image pending generation
-//                                   </span>
-//                                 )}
-//                               </div>
-//                             )}
-//                           </div>
-//                         </div>
-//                       </div>
-//                     );
-//                   })}
-//                 </div>
+//     style={{ marginTop: "0.5rem" }}
+//     className="sticky top-2 z-10 rounded-lg border border-[#e8ddcc] dark:border-gray-700 p-6 animate-fade-in bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm shadow-lg"
+//   >
+//     <div className="flex justify-between items-center mb-6 gap-2">
+//       <h3 className="flex items-center gap-2 text-2xl font-sergoe text-[#0c393b] dark:text-emerald-400">
+//         Ideas List
+//         <span className="px-3 py-1 bg-[#556052]/20 dark:bg-indigo-600/50 border border-[#556052]/30 dark:border-indigo-500/50 rounded-full text-sm font-medium text-[#556052] dark:text-white">
+//           {ideas.length} {ideas.length === 1 ? "idea" : "ideas"}
+//         </span>
+//         {acceptedIdeas.length > 0 && (
+//           <span className="px-3 py-1 ml-2 bg-[#3f4f54]/20 dark:bg-emerald-600/50 border border-[#3f4f54]/30 dark:border-emerald-500/50 rounded-full text-sm font-medium text-[#3f4f54] dark:text-white">
+//             {acceptedIdeas.length} generated
+//           </span>
+//         )}
+//       </h3>
+      
+//     </div>
+//     {/* Modified idea cards with integrated image generation */}
+//     <div className="space-y-6">
+//     {ideas.map((idea) => {
+//   const ideaId = idea.idea_id.toString();
+//   const isAccepted = acceptedIdeas.some(accepted => accepted.idea_id === idea.idea_id);
+
+//   return (
+//     <div 
+//       key={ideaId}
+//       className={`p-6 rounded-lg border ${
+//         isAccepted 
+//           ? "border-[#3f4f54] border-l-4 bg-white/90 dark:bg-gray-800/90 shadow-md" 
+//           : "border-[#e8ddcc] hover:border-[#a68a70] bg-white/80 dark:bg-gray-800/80 dark:border-gray-700 dark:hover:border-green-500"
+//       } transition-all hover:shadow-lg`}
+//     >
+//       {/* Rest of your idea card JSX */}
+//       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+//         <div className="flex-1">
+//           {editingIdea === idea.idea_id ? (
+//             <EditIdeaPanel
+//               editForm={editForm}
+//               handleEditChange={handleEditChange}
+//               handleUpdateIdea={handleUpdateIdea}
+//               setEditingIdea={setEditingIdea}
+//               ideaId={idea.idea_id}
+//               className="mb-4"
+//             />
+//           ) : (
+//             <>
+//              <div className="flex flex-1 gap-2 items-center">
+              
+            
+//              <input
+//   type="checkbox"
+//   checked={isAccepted}
+//   onChange={() => {
+//     if (isAccepted) {
+//       handleUnaccept(idea.idea_id);
+//     } else {
+//       handleAccept(idea.idea_id);
+//     }
+//   }}
+//   className="w-4 h-4 accent-[#ace000] dark:accent-emerald-600 mt-0 mb-1"
+// />
+
+                     
+//                       <div className="flex-1 flex items-center mt-0.5">
+//                 <IdeaTitle idea={idea} />
+//               </div>
+//             </div>
+
+//               <p className="text-[#5e4636] dark:text-gray-300 mb-4 text-justify leading-relaxed">
+//                 <HighlightedDescription
+//                   description={idea.description}
+//                   dynamicFields={dynamicFields}
+//                   formData={formData}
+//                   isComparisonMode={isComparisonMode}
+//                 />
+//                 <IdeaAnalysis
+//                   idea={idea}
+//                   dynamicFields={dynamicFields}
+//                   formData={formData}
+//                   isComparisonMode={isComparisonMode}
+//                 />
+//               </p>
+
+//               <div className="flex flex-wrap gap-2">
+//               <IdeaMetadata ideaMetadata={ideaMetadata[idea.idea_id]} />
+//                 <button
+//                   onClick={() => handleEdit(idea)}
+//                   className="px-4 py-2 bg-[#f8fbe5] hover:bg-[#ebf4b8] text-[#5e4636] border border-[#d6cbbf] dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
+//                   title="Edit idea"
+//                 >
+//                   <Edit2 size={16} />
+//                 </button>
+            
+//               </div>
+//             </>
+//           )}
+//         </div>
+        
+//         {/* Add image section to the right */}
+//         {isAccepted && (
+//           <div className="w-full md:w-1/2 lg:w-1/3">
+//             {generatedImages[ideaId] ? (
+//               <div className="relative aspect-square rounded-lg overflow-hidden border border-[#d6cbbf] dark:border-gray-700">
+//                 <img
+//                   src={generatedImages[ideaId]}
+//                   alt={idea.product_name}
+//                   className="object-cover w-full h-full"
+//                   onClick={() => {
+//                     setZoomImageUrl(generatedImages[ideaId]);
+//                     setIsZoomOpen(true);
+//                   }}
+//                 />
 //               </div>
 //             ) : (
-//               <div
-//                 style={{ marginTop: "0.5rem" }}
-//                 className="sticky top-2 z-10 rounded-lg border border-[#e8ddcc] dark:border-gray-700 p-6 animate-fade-in bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm shadow-lg"
-//               >
-//                 <div className="flex justify-between items-center mb-6 gap-2">
-//                   <h3 className="flex items-center gap-2 text-2xl font-sergoe text-[#0c393b] dark:text-emerald-400">
-//                     Ideas List
-//                     <span className="px-3 py-1 bg-[#556052]/20 dark:bg-indigo-600/50 border border-[#556052]/30 dark:border-indigo-500/50 rounded-full text-sm font-medium text-[#556052] dark:text-white">
-//                       {ideas.length} {ideas.length === 1 ? "idea" : "ideas"}
-//                     </span>
-//                   </h3>
-//                   {/* Add the comparison toggle here */}
-//                   <ComparisonModeToggle
-//                     isEnabled={isComparisonMode}
-//                     onToggle={() => setIsComparisonMode((prev) => !prev)}
-//                   />
-//                 </div>
-  
-//                 <div className="space-y-6">
-//                   {ideas.map((idea) => {
-//                     const ideaId = idea.idea_id.toString();
-//                     const isEditing = editingIdea === idea.idea_id;
-//                     const isAccepted = acceptedIdeas.some(
-//                       (accepted) => accepted.idea_id === idea.idea_id
-//                     );
-                    
-//                     return (
-//                       <div
-//                         key={ideaId}
-//                         className={`p-6 rounded-lg border ${
-//                           isAccepted 
-//                             ? "border-[#3f4f54] border-l-4 bg-white/90 dark:bg-gray-800/90 shadow-md" 
-//                             : "border-[#e8ddcc] hover:border-[#a68a70] bg-white/80 dark:bg-gray-800/80 dark:border-gray-700 dark:hover:border-green-500"
-//                         } transition-all hover:shadow-lg`}
-//                       >
-//                         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-//                           <div className="flex-1">
-//                             {isEditing ? (
-//                               <EditIdeaPanel
-//                                 editForm={editForm}
-//                                 handleEditChange={handleEditChange}
-//                                 handleUpdateIdea={handleUpdateIdea}
-//                                 setEditingIdea={setEditingIdea}
-//                                 ideaId={idea.idea_id}
-//                                 className="mb-4"
-//                               />
-//                             ) : (
-//                               <>
-//                                 <div className="flex flex-1 gap-2">
-//                                   <IdeaTitle idea={idea} />
-//                                 </div>
-  
-//                                 <p className="text-[#5e4636] dark:text-gray-300 mb-4 text-justify leading-relaxed">
-//                                   <HighlightedDescription
-//                                     description={idea.description}
-//                                     dynamicFields={dynamicFields}
-//                                     formData={formData}
-//                                     isComparisonMode={isComparisonMode}
-//                                   />
-//                                   {/* Add the IdeaAnalysis component here */}
-//                                   <IdeaAnalysis
-//                                     idea={idea}
-//                                     dynamicFields={dynamicFields}
-//                                     formData={formData}
-//                                     isComparisonMode={isComparisonMode}
-//                                   />
-//                                 </p>
-  
-//                                 <div className="flex flex-wrap gap-2">
-//                                   <button
-//                                     onClick={() => handleEdit(idea)}
-//                                     className="px-4 py-2 bg-[#f8fbe5] hover:bg-[#ebf4b8] text-[#5e4636] border border-[#d6cbbf] dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
-//                                     title="Edit idea"
-//                                   >
-//                                     <Edit2 size={16} />
-//                                   </button>
-  
-//                                   {isAccepted ? (
-//                                     <button
-//                                       onClick={() =>
-//                                         handleUnaccept(idea.idea_id)
-//                                       }
-//                                       className="w-32 bg-[#ace000] hover:bg-[#d2e660] text-white dark:bg-emerald-600 dark:hover:bg-emerald-700 px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
-//                                     >
-//                                       <Check size={16} /> Accepted
-//                                     </button>
-//                                   ) : (
-//                                     <button
-//                                       onClick={() => handleAccept(idea.idea_id)}
-//                                       className="w-32 bg-white hover:bg-[#f5e6d8] text-[#5e4636] border border-[#d6cbbf] dark:bg-gray-600 dark:hover:bg-emerald-700 dark:text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
-//                                     >
-//                                       Accept
-//                                     </button>
-//                                   )}
-  
-//                                   <button
-//                                     onClick={() => handleReject(idea.idea_id)}
-//                                     className="px-4 py-2 bg-red-500 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 transition-colors"
-//                                   >
-//                                     <X size={16} /> Reject
-//                                   </button>
-//                                   <IdeaMetadata
-//                                     ideaMetadata={ideaMetadata[idea.idea_id]}
-//                                   />
-//                                 </div>
-//                               </>
-//                             )}
-//                           </div>
-//                         </div>
-//                       </div>
-//                     );
-//                   })}
-//                 </div>
+//               <div className="flex items-center justify-center h-full aspect-square bg-[#f5e6d8] dark:bg-gray-700 rounded-lg border border-[#d6cbbf] dark:border-gray-600">
+//                 {loadingStates[ideaId] ? (
+//                   <div className="loader"></div>
+//                 ) : (
+//                   <span className="text-[#5a544a] dark:text-gray-400">
+//                     Generating image...
+//                   </span>
+//                 )}
 //               </div>
 //             )}
-  
+            
+//             {/* Image controls for regenerating */}
+//             {generatedImages[ideaId] && (
+//               <div className="mt-2 flex flex-wrap gap-2 items-center justify-center">
+                
+                
+//                 <AdvancedRegenControls
+//                   idea={idea}
+//                   onRegenerate={handleRegenerateImage}
+//                   isLoading={loadingStates[ideaId]}
+//                 />
+                
+//                 <button
+//                   onClick={() => handleViewHistory(idea)}
+//                   className="px-3 py-2 bg-white hover:bg-[#f5e6d8] text-[#5e4636] border border-[#d6cbbf] dark:bg-gradient-to-r dark:from-purple-500 dark:to-indigo-600 dark:hover:from-purple-600 dark:hover:to-indigo-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
+//                   title="Versions History"
+//                 >
+//                   <Clock size={16} />
+//                 </button>
+//               </div>
+//             )}
+//           </div>
+//         )}
+//       </div>
+//     </div>
+//   );
+// })}
+//     </div>
+//   </div>
+// )}
 //             {error && (
 //               <div
 //                 className="bg-red-100 dark:bg-red-900 text-red-600 dark:text-white px-4 py-3 rounded-lg border border-red-200 dark:border-transparent"
@@ -2109,12 +1978,75 @@
 //         </main>
 //       </div>
 //       <DocumentParamsModal />
+//       <style>{`
+//       .loader {
+//     animation: rotate 1s infinite;
+//     height: 50px;
+//     width: 50px;
+//   }
+
+//   .loader:before,
+//   .loader:after {
+//     border-radius: 50%;
+//     content: "";
+//     display: block;
+//     height: 20px;
+//     width: 20px;
+//   }
+//   .loader:before {
+//     animation: ball1 1s infinite;
+//     background-color: #fff;
+//     box-shadow: 30px 0 0 #ff3d00;
+//     margin-bottom: 10px;
+//   }
+//   .loader:after {
+//     animation: ball2 1s infinite;
+//     background-color: #ff3d00;
+//     box-shadow: 30px 0 0 #fff;
+//   }
+
+//   @keyframes rotate {
+//     0% { transform: rotate(0deg) scale(0.8) }
+//     50% { transform: rotate(360deg) scale(1.2) }
+//     100% { transform: rotate(720deg) scale(0.8) }
+//   }
+
+//   @keyframes ball1 {
+//     0% {
+//       box-shadow: 30px 0 0 #ff3d00;
+//     }
+//     50% {
+//       box-shadow: 0 0 0 #ff3d00;
+//       margin-bottom: 0;
+//       transform: translate(15px, 15px);
+//     }
+//     100% {
+//       box-shadow: 30px 0 0 #ff3d00;
+//       margin-bottom: 10px;
+//     }
+//   }
+
+//   @keyframes ball2 {
+//     0% {
+//       box-shadow: 30px 0 0 #fff;
+//     }
+//     50% {
+//       box-shadow: 0 0 0 #fff;
+//       margin-top: -20px;
+//       transform: translate(15px, 15px);
+//     }
+//     100% {
+//       box-shadow: 30px 0 0 #fff;
+//       margin-top: 0;
+//     }
+//   }
+  
+//       `}</style>
 //     </div>
 //   );
 // };
 
 // export default IdeaForm;
-
 
 
 
@@ -2529,17 +2461,12 @@ const IdeaForm = () => {
     const ideaToAccept = ideas.find((idea) => idea.idea_id === ideaId);
     if (ideaToAccept) {
       setAcceptedIdeas((prev) => {
-        // Only add if not already in acceptedIdeas
+        // Check if the idea is already in acceptedIdeas
         if (!prev.some(idea => idea.idea_id === ideaId)) {
           const newAcceptedIdeas = [ideaToAccept, ...prev];
           
-          // Only trigger generation if:
-          // 1. No image exists AND
-          // 2. Not already loading AND
-          // 3. Not in the middle of batch generation
-          if (!generatedImages[ideaId] && 
-              !loadingStates[ideaId] && 
-              !imageGenerationInProgress) {
+          // Only trigger sequential generation if no image exists
+          if (!generatedImages[ideaId]) {
             setTimeout(() => {
               generateImagesSequentially();
             }, 100);
@@ -2554,12 +2481,10 @@ const IdeaForm = () => {
 
   const handleUnaccept = (ideaId) => {
     setAcceptedIdeas((prev) => prev.filter((idea) => idea.idea_id !== ideaId));
-    setGeneratedImages((prev) => {
-      const newImages = { ...prev };
-      delete newImages[ideaId];
-      return newImages;
-    });
-
+    
+    // We've removed the code that deletes the image from generatedImages
+    // This way, the image remains cached for future use
+    
     if (acceptedIdeas.length <= 1) {
       setShowImageGeneration(false);
     }
@@ -2654,35 +2579,7 @@ const IdeaForm = () => {
     }
   };
 
-  const handleReject = async (ideaId) => {
-    try {
-      const response = await ideaService.deleteIdea(ideaId);
-
-      if (response.data.success) {
-        // Remove the idea from both ideas and acceptedIdeas arrays
-        setIdeas(ideas.filter((idea) => idea.idea_id !== ideaId));
-        setAcceptedIdeas(
-          acceptedIdeas.filter((idea) => idea.idea_id !== ideaId)
-        );
-
-        // Remove the generated image for this idea
-        setGeneratedImages((prev) => {
-          const newImages = { ...prev };
-          delete newImages[ideaId];
-          return newImages;
-        });
-
-        // If we're in image generation view and there are no more accepted ideas, go back to ideas view
-        if (showImageGeneration && acceptedIdeas.length <= 1) {
-          setShowImageGeneration(false);
-        }
-      } else {
-        setError(response.data.error || "Failed to delete idea");
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || "Failed to connect to the server");
-    }
-  };
+ 
 
   const handleRegenerateImage = useCallback(
     async (params) => {
@@ -2994,15 +2891,16 @@ const IdeaForm = () => {
   
 
   useEffect(() => {
-    // Get only ideas that truly need images (no image AND not loading)
-    const ideasNeedingImages = acceptedIdeas.filter(
-      idea => !generatedImages[idea.idea_id] && !loadingStates[idea.idea_id]
+    // Check if there are any ideas without images
+    const hasIdeasWithoutImages = acceptedIdeas.some(
+      idea => !generatedImages[idea.idea_id]
     );
-  
-    if (ideasNeedingImages.length > 0 && !imageGenerationInProgress) {
+    
+    // Only trigger batch generation if there are ideas without images
+    if (hasIdeasWithoutImages && !imageGenerationInProgress) {
       generateImagesSequentially();
     }
-  }, [acceptedIdeas, imageGenerationInProgress, generatedImages, loadingStates]);
+  }, [acceptedIdeas, imageGenerationInProgress, generatedImages]);
 
   const handleRestoreVersion = (restoredData) => {
     // Handle both complete version restore and single image restore
@@ -3955,10 +3853,7 @@ const fillFormWithDocParams = () => {
           </span>
         )}
       </h3>
-      {/* <ComparisonModeToggle
-        isEnabled={isComparisonMode}
-        onToggle={() => setIsComparisonMode((prev) => !prev)}
-      /> */}
+      
     </div>
     {/* Modified idea cards with integrated image generation */}
     <div className="space-y-6">
@@ -4071,13 +3966,7 @@ const fillFormWithDocParams = () => {
             {/* Image controls for regenerating */}
             {generatedImages[ideaId] && (
               <div className="mt-2 flex flex-wrap gap-2 items-center justify-center">
-                {/* <button
-                  onClick={() => generateImageForIdea(idea)}
-                  className="px-3 py-2 bg-[#556052] hover:bg-[#394037] text-white rounded-lg flex items-center gap-2 transition-colors"
-                  disabled={loadingStates[ideaId]}
-                >
-                  <RotateCw size={16} />
-                </button> */}
+                
                 
                 <AdvancedRegenControls
                   idea={idea}
