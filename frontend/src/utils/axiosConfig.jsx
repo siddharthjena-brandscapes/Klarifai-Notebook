@@ -187,10 +187,16 @@ export const ideaService = {
     }
   },
 
-  // // Update project
-  // updateProject: (projectId, data) => {
-  //   return axiosInstance.put(`/ideas/projects/${projectId}/`, data);
-  // },
+  // Update project with validation
+  updateProject: (projectId, data) => {
+    
+    if (projectId === undefined || projectId === null || 
+        typeof projectId === 'object' || isNaN(Number(projectId))) {
+      console.error("Invalid project ID for updateProject:", projectId);
+      return Promise.reject(new Error("Invalid project ID. Expected a number or numeric string."));
+    }
+    return axiosInstance.put(`/ideas/projects/${projectId}/`, data);
+  },
 
   // Delete project
   deleteProject: (projectId) => {
