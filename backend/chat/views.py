@@ -94,22 +94,22 @@ if not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Configure Google Generative AI
-GOOGLE_API_KEY = "AIzaSyDOKm5KYY6LjLa20IbZg027fQauwyMOKWQ"
-genai.configure(api_key=GOOGLE_API_KEY)
-# model = genai.GenerativeModel('gemini-1.5-flash')
-GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash', 
-    generation_config={
-        'temperature': 0.7,
-        'max_output_tokens': 1024
-    },
-    safety_settings={
-        genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_NONE,
-        genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-        genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-        genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE
-    }
-)
+# # Configure Google Generative AI
+# GOOGLE_API_KEY = "AIzaSyDOKm5KYY6LjLa20IbZg027fQauwyMOKWQ"
+# genai.configure(api_key=GOOGLE_API_KEY)
+# # model = genai.GenerativeModel('gemini-1.5-flash')
+# GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash', 
+#     generation_config={
+#         'temperature': 0.7,
+#         'max_output_tokens': 1024
+#     },
+#     safety_settings={
+#         genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_NONE,
+#         genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+#         genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+#         genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE
+#     }
+# )
 
 class SignupView(APIView):
     # Explicitly set permission to allow any user (including unauthenticated)
@@ -2145,6 +2145,8 @@ class ChatView(APIView):
             )
 
     def post(self, request):
+
+        user = request.user
         try:
             # Extract data with more robust handling
             message = request.data.get('message')
@@ -2176,7 +2178,7 @@ class ChatView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            user = request.user
+
 
             conversation_context = ""
             if conversation_id:
@@ -2197,7 +2199,7 @@ class ChatView(APIView):
                         context_messages = []
                         for msg in recent_messages:
                             prefix = "User: " if msg.role == 'user' else "Assistant: "
-                            context_messages.append(f"{prefix}{msg.content[:150]}...")
+                            context_messages.append(f"{prefix}{msg.content[:400]}...")
                         
                         conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
                     
@@ -2371,7 +2373,7 @@ class ChatView(APIView):
             # Get answer based on mode
             if general_chat_mode:
                 # Process request in general chat mode (no documents needed)
-                answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format)
+                answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format, user=user)
                 print("Generated response using general chat mode")
             else:
                 # Process with documents
@@ -2387,8 +2389,9 @@ class ChatView(APIView):
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
                         web_knowledge_response, web_sources = self.get_web_knowledge_response(
-                            message, 
-                            document_context=similar_contents  # Pass document context to enhance web search
+                            message,
+                            user=user,
+                            document_context=similar_contents  # Pass document context to enhance web search  
                         )
                         print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
                         
@@ -2411,7 +2414,7 @@ class ChatView(APIView):
                     # No document content found
                     if use_web_knowledge:
                         # Only web knowledge available
-                        web_knowledge_response, web_sources = self.get_web_knowledge_response(message)
+                        web_knowledge_response, web_sources = self.get_web_knowledge_response(message,user=user)
                         answer = web_knowledge_response
                         print("Using web knowledge response as document search returned no results")
                     else:
@@ -2429,11 +2432,11 @@ class ChatView(APIView):
             
             # Generate follow-up questions (either from documents or general chat)
             if general_chat_mode:
-                follow_up_questions = self.generate_general_follow_up_questions(message, clean_response)
+                follow_up_questions = self.generate_general_follow_up_questions(message, clean_response, user=user)
             else:
                 if all_chunks:
                     context_texts = [chunk.get('text', '') for chunk in all_chunks[:3]]
-                    follow_up_questions = self.generate_follow_up_questions(context_texts)
+                    follow_up_questions = self.generate_follow_up_questions(context_texts, user=user)
                 else:
                     follow_up_questions = [
                         "What else would you like to know about this document?",
@@ -2565,7 +2568,7 @@ class ChatView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    def get_web_knowledge_response(self, query, document_context=None):
+    def get_web_knowledge_response(self, query, user=None, document_context=None):
         """
         Search the web for information and generate a response, using document context to enhance the search.
         
@@ -2664,7 +2667,9 @@ class ChatView(APIView):
                 from google import genai
                 
                 # Get API key from environment
-                GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
+                user_api_tokens = UserAPITokens.objects.get(user=user)
+                GOOGLE_API_KEY = user_api_tokens.gemini_token
+
                 if not GOOGLE_API_KEY:
                     logger.error("GEMINI_API_KEY not found in environment variables.")
                     return "I couldn't access web search. API key is missing.", []
@@ -2783,7 +2788,7 @@ class ChatView(APIView):
             logger.error(f"Error in web knowledge search: {str(e)}", exc_info=True)
             return f"An error occurred while searching the web: {str(e)}", []
 
-    def search_web(self, query, max_results=5):
+    def search_web(self, query, max_results=5, user=None):
         """Search the web using Google Genai and return results"""
         try:
             # Initialize Google Genai client and tools
@@ -2792,9 +2797,10 @@ class ChatView(APIView):
             from google import genai
             
             # Get API key from environment
-            GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
+            user_api_tokens = UserAPITokens.objects.get(user=user)
+            GOOGLE_API_KEY = user_api_tokens.gemini_token
             if not GOOGLE_API_KEY:
-                logger.error("GEMINI_API_KEY not found in environment variables.")
+                logger.error("GOOGLE_API_KEY not found in environment variables.")
                 return []
             
             # Initialize Google Genai client
@@ -3633,7 +3639,15 @@ class ChatView(APIView):
             RECENT CONVERSATION HISTORY:
             {conversation_context}
             
-            Please consider this conversation history when providing your response to maintain continuity.
+            The above messages are the previous parts of the same ongoing conversation with the user. 
+            When generating your response:
+            - Assume that the user may be referring back to earlier topics or questions from this history.
+            - Resolve any references, clarifications, or follow-up questions based on this conversation history.
+            - Maintain consistency with the user's earlier context, assumptions, and preferred response style if any.
+            - If something from the conversation history clearly answers or helps answer the current question, incorporate it thoughtfully.
+            - If there is ambiguity, prefer interpretations that align with prior conversation context.
+            
+            Please use this conversation history to maintain continuity, relevance, and coherence in your response.
             """
         # Get project description if available
         project_description = self._get_project_description(query)
@@ -3867,7 +3881,15 @@ class ChatView(APIView):
             RECENT CONVERSATION HISTORY:
             {conversation_context}
             
-            Please consider this conversation history when providing your response to maintain continuity.
+            The above messages are the previous parts of the same ongoing conversation with the user. 
+            When generating your response:
+            - Assume that the user may be referring back to earlier topics or questions from this history.
+            - Resolve any references, clarifications, or follow-up questions based on this conversation history.
+            - Maintain consistency with the user's earlier context, assumptions, and preferred response style if any.
+            - If something from the conversation history clearly answers or helps answer the current question, incorporate it thoughtfully.
+            - If there is ambiguity, prefer interpretations that align with prior conversation context.
+            
+            Please use this conversation history to maintain continuity, relevance, and coherence in your response.
             """
         
         # Get project description if available
@@ -4014,7 +4036,7 @@ class ChatView(APIView):
             return ""
     
 
-    def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural'):
+    def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural', user=None):
         """
         Generate an answer for general chat mode, optionally using web knowledge.
         
@@ -4088,7 +4110,7 @@ class ChatView(APIView):
             try:
                 # Step 1: Search the web using DuckDuckGo
                 print(f"Searching web for: {query}")
-                web_results = self.get_web_knowledge_response(query, document_context=None )
+                web_results = self.get_web_knowledge_response(query, user=user, document_context=None )
                 
                 if not web_results:
                     return "I couldn't find relevant information on the web for your query."
@@ -4441,7 +4463,8 @@ class ChatView(APIView):
         return selected_context, selected_sources
             
     # Keep general follow-up question generation as is
-    def generate_general_follow_up_questions(self, question, answer):
+    def generate_general_follow_up_questions(self, question, answer, user=None):
+        
         prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
         The questions should be short, interesting, and directly related to the topic.
@@ -4452,7 +4475,13 @@ class ChatView(APIView):
         """
         
         try:
-            response = GENERATIVE_MODEL.generate_content(prompt)
+            user_api_tokens = UserAPITokens.objects.get(user=user)
+            gemini_api_key = user_api_tokens.gemini_token
+            genai.configure(api_key=gemini_api_key)
+            
+            # Create a generative model instance
+            model = genai.GenerativeModel("gemini-2.0-flash-exp")
+            response = model.generate_content(prompt)
             questions = response.text.split('\n')
             # Filter out empty lines and remove numbering if present
             questions = [q.strip().lstrip('0123456789. ') for q in questions if q.strip()]
@@ -4465,7 +4494,7 @@ class ChatView(APIView):
             ]
             
     # Keep document follow-up questions as is
-    def generate_follow_up_questions(self, context):
+    def generate_follow_up_questions(self, context, user=None):
         context_sample = "\n".join(context[:3]) if context else ""
         prompt = f"""
         Based on this context, suggest 3 relevant follow-up questions, the length of the questions should be short:
@@ -4473,7 +4502,13 @@ class ChatView(APIView):
         """
         
         try:
-            response = GENERATIVE_MODEL.generate_content(prompt)
+            user_api_tokens = UserAPITokens.objects.get(user=user)
+            gemini_api_key = user_api_tokens.gemini_token
+            genai.configure(api_key=gemini_api_key)
+            
+            # Create a generative model instance
+            model = genai.GenerativeModel("gemini-2.0-flash-exp")
+            response = model.generate_content(prompt)
             questions = response.text.split('\n')
             # Filter out empty lines and remove numbering if present
             questions = [q.strip().lstrip('0123456789. ') for q in questions if q.strip()]
