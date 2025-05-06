@@ -512,7 +512,7 @@ class DocumentProcessingMixin:
             
             # Then extract text from the resulting audio file
             print(f"Starting audio transcription...")
-            extracted_text = self.extract_text_from_audio(audio_path, user)
+            extracted_text = self.extract_text_from_audio(audio_path, user=user)
             
             print(f"Audio transcription completed, text length: {len(extracted_text) if extracted_text else 0}")
             
@@ -528,7 +528,7 @@ class DocumentProcessingMixin:
             logger.error(f"Error extracting text from video: {str(e)}")
             return f"Error transcribing video: {str(e)}"
 
-    def process_document_from_text(self, text, filename, user):
+    def process_document_from_text(self, text, filename):
         """
         Process document directly from provided text.
         For use with transcripts that are already extracted.
@@ -592,25 +592,24 @@ class DocumentProcessingMixin:
         Extract text from audio files using Google's Gemini API.
         For large files, chunks the audio before transcription.
         Returns the transcribed text.
-       
+        
         Args:
             file_path: Path to the audio file
             user: Django user object to get API token
         """
- 
-       
+
         logger = logging.getLogger(__name__)
-       
+        
         # Set up the transcripts directory
         TRANSCRIPT_DIR = "transcripts"
         os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
-       
+        
         # Audio chunking settings
         CHUNK_LENGTH_MINUTES = 5
         CHUNK_THRESHOLD_MB = 20
         DURATION_THRESHOLD_MINUTES = 10
         MAX_RETRIES = 3
-       
+        
         try:
             # Get the user's Gemini API token
             gemini_api_key = None
@@ -618,84 +617,84 @@ class DocumentProcessingMixin:
                 try:
                     user_api_tokens = UserAPITokens.objects.get(user=user)
                     gemini_api_key = user_api_tokens.gemini_token
-                   
+                    
                     # If no token is saved for the user, use a fallback mechanism or raise an error
                     if not gemini_api_key:
                         logger.warning(f"No Gemini API token found for user {user.username}")
                         # Optional: You could implement a fallback or use an environment variable
-                        gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+                        gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
                         if not gemini_api_key:
                             raise ValueError("Gemini API token is required for processing audio files")
-                       
+                        
                 except UserAPITokens.DoesNotExist:
                     logger.error(f"No API tokens record found for user {user.username}")
                     raise ValueError("User API tokens not configured")
             else:
                 # Fallback to environment variable if no user provided
-                gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+                gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
                 if not gemini_api_key:
                     raise ValueError("Gemini API token is required for processing audio files")
-           
+            
             # Configure the Gemini API with the retrieved key
             from google import generativeai as genai
             genai.configure(api_key=gemini_api_key)
-           
+            
             # Create a generative model instance
-            model = genai.GenerativeModel("gemini-2.0-flash")
-           
+            model = genai.GenerativeModel("gemini-2.0-flash-exp")
+            
             # Generate a unique base filename for this transcription
             base_filename = f"audio_transcript_{uuid.uuid4().hex}"
             full_transcript = ""
             temp_files = []
-           
+            
             # Check if audio file needs chunking
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-           
+            
             # Load audio file to check duration using MoviePy
             audio_clip = AudioFileClip(file_path)
             duration_minutes = audio_clip.duration / 60  # Convert seconds to minutes
-           
+            
             logger.info(f"Audio file: {file_path}, Size: {file_size_mb:.2f}MB, Duration: {duration_minutes:.2f} minutes")
-           
+            
             # Determine if chunking is needed
             need_chunking = False
             if file_size_mb > CHUNK_THRESHOLD_MB or duration_minutes > DURATION_THRESHOLD_MINUTES:
                 need_chunking = True
                 logger.info(f"File exceeds size/duration thresholds, will chunk for processing")
-           
+            
             if need_chunking:
                 # Calculate parameters for chunking
                 chunk_length_seconds = CHUNK_LENGTH_MINUTES * 60
                 overlap_seconds = 5  # 5 second overlap
                 total_chunks = int(audio_clip.duration / chunk_length_seconds) + (1 if audio_clip.duration % chunk_length_seconds > 0 else 0)
-               
+                
                 logger.info(f"Splitting audio into {total_chunks} chunks of {CHUNK_LENGTH_MINUTES} minutes each")
-               
+                
                 for i in range(total_chunks):
                     # Calculate start and end times with overlap
                     start_time = max(0, i * chunk_length_seconds - overlap_seconds) if i > 0 else 0
                     end_time = min(audio_clip.duration, (i + 1) * chunk_length_seconds + overlap_seconds)
-                   
+                    
                     # Create a subclip
                     chunk = audio_clip.subclipped(start_time, end_time)
-                   
+                    
                     # Export the chunk to a temporary file
                     chunk_filename = f"{os.path.splitext(file_path)[0]}_chunk_{i}.mp3"
                     chunk.write_audiofile(chunk_filename, codec='mp3')
                     temp_files.append(chunk_filename)
                     chunk.close()  # Close the subclip to free resources
-                   
+                    
                     # Process the chunk
                     logger.info(f"Processing chunk {i + 1}/{total_chunks}")
-                   
+                    
                     # Transcribe each chunk with retry logic
                     retry_count = 0
                     success = False
-                   
+                    
                     while retry_count < MAX_RETRIES and not success:
                         try:
                             uploaded_file = genai.upload_file(path=chunk_filename)
-                           
+                            
                             # Define the prompt for transcription
                             prompt = """You are a transcription and translation assistant.
 
@@ -723,18 +722,18 @@ class DocumentProcessingMixin:
                                     Only output the above format. Nothing else.
 
                                     """
-                           
+                            
                             # Generate the transcription
                             response = model.generate_content([prompt, uploaded_file])
                             chunk_transcription = response.text
-                           
+                            
                             # Add a separator between chunks
                             if i > 0:
                                 full_transcript += "\n\n--- NEXT SEGMENT ---\n\n"
-                           
+                            
                             full_transcript += chunk_transcription
                             success = True
-                           
+                            
                         except Exception as e:
                             retry_count += 1
                             logger.error(f"Error in chunk transcription (attempt {retry_count}): {str(e)}")
@@ -742,34 +741,34 @@ class DocumentProcessingMixin:
                                 full_transcript += f"\n\n[Error transcribing segment {i + 1}: {str(e)}]\n\n"
                             else:
                                 time.sleep(2)  # Wait before retry
-               
+                
                 # Close the main audio clip
                 audio_clip.close()
-                   
+                    
             else:
                 # Process the entire file at once if it's small enough
                 logger.info("Processing audio file in a single pass")
                 audio_clip.close()  # Close the clip since we're not using it for chunking
-               
+                
                 uploaded_file = genai.upload_file(path=file_path)
-               
+                
                 # Define the prompt for transcription
                 prompt = """Transcribe this audio. Include:
                 - Exact words spoken
                 - Speaker labels
                 - Timestamps only at speaker change
-               
+                
                 Do not summarize or expand."""
-               
+                
                 # Generate the transcription
                 response = model.generate_content([prompt, uploaded_file])
                 full_transcript = response.text
-           
+            
             # Save the full transcription as a text file
             txt_path = os.path.join(TRANSCRIPT_DIR, f"{base_filename}.txt")
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(full_transcript)
-           
+            
             # Clean up temporary chunk files
             for temp_file in temp_files:
                 try:
@@ -778,17 +777,17 @@ class DocumentProcessingMixin:
                         logger.info(f"Removed temporary file: {temp_file}")
                 except Exception as e:
                     logger.error(f"Error removing file {temp_file}: {str(e)}")
-           
+            
             # Extract the text from the saved text file using the existing method
             extracted_text = self.extract_text_from_txt(txt_path)
-           
+            
             return extracted_text
-       
+        
         except Exception as e:
             logger.error(f"Error transcribing audio file: {str(e)}")
             return f"Error transcribing audio: {str(e)}"
-        
-    def extract_text_from_file(self, file_path):
+            
+    def extract_text_from_file(self, file_path, user=None):
         """Extract text from different file types."""
         from pathlib import Path
         ext = Path(file_path).suffix.lower()
@@ -804,7 +803,7 @@ class DocumentProcessingMixin:
             return self.extract_text_from_txt(file_path)
         
         elif ext in ['.mp3', '.mp4', '.wav', '.mpeg']:
-            return self.extract_text_from_audio(file_path)
+            return self.extract_text_from_audio(file_path, user)
         else:
             return ""
 
@@ -1327,10 +1326,10 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         # Extract text based on file type
                         if is_video_file:
                             print(f"Processing video file: {file.name}")
-                            extracted_text = self.extract_text_from_video(file_path, user)
+                            extracted_text = self.extract_text_from_video(file_path, user=user)
                         else:  # audio file
                             print(f"Processing audio file: {file.name}")
-                            extracted_text = self.extract_text_from_audio(file_path, user)
+                            extracted_text = self.extract_text_from_audio(file_path, user=user)
                         
                         if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
                             return Response({
@@ -1372,7 +1371,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         os.unlink(transcript_file_path)
                         
                         # Process the document for RAG
-                        processed_data = self.process_document_from_text(extracted_text, transcript_filename, user)
+                        processed_data = self.process_document_from_text(extracted_text, transcript_filename)
                         
                         # Create ProcessedIndex
                         ProcessedIndex.objects.create(
@@ -1791,7 +1790,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     return self.process_complex_document_with_llamaparse(file_path, file.name, user)
                 else:
                     # Original simple document processing
-                    extracted_text = self.extract_text_from_file(file_path)
+                    extracted_text = self.extract_text_from_file(file_path, user=user)
                 
                 if not extracted_text:
                     raise ValueError("No content could be extracted from the document")
@@ -1849,6 +1848,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error in process_document: {str(e)}")
             raise
+
 
 
 
