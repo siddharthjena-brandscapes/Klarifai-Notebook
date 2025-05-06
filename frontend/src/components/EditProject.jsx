@@ -81,7 +81,8 @@ const EditProject = ({ project, modules, onClose, onUpdate }) => {
       ? projectData.customCategory 
       : projectData.category;
 
-    if (!projectData.name || !projectData.description || !finalCategory) {
+    if (!projectData.name ||
+       !finalCategory) {
       setError('Please fill in all required fields');
       setLoading(false);
       return;
@@ -187,6 +188,36 @@ const EditProject = ({ project, modules, onClose, onUpdate }) => {
                     </option>
                   ))}
                 </select>
+                {projectData.category === "Other" && (
+                <div className="mt-4">
+                  <label
+                    htmlFor="customCategory"
+                    className="block text-sm font-medium dark:text-gray-200 mb-2"
+                  >
+                    Custom Category Name
+                  </label>
+                  <input
+                    type="text"
+                    id="customCategory"
+                    className="w-full px-4 py-2 dark:bg-white/5 border dark:border-gray-300/20 rounded-lg dark:text-white text-[#5e4636]  focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
+                    placeholder="Enter your custom category"
+                    value={projectData.customCategory}
+                    onChange={(e) =>
+                      setProjectData((prev) => ({
+                        ...prev,
+                        customCategory: e.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+                
+              )}
+              {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-300">
+              {error}
+            </div>
+          )}
   
                 {/* Module selection */}
                 <div>
