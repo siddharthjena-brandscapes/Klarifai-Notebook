@@ -187,10 +187,10 @@ export const ideaService = {
     }
   },
 
-  // Update project
-  updateProject: (projectId, data) => {
-    return axiosInstance.put(`/ideas/projects/${projectId}/`, data);
-  },
+  // // Update project
+  // updateProject: (projectId, data) => {
+  //   return axiosInstance.put(`/ideas/projects/${projectId}/`, data);
+  // },
 
   // Delete project
   deleteProject: (projectId) => {

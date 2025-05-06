@@ -130,5 +130,5 @@ yarl==1.18.3
 zope.interface==7.2
 reportlab==4.3.1
 beautifulsoup4==4.13.3
-moviepy
+moviepy==2.1.2
 google-genai==1.13.0
