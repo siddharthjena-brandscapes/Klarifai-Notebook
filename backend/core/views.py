@@ -3,6 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
 from .models import Project, ProjectModule, DocumentQAModule, IdeaGeneratorModule
+from chat.models import UserAPITokens
 from django.db import transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.authentication import TokenAuthentication
@@ -82,6 +83,7 @@ def archived_projects(request):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def enhance_prompt_with_ai(request):
+    user=request.user
     try:
         # Get the user-written prompt from the request
         data = request.data
@@ -94,7 +96,7 @@ def enhance_prompt_with_ai(request):
             }, status=400)
        
         # Initialize Gemini model
-        model = initialize_gemini()
+        model = initialize_gemini(user=user)
         if not model:
             return JsonResponse({
                 'status': 'error',
@@ -229,14 +231,16 @@ def extract_text_from_txt(txt_file):
         
     return text
  
-def initialize_gemini():
-    api_key = "AIzaSyC5Dqjx0DLbkRXH9YWqWZ1SPTK0w0C4oFY"  # In production, get this from settings or env vars
+def initialize_gemini(user=None):
+
+    user_api_tokens = UserAPITokens.objects.get(user=user)
+    api_key = user_api_tokens.gemini_token 
    
     if not api_key:
         return None
    
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-1.5-pro')
+    return genai.GenerativeModel('gemini-2.0-flash')
  
 def generate_prompt(document_text):
     model = initialize_gemini()
