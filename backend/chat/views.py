@@ -2128,6 +2128,7 @@ from agno.tools.duckduckgo import DuckDuckGoTools
 
 logger = logging.getLogger(__name__)
 
+
 class ChatView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -2146,7 +2147,6 @@ class ChatView(APIView):
             )
 
     def post(self, request):
-
         user = request.user
         try:
             # Extract data with more robust handling
@@ -2179,7 +2179,15 @@ class ChatView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-
+            # Process URLs in the query - new feature
+            modified_message, url_context, extracted_urls = self.process_urls_in_query(message)
+            has_url_content = bool(url_context)
+            
+            # Log URL processing results
+            if has_url_content:
+                print(f"URLs detected in query: {extracted_urls}")
+                print(f"Modified query: {modified_message}")
+                print(f"URL context size: {len(url_context)} characters")
 
             conversation_context = ""
             if conversation_id:
@@ -2217,8 +2225,8 @@ class ChatView(APIView):
                     # No conversation yet, that's fine
                     pass
             
-            # Skip document validation if in general chat mode
-            if not general_chat_mode:
+            # Skip document validation if in general chat mode or if URLs are present
+            if not general_chat_mode and not has_url_content:
                 # First, check for active document in session
                 active_document_id = request.session.get('active_document_id')
                 
@@ -2227,7 +2235,7 @@ class ChatView(APIView):
                     if active_document_id:
                         selected_documents = [active_document_id]
                 
-                # Validate document selection only when not in general chat mode
+                # Validate document selection only when not in general chat mode and no URLs are provided
                 if not selected_documents:
                     return Response(
                         {'error': 'Please select at least one document or set an active document'},
@@ -2243,6 +2251,7 @@ class ChatView(APIView):
             print(f"Response format: {response_format}")
             print(f"Response length: {response_length}")
             print(f"Has conversation context: {bool(conversation_context)}")
+            print(f"Has URL content: {has_url_content}")
 
             # Process document search early to get context for format detection
             all_chunks = []
@@ -2256,7 +2265,7 @@ class ChatView(APIView):
                         document__user=user
                     )
                     
-                    if not processed_docs.exists():
+                    if not processed_docs.exists() and not has_url_content:
                         return Response(
                             {'error': 'No valid documents found'},
                             status=status.HTTP_404_NOT_FOUND
@@ -2272,10 +2281,11 @@ class ChatView(APIView):
                         
                 except Exception as e:
                     print(f"Error fetching documents: {str(e)}")
-                    return Response(
-                        {'error': f'Document retrieval error: {str(e)}'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    if not has_url_content:
+                        return Response(
+                            {'error': f'Document retrieval error: {str(e)}'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
 
                 # Create a merged metadata store from all selected documents
                 all_metadata_store = []
@@ -2337,9 +2347,9 @@ class ChatView(APIView):
                 # Now search using the improved approach
                 if all_metadata_store:
                     print(f"Searching in {len(all_metadata_store)} chunks across all documents")
-                    # Get relevant content based on query
+                    # Get relevant content based on query - use modified_message if URLs detected
                     similar_contents, content_sources = self.search_similar_content(
-                        message, 
+                        modified_message if has_url_content else message, 
                         processed_docs,
                         all_metadata_store
                     )
@@ -2357,7 +2367,7 @@ class ChatView(APIView):
             # Check if we should auto-detect the response format
             if response_format == 'auto_detect':
                 context_snippets = [chunk.get('text', '') for chunk in all_chunks[:5]] if all_chunks else []
-                detected_format, secondary_format, confidence = self.detect_question_format(message, context_snippets)
+                detected_format, secondary_format, confidence = self.detect_question_format(modified_message if has_url_content else message, context_snippets)
                 
                 # Use the detected format if confidence is reasonable, otherwise default to 'natural'
                 if confidence >= 5.0:
@@ -2373,24 +2383,60 @@ class ChatView(APIView):
             
             # Get answer based on mode
             if general_chat_mode:
-                # Process request in general chat mode (no documents needed)
-                answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format, user=user)
-                print("Generated response using general chat mode")
-            else:
-                # Process with documents
-                if all_chunks:
-                    # First, generate document-based answer
-                    if response_length == 'short':
-                        document_answer = self.generate_short_response(message, similar_contents, content_sources, False, response_format, conversation_context)
-                    else:  # Default to comprehensive
-                        document_answer = self.generate_response(message, similar_contents, content_sources, False, response_format, conversation_context)
+                # For general chat mode, consider URL content if available
+                if has_url_content:
+                    # Create a hybrid prompt that includes the URL content
+                    augmented_query = f"""
+                    Please answer this question: {modified_message}
                     
-                    print(f"Generated document-based answer using {response_length} response length")
+                    The question references content from URLs, which is provided here:
+                    
+                    {url_context}
+                    
+                    Based on this URL content, answer the user's question.
+                    """
+                    
+                    # Use the existing general chat function but with our augmented query
+                    answer = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format, user=user)
+                    print("Generated response using general chat mode with URL content")
+                else:
+                    # Standard general chat response without URL content
+                    answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format, user=user)
+                    print("Generated response using general chat mode")
+            else:
+                # Document chat mode - now handles URL content too
+                document_content_exists = bool(all_chunks)
+                
+                if document_content_exists or has_url_content:
+                    # If we have URL content, add it to the context
+                    if has_url_content:
+                        # Add URL context to similar_contents and content_sources
+                        combined_contents = similar_contents.copy() if similar_contents else []
+                        combined_contents.append(url_context)
+                        
+                        combined_sources = content_sources.copy() if content_sources else []
+                        combined_sources.append("URL Content")
+                        
+                        # Generate response using combined context
+                        if response_length == 'short':
+                            document_answer = self.generate_short_response(modified_message, combined_contents, combined_sources, False, response_format, conversation_context)
+                        else:  # Default to comprehensive
+                            document_answer = self.generate_response(modified_message, combined_contents, combined_sources, False, response_format, conversation_context)
+                        
+                        print(f"Generated document-based answer with URL content using {response_length} response length")
+                    else:
+                        # Standard document-based response without URL content
+                        if response_length == 'short':
+                            document_answer = self.generate_short_response(message, similar_contents, content_sources, False, response_format, conversation_context)
+                        else:  # Default to comprehensive
+                            document_answer = self.generate_response(message, similar_contents, content_sources, False, response_format, conversation_context)
+                        
+                        print(f"Generated document-based answer using {response_length} response length")
                     
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
                         web_knowledge_response, web_sources = self.get_web_knowledge_response(
-                            message,
+                            modified_message if has_url_content else message,
                             user=user,
                             document_context=similar_contents  # Pass document context to enhance web search  
                         )
@@ -2398,10 +2444,10 @@ class ChatView(APIView):
                         
                         # Combine document and web responses
                         answer = self.combine_document_and_web_responses(
-                            message, 
+                            modified_message if has_url_content else message, 
                             document_answer, 
                             web_knowledge_response, 
-                            content_sources, 
+                            combined_sources if has_url_content else content_sources, 
                             web_sources,
                             response_format,
                             conversation_context,
@@ -2415,7 +2461,10 @@ class ChatView(APIView):
                     # No document content found
                     if use_web_knowledge:
                         # Only web knowledge available
-                        web_knowledge_response, web_sources = self.get_web_knowledge_response(message,user=user)
+                        web_knowledge_response, web_sources = self.get_web_knowledge_response(
+                            modified_message if has_url_content else message,
+                            user=user
+                        )
                         answer = web_knowledge_response
                         print("Using web knowledge response as document search returned no results")
                     else:
@@ -2430,17 +2479,30 @@ class ChatView(APIView):
             else:
                 clean_response = answer
                 source_info = "Web search results" if use_web_knowledge else ""
+                
+                # Add URL sources if applicable
+                if has_url_content:
+                    urls_domains = [self.extract_domain(url) for url in extracted_urls]
+                    url_sources = ", ".join(urls_domains)
+                    if source_info:
+                        source_info += f", URLs: {url_sources}"
+                    else:
+                        source_info = f"URLs: {url_sources}"
             
             # Generate follow-up questions (either from documents or general chat)
             if general_chat_mode:
-                follow_up_questions = self.generate_general_follow_up_questions(message, clean_response, user=user)
+                follow_up_questions = self.generate_general_follow_up_questions(
+                    modified_message if has_url_content else message, 
+                    clean_response, 
+                    user=user
+                )
             else:
                 if all_chunks:
                     context_texts = [chunk.get('text', '') for chunk in all_chunks[:3]]
                     follow_up_questions = self.generate_follow_up_questions(context_texts, user=user)
                 else:
                     follow_up_questions = [
-                        "What else would you like to know about this document?",
+                        "What else would you like to know about this content?",
                         "Would you like me to elaborate on any specific point?",
                         "Do you have any other questions I can help with?"
                     ]
@@ -2457,6 +2519,19 @@ class ChatView(APIView):
                         'snippet': chunk_text[:200] + "..." if len(chunk_text) > 200 else chunk_text,
                         'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
                     })
+                
+                # Add URL citations if applicable
+                if has_url_content:
+                    for idx, url in enumerate(extracted_urls):
+                        domain = self.extract_domain(url)
+                        citations.append({
+                            'source_file': domain,
+                            'page_number': 'URL',
+                            'section_title': 'URL Content',
+                            'snippet': f"Content from {domain}",
+                            'document_id': f"url_{idx}",
+                            'url': url
+                        })
                 
                 # Add web citations if applicable
                 if use_web_knowledge and web_sources:
@@ -2505,7 +2580,6 @@ class ChatView(APIView):
                 response_format=response_format
             )
 
-
             # Update or create memory buffer
             memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
                 conversation=conversation
@@ -2546,7 +2620,9 @@ class ChatView(APIView):
                 'use_web_knowledge': use_web_knowledge,
                 'general_chat_mode': general_chat_mode,
                 'response_length': response_length,  # Include in response for tracking
-                'response_format': response_format   # Include detected/used format in response
+                'response_format': response_format,   # Include detected/used format in response
+                'url_content_used': has_url_content,  # Flag if URL content was used
+                'extracted_urls': extracted_urls if has_url_content else []  # List of extracted URLs
             }
 
             # Print detailed chat response information
@@ -2555,6 +2631,9 @@ class ChatView(APIView):
             print(f"Mode: {'Web Knowledge' if use_web_knowledge else 'General Chat' if general_chat_mode else 'Document Chat'}")
             print(f"Format: {response_format}")
             print(f"Length: {response_length}")
+            print(f"URL content used: {has_url_content}")
+            if has_url_content:
+                print(f"Extracted URLs: {extracted_urls}")
             print(f"Assistant Response: {clean_response[:500]}...")  # First 500 chars
             print(f"Citation count: {len(citations)}")
             print(f"Follow-up Questions: {len(follow_up_questions)}")
@@ -2568,6 +2647,142 @@ class ChatView(APIView):
                 {'error': f'An unexpected error occurred: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    def scrape_webpage(self, url):
+        """Scrape content from a webpage"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
+            }
+
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove script and style elements
+            for script_or_style in soup(['script', 'style', 'header', 'footer', 'nav']):
+                script_or_style.decompose()
+                
+            # Extract title
+            title = soup.title.string if soup.title else "No title found"
+            
+            # Extract main content - focus on article, main, or div with content
+            content_elements = soup.select('article, main, .content, #content, .post, .entry')
+            
+            if not content_elements:
+                # If no specific content elements, get all paragraphs
+                paragraphs = soup.find_all('p')
+                content = ' '.join([p.get_text() for p in paragraphs])
+            else:
+                # Use the first content element found
+                content = content_elements[0].get_text()
+            
+            # Clean the content
+            content = re.sub(r'\s+', ' ', content).strip()
+            
+            return {
+                'title': title,
+                'content': content[:15000],  # Limit content length
+                'url': url
+            }
+        except Exception as e:
+            logger.error(f"Error scraping webpage {url}: {str(e)}")
+            return {
+                'title': 'Error scraping page',
+                'content': f"Could not retrieve content: {str(e)}",
+                'url': url
+            }
+
+    def extract_urls_from_text(self, text):
+        """
+        Extract URLs from text using regex pattern matching.
+        
+        Args:
+            text (str): The text to extract URLs from
+            
+        Returns:
+            list: List of extracted URLs
+        """
+        import re
+        
+        # Pattern to match URLs - handles http, https, www formats
+        url_pattern = r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+(?:/[-\w%!./?=&#+]*)*'
+        www_pattern = r'www\.(?:[-\w.]|(?:%[\da-fA-F]{2}))+(?:/[-\w%!./?=&#+]*)*'
+        
+        # Find all matches
+        http_urls = re.findall(url_pattern, text)
+        www_urls = re.findall(www_pattern, text)
+        
+        # Add http:// prefix to www URLs if they aren't already prefixed
+        processed_www_urls = []
+        for url in www_urls:
+            if not any(url in http_url for http_url in http_urls):
+                processed_www_urls.append(f"http://{url}")
+        
+        # Combine and return all URLs
+        return http_urls + processed_www_urls
+
+    def process_urls_in_query(self, query):
+        """
+        Process query to extract URLs, scrape their content, and return enhanced context.
+        
+        Args:
+            query (str): The user's query that may contain URLs
+            
+        Returns:
+            tuple: (modified_query, url_context, extracted_urls)
+        """
+        # Extract URLs from the query
+        extracted_urls = self.extract_urls_from_text(query)
+        
+        if not extracted_urls:
+            return query, "", []
+        
+        # Log found URLs
+        logger.info(f"Found {len(extracted_urls)} URLs in query: {extracted_urls}")
+        
+        # Scrape content from each URL
+        url_contents = []
+        successful_urls = []
+        
+        for url in extracted_urls:
+            try:
+                scraped_content = self.scrape_webpage(url)
+                if scraped_content and scraped_content.get('content'):
+                    url_contents.append({
+                        'url': url,
+                        'title': scraped_content.get('title', 'No title'),
+                        'content': scraped_content.get('content')
+                    })
+                    successful_urls.append(url)
+                    logger.info(f"Successfully scraped content from {url}")
+                else:
+                    logger.warning(f"No content retrieved from {url}")
+            except Exception as e:
+                logger.error(f"Error scraping URL {url}: {str(e)}")
+        
+        if not url_contents:
+            return query, "", extracted_urls
+        
+        # Build context from scraped content
+        url_context = "CONTENT FROM URLS IN QUERY:\n\n"
+        
+        for content in url_contents:
+            domain = self.extract_domain(content['url'])
+            url_context += f"Source: {domain}\n"
+            url_context += f"Title: {content['title']}\n"
+            # Limit content length to avoid exceeding token limits
+            url_context += f"Content: {content['content'][:5000]}...\n\n"
+        
+        # Create a modified query that references the URLs without including them
+        modified_query = query
+        for url in extracted_urls:
+            # Replace URLs with a more readable reference
+            domain = self.extract_domain(url)
+            modified_query = modified_query.replace(url, f"[content from {domain}]")
+        
+        return modified_query, url_context, extracted_urls
     
     def get_web_knowledge_response(self, query, user=None, document_context=None):
         """
@@ -2613,7 +2828,7 @@ class ChatView(APIView):
                 try:
                     # Extract context-aware keywords using OpenAI
                     keyword_response = client.chat.completions.create(
-                        model="gpt-3.5-turbo",  # Using a smaller model for efficiency
+                        model="gpt-4o",  # Using a smaller model for efficiency
                         messages=[
                             {"role": "system", "content": "You are a search optimization specialist who identifies the most effective search terms based on document context."},
                             {"role": "user", "content": keyword_prompt}
@@ -2639,7 +2854,7 @@ class ChatView(APIView):
                     """
                     
                     context_response = client.chat.completions.create(
-                        model="gpt-3.5-turbo",
+                        model="gpt-4o",
                         messages=[
                             {"role": "system", "content": "You extract the most relevant passages from documents."},
                             {"role": "user", "content": context_prompt}
@@ -2766,7 +2981,7 @@ class ChatView(APIView):
                 prompt = f"Please provide information about {enhanced_query}. Be concise and factual."
                 
                 fallback_response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model="gpt-4o",
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant providing factual information."},
                         {"role": "user", "content": prompt}
@@ -3053,7 +3268,7 @@ class ChatView(APIView):
         try:
             # Extract key information from document response to enhance web results integration
             analysis_response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "You are an expert analyst who extracts structured information from text."},
                     {"role": "user", "content": analyze_prompt}
@@ -3550,6 +3765,7 @@ class ChatView(APIView):
     def generate_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a response using the provided context and sources with web search capability.
+        Enhanced to handle URL content in context.
         
         Args:
             query (str): User's original query
@@ -3621,13 +3837,35 @@ class ChatView(APIView):
         if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents."
         
-        # Standard document-based response (no web search)
-        selected_context, selected_sources = self._prepare_context(context, sources)
+        # Check for URL content in the context
+        url_context = ""
+        document_context = []
+        document_sources = []
+        url_sources = []
+        
+        # Separate URL content from document content
+        for i, content_item in enumerate(context):
+            if i < len(sources) and sources[i] == "URL Content" and "CONTENT FROM URLS IN QUERY:" in content_item:
+                url_context = content_item
+                url_sources.append(sources[i])
+            else:
+                document_context.append(content_item)
+                if i < len(sources):
+                    document_sources.append(sources[i])
+        
+        # Standard document-based response preparation
+        selected_context, selected_sources = self._prepare_context(document_context, document_sources)
         
         # Create context with source information
         contextualized_content = []
         for content, source in zip(selected_context, selected_sources):
             contextualized_content.append(f"From document '{source}':\n{content}")
+            
+        # Add URL context if available
+        if url_context:
+            contextualized_content.append(f"From URLs in query:\n{url_context}")
+            selected_sources.append("URL Content")
+            
         full_context = "\n\n".join(contextualized_content)
 
         # Get format-specific guidance
@@ -3650,6 +3888,7 @@ class ChatView(APIView):
             
             Please use this conversation history to maintain continuity, relevance, and coherence in your response.
             """
+
         # Get project description if available
         project_description = self._get_project_description(query)
 
@@ -3658,22 +3897,22 @@ class ChatView(APIView):
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
-       
+    
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
-       
+    
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
-       
+    
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
-       
-        # Define the user prompt (consistent with existing implementation but with conversation context)
+    
+        # Define the user prompt - modified to handle URL content
         user_prompt = f"""
-        Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+        Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -3682,7 +3921,6 @@ class ChatView(APIView):
         {conversation_prompt}
 
         {project_guidance}
- 
 
         RESPONSE GENERATION GUIDELINES:
         - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
@@ -3694,10 +3932,11 @@ class ChatView(APIView):
         - When appropriate, organize information with clear sections and structure.
         - Maintain a natural, conversational tone.
         - Ensure the response is directly derived from the provided document context.
+        - If URL content is present, specifically address content from URLs that is relevant to the query.
         - If the document does NOT contain relevant information, explicitly state that and summarize related available content instead.
         - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
 
-        DOCUMENT CONTEXT:
+        DOCUMENT AND URL CONTEXT:
         {full_context}
 
         USER QUERY: {query}
@@ -3714,12 +3953,13 @@ class ChatView(APIView):
         9. Use <table> and <tr>, <td> for tabular information
 
         CRITICAL CONSTRAINTS:
-        - Use ONLY information from the provided document.
+        - Use ONLY information from the provided document and URL context.
         - DO NOT generate speculative or external information.
-        - Your response must be based EXCLUSIVELY on the document context provided.
+        - Your response must be based EXCLUSIVELY on the document and URL context provided.
         - Ensure clarity, accuracy, and comprehensive coverage of all relevant details.
         - Avoid summarizing or condensing important information - include all relevant details.
         - Use <b> tags for key section headings.
+        - If the context contains URL content, clearly attribute information from URLs in your response.
         """
         
         # Define system message
@@ -3789,9 +4029,11 @@ class ChatView(APIView):
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{answer}\n\n*Sources: {source_info}*"
+
     def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a shorter, concise response using the provided context with web search capability.
+        Enhanced to handle URL content in context.
         
         Args:
             query (str): User's original query
@@ -3863,13 +4105,35 @@ class ChatView(APIView):
         if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents."
         
+        # Check for URL content in the context
+        url_context = ""
+        document_context = []
+        document_sources = []
+        url_sources = []
+        
+        # Separate URL content from document content
+        for i, content_item in enumerate(context):
+            if i < len(sources) and sources[i] == "URL Content" and "CONTENT FROM URLS IN QUERY:" in content_item:
+                url_context = content_item
+                url_sources.append(sources[i])
+            else:
+                document_context.append(content_item)
+                if i < len(sources):
+                    document_sources.append(sources[i])
+        
         # Standard document-based response (no web search) - mostly the same as original
-        selected_context, selected_sources = self._prepare_context(context, sources)
+        selected_context, selected_sources = self._prepare_context(document_context, document_sources)
         
         # Create context with source information
         contextualized_content = []
         for content, source in zip(selected_context, selected_sources):
             contextualized_content.append(f"From document '{source}':\n{content}")
+            
+        # Add URL context if available
+        if url_context:
+            contextualized_content.append(f"From URLs in query:\n{url_context}")
+            selected_sources.append("URL Content")
+            
         full_context = "\n\n".join(contextualized_content)
 
         # Get format-specific guidance for short responses
@@ -3892,31 +4156,32 @@ class ChatView(APIView):
             
             Please use this conversation history to maintain continuity, relevance, and coherence in your response.
             """
-        
+
         # Get project description if available
         project_description = self._get_project_description(query)
         
+        # Update to include project description in response guidelines
         project_guidance = ""
         if project_description and len(project_description.strip()) > 5:
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
-       
+            
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
-       
+            
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
-       
+            
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
-       
-        # Define the user prompt (consistent with existing implementation but with conversation context)
+        
+        # Define the user prompt for short response with conversation context
         user_prompt = f"""
-        Based ONLY on the following context from multiple documents, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+        Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -3925,7 +4190,6 @@ class ChatView(APIView):
         {conversation_prompt}
 
         {project_guidance}
- 
 
         RESPONSE GENERATION GUIDELINES:
         - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
@@ -3935,12 +4199,12 @@ class ChatView(APIView):
         - Prioritize clarity and directness over excessive detail.
         - When appropriate, organize information with clear sections and structure.
         - Maintain a natural, conversational tone.
-        - Ensure the response is directly derived from the provided document context.
+        - Ensure the response is directly derived from the provided document and URL context.
+        - If URL content is present, specifically address content from URLs that is relevant to the query.
         - If the document does NOT contain relevant information, explicitly state that.
         - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
-    
 
-        DOCUMENT CONTEXT:
+        DOCUMENT AND URL CONTEXT:
         {full_context}
 
         USER QUERY: {query}
@@ -3956,11 +4220,11 @@ class ChatView(APIView):
         8. Use <table> and <tr>, <td> for tabular information if absolutely necessary
 
         CRITICAL CONSTRAINTS:
-        - Use ONLY information from the provided document.
+        - Use ONLY information from the provided document and URL context.
         - DO NOT generate speculative or external information.
-        - Your response must be based EXCLUSIVELY on the document context provided.
-        - Ensure clarity, accuracy, and comprehensive coverage of all relevant details.
-        - Avoid summarizing or condensing important information - include all relevant details.
+        - Your response must be based EXCLUSIVELY on the document and URL context provided.
+        - Ensure clarity, accuracy, and comprehensive coverage of key relevant details.
+        - If the context contains URL content, clearly attribute information from URLs in your response.
         """
         
         # Define system message for short response
@@ -3975,7 +4239,7 @@ class ChatView(APIView):
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.4,
-                max_completion_tokens=2000
+                max_tokens=2000
             )
             
             answer = completion.choices[0].message.content
