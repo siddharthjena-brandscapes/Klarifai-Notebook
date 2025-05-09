@@ -75,7 +75,7 @@ nltk==3.9.1
 numpy==2.2.3
 openai==1.70.0
 packaging==24.2
-pillow==11.1.0
+pillow==10.2.0
 primp==0.14.0
 propcache==0.3.0
 proto-plus==1.26.0
@@ -132,3 +132,4 @@ reportlab==4.3.1
 beautifulsoup4==4.13.3
 moviepy==2.1.2
 google-genai==1.13.0
+openpyxl==3.1.5
