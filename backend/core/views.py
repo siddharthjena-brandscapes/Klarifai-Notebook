@@ -152,6 +152,7 @@ def enhance_prompt_with_ai(request):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def upload_document_for_prompt(request):
+    user=request.user
     try:
         if 'document' not in request.FILES:
             return JsonResponse({
@@ -176,7 +177,7 @@ def upload_document_for_prompt(request):
             }, status=400)
        
         # Generate prompt from document content
-        generated_prompt = generate_prompt(document_text)
+        generated_prompt = generate_prompt(document_text,user=user)
        
         return JsonResponse({
             'status': 'success',
@@ -242,8 +243,8 @@ def initialize_gemini(user=None):
     genai.configure(api_key=api_key)
     return genai.GenerativeModel('gemini-2.0-flash')
  
-def generate_prompt(document_text):
-    model = initialize_gemini()
+def generate_prompt(document_text, user=None):
+    model = initialize_gemini(user=user)
     if not model:
         return "Failed to initialize AI model. Please provide a description manually."
    
