@@ -220,6 +220,34 @@ function App() {
     }
   };
 
+  // Add a comprehensive effect to clear errors when any key action happens
+useEffect(() => {
+  // This effect clears errors whenever key user interactions happen
+  const clearErrorsOnAction = (e) => {
+    // Clear errors on key actions like clicking buttons or typing
+    if (e.type === 'keydown' || e.type === 'click') {
+      if (error) setError(null);
+      if (uploadError) setUploadError(null);
+    }
+  };
+  
+  // Add event listeners for global interactions that should clear errors
+  document.addEventListener('keydown', clearErrorsOnAction);
+  document.addEventListener('click', clearErrorsOnAction);
+  
+  return () => {
+    document.removeEventListener('keydown', clearErrorsOnAction);
+    document.removeEventListener('click', clearErrorsOnAction);
+  };
+}, [error, uploadError]);
+
+// Clear error message when form fields change
+useEffect(() => {
+  if (error) {
+    setError(null);
+  }
+}, [projectData.name, projectData.description, projectData.category, projectData.customCategory, projectData.selected_modules]);
+
   // Add this effect to close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = () => {
@@ -382,6 +410,9 @@ function App() {
   };
 
   const handleEnhanceDescription = async () => {
+    // Clear any existing errors before starting the enhancement process
+    setError(null);
+    setUploadError(null);
     if (
       !projectData.description ||
       projectData.description.trim().length < 10
@@ -405,6 +436,7 @@ function App() {
           ...prev,
           description: cleanedDescription,
         }));
+        setError(null);
       } else {
         setError(response.message || "Failed to enhance description.");
       }
@@ -423,6 +455,9 @@ function App() {
  // In the handleDocumentChange function, update the file type check to include .txt files
 const handleDocumentChange = (e) => {
   const selectedFile = e.target.files[0];
+
+  // Clear previous upload errors as the user is taking action
+  setUploadError(null);
 
   if (!selectedFile) {
     setDocumentFile(null);
@@ -1076,6 +1111,8 @@ const handleDocumentChange = (e) => {
       }
     };
 
+    
+
 // More robust sorting function
 const sortedProjects = [...filteredProjects].sort((a, b) => {
   if (sortOption === "recent") {
@@ -1488,12 +1525,18 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
       className="w-full px-4 py-2 bg-white/80 dark:bg-white/5 border border-gray-700 dark:border-gray-300/20 rounded-lg text-gray-800 dark:text-white focus:ring-2 focus:ring-[#a55233] dark:focus:ring-teal-500 focus:border-transparent"
       placeholder="Describe your project's purpose and goals (optional)"
       value={projectData.description}
-      onChange={(e) =>
-        setProjectData((prev) => ({
-          ...prev,
-          description: e.target.value,
-        }))
-      }
+      onChange={(e) => {
+  setProjectData(prev => ({ ...prev, description: e.target.value }));
+  // Clear all description-related errors when the user types
+  if (error && (
+    error.includes('description') || 
+    error.includes('enhance') || 
+    error.includes('detailed') ||
+    error.includes('AI')
+  )) {
+    setError(null);
+  }
+}}
       
     ></textarea>
     
@@ -1514,18 +1557,27 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
     {/* Action buttons with improved styling and better light theme contrast */}
     <div className="flex flex-wrap gap-3">
       <button
-        type="button"
-        onClick={handleEnhanceDescription}
-        disabled={enhanceLoading}
-        className="px-3 py-2 bg-[#556052]/80 dark:bg-emerald-600/20 hover:bg-[#556052] dark:hover:bg-emerald-600/30 text-white dark:text-emerald-300 rounded-lg transition-colors text-sm font-medium flex items-center"
-      >
-        {enhanceLoading ? (
-          <Loader className="w-4 h-4 mr-1.5 animate-spin" />
-        ) : (
-          <Wand2 className="w-4 h-4 mr-1.5" />
-        )}
-        Enhance with AI
-      </button>
+  type="button"
+  onClick={() => {
+    // Clear any errors before enhancing
+    setError(null);
+    setUploadError(null);
+    handleEnhanceDescription();
+  }}
+  disabled={enhanceLoading}
+  className={`px-3 py-2 rounded-lg transition-colors text-sm font-medium flex items-center ${
+    enhanceLoading 
+    ? 'bg-[#556052]/50 dark:bg-emerald-600/10 text-white/70 dark:text-emerald-300/50 cursor-not-allowed' 
+    : 'bg-[#556052]/80 dark:bg-emerald-600/20 hover:bg-[#556052] dark:hover:bg-emerald-600/30 text-white dark:text-emerald-300'
+  }`}
+>
+  {enhanceLoading ? (
+    <Loader className="w-4 h-4 mr-1.5 animate-spin" />
+  ) : (
+    <Wand2 className="w-4 h-4 mr-1.5" />
+  )}
+  Enhance with AI
+</button>
       
       <div className="relative">
         <input
