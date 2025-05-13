@@ -2161,7 +2161,7 @@ class ChatView(APIView):
             # Extract general_chat_mode flag
             general_chat_mode = request.data.get('general_chat_mode', False)
 
-            # Extract response_length preference (new parameter)
+            # Extract response_length preference
             response_length = request.data.get('response_length', 'comprehensive')
             
             # Extract response_format parameter or default to 'natural'
@@ -2257,6 +2257,7 @@ class ChatView(APIView):
             all_chunks = []
             content_sources = []
             similar_contents = []  # Store document content separately
+            citation_sources = {}  # Initialize citation sources dict
             
             if not general_chat_mode:
                 try:
@@ -2348,11 +2349,15 @@ class ChatView(APIView):
                 if all_metadata_store:
                     print(f"Searching in {len(all_metadata_store)} chunks across all documents")
                     # Get relevant content based on query - use modified_message if URLs detected
-                    similar_contents, content_sources = self.search_similar_content(
+                    # Use updated search_similar_content that returns citation_sources
+                    similar_contents, content_sources, chunk_citation_sources = self.search_similar_content(
                         modified_message if has_url_content else message, 
                         processed_docs,
                         all_metadata_store
                     )
+                    
+                    # Store citation sources
+                    citation_sources = chunk_citation_sources
                     
                     if similar_contents:
                         print(f"Found {len(similar_contents)} relevant content chunks")
@@ -2380,6 +2385,7 @@ class ChatView(APIView):
             # Get answer based on mode
             web_knowledge_response = None
             web_sources = []
+            doc_citation_sources = {}
             
             # Get answer based on mode
             if general_chat_mode:
@@ -2417,19 +2423,58 @@ class ChatView(APIView):
                         combined_sources = content_sources.copy() if content_sources else []
                         combined_sources.append("URL Content")
                         
-                        # Generate response using combined context
+                        # Add URL to citation sources
+                        if citation_sources:
+                            url_citation_key = max(citation_sources.keys()) + 1 if citation_sources else 1
+                            citation_sources[url_citation_key] = {
+                                'source_file': 'URL Content',
+                                'text': url_context[:500] + "..." if len(url_context) > 500 else url_context,
+                                'document_id': 'url_content',
+                                'score': 0.9,  # High score for URL content
+                                'display_num': url_citation_key
+                            }
+                        
+                        # Generate response using combined context with citation sources
                         if response_length == 'short':
-                            document_answer = self.generate_short_response(modified_message, combined_contents, combined_sources, False, response_format, conversation_context)
+                            document_answer, doc_citation_sources = self.generate_short_response(
+                                modified_message, 
+                                combined_contents, 
+                                combined_sources, 
+                                False, 
+                                response_format, 
+                                conversation_context
+                            )
                         else:  # Default to comprehensive
-                            document_answer = self.generate_response(modified_message, combined_contents, combined_sources, False, response_format, conversation_context)
+                            document_answer, doc_citation_sources = self.generate_response(
+                                modified_message, 
+                                combined_contents, 
+                                combined_sources, 
+                                False, 
+                                response_format, 
+                                conversation_context
+                            )
                         
                         print(f"Generated document-based answer with URL content using {response_length} response length")
                     else:
                         # Standard document-based response without URL content
                         if response_length == 'short':
-                            document_answer = self.generate_short_response(message, similar_contents, content_sources, False, response_format, conversation_context)
+                            document_answer, doc_citation_sources = self.generate_short_response(
+                                message, 
+                                similar_contents, 
+                                content_sources, 
+                                False, 
+                                response_format, 
+                                conversation_context
+                            )
                         else:  # Default to comprehensive
-                            document_answer = self.generate_response(message, similar_contents, content_sources, False, response_format, conversation_context)
+                            document_answer, doc_citation_sources = self.generate_response(
+                                message, 
+                                similar_contents, 
+                                content_sources, 
+                                False, 
+                                response_format, 
+                                conversation_context
+                            )
                         
                         print(f"Generated document-based answer using {response_length} response length")
                     
@@ -2443,7 +2488,7 @@ class ChatView(APIView):
                         print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
                         
                         # Combine document and web responses
-                        answer = self.combine_document_and_web_responses(
+                        answer, combined_citation_sources = self.combine_document_and_web_responses(
                             modified_message if has_url_content else message, 
                             document_answer, 
                             web_knowledge_response, 
@@ -2451,9 +2496,13 @@ class ChatView(APIView):
                             web_sources,
                             response_format,
                             conversation_context,
-                            original_doc_context=similar_contents
+                            original_doc_context=similar_contents,
+                            doc_citation_sources=doc_citation_sources  # Pass citation sources
                         )
                         print("Combined document and web responses")
+                        
+                        # Update citation sources with combined sources
+                        doc_citation_sources = combined_citation_sources
                     else:
                         # Just use document answer
                         answer = document_answer
@@ -2507,18 +2556,33 @@ class ChatView(APIView):
                         "Do you have any other questions I can help with?"
                     ]
             
-            # Create citations from chunks (empty in general chat mode)
+            # Create citations from chunks and citation sources
             citations = []
             if not general_chat_mode:
-                for chunk in all_chunks:
-                    chunk_text = chunk.get('text', '')
+                # First add citations from doc_citation_sources (our enhanced citations)
+                for citation_num, citation_info in doc_citation_sources.items():
+                    # Format the snippet to properly handle tables
+                    formatted_snippet = self.format_citation_content(citation_info.get('snippet', ''))
                     citations.append({
-                        'source_file': chunk.get('source', 'Unknown'),
-                        'page_number': chunk.get('chunk_id', 'Unknown'),
-                        'section_title': 'Unknown',
-                        'snippet': chunk_text[:200] + "..." if len(chunk_text) > 200 else chunk_text,
-                        'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
+                        'source_file': citation_info.get('source_file', 'Unknown'),
+                        'page_number': citation_info.get('page_number', 'Unknown'),
+                        'section_title': citation_info.get('section_title', 'Unknown'),
+                        'snippet': formatted_snippet,
+                        'document_id': citation_info.get('document_id', 'Unknown')
                     })
+                
+                # If no enhanced citations, fall back to chunk-based citations (original method)
+                if not citations:
+                    for chunk in all_chunks:
+                        chunk_text = chunk.get('text', '')
+                        formatted_snippet = self.format_citation_content(chunk_text)
+                        citations.append({
+                            'source_file': chunk.get('source', 'Unknown'),
+                            'page_number': chunk.get('chunk_id', 'Unknown'),
+                            'section_title': 'Unknown',
+                            'snippet': formatted_snippet[:200] + "..." if len(formatted_snippet) > 200 else formatted_snippet,
+                            'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
+                        })
                 
                 # Add URL citations if applicable
                 if has_url_content:
@@ -2610,6 +2674,7 @@ class ChatView(APIView):
             conversation.follow_up_questions = follow_up_questions
             conversation.save()
 
+            # Use citation_sources in the response data if available
             response_data = {
                 'response': clean_response,
                 'follow_up_questions': follow_up_questions,
@@ -2648,6 +2713,730 @@ class ChatView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+       
+    # def format_citation_content(self, snippet):
+    #     """
+    #     Format citation snippets to optimize display of complex tables with long content
+    #     """
+    #     if not snippet:
+    #         return snippet
+            
+    #     # Check if content likely contains a table
+    #     if '|' in snippet and ('|---' in snippet or '| ---' in snippet or '|----' in snippet or '------' in snippet):
+    #         try:
+    #             # Start with basic cleanup
+    #             content = snippet
+                
+    #             # Replace emoji arrows with text versions for better compatibility
+    #             content = content.replace('🔻', '↓').replace('🔼', '↑')
+                
+    #             # Step 1: Ensure all section headers are properly formatted and on their own lines
+    #             content = re.sub(r'(#{1,6}\s*[^\n#]+)([^#\n])', r'\1\n\2', content)
+                
+    #             # Step 2: Identify table sections
+    #             lines = content.split('\n')
+    #             formatted_lines = []
+                
+    #             in_table = False
+    #             table_lines = []
+                
+    #             for line in lines:
+    #                 # Check if this is a table line
+    #                 is_table_line = '|' in line and line.strip().startswith('|') and line.strip().endswith('|')
+                    
+    #                 # Check if this is a separator line
+    #                 is_separator = is_table_line and ('-' in line or '=' in line)
+                    
+    #                 if is_table_line:
+    #                     if not in_table:
+    #                         # Start of a new table
+    #                         in_table = True
+    #                         # If we have pending lines, add them with a separator
+    #                         if formatted_lines:
+    #                             formatted_lines.append('')  # Empty line before table
+                        
+    #                     # Add to current table
+    #                     table_lines.append(line)
+    #                 else:
+    #                     if in_table:
+    #                         # End of table, process it
+    #                         in_table = False
+                            
+    #                         # Process and optimize the table
+    #                         optimized_table = self.optimize_table_structure(table_lines)
+                            
+    #                         # Add the optimized table
+    #                         formatted_lines.extend(optimized_table)
+    #                         formatted_lines.append('')  # Empty line after table
+    #                         table_lines = []
+                        
+    #                     # Add non-table line
+    #                     formatted_lines.append(line)
+                
+    #             # Don't forget to process any table that's at the end
+    #             if in_table and table_lines:
+    #                 optimized_table = self.optimize_table_structure(table_lines)
+    #                 formatted_lines.extend(optimized_table)
+                
+    #             # Join everything back together
+    #             content = '\n'.join(formatted_lines)
+                
+    #             # Step 3: Final cleanup, remove excessive newlines
+    #             content = re.sub(r'\n{3,}', '\n\n', content)
+                
+    #             return content
+                
+    #         except Exception as e:
+    #             print(f"Error formatting complex table content: {str(e)}")
+    #             # Return original content on error
+    #             return snippet
+        
+    #     # If not a table or processing failed, return the original content
+    #     return snippet
+
+    # def optimize_table_structure(self, table_lines):
+    #     """
+    #     Process and optimize a table's structure for better display
+    #     """
+    #     if not table_lines:
+    #         return []
+        
+    #     # Find separator row (has dashes or equals signs)
+    #     separator_idx = -1
+    #     for i, line in enumerate(table_lines):
+    #         if '-' in line or '=' in line:
+    #             separator_idx = i
+    #             break
+        
+    #     # If no separator found, this doesn't look like a proper table
+    #     if separator_idx == -1:
+    #         return table_lines
+        
+    #     # Identify header row (typically above separator)
+    #     header_idx = max(0, separator_idx - 1)
+        
+    #     # Count columns in the header
+    #     header_parts = table_lines[header_idx].split('|')
+    #     num_columns = len([p for p in header_parts if p.strip()])
+        
+    #     # Check for long content cells
+    #     has_long_cells = False
+    #     for line in table_lines:
+    #         parts = line.split('|')
+    #         for part in parts:
+    #             if part and len(part.strip()) > 20:
+    #                 has_long_cells = True
+    #                 break
+    #         if has_long_cells:
+    #             break
+        
+    #     # If we have long cells, let's optimize the table formatting
+    #     if has_long_cells:
+    #         # Add extra spacing for readability
+    #         optimized_lines = []
+            
+    #         # Add the header
+    #         optimized_lines.append(table_lines[header_idx])
+            
+    #         # Add the separator
+    #         optimized_lines.append(table_lines[separator_idx])
+            
+    #         # Process data rows with better spacing
+    #         for i in range(separator_idx + 1, len(table_lines)):
+    #             # Clean up spacing in cells for better readability
+    #             parts = table_lines[i].split('|')
+    #             formatted_parts = ['']  # Start with empty part for leading pipe
+                
+    #             for part in parts[1:-1]:  # Skip first and last (empty parts)
+    #                 # Clean up whitespace but maintain padding
+    #                 cleaned = part.strip()
+    #                 formatted_parts.append(f" {cleaned} ")
+                
+    #             formatted_parts.append('')  # End with empty part for trailing pipe
+                
+    #             # Join back into a well-formatted line
+    #             formatted_line = '|'.join(formatted_parts)
+    #             optimized_lines.append(formatted_line)
+            
+    #         return optimized_lines
+        
+    #     # If no long cells, just return the original table lines
+    #     return table_lines
+
+    def format_citation_content(self, snippet):
+        """
+        Format citation snippets to optimize display of complex tables with long content
+        Designed to work with any table structure from any file type
+        """
+        if not snippet:
+            return snippet
+            
+        # Generic table pattern detection - using structural indicators, not content-specific terms
+        has_table_pattern = (
+            # Standard markdown table patterns
+            ('|' in snippet and any(separator in snippet for separator in ['|---', '| ---', '|----', '------'])) or
+            # Table rows with pipes at beginning and end
+            ('|' in snippet and any(row.strip().startswith('|') and row.strip().endswith('|') for row in snippet.split('\n'))) or
+            # Any structured data that resembles a table (multiple lines with consistent pipe counts)
+            self._detect_tabular_structure(snippet)
+        )
+        
+        if has_table_pattern:
+            try:
+                # Start with basic cleanup
+                content = snippet
+                
+                # Replace emoji arrows with text versions for better compatibility
+                content = content.replace('🔻', '↓').replace('🔼', '↑')
+                
+                # Step 1: Process section headers to ensure they're properly formatted
+                # Match any line starting with # and make sure there's a newline after it
+                content = re.sub(r'(#+\s*[^\n]+)(?![\n])', r'\1\n', content)
+                
+                # Step 2: Make sure all headers have proper spacing
+                content = re.sub(r'(#+)(\S)', r'\1 \2', content)
+                
+                # Step 3: Detect and format tabular structures
+                lines = content.split('\n')
+                formatted_lines = []
+                
+                in_table = False
+                table_lines = []
+                table_header_detected = False
+                pending_table_header = None
+                
+                for i, line in enumerate(lines):
+                    stripped_line = line.strip()
+                    
+                    # Check if this is a header followed by a potential table
+                    is_header = stripped_line.startswith('#')
+                    next_line_is_table = (i < len(lines) - 1 and 
+                                        '|' in lines[i+1] and 
+                                        lines[i+1].strip().startswith('|') and 
+                                        lines[i+1].strip().endswith('|'))
+                    
+                    # Handle headers that might be associated with tables
+                    if is_header and next_line_is_table:
+                        formatted_lines.append(line)
+                        continue
+                    
+                    # Check if this is a table line using structural patterns
+                    is_table_line = '|' in stripped_line and stripped_line.startswith('|') and stripped_line.endswith('|')
+                    
+                    # Check if this is a separator line
+                    is_separator = is_table_line and any(c in stripped_line for c in ['-', '='])
+                    
+                    # Check for potential table headers based on structure (first row of pipe-delimited content)
+                    is_potential_header = (is_table_line and 
+                                        not is_separator and 
+                                        not in_table and
+                                        i < len(lines) - 1 and
+                                        '|' in lines[i+1])
+                    
+                    # Fix incomplete tables missing separators
+                    if is_potential_header and i < len(lines) - 1:
+                        next_line = lines[i+1].strip()
+                        is_next_separator = '|' in next_line and any(c in next_line for c in ['-', '='])
+                        
+                        if '|' in next_line and not is_next_separator:
+                            # This looks like a header row without a separator, let's add one
+                            pending_table_header = line
+                            table_header_detected = True
+                            continue
+                    
+                    if table_header_detected and is_table_line and not is_separator:
+                        # We found a data row after a header without separator, add the header and create a separator
+                        if pending_table_header:
+                            formatted_lines.append(pending_table_header)
+                            # Create a separator row based on the header
+                            parts = [p.strip() for p in pending_table_header.split('|')]
+                            separator = '|'
+                            for part in parts[1:-1]:  # Skip first and last empty parts
+                                separator += ' ' + '-' * len(part) + ' |'
+                            formatted_lines.append(separator)
+                            pending_table_header = None
+                            table_header_detected = False
+                            in_table = True
+                        formatted_lines.append(line)
+                        continue
+                    
+                    if is_table_line:
+                        if not in_table:
+                            # Start of a new table
+                            in_table = True
+                            # If we have pending lines, add them
+                            if formatted_lines and not formatted_lines[-1].strip() == '':
+                                formatted_lines.append('')  # Empty line before table
+                        
+                        # Add to current table
+                        table_lines.append(line)
+                    else:
+                        if in_table:
+                            # End of table, process it
+                            in_table = False
+                            
+                            # Process and optimize the table
+                            optimized_table = self.optimize_table_structure(table_lines)
+                            
+                            # Add the optimized table
+                            formatted_lines.extend(optimized_table)
+                            
+                            if not stripped_line:  # If this is an empty line
+                                formatted_lines.append('')  # Empty line after table
+                            else:
+                                # If next line has content, add a separator
+                                formatted_lines.append('')  # Empty line after table
+                                formatted_lines.append(line)  # Add the current non-table line
+                            
+                            table_lines = []
+                            continue
+                        
+                        # Add non-table line
+                        formatted_lines.append(line)
+                
+                # Don't forget to process any table that's at the end
+                if in_table and table_lines:
+                    optimized_table = self.optimize_table_structure(table_lines)
+                    formatted_lines.extend(optimized_table)
+                
+                # Join everything back together
+                content = '\n'.join(formatted_lines)
+                
+                # Final cleanup, remove excessive newlines
+                content = re.sub(r'\n{3,}', '\n\n', content)
+                
+                return content
+                
+            except Exception as e:
+                print(f"Error formatting complex table content: {str(e)}")
+                # Return original content on error
+                return snippet
+        
+        # If not a table or processing failed, return the original content
+        return snippet
+
+    def _detect_tabular_structure(self, text):
+        """
+        Generic detection of tabular structures in text.
+        Looks for consistent patterns of delimiter characters that indicate a table.
+        """
+        if not text or '|' not in text:
+            return False
+            
+        lines = text.split('\n')
+        pipe_counts = []
+        
+        # Count pipes in consecutive non-empty lines
+        consecutive_lines = 0
+        for line in lines:
+            if not line.strip():
+                consecutive_lines = 0
+                continue
+                
+            if '|' in line:
+                pipe_count = line.count('|')
+                pipe_counts.append(pipe_count)
+                consecutive_lines += 1
+                
+                # If we have at least 3 consecutive lines with pipes, check pattern
+                if consecutive_lines >= 3:
+                    # Check if pipe counts are consistent (allowing small variations)
+                    unique_counts = set(pipe_counts[-3:])
+                    if len(unique_counts) <= 2 and max(unique_counts) - min(unique_counts) <= 2:
+                        return True
+        
+        # Alternative detection: Check if we have a header-like row followed by a separator-like row
+        for i in range(len(lines) - 1):
+            current_line = lines[i].strip()
+            next_line = lines[i+1].strip()
+            
+            if (current_line.startswith('|') and current_line.endswith('|') and
+                next_line.startswith('|') and next_line.endswith('|') and
+                '-' in next_line):
+                return True
+        
+        return False
+
+    def optimize_table_structure(self, table_lines):
+        """
+        Process and optimize a table's structure for better display
+        Works with any table format from any file type
+        """
+        if not table_lines:
+            return []
+        
+        # Find header and separator rows
+        header_idx = -1
+        separator_idx = -1
+        
+        for i, line in enumerate(table_lines):
+            if '-' in line or '=' in line:
+                separator_idx = i
+                header_idx = max(0, i - 1)
+                break
+        
+        # If no separator found, try to identify the header row and create a separator
+        if separator_idx == -1 and len(table_lines) >= 2:
+            # Assume first row is header if we have at least two rows with same number of columns
+            header_row = table_lines[0]
+            header_parts = header_row.split('|')
+            
+            first_data_row = table_lines[1]
+            data_parts = first_data_row.split('|')
+            
+            # If first and second row have similar structure, assume first is header
+            if abs(len(header_parts) - len(data_parts)) <= 1:
+                header_idx = 0
+                # Create a separator row
+                parts = header_row.split('|')
+                separator = '|'
+                for part in parts[1:-1]:  # Skip first and last empty parts
+                    separator += ' ' + '-' * len(part.strip()) + ' |'
+                
+                # Insert the separator row
+                table_lines.insert(1, separator)
+                separator_idx = 1
+        
+        # If we still don't have a separator, check if we have consistent columns
+        if separator_idx == -1:
+            # Try to convert any table-like structure to proper format
+            has_consistent_columns = True
+            if len(table_lines) >= 2:
+                col_count = len(table_lines[0].split('|'))
+                for line in table_lines[1:]:
+                    if len(line.split('|')) != col_count:
+                        has_consistent_columns = False
+                        break
+                
+                if has_consistent_columns:
+                    # Create a proper table with first row as header
+                    header_idx = 0
+                    separator = '|'
+                    header_parts = table_lines[0].split('|')
+                    for part in header_parts[1:-1]:
+                        separator += ' ' + '-' * len(part.strip()) + ' |'
+                    
+                    table_lines.insert(1, separator)
+                    separator_idx = 1
+        
+        # If still no structure found, create a default structure
+        if header_idx == -1 or separator_idx == -1:
+            # The simplest approach: consider the first row as header
+            if len(table_lines) >= 1:
+                header_idx = 0
+                
+                # Create and insert a separator row
+                header_parts = table_lines[0].split('|')
+                separator = '|'
+                for part in header_parts[1:-1]:  # Skip first and last empty parts
+                    separator += ' ' + '-' * len(part.strip()) + ' |'
+                
+                if len(table_lines) > 1:
+                    table_lines.insert(1, separator)
+                    separator_idx = 1
+                else:
+                    table_lines.append(separator)
+                    separator_idx = 1
+        
+        # Enhancement: Format cells with indicators, preserving the original indicator characters
+        for i in range(len(table_lines)):
+            # Skip header and separator
+            if i != header_idx and i != separator_idx:
+                line = table_lines[i]
+                parts = line.split('|')
+                formatted_parts = []
+                
+                for part in parts:
+                    trimmed = part.strip()
+                    
+                    # Detect any trend indicators without hardcoding specific symbols
+                    # This looks for common directional symbols in a generic way
+                    has_up_indicator = any(up_symbol in trimmed for up_symbol in ['↑', '▲', '🔼', '⬆'])
+                    has_down_indicator = any(down_symbol in trimmed for down_symbol in ['↓', '▼', '🔻', '⬇'])
+                    
+                    if has_up_indicator or has_down_indicator:
+                        # Keep original format but ensure consistent spacing
+                        formatted_parts.append(' ' + trimmed + ' ')
+                    else:
+                        formatted_parts.append(part)
+                
+                table_lines[i] = '|'.join(formatted_parts)
+        
+        # Analyze table for column consistency
+        column_counts = [len(line.split('|')) - 1 for line in table_lines]  # -1 because n+1 pipes make n columns
+        
+        if len(set(column_counts)) > 1:
+            # Inconsistent column counts - normalize
+            max_columns = max(column_counts)
+            
+            for i in range(len(table_lines)):
+                parts = table_lines[i].split('|')
+                current_columns = len(parts) - 1
+                
+                if current_columns < max_columns:
+                    # Add missing columns
+                    if table_lines[i].endswith('|'):
+                        # Add columns before the trailing |
+                        table_lines[i] = table_lines[i][:-1] + ('| ' * (max_columns - current_columns)) + '|'
+                    else:
+                        # Add columns including trailing |
+                        table_lines[i] = table_lines[i] + ('| ' * (max_columns - current_columns)) + '|'
+        
+        # Check for long content cells and analyze column widths
+        has_long_cells = False
+        max_col_lengths = []
+        
+        # Initialize with header column lengths if header exists
+        if header_idx >= 0 and header_idx < len(table_lines):
+            header_parts = table_lines[header_idx].split('|')[1:-1]  # Skip first and last
+            max_col_lengths = [len(part.strip()) for part in header_parts]
+        else:
+            # Initialize with zeros if no header
+            max_columns = max(len(line.split('|')) - 1 for line in table_lines)
+            max_col_lengths = [0] * max_columns
+        
+        # Update with actual content lengths
+        for line in table_lines:
+            if separator_idx >= 0 and line == table_lines[separator_idx]:
+                continue
+                
+            parts = line.split('|')[1:-1]  # Skip first and last
+            
+            for i, part in enumerate(parts):
+                if i < len(max_col_lengths):
+                    max_col_lengths[i] = max(max_col_lengths[i], len(part.strip()))
+                    if len(part.strip()) > 20:
+                        has_long_cells = True
+                elif i >= len(max_col_lengths) and len(parts) > len(max_col_lengths):
+                    # Extend max_col_lengths if needed
+                    max_col_lengths.extend([0] * (len(parts) - len(max_col_lengths)))
+                    max_col_lengths[i] = len(part.strip())
+                    if len(part.strip()) > 20:
+                        has_long_cells = True
+        
+        # Optimize the formatting if we have long cells or inconsistent structure
+        if has_long_cells or len(set(column_counts)) > 1:
+            # Format the table with consistent column widths
+            formatted_table = []
+            
+            for i, line in enumerate(table_lines):
+                if i == separator_idx:
+                    # Special handling for separator
+                    parts = ['']  # Start with empty part for leading pipe
+                    for j, max_length in enumerate(max_col_lengths):
+                        parts.append(' ' + '-' * max_length + ' ')
+                    parts.append('')  # End with empty part for trailing pipe
+                    formatted_table.append('|'.join(parts))
+                else:
+                    parts = line.split('|')
+                    formatted_parts = ['']  # Start with empty part for leading pipe
+                    
+                    for j in range(len(max_col_lengths)):
+                        if j + 1 < len(parts):
+                            # Part exists in current row
+                            part = parts[j+1]
+                            # Clean up whitespace but maintain padding
+                            cleaned = part.strip()
+                            # Ensure consistent width formatting
+                            formatted_parts.append(' ' + cleaned.ljust(max_col_lengths[j]) + ' ')
+                        else:
+                            # Missing part in current row
+                            formatted_parts.append(' ' + ' ' * max_col_lengths[j] + ' ')
+                    
+                    formatted_parts.append('')  # End with empty part for trailing pipe
+                    formatted_table.append('|'.join(formatted_parts))
+            
+            return formatted_table
+        
+        # If no special formatting needed, just return the original table lines
+        return table_lines
+
+    def reconstruct_flattened_table(flattened_text):
+        """
+        Attempt to reconstruct a flattened markdown table.
+        This handles cases where a table has been completely flattened into a single line.
+        """
+        try:
+            # Check for common patterns of flattened tables
+            header_pattern = r'\|\s*([^|]+)\s*\|'
+            separator_pattern = r'\|\s*[-:]+\s*\|'
+            
+            # Check if this text contains both header and separator patterns
+            if re.search(separator_pattern, flattened_text):
+                # Find all table parts - each table row is delimited by | at start and end
+                parts = re.findall(r'\|[^|]+\|', flattened_text)
+                
+                if parts:
+                    # Find headers (should be text before the separator row)
+                    header_parts = []
+                    separator_parts = []
+                    data_parts = []
+                    
+                    # Identify which parts are headers, separators, and data
+                    found_separator = False
+                    for part in parts:
+                        if re.match(separator_pattern, part):
+                            separator_parts.append(part)
+                            found_separator = True
+                        elif not found_separator:
+                            header_parts.append(part)
+                        else:
+                            data_parts.append(part)
+                    
+                    # If we have header and separator, attempt to reconstruct
+                    if header_parts and separator_parts:
+                        # Join headers into a row
+                        headers_row = ' '.join(header_parts)
+                        # Join separators into a row
+                        separator_row = ' '.join(separator_parts)
+                        
+                        # Build data rows - group data parts into rows based on column count
+                        data_rows = []
+                        if data_parts:
+                            # Estimate number of columns from header row
+                            est_columns = headers_row.count('|') - 1
+                            
+                            # Group data parts into rows
+                            current_row = []
+                            for part in data_parts:
+                                current_row.append(part)
+                                if len(current_row) == est_columns:
+                                    data_rows.append(' '.join(current_row))
+                                    current_row = []
+                            
+                            # Add any remaining parts as a final row
+                            if current_row:
+                                data_rows.append(' '.join(current_row))
+                        
+                        # Combine into table
+                        table_lines = [headers_row, separator_row] + data_rows
+                        return '\n'.join(table_lines)
+                
+                # If we couldn't reconstruct using parts, try a different approach
+                # Look for patterns like | header1 | header2 | | --- | --- | | data1 | data2 |
+                headers_match = re.search(r'(\|[^|]*\|[^|]*\|+)', flattened_text)
+                if headers_match:
+                    header_text = headers_match.group(1)
+                    rest_text = flattened_text[headers_match.end():]
+                    
+                    # Look for separator row
+                    separator_match = re.search(r'(\|[\s-:]*\|[\s-:]*\|+)', rest_text)
+                    if separator_match:
+                        separator_text = separator_match.group(1)
+                        data_text = rest_text[separator_match.end():]
+                        
+                        # Count columns based on header row
+                        column_count = header_text.count('|') - 1
+                        
+                        # Split data text into rows based on column count
+                        data_parts = re.findall(r'\|[^|]*', data_text)
+                        data_rows = []
+                        current_row = []
+                        
+                        for part in data_parts:
+                            current_row.append(part)
+                            if len(current_row) == column_count:
+                                data_rows.append(''.join(current_row) + '|')
+                                current_row = []
+                        
+                        # Add any remaining parts
+                        if current_row:
+                            data_rows.append(''.join(current_row) + '|')
+                        
+                        # Combine into table
+                        return '\n'.join([header_text, separator_text] + data_rows)
+            
+            # If all else fails, look for standard markdown table pattern
+            table_pattern = r'(\|\s*[^|]+\s*\|[^|]*\|.*?)(\|\s*[-:]+\s*\|[-:\s|]*\|.*?)(\|.*)'
+            table_match = re.match(table_pattern, flattened_text)
+            
+            if table_match:
+                header_row = table_match.group(1)
+                separator_row = table_match.group(2)
+                data_rows = table_match.group(3)
+                
+                # Count pipes to estimate column count
+                column_count = header_row.count('|') - 1
+                
+                # Split data rows based on column count
+                data_parts = []
+                remaining = data_rows
+                while remaining and '|' in remaining:
+                    # Extract one row worth of cells
+                    current_row = []
+                    for i in range(column_count):
+                        cell_match = re.match(r'\|([^|]*)', remaining)
+                        if cell_match:
+                            current_row.append('|' + cell_match.group(1))
+                            remaining = remaining[cell_match.end():]
+                        else:
+                            break
+                    
+                    if current_row:
+                        data_parts.append(''.join(current_row) + '|')
+                
+                # Combine into table
+                if data_parts:
+                    return '\n'.join([header_row, separator_row] + data_parts)
+        
+        except Exception as e:
+            print(f"Error reconstructing flattened table: {str(e)}")
+        
+        # If all reconstruction attempts fail, return the original text
+        return flattened_text
+    
+    def format_table_section(section):
+        """Format a specific section that contains a markdown table."""
+        try:
+            lines = section.split('\n')
+            
+            # Identify important table parts - look for the header row and separator row
+            header_idx = -1
+            separator_idx = -1
+            
+            for i, line in enumerate(lines):
+                if ('|---' in line or '| ---' in line or '|----' in line) and separator_idx == -1:
+                    separator_idx = i
+                    # Header is typically right before the separator
+                    header_idx = i - 1 if i > 0 else i
+                    break
+            
+            # If we couldn't identify the table structure, return as is
+            if separator_idx == -1 or header_idx < 0:
+                # This might be a single-line flattened table, try to reconstruct it
+                for i, line in enumerate(lines):
+                    if '|' in line and any(marker in line for marker in ['|---', '| ---', '|----']):
+                        # This line probably contains flattened table parts
+                        reconstructed = reconstruct_flattened_table(line)
+                        if reconstructed:
+                            # Replace the line with reconstructed table
+                            lines[i] = reconstructed
+                            break
+                
+                return '\n'.join(lines)
+            
+            # Get the header and separator rows
+            header_row = lines[header_idx]
+            separator_row = lines[separator_idx]
+            
+            # Check if this is a flattened table where header, separator and data are all in one line
+            if '|' in header_row and ('|---' in header_row or '|----' in header_row):
+                # Try to reconstruct a flattened table
+                reconstructed = reconstruct_flattened_table(header_row)
+                if reconstructed:
+                    # Replace the flattened table with the reconstructed one
+                    lines[header_idx] = reconstructed
+                    # Remove the separator row if it was part of the flattened table
+                    if separator_idx > header_idx:
+                        lines.pop(separator_idx)
+                
+            return '\n'.join(lines)
+        
+        except Exception as e:
+            print(f"Error formatting table section: {str(e)}")
+            return section
+
+    
     def scrape_webpage(self, url):
         """Scrape content from a webpage"""
         try:
@@ -3211,6 +4000,9 @@ class ChatView(APIView):
             # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
             return greeting_responses[response_index]
+
+        # Initialize combined citation sources with document citations
+        combined_citation_sources = doc_citation_sources.copy() if doc_citation_sources else {}
         
         # If not a greeting, proceed with the regular flow
         # Clean up responses by removing source sections
@@ -3396,11 +4188,23 @@ class ChatView(APIView):
                 combined_response = completion.choices[0].message.content
                 
             else:
+                # Update the prompt to include citation information
+                citation_instructions = """
+                CITATION GUIDELINES:
+                When referencing information from the document sources, cite the source using [n] format.
+                When referencing information from web sources, cite the source using [Wn] format (e.g., [W1], [W2]).
+                Every statement that comes directly from a source should include a citation.
+                Place citations immediately after the information they support.
+                """
+                
+                
                 # Standard combination prompt if we don't need model knowledge
                 prompt = f"""
                 You have two responses to the user's query: one based on their documents and one based on web search.
                 Your task is to combine these into a single coherent response that prioritizes the document information
                 (since that is more specific to the user) but supplements with web information when valuable.
+                
+                {citation_instructions}
 
                 The response format should be: {response_format.replace('_', ' ').title()}
 
@@ -3438,6 +4242,9 @@ class ChatView(APIView):
                 - <h3>Information from Documents</h3> for document-based information.
                 - <h3>Information from the Web</h3> for web-based information.
 
+                9. For document information, maintain the existing citation numbers [n].
+                10. For web information, use [W1], [W2], etc. format.
+
                 Create a single, coherent, well-structured response that combines both sources of information.
                 Make sure your response is contextually relevant to the ongoing conversation.
 
@@ -3458,6 +4265,34 @@ class ChatView(APIView):
                 
                 combined_response = completion.choices[0].message.content
             
+            # Process citations in the combined response to include web sources
+            web_citation_pattern = r'\[W(\d+)\]'
+            web_citations = re.findall(web_citation_pattern, combined_response)
+
+
+            # Add web sources to combined_citation_sources
+            if web_citations and web_sources:
+                web_citation_base = max(combined_citation_sources.keys()) + 1 if combined_citation_sources else 1
+                
+                for i, web_citation in enumerate(set(web_citations)):
+                    web_idx = int(web_citation) - 1
+                    if web_idx < len(web_sources):
+                        web_source = web_sources[web_idx]
+                        citation_num = web_citation_base + i
+                        
+                        # Add web source to citation sources
+                        combined_citation_sources[citation_num] = {
+                            'source_file': web_source.get('title', 'Web Source'),
+                            'page_number': 'Web',
+                            'section_title': 'Web Search Result',
+                            'snippet': web_source.get('snippet', '')[:200] + "..." if web_source.get('snippet', '') else "Web content",
+                            'document_id': f"web_{web_idx}",
+                            'url': web_source.get('url', '')
+                        }
+                        
+                        # Replace [Wn] with [citation_num]
+                        combined_response = combined_response.replace(f"[W{web_citation}]", f"[{citation_num}]")
+
             # Add all sources
             all_doc_sources = list(set(doc_sources))
             all_web_domains = [self.extract_domain(source.get('url', '')) for source in web_sources]
@@ -3471,8 +4306,12 @@ class ChatView(APIView):
                     all_sources_str = "Document context and general knowledge"
             else:
                 all_sources_str = ", ".join(all_sources) if all_sources else "Document context only"
+
+            # Clean up and process citations in the final response
+            processed_response, processed_citation_sources = self._format_citations_for_response(combined_response, combined_citation_sources)
+        
             
-            return f"{combined_response}\n\n*Sources: {all_sources_str}*"
+            return f"{processed_response}\n\n*Sources: {all_sources_str}*", processed_citation_sources
             
         except Exception as e:
             logger.error(f"Error combining responses: {str(e)}", exc_info=True)
@@ -3496,7 +4335,7 @@ class ChatView(APIView):
             all_sources = all_doc_sources + all_web_domains
             all_sources_str = ", ".join(all_sources)
             
-            return f"{fallback_response}\n\n*Sources: {all_sources_str}*"
+            return f"{fallback_response}\n\n*Sources: {all_sources_str}*", doc_citation_sources
 
     def detect_question_format(self, query, context_snippets=None):
         """
@@ -3761,11 +4600,97 @@ class ChatView(APIView):
         return "Provide a helpful response to the query based on the document context."
 
 
+    # Add these citation-specific prompt templates to the ChatView class
 
+    CITATION_QA_TEMPLATE = """
+    Please provide an answer based solely on the provided sources. 
+    When referencing information from a source, cite the appropriate source(s) using their corresponding numbers within square brackets.
+    Every statement in your answer should include at least one source citation.
+    Only cite a source when you are explicitly referencing it.
+    If none of the sources are helpful, you should indicate that.
+
+    Examples of good citations:
+    1. 'The sky is red in the evening [1]'
+    2. 'Water is wet when the sky is red [2], which occurs in the evening [1]'
+    3. 'According to the research [3], both findings [1][2] support this conclusion'
+
+    Your answer should be clear, accurate, and directly tied to the source material.
+    Below are several numbered sources of information:
+
+    {context_str}
+
+    Query: {query_str}
+    Answer: 
+    """
+
+    CITATION_REFINE_TEMPLATE = """
+    You are refining an existing answer to make it more accurate and well-cited.
+    When referencing information from a source, cite the appropriate source(s) using their corresponding numbers within square brackets.
+    Every statement in your answer should include at least one source citation.
+    Only cite a source when you are explicitly referencing it.
+
+    We have provided an existing answer: {existing_answer}
+
+    Below are numbered sources of information.
+    Use them to refine the existing answer, ensuring all statements have proper citations.
+
+    {context_msg}
+
+    Query: {query_str}
+    Refined Answer:
+    """
+
+
+    def _clean_citations(self, text, citation_sources):
+        """Clean up citation format to ensure consistent [n] format."""
+        # Fix citations that might not have brackets
+        text = re.sub(r'(\s)(\d+)(\s)', lambda m: m.group(1) + '[' + m.group(2) + ']' + m.group(3) 
+                    if self._is_likely_citation(int(m.group(2)), citation_sources) else m.group(0), text)
+        
+        # Fix spaces in citations
+        text = re.sub(r'\[\s*(\d+)\s*\]', r'[\1]', text)
+        
+        return text
+
+    def _is_likely_citation(self, num, citation_sources):
+        """Check if a number is likely to be a citation based on available sources."""
+        return num in citation_sources and 1 <= num <= len(citation_sources)
+
+    def _format_citations_for_response(self, response_text, citation_sources):
+        """Format the citations for response."""
+        # Extract all citations from the text
+        citation_pattern = r'\[(\d+)\]'
+        citations = re.findall(citation_pattern, response_text)
+        unique_citations = sorted(set([int(c) for c in citations if c.isdigit()]))
+        
+        # Create mapping from original citation numbers to sequential display numbers
+        citation_mapping = {original_num: display_num for display_num, original_num in enumerate(unique_citations, 1)}
+        
+        # Replace original citation numbers with sequential display numbers
+        processed_text = response_text
+        for original_num in sorted(citation_mapping.keys(), reverse=True):
+            processed_text = re.sub(r'\[' + str(original_num) + r'\]', f'[{citation_mapping[original_num]}]', processed_text)
+        
+        # Create new citation sources dictionary with display numbers
+        display_citation_sources = {}
+        for display_num, original_num in enumerate(unique_citations, 1):
+            if original_num in citation_sources:
+                source_info = citation_sources[original_num]
+                snippet = source_info.get('text', '')
+                snippet_length = 1500 
+                display_citation_sources[display_num] = {
+                    'source_file': source_info.get('source_file', 'Unknown'),
+                    'page_number': 'Unknown',  # Or get chunk number if available
+                    'section_title': 'Unknown',
+                    'snippet': snippet[:snippet_length] + "..." if len(snippet) > snippet_length else snippet,
+                    'document_id': source_info.get('document_id', 'Unknown')
+                }
+        
+        return processed_text, display_citation_sources
     def generate_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a response using the provided context and sources with web search capability.
-        Enhanced to handle URL content in context.
+        Enhanced to handle URL content in context. Also Enhnaced with accurate citation
         
         Args:
             query (str): User's original query
@@ -3831,11 +4756,11 @@ class ChatView(APIView):
             ]
             # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
-            return greeting_responses[response_index]
+            return greeting_responses[response_index], {}
         
         # If not a greeting, proceed with the regular flow
         if not context and not use_web_knowledge:
-            return "I cannot answer this question based on the provided documents."
+            return "I cannot answer this question based on the provided documents.", {}
         
         # Check for URL content in the context
         url_context = ""
@@ -3853,18 +4778,40 @@ class ChatView(APIView):
                 if i < len(sources):
                     document_sources.append(sources[i])
         
-        # Standard document-based response preparation
+        # Updated context preparation with citation mapping
+        citation_sources = {}
         selected_context, selected_sources = self._prepare_context(document_context, document_sources)
         
         # Create context with source information
         contextualized_content = []
-        for content, source in zip(selected_context, selected_sources):
-            contextualized_content.append(f"From document '{source}':\n{content}")
+        for i, (content, source) in enumerate(zip(selected_context, selected_sources), 1):
+            # Add citation number to each chunk
+            citation_sources[i] = {
+                "source_file": source,
+                "text": content,
+                "document_id": "Unknown",  # You might need to add logic to get the document ID
+                "score": 1.0 - (i * 0.05),  # Simple scoring based on position (higher for earlier chunks)
+                "display_num": i
+            }
+            contextualized_content.append(f"Source {i}:\n{content}")
             
-        # Add URL context if available
+        # # Add URL context if available
+        # if url_context:
+        #     contextualized_content.append(f"From URLs in query:\n{url_context}")
+        #     selected_sources.append("URL Content")
+
         if url_context:
-            contextualized_content.append(f"From URLs in query:\n{url_context}")
+            citation_count = len(contextualized_content) + 1
+            contextualized_content.append(f"Source {citation_count}:\n{url_context}")
             selected_sources.append("URL Content")
+            citation_sources[citation_count] = {
+                "source_file": "URL Content",
+                "text": url_context,
+                "document_id": "url_content",
+                "score": 0.8,  # Fixed score for URL content
+                "display_num": citation_count
+            }
+
             
         full_context = "\n\n".join(contextualized_content)
 
@@ -3909,10 +4856,24 @@ class ChatView(APIView):
     
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
-    
+
+
+        # Add citation instruction to the prompt
+        citation_instructions = """
+        CITATION GUIDELINES:
+        When referencing information from the provided sources, cite the appropriate source using its corresponding number within square brackets (e.g., [1], [2], etc.). 
+        Every statement that comes from a specific source should include a citation.
+        When multiple sources support a statement, cite all relevant sources: [1][2].
+        Place citations immediately after the information they support.
+        Ensure all facts and information are properly cited with their source number.
+        Only cite a source when you are explicitly referencing information from it.
+        """
+
         # Define the user prompt - modified to handle URL content
         user_prompt = f"""
         Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+
+        {citation_instructions}
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -3951,6 +4912,8 @@ class ChatView(APIView):
         7. Use <p> tags for detailed explanations
         8. Use <ul> and <li> for list-based information
         9. Use <table> and <tr>, <td> for tabular information
+        10. IMPORTANT: Cite sources using [n] format after each statement that comes from a specific source
+
 
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document and URL context.
@@ -3963,7 +4926,7 @@ class ChatView(APIView):
         """
         
         # Define system message
-        system_message = "You are a document analysis expert with conversation memory. Provide a comprehensive and detailed answer using only available information while maintaining conversation continuity."
+        system_message = "You are a document analysis expert with conversation memory. Provide a comprehensive and detailed answer using only available information while maintaining conversation continuity. Use source citations [n] for all information from the documents."
         
         try:
             # Call the OpenAI chat completion API
@@ -3977,10 +4940,14 @@ class ChatView(APIView):
             
             # Extract the answer from the response
             answer = completion.choices[0].message.content
+
+            # Clean and process citations in the answer
+            answer = self._clean_citations(answer, citation_sources)
+            processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
             
             # If answer seems too short, try to generate a more detailed one
             if len(answer.split()) < 100:  # If less than ~100 words
-                enhanced_system_message = "You are a document analysis expert with conversation memory. Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity."
+                enhanced_system_message = "You are a document analysis expert with conversation memory. Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity. Use source citations [n] for all information from the documents."
                 
                 completion = client.chat.completions.create(
                     model="o3-mini",
@@ -3991,6 +4958,8 @@ class ChatView(APIView):
                 )
                 
                 answer = completion.choices[0].message.content
+                answer = self._clean_citations(answer, citation_sources)
+                processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
                 
         except Exception as e:
             # If there's an error (e.g., token limit), try with fewer context chunks
@@ -4021,6 +4990,8 @@ class ChatView(APIView):
                 )
                 
                 answer = fallback_completion.choices[0].message.content
+                answer = self._clean_citations(answer, citation_sources)
+                processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
             except Exception as nested_e:
                 # Last resort fallback
                 answer = f"An error occurred while generating the response: {str(e)}. Please try a more specific question or with fewer documents."
@@ -4028,7 +4999,7 @@ class ChatView(APIView):
         # Add source information
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
-        return f"{answer}\n\n*Sources: {source_info}*"
+        return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
 
     def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
@@ -4099,7 +5070,7 @@ class ChatView(APIView):
             ]
             # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
-            return greeting_responses[response_index]
+            return greeting_responses[response_index], {}  # Return empty citation dict
         
         # If not a greeting, proceed with the regular flow
         if not context and not use_web_knowledge:
@@ -4122,17 +5093,40 @@ class ChatView(APIView):
                     document_sources.append(sources[i])
         
         # Standard document-based response (no web search) - mostly the same as original
+        citation_sources = {}
         selected_context, selected_sources = self._prepare_context(document_context, document_sources)
         
         # Create context with source information
         contextualized_content = []
-        for content, source in zip(selected_context, selected_sources):
-            contextualized_content.append(f"From document '{source}':\n{content}")
+        for i, (content, source) in enumerate(zip(selected_context, selected_sources), 1):
+            # Add citation number to each chunk
+            citation_sources[i] = {
+                "source_file": source,
+                "text": content,
+                "document_id": "Unknown",  # You might need to add logic to get the document ID
+                "score": 1.0 - (i * 0.05),  # Simple scoring based on position (higher for earlier chunks)
+                "display_num": i
+            }
+            contextualized_content.append(f"Source {i}:\n{content}")
             
-        # Add URL context if available
+        # # Add URL context if available
+        # if url_context:
+        #     contextualized_content.append(f"From URLs in query:\n{url_context}")
+        #     selected_sources.append("URL Content")
+
         if url_context:
-            contextualized_content.append(f"From URLs in query:\n{url_context}")
+            citation_count = len(contextualized_content) + 1
+            contextualized_content.append(f"Source {citation_count}:\n{url_context}")
             selected_sources.append("URL Content")
+            citation_sources[citation_count] = {
+                "source_file": "URL Content",
+                "text": url_context,
+                "document_id": "url_content",
+                "score": 0.8,  # Fixed score for URL content
+                "display_num": citation_count
+            }
+
+
             
         full_context = "\n\n".join(contextualized_content)
 
@@ -4178,10 +5172,21 @@ class ChatView(APIView):
             
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
-        
+        # Add citation instruction to the prompt
+        citation_instructions = """
+        CITATION GUIDELINES:
+        When referencing information from the provided sources, cite the appropriate source using its corresponding number within square brackets (e.g., [1], [2], etc.). 
+        Every statement that comes from a specific source should include a citation.
+        When multiple sources support a statement, cite all relevant sources: [1][2].
+        Place citations immediately after the information they support.
+        Ensure all facts and information are properly cited with their source number.
+        Only cite a source when you are explicitly referencing information from it.
+        """
         # Define the user prompt for short response with conversation context
         user_prompt = f"""
         Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+
+        {citation_instructions}
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -4218,6 +5223,7 @@ class ChatView(APIView):
         6. Use <p> tags for explanations
         7. Use <ul> and <li> for list-based information
         8. Use <table> and <tr>, <td> for tabular information if absolutely necessary
+        9. IMPORTANT: Cite sources using [n] format after each statement that comes from a specific source
 
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document and URL context.
@@ -4228,7 +5234,7 @@ class ChatView(APIView):
         """
         
         # Define system message for short response
-        system_message = "You are a document analysis expert with conversation memory. Provide a concise yet informative response that maintains conversation continuity."
+        system_message = "You are a document analysis expert with conversation memory. Provide a concise yet informative response that maintains conversation continuity. Use source citations [n] for information from the documents."
         
         try:
             # Call the OpenAI chat completion API for short response
@@ -4243,6 +5249,8 @@ class ChatView(APIView):
             )
             
             answer = completion.choices[0].message.content
+            answer = self._clean_citations(answer, citation_sources)
+            processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
                 
         except Exception as e:
             # If there's an error, try with even fewer context chunks
@@ -4266,6 +5274,8 @@ class ChatView(APIView):
                 )
                 
                 answer = fallback_completion.choices[0].message.content
+                answer = self._clean_citations(answer, citation_sources)
+                processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
             except Exception as nested_e:
                 # Last resort fallback
                 answer = f"An error occurred while generating the response. Please try a more specific question."
@@ -4273,7 +5283,7 @@ class ChatView(APIView):
         # Add source information
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
-        return f"{answer}\n\n*Sources: {source_info}*"
+        return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
 
     def _get_project_description(self, query):
         """
@@ -4514,12 +5524,14 @@ class ChatView(APIView):
         # Get embeddings for the query
         query_embedding = self.get_embeddings([query])
         if not query_embedding:
-            return [], []
+            return [], [], {}  # Return empty citation mapping to
         
         # Search each document's FAISS index separately
         all_results = []
         all_distances = []
         all_sources = []
+        citation_mapping = {}  # Add citation mapping
+        citation_count = 0
         
         # Check if we have any valid documents to search
         valid_docs_found = False
@@ -4582,6 +5594,18 @@ class ChatView(APIView):
                             content = chunks[idx].get('text', '')
                             # Only add non-empty content
                             if content and content.strip():
+                                # Add numbered citation
+                                citation_count += 1
+                                citation_key = citation_count
+
+                                # Store citation mapping with metadata
+                                citation_mapping[citation_key] = {
+                                    'source': proc_doc.document.filename,
+                                    'text': content,
+                                    'relevance_score': float(distances[0][i]),
+                                    'document_id': proc_doc.document.id,
+                                    'chunk_idx': idx
+                                }
                                 all_results.append(content)
                                 all_distances.append(distances[0][i])
                                 all_sources.append(proc_doc.document.filename)
@@ -4657,6 +5681,15 @@ class ChatView(APIView):
                 # Extract sorted content and sources
                 results = [res[0] for res in sorted_results]
                 sources = [res[1] for res in sorted_results]
+
+                 # Update citation mapping with new ranking
+                reordered_citation_mapping = {}
+                for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+                    if old_key in citation_mapping:
+                        reordered_citation_mapping[new_idx] = citation_mapping[old_key]
+                        reordered_citation_mapping[new_idx]['display_num'] = new_idx
+                
+                citation_mapping = reordered_citation_mapping
             except Exception as e:
                 logger.error(f"Error in TF-IDF processing: {str(e)}")
                 # Fallback to original results if TF-IDF fails
@@ -4671,11 +5704,22 @@ class ChatView(APIView):
             
             results = [res[0] for res in sorted_results]
             sources = [res[1] for res in sorted_results]
+
+            # Update citation mapping with new ranking
+            reordered_citation_mapping = {}
+            for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+                if old_key in citation_mapping:
+                    reordered_citation_mapping[new_idx] = citation_mapping[old_key]
+                    reordered_citation_mapping[new_idx]['display_num'] = new_idx
+            
+            citation_mapping = reordered_citation_mapping
         
         # Remove duplicates while preserving order
         seen_content = set()
         filtered_results = []
         filtered_sources = []
+        filtered_citation_mapping = {}
+        new_citation_count = 0
         
         for content, source in zip(results, sources):
             # Use first 100 chars as a content signature
@@ -4684,9 +5728,17 @@ class ChatView(APIView):
                 seen_content.add(content_hash)
                 filtered_results.append(content)
                 filtered_sources.append(source)
+
+                # Update citation mapping
+                new_citation_count += 1
+                old_idx = i + 1
+                if old_idx in citation_mapping:
+                    filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx]
+                    filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
         
         # Return top matches (limit to 15 most relevant)
-        return filtered_results[:min(len(filtered_results), 15)], filtered_sources[:min(len(filtered_sources), 15)]
+        max_results = min(len(filtered_results), 15)
+        return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
     
     # Helper method to prepare context for response generation
     def _prepare_context(self, context, sources):
