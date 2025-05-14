@@ -307,90 +307,203 @@ const Sidebar = ({
 
   // Function to handle generating ideas from selected documents
   // Update the handleGenerateIdeas function in your Sidebar.jsx
-  const handleGenerateIdeas = async () => {
-    // Check if the idea-generator module is disabled or not included in project
-    if (!isModuleAvailable("idea-generator")) {
-      toast.error("Idea Generator is not available for this project");
-      return;
-    }
-    if (!selectedDocuments || selectedDocuments.length === 0) {
-      toast.warning("Please select at least one document first");
-      return;
-    }
+  // const handleGenerateIdeas = async () => {
+  //   // Check if the idea-generator module is disabled or not included in project
+  //   if (!isModuleAvailable("idea-generator")) {
+  //     toast.error("Idea Generator is not available for this project");
+  //     return;
+  //   }
+  //   if (!selectedDocuments || selectedDocuments.length === 0) {
+  //     toast.warning("Please select at least one document first");
+  //     return;
+  //   }
+
+  //   const mainProjectName = await getMainProjectName();
+
+  //   try {
+  //     // Show animation while processing
+  //     setIsGenerateIdeasAnimating(true);
+
+  //     toast.info("Extracting idea parameters from document...", {
+  //       autoClose: 3000,
+  //     });
+
+  //     // Call the backend API to extract parameters from the first selected document
+  //     const response = await documentService.generateIdeaContext({
+  //       document_id: selectedDocuments[0],
+  //       main_project_id: mainProjectId,
+  //     });
+
+  //     // Stop animation
+  //     setIsGenerateIdeasAnimating(false);
+
+  //     if (response.data && response.data.idea_parameters) {
+  //       // Find the selected document's name for project title
+  //       const selectedDoc = documents.find(
+  //         (doc) => doc.id.toString() === selectedDocuments[0]
+  //       );
+  //       const documentName = selectedDoc ? selectedDoc.filename : "Document";
+
+  //       // Create a default project name from document
+  //       const projectName =
+  //         response.data.suggested_project_name ||
+  //         `Ideas from ${
+  //           response.data.document_name_no_ext || response.data.document_name
+  //         }`;
+
+  //       // Create a new project first
+  //       const projectResponse = await ideaService.createProject({
+  //         name: projectName,
+  //         main_project_id: mainProjectId,
+  //       });
+
+  //       if (projectResponse.data && projectResponse.data.success) {
+  //         // Now navigate to the regular IdeaForm route with the new project ID
+  //         const newProjectId = projectResponse.data.project.id;
+
+  //         // Navigate to the form endpoint for this new project
+  //         navigate(`/idea-generation/${mainProjectId}/form`, {
+  //           state: {
+  //             fromDocQA: true,
+  //             document_id: response.data.document_id,
+  //             document_name: response.data.document_name,
+  //             idea_parameters: response.data.idea_parameters,
+  //             main_project_id: mainProjectId,
+  //             newProject: {
+  //               id: newProjectId,
+  //               name: projectName,
+  //             },
+  //             projectName: mainProjectName,
+  //           },
+  //         });
+
+  //         toast.success("New project created! Loading Idea Generator...");
+  //       } else {
+  //         throw new Error("Failed to create a new project");
+  //       }
+  //     } else {
+  //       toast.error("Failed to extract idea parameters from the document.");
+  //     }
+  //   } catch (error) {
+  //     // Stop animation on error
+  //     setIsGenerateIdeasAnimating(false);
+  //     console.error("Error generating idea context:", error);
+  //     toast.error("Failed to extract idea parameters. Please try again.");
+  //   }
+  // };
+
+ // Updated handleGenerateIdeas function with loading overlay that removes on navigation
+const handleGenerateIdeas = async () => {
+  // Check if the idea-generator module is disabled or not included in project
+  if (!isModuleAvailable("idea-generator")) {
+    toast.error("Idea Generator is not available for this project");
+    return;
+  }
+  if (!selectedDocuments || selectedDocuments.length === 0) {
+    toast.warning("Please select at least one document first");
+    return;
+  }
+
+  // Create and show loading overlay
+  const loadingOverlay = document.createElement('div');
+  loadingOverlay.id = 'idea-generator-loading-overlay';
+  loadingOverlay.className = `fixed inset-0 flex items-center justify-center z-50 ${theme === "dark" ? 'bg-gray-900/80' : 'bg-white/80'} backdrop-blur-sm`;
+  
+  // Create the loader element
+  const loaderHTML = `
+    <div class="flex flex-col items-center">
+      <span class="idea-generator-loader mb-4"></span>
+      <div class="${theme === "dark" ? 'text-white' : 'text-[#a55233]'} text-lg font-medium">
+        Analyzing document and preparing ideas...
+      </div>
+    </div>
+  `;
+  
+  loadingOverlay.innerHTML = loaderHTML;
+  document.body.appendChild(loadingOverlay);
+
+  try {
+    // Show animation while processing
+    setIsGenerateIdeasAnimating(true);
+
+    // toast.info("Extracting idea parameters from document...", {
+    //   autoClose: 3000,
+    // });
 
     const mainProjectName = await getMainProjectName();
 
-    try {
-      // Show animation while processing
-      setIsGenerateIdeasAnimating(true);
+    // Call the backend API to extract parameters from the first selected document
+    const response = await documentService.generateIdeaContext({
+      document_id: selectedDocuments[0],
+      main_project_id: mainProjectId,
+    });
 
-      toast.info("Extracting idea parameters from document...", {
-        autoClose: 3000,
-      });
+    // Find the selected document's name for project title
+    const selectedDoc = documents.find(
+      (doc) => doc.id.toString() === selectedDocuments[0]
+    );
+    const documentName = selectedDoc ? selectedDoc.filename : "Document";
 
-      // Call the backend API to extract parameters from the first selected document
-      const response = await documentService.generateIdeaContext({
-        document_id: selectedDocuments[0],
-        main_project_id: mainProjectId,
-      });
+    // Create a default project name from document
+    const projectName =
+      response.data.suggested_project_name ||
+      `Ideas from ${
+        response.data.document_name_no_ext || response.data.document_name
+      }`;
 
-      // Stop animation
-      setIsGenerateIdeasAnimating(false);
+    // Create a new project first
+    const projectResponse = await ideaService.createProject({
+      name: projectName,
+      main_project_id: mainProjectId,
+    });
 
-      if (response.data && response.data.idea_parameters) {
-        // Find the selected document's name for project title
-        const selectedDoc = documents.find(
-          (doc) => doc.id.toString() === selectedDocuments[0]
-        );
-        const documentName = selectedDoc ? selectedDoc.filename : "Document";
+    if (projectResponse.data && projectResponse.data.success) {
+      // Now navigate to the regular IdeaForm route with the new project ID
+      const newProjectId = projectResponse.data.project.id;
 
-        // Create a default project name from document
-        const projectName =
-          response.data.suggested_project_name ||
-          `Ideas from ${
-            response.data.document_name_no_ext || response.data.document_name
-          }`;
-
-        // Create a new project first
-        const projectResponse = await ideaService.createProject({
-          name: projectName,
-          main_project_id: mainProjectId,
-        });
-
-        if (projectResponse.data && projectResponse.data.success) {
-          // Now navigate to the regular IdeaForm route with the new project ID
-          const newProjectId = projectResponse.data.project.id;
-
-          // Navigate to the form endpoint for this new project
-          navigate(`/idea-generation/${mainProjectId}/form`, {
-            state: {
-              fromDocQA: true,
-              document_id: response.data.document_id,
-              document_name: response.data.document_name,
-              idea_parameters: response.data.idea_parameters,
-              main_project_id: mainProjectId,
-              newProject: {
-                id: newProjectId,
-                name: projectName,
-              },
-              projectName: mainProjectName,
-            },
-          });
-
-          toast.success("New project created! Loading Idea Generator...");
-        } else {
-          throw new Error("Failed to create a new project");
-        }
-      } else {
-        toast.error("Failed to extract idea parameters from the document.");
+      // Remove the loading overlay before navigation
+      const loadingElement = document.getElementById('idea-generator-loading-overlay');
+      if (loadingElement) {
+        document.body.removeChild(loadingElement);
       }
-    } catch (error) {
-      // Stop animation on error
+      
+      // Reset animation state
       setIsGenerateIdeasAnimating(false);
-      console.error("Error generating idea context:", error);
-      toast.error("Failed to extract idea parameters. Please try again.");
+
+      // Navigate to the idea generator form
+      navigate(`/idea-generation/${mainProjectId}/form`, {
+        state: {
+          fromDocQA: true,
+          document_id: response.data.document_id,
+          document_name: response.data.document_name,
+          idea_parameters: response.data.idea_parameters,
+          main_project_id: mainProjectId,
+          newProject: {
+            id: newProjectId,
+            name: projectName,
+          },
+          projectName: mainProjectName,
+        },
+      });
+
+      toast.success("New project created!");
+    } else {
+      throw new Error("Failed to create a new project");
     }
-  };
+  } catch (error) {
+    // Remove the loading overlay on error
+    const loadingElement = document.getElementById('idea-generator-loading-overlay');
+    if (loadingElement) {
+      document.body.removeChild(loadingElement);
+    }
+    
+    // Stop animation on error
+    setIsGenerateIdeasAnimating(false);
+    console.error("Error generating idea context:", error);
+    toast.error("Failed to extract idea parameters. Please try again.");
+  }
+};
+
   const handleResetSearch = () => {
     setDocumentSearchTerm("");
   };
@@ -2122,6 +2235,132 @@ const Sidebar = ({
       {/* Custom Scrollbar Styles */}
       {/* Custom Scrollbar Styles */}
       <style>{`
+/* Make loader visible on both light and dark modes */
+.idea-generator-loader {
+  position: relative;
+  width: 100px;
+  height: 100px;
+}
+
+/* Dark theme loader - using more specific selectors to ensure it applies */
+html.dark #idea-generator-loading-overlay .idea-generator-loader:before,
+body.dark #idea-generator-loading-overlay .idea-generator-loader:before,
+.dark #idea-generator-loading-overlay .idea-generator-loader:before {
+  content: '';
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  top: 50%;
+  left: 0;
+  transform: translate(-5px, -50%);
+  background: linear-gradient(to right, #60a5fa 50%, #93c5fd 50%) no-repeat; /* Using Tailwind blue-400 (#60a5fa) and blue-300 (#93c5fd) */
+  background-size: 200% auto;
+  background-position: 100% 0;
+  animation: colorBallMoveXDark 1.5s linear infinite alternate;
+}
+
+html.dark #idea-generator-loading-overlay .idea-generator-loader:after,
+body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
+.dark #idea-generator-loading-overlay .idea-generator-loader:after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background: #60a5fa; /* Exact blue-400 color from Tailwind */
+}
+
+@keyframes colorBallMoveXDark {
+  0% {
+    background-position: 0% 0;
+    transform: translate(-15px, -50%);
+  }
+  15%, 25% {
+    background-position: 0% 0;
+    transform: translate(0px, -50%);
+  }
+  75%, 85% {
+    background-position: 100% 0;
+    transform: translate(50px, -50%);
+  }
+  100% {
+    background-position: 100% 0;
+    transform: translate(65px, -50%);
+  }
+}
+
+/* Light theme loader */
+:not(.dark) .idea-generator-loader:before {
+  content: '';
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  top: 50%;
+  left: 0;
+  transform: translate(-5px, -50%);
+  background: linear-gradient(to right, #a55233 50%, #556052 50%) no-repeat;
+  background-size: 200% auto;
+  background-position: 100% 0;
+  animation: colorBallMoveXLight 1.5s linear infinite alternate;
+}
+
+:not(.dark) .idea-generator-loader:after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background: #a55233;
+}
+
+@keyframes colorBallMoveXLight {
+  0% {
+    background-position: 0% 0;
+    transform: translate(-15px, -50%);
+  }
+  15%, 25% {
+    background-position: 0% 0;
+    transform: translate(0px, -50%);
+  }
+  75%, 85% {
+    background-position: 100% 0;
+    transform: translate(50px, -50%);
+  }
+  100% {
+    background-position: 100% 0;
+    transform: translate(65px, -50%);
+  }
+}
+
+/* Optional animation to add a pulsing effect to the text */
+@keyframes textPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+#idea-generator-loading-overlay div {
+  animation: textPulse 2s ease-in-out infinite;
+}
+
+/* Ensure the loading overlay has higher z-index than other elements */
+#idea-generator-loading-overlay {
+  z-index: 9999;
+}
+
+/* Ensure the loading overlay has higher z-index than other elements */
+#idea-generator-loading-overlay {
+  z-index: 9999;
+}
   /* Add to your styles */
   .sidebar-footer {
     margin-top: auto; /* Push to bottom */
