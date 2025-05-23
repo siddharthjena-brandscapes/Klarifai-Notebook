@@ -14,6 +14,8 @@ const EditableMessage = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
   const textareaRef = useRef(null);
  
   // Get version information
@@ -28,14 +30,20 @@ const EditableMessage = ({
   // Reset content when message changes
   useEffect(() => {
     setEditedContent(message.content);
+    // Reset undo/redo stacks when starting to edit a new message
+    setUndoStack([]);
+    setRedoStack([]);
   }, [message.content]);
  
   useEffect(() => {
     if (isEditing && textareaRef.current) {
       textareaRef.current.focus();
       resizeTextarea(textareaRef.current);
+      // Initialize undo stack with the original content
+      setUndoStack([message.content]);
+      setRedoStack([]);
     }
-  }, [isEditing]);
+  }, [isEditing, message.content]);
  
   // Function to handle textarea resizing
   const resizeTextarea = (element) => {
@@ -81,6 +89,8 @@ const EditableMessage = ({
   const handleCancel = () => {
     setIsEditing(false);
     setEditedContent(message.content);
+    setUndoStack([]);
+    setRedoStack([]);
   };
  
   const handleSave = () => {
@@ -88,22 +98,132 @@ const EditableMessage = ({
       onUpdate(messageIndex, editedContent);
     }
     setIsEditing(false);
+    setUndoStack([]);
+    setRedoStack([]);
   };
  
   const handleButtonSave = () => {
     // Same functionality as handleSave but with a different name to match UI
     handleSave();
   };
- 
+
+  // Enhanced change handler with undo stack management
   const handleTextareaChange = (e) => {
-    setEditedContent(e.target.value);
+    const newValue = e.target.value;
+    
+    // Only add to undo stack if the content actually changed
+    if (newValue !== editedContent) {
+      setUndoStack(prev => [...prev, editedContent]);
+      setRedoStack([]); // Clear redo stack when new changes are made
+      setEditedContent(newValue);
+    }
+    
     resizeTextarea(e.target);
   };
- 
+
+  // Undo function
+  const handleUndo = () => {
+    if (undoStack.length > 0) {
+      const previousState = undoStack[undoStack.length - 1];
+      setRedoStack(prev => [...prev, editedContent]);
+      setEditedContent(previousState);
+      setUndoStack(prev => prev.slice(0, -1));
+      
+      // Resize textarea after undo
+      setTimeout(() => {
+        if (textareaRef.current) {
+          resizeTextarea(textareaRef.current);
+        }
+      }, 0);
+    }
+  };
+
+  // Redo function
+  const handleRedo = () => {
+    if (redoStack.length > 0) {
+      const nextState = redoStack[redoStack.length - 1];
+      setUndoStack(prev => [...prev, editedContent]);
+      setEditedContent(nextState);
+      setRedoStack(prev => prev.slice(0, -1));
+      
+      // Resize textarea after redo
+      setTimeout(() => {
+        if (textareaRef.current) {
+          resizeTextarea(textareaRef.current);
+        }
+      }, 0);
+    }
+  };
+
+  // Handle tab indentation and other shortcuts
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = e.target.selectionStart;
+      const end = e.target.selectionEnd;
+      const value = e.target.value;
+      
+      if (e.shiftKey) {
+        // Shift+Tab: Remove indentation
+        const lines = value.substring(0, start).split('\n');
+        const currentLine = lines[lines.length - 1];
+        
+        if (currentLine.startsWith('    ')) {
+          // Remove 4 spaces
+          const newValue = value.substring(0, start - 4) + value.substring(start);
+          setUndoStack(prev => [...prev, editedContent]);
+          setRedoStack([]);
+          setEditedContent(newValue);
+          
+          // Set cursor position
+          setTimeout(() => {
+            e.target.selectionStart = start - 4;
+            e.target.selectionEnd = end - 4;
+          }, 0);
+        } else if (currentLine.startsWith('  ')) {
+          // Remove 2 spaces
+          const newValue = value.substring(0, start - 2) + value.substring(start);
+          setUndoStack(prev => [...prev, editedContent]);
+          setRedoStack([]);
+          setEditedContent(newValue);
+          
+          // Set cursor position
+          setTimeout(() => {
+            e.target.selectionStart = start - 2;
+            e.target.selectionEnd = end - 2;
+          }, 0);
+        }
+      } else {
+        // Tab: Add indentation (4 spaces)
+        const newValue = value.substring(0, start) + '    ' + value.substring(end);
+        setUndoStack(prev => [...prev, editedContent]);
+        setRedoStack([]);
+        setEditedContent(newValue);
+        
+        // Set cursor position
+        setTimeout(() => {
+          e.target.selectionStart = start + 4;
+          e.target.selectionEnd = start + 4;
+        }, 0);
+      }
+      
+      resizeTextarea(e.target);
+    } else if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      // Ctrl+Z: Undo
+      e.preventDefault();
+      handleUndo();
+    } else if ((e.key === 'y' && (e.ctrlKey || e.metaKey)) || 
+               (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey)) {
+      // Ctrl+Y or Ctrl+Shift+Z: Redo
+      e.preventDefault();
+      handleRedo();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Ctrl+Enter: Save
+      e.preventDefault();
       handleSave();
     } else if (e.key === 'Escape') {
+      // Escape: Cancel
+      e.preventDefault();
       handleCancel();
     }
   };
@@ -125,6 +245,15 @@ const EditableMessage = ({
     if (onRestoreVersion) {
       onRestoreVersion(messageIndex, newVersion);
     }
+  };
+
+  // Function to format message content with preserved line breaks
+  const formatMessageContent = (content) => {
+    // Convert newlines to <br> tags for HTML rendering
+    // Also preserve spaces for indentation
+    return content
+      .replace(/\n/g, '<br>')
+      .replace(/  /g, '&nbsp;&nbsp;'); // Convert double spaces to non-breaking spaces for indentation
   };
  
   return (
@@ -173,20 +302,22 @@ const EditableMessage = ({
       value={editedContent}
       onChange={handleTextareaChange}
       onKeyDown={handleKeyDown}
-      className="w-full bg-transparent text-[#5e4636] dark:text-white p-2 resize-none focus:outline-none leading-relaxed"
+      className="w-full bg-transparent text-[#5e4636] dark:text-white p-2 resize-none focus:outline-none leading-relaxed font-mono"
       style={{
         height: '60px',
         maxHeight: '100px',
         minWidth: '600px',
         overflowY: 'auto',
-        fontFamily: 'inherit',
+        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
         fontSize: 'inherit',
-        lineHeight: '1.5'
+        lineHeight: '1.5',
+        tabSize: 4
       }}
     />
     <div className="flex justify-between mt-2">
       <div className="text-[#5a544a] dark:text-gray-400 text-xs self-center">
-        Press Ctrl+Enter to save, Esc to cancel
+        <div>Tab/Shift+Tab: Indent/Unindent</div>
+        <div>Ctrl+Z/Ctrl+Y: Undo/Redo • Ctrl+Enter: Save • Esc: Cancel</div>
       </div>
       <div className="flex space-x-2">
         <button
@@ -222,7 +353,13 @@ const EditableMessage = ({
         <ChevronRight className="h-3 w-3 text-[#556052] dark:text-amber-400 ml-2" title="Use Alt+→ to view newer versions" />
       </div>
     )}
-    {message.content}
+    {/* Updated message content display with preserved line breaks and indentation */}
+    <div 
+      className="whitespace-pre-wrap break-words font-mono"
+      dangerouslySetInnerHTML={{
+        __html: formatMessageContent(message.content)
+      }}
+    />
   </div>
 )}
     </div>

@@ -187,16 +187,26 @@ export const ideaService = {
     }
   },
 
-  // Update project with validation
-  updateProject: (projectId, data) => {
-    
-    if (projectId === undefined || projectId === null || 
-        typeof projectId === 'object' || isNaN(Number(projectId))) {
-      console.error("Invalid project ID for updateProject:", projectId);
-      return Promise.reject(new Error("Invalid project ID. Expected a number or numeric string."));
-    }
-    return axiosInstance.put(`/ideas/projects/${projectId}/`, data);
-  },
+ updateProject: (projectId, data) => {
+  // Check if projectId is an object (in case the old pattern is used)
+  if (typeof projectId === 'object' && projectId !== null && projectId.id) {
+    console.log("Converting object-style projectId to ID + data format");
+    data = projectId;
+    projectId = projectId.id;
+  }
+  
+  // Now ensure projectId is valid
+  if (!projectId || isNaN(Number(projectId))) {
+    console.error("Invalid project ID for updateProject:", projectId);
+    return Promise.reject(new Error("Invalid project ID. Expected a number or numeric string."));
+  }
+  
+  // Log the API call we're about to make
+  console.log(`Making API call to update project ${projectId}`);
+  
+  // Make the API call
+  return axiosInstance.put(`/ideas/projects/${projectId}/`, data);
+},
 
   // Delete project
   deleteProject: (projectId) => {

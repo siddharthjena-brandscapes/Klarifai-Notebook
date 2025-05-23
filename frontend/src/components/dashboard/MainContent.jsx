@@ -163,6 +163,61 @@ const MainContent = ({
     }
   }, []);
 
+
+  // Add this right after the imports and before the MainContent component definition
+const processWebSources = (sourcesInfo, extractedUrls) => {
+  let webSources = [];
+  
+  if (sourcesInfo) {
+    if (typeof sourcesInfo === 'string') {
+      webSources = sourcesInfo
+        .split(',')
+        .map(source => source.trim())
+        .filter(source => source && source !== '*');
+    } else if (Array.isArray(sourcesInfo)) {
+      webSources = sourcesInfo;
+    }
+  } else if (extractedUrls && Array.isArray(extractedUrls) && extractedUrls.length > 0) {
+    webSources = extractedUrls;
+  }
+  
+  return webSources;
+};
+
+  // Utility function to process follow-up questions consistently
+const processFollowUpQuestions = (questionsData) => {
+  if (!questionsData) return [];
+  
+  let questions = questionsData;
+  
+  // Handle string responses (JSON or plain text)
+  if (typeof questions === 'string') {
+    try {
+      const parsed = JSON.parse(questions);
+      questions = parsed.questions || parsed || [];
+    } catch (e) {
+      // If not JSON, treat as a single question or split by newlines
+      questions = questions.split('\n').filter(q => q.trim());
+    }
+  } 
+  // Handle object responses
+  else if (typeof questions === 'object' && !Array.isArray(questions)) {
+    questions = questions.questions || [];
+  }
+  
+  // Ensure we have an array
+  if (!Array.isArray(questions)) {
+    return [];
+  }
+  
+  // Clean and validate questions
+  return questions
+    .filter(q => q && typeof q === 'string')
+    .map(q => q.trim())
+    .filter(q => q.length > 0)
+    .slice(0, 5); // Limit to 5 questions max
+};
+
   
   const getTextSizeClass = (size) => {
     switch (size) {
@@ -218,9 +273,6 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
         [messageIndex]: 0
       }));
     }
-
-    // Show a toast to indicate regeneration is in progress
-    // const toastId = toast.loading(`Regenerating ${length} response...`);
     
     // Force web mode when no documents are selected
     const useWebMode = localSelectedDocuments.length === 0 ? true : useWebKnowledge;
@@ -241,16 +293,39 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
     const response = await chatService.sendMessage(requestData);
     
     if (response && response.data) {
+      // Parse the JSON response
+      let responseContent = response.data.response || response.data.content;
+      let citations = response.data.citations || [];
+      
+      // Process web sources using the helper function
+      const webSources = processWebSources(response.data.sources_info, response.data.extracted_urls);
+      
+      // Handle JSON response format
+      if (typeof responseContent === 'string' && responseContent.startsWith('{')) {
+        try {
+          const parsedResponse = JSON.parse(responseContent);
+          responseContent = parsedResponse.content || responseContent;
+          if (parsedResponse.citations) {
+            citations = parsedResponse.citations;
+          }
+        } catch (jsonError) {
+          console.warn("Failed to parse JSON response:", jsonError);
+        }
+      }
+
       const regeneratedMessage = {
         role: 'assistant',
-        content: response.data.response || response.data.content,
+        content: responseContent,
         citations: response.data.citations || [],
         follow_up_questions: response.data.follow_up_questions || [],
         use_web_knowledge: response.data.use_web_knowledge || useWebMode,
         response_length: response.data.response_length || length,
         response_format: response.data.response_format || responseFormat,
         regenerated: true,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        webSources: webSources, // Add processed web sources
+        sources_info: response.data.sources_info, // Store original sources_info
+        extracted_urls: response.data.extracted_urls, // Store original extracted_urls
       };
       
       // Add the regenerated response to the collection
@@ -276,25 +351,23 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
       });
       
       // Update follow-up questions if available
-      if (response.data.follow_up_questions?.length > 0) {
-        setCurrentFollowUpQuestions(response.data.follow_up_questions);
-        setFollowUpQuestions(response.data.follow_up_questions);
+      if (response.data.follow_up_questions) {
+        const validQuestions = processFollowUpQuestions(response.data.follow_up_questions);
+        if (validQuestions.length > 0) {
+          setCurrentFollowUpQuestions(validQuestions);
+          setFollowUpQuestions(validQuestions);
+        }
       }
       toast.success('Response regenerated successfully!', {
-        
         isLoading: false,
         autoClose: 2000
       });
-      
     }
   } catch (error) {
     console.error("Response regeneration error:", error);
     toast.error("Failed to regenerate response. Please try again.");
   }
   
-  
-  
-  // Return a promise that can be awaited by the ResponseRegenerator component
   return Promise.resolve();
 };
   
@@ -671,18 +744,28 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
         mainProjectId
       );
 
+        
       if (response.data.summaries) {
-        // Combine all summaries
         const combinedSummary = response.data.summaries
           .map((summary) => {
-            return `<h3 class="text-lg font-bold mb-2">${summary.filename}</h3>${summary.summary}`;
+            // Parse summary content if it's JSON
+            let summaryContent = summary.summary;
+            if (typeof summaryContent === 'string' && summaryContent.startsWith('{')) {
+              try {
+                const parsedSummary = JSON.parse(summaryContent);
+                summaryContent = parsedSummary.content || parsedSummary.summary || summaryContent;
+              } catch (jsonError) {
+                console.warn("Failed to parse summary JSON:", jsonError);
+              }
+            }
+            
+            return `<h3 class="text-lg font-bold mb-2">${summary.filename}</h3>${summaryContent}`;
           })
           .join('<hr class="my-4 border-blue-500/20" />');
 
         setSummary(combinedSummary);
         setPersistentSummary(combinedSummary);
         setIsSummaryVisible(true);
-
         toast.success("Summary generated successfully!");
       }
     } catch (error) {
@@ -944,6 +1027,7 @@ const renderSummaryView = () => {
   );
 };
 
+
   useEffect(() => {
     // Update persistent summary when prop or popup summary changes
     if (propSummary) {
@@ -956,54 +1040,68 @@ const renderSummaryView = () => {
     fetchUserDocuments();
   }, []);
 
-  useEffect(() => {
-    if (selectedChat) {
-      console.log("Loading selected chat:", selectedChat);
+ useEffect(() => {
+  if (selectedChat) {
+    console.log("Loading selected chat:", selectedChat);
 
-      // Set conversation state with messages
-      const chatMessages = selectedChat.messages || [];
-      setConversation(
-        [...chatMessages].sort(
-          (a, b) => new Date(a.created_at) - new Date(b.created_at)
-        )
+    // Set conversation state with messages
+    const chatMessages = selectedChat.messages || [];
+    
+    // Process messages and ensure webSources are included
+    const processedMessages = chatMessages.map(msg => {
+      if (msg.sources_info || msg.extracted_urls || msg.webSources) {
+        return {
+          ...msg,
+          webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
+        };
+      }
+      return msg;
+    });
+    
+    setConversation(
+      [...processedMessages].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      )
+    );
+
+    // Set conversation ID
+    setConversationId(selectedChat.conversation_id);
+
+    // Set summary state
+    if (selectedChat.summary) {
+      setSummary(selectedChat.summary);
+      setPersistentSummary(selectedChat.summary);
+    }
+
+    // Handle documents
+    if (selectedChat.selected_documents?.length > 0) {
+      const documentIds = selectedChat.selected_documents.map((doc) =>
+        typeof doc === "object" ? doc.id.toString() : doc.toString()
       );
+      setLocalSelectedDocuments(documentIds);
+      setActiveDocumentForSummary(documentIds[0]);
 
-      // Set conversation ID
-      setConversationId(selectedChat.conversation_id);
-
-      // Set summary state
-      if (selectedChat.summary) {
-        setSummary(selectedChat.summary);
-        setPersistentSummary(selectedChat.summary); // Add this line
-      }
-
-      // Handle documents
-      if (selectedChat.selected_documents?.length > 0) {
-        const documentIds = selectedChat.selected_documents.map((doc) =>
-          typeof doc === "object" ? doc.id.toString() : doc.toString()
-        );
-        setLocalSelectedDocuments(documentIds);
-        setActiveDocumentForSummary(documentIds[0]);
-
-        // Important: Also update the parent's selectedDocuments
-        if (setSelectedDocuments) {
-          setSelectedDocuments(documentIds);
-        }
-      }
-
-      // Handle follow-up questions - Modified this part
-      const followUps = selectedChat.follow_up_questions || [];
-      if (followUps.length > 0) {
-        console.log("Setting follow-up questions:", followUps);
-        setCurrentFollowUpQuestions(followUps);
-        setFollowUpQuestions(followUps);
-      } else {
-        // Reset follow-up questions if none exist
-        setCurrentFollowUpQuestions([]);
-        setFollowUpQuestions([]);
+      // Important: Also update the parent's selectedDocuments
+      if (setSelectedDocuments) {
+        setSelectedDocuments(documentIds);
       }
     }
-  }, [selectedChat, setFollowUpQuestions, setSummary, setSelectedDocuments]);
+
+    // Handle follow-up questions
+    const followUps = selectedChat.follow_up_questions || [];
+    const processedFollowUps = processFollowUpQuestions(followUps);
+
+    if (processedFollowUps.length > 0) {
+      console.log("Setting follow-up questions:", processedFollowUps);
+      setCurrentFollowUpQuestions(processedFollowUps);
+      setFollowUpQuestions(processedFollowUps);
+    } else {
+      // Reset follow-up questions if none exist
+      setCurrentFollowUpQuestions([]);
+      setFollowUpQuestions([]);
+    }
+  }
+}, [selectedChat, setFollowUpQuestions, setSummary, setSelectedDocuments]);
 
   useEffect(() => {
     // Cleanup function to reset states when component unmounts or chat changes
@@ -1287,80 +1385,229 @@ const renderSummaryView = () => {
     }
   };
 
-  const handleSendMessage = async (message) => {
-    if (!message.trim()) return;
+const handleSendMessage = async (message) => {
+  if (!message.trim()) return;
 
-    // Add user message to conversation
-    const newConversation = [
-      ...conversation,
-      { role: "user", content: message },
-    ];
-    setConversation(newConversation);
-    setMessage("");
-    setIsLoading(true);
+  // Add user message to conversation
+  const newConversation = [
+    ...conversation,
+    { role: "user", content: message },
+  ];
+  setConversation(newConversation);
+  setMessage("");
+  setIsLoading(true);
 
-    if (!isFollowUpQuestionsMinimized) {
-      setIsFollowUpQuestionsMinimized(true);
-    }
+  if (!isFollowUpQuestionsMinimized) {
+    setIsFollowUpQuestionsMinimized(true);
+  }
 
-    try {
-      // Force useWebKnowledge to true if no documents are selected
-      // Otherwise use the user's preference (will default to false when docs are selected)
-      const useWebMode =
-        localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+  try {
+    // Force useWebKnowledge to true if no documents are selected
+    const useWebMode =
+      localSelectedDocuments.length === 0 ? true : useWebKnowledge;
 
-      // Prepare request data
-      const messageData = {
-        message,
-        conversation_id: conversationId,
-        selected_documents: localSelectedDocuments,
-        main_project_id: mainProjectId,
-        messages: newConversation,
-        use_web_knowledge: useWebMode, // Use the local variable instead of state directly
-        response_length: responseLength,
-        response_format: responseFormat,
-        general_chat_mode: localSelectedDocuments.length === 0, // Add this flag for backend to know it's general chat
-      };
+    // Prepare request data
+    const messageData = {
+      message,
+      conversation_id: conversationId,
+      selected_documents: localSelectedDocuments,
+      main_project_id: mainProjectId,
+      messages: newConversation,
+      use_web_knowledge: useWebMode,
+      response_length: responseLength,
+      response_format: responseFormat,
+      general_chat_mode: localSelectedDocuments.length === 0,
+    };
 
-      console.log("Sending message with data:", messageData);
+    console.log("🚀 SENDING REQUEST TO BACKEND:", messageData);
 
-      const response = await chatService.sendMessage(messageData);
+    const response = await chatService.sendMessage(messageData);
 
-      if (response && response.data) {
-        const assistantMessage = {
-          role: "assistant",
-          content: response.data.response || response.data.content,
-          citations: response.data.citations || [],
-          follow_up_questions: response.data.follow_up_questions || [],
-          use_web_knowledge: response.data.use_web_knowledge || useWebMode,
-          response_length: response.data.response_length || responseLength,
-          response_format: response.data.response_format || responseFormat,
-        };
-
-        // Update conversation with the new assistant message
-        const updatedConversation = [...newConversation, assistantMessage];
-        setConversation(updatedConversation);
-        setMessage("");
-
-        // Update follow-up questions if available
-        if (response.data.follow_up_questions) {
-          setCurrentFollowUpQuestions(response.data.follow_up_questions);
-          setFollowUpQuestions(response.data.follow_up_questions);
-        }
-        // Ensure conversation_id is set for the entire chat session
-        if (!conversationId && response.data.conversation_id) {
-          setConversationId(response.data.conversation_id);
+    console.log("📦 Full Response Object:", response);
+    
+    if (response && response.data) {
+      // Parse the JSON response from backend
+      let responseContent = response.data.response || response.data.content;
+      let citations = response.data.citations || [];
+      
+      // Process web sources using the helper function
+      const webSources = processWebSources(response.data.sources_info, response.data.extracted_urls);
+      
+      console.log("Processed web sources:", webSources);
+      
+      // If the response is a JSON string, parse it
+      if (typeof responseContent === 'string' && responseContent.startsWith('{')) {
+        try {
+          const parsedResponse = JSON.parse(responseContent);
+          responseContent = parsedResponse.content || responseContent;
+          // Update citations if they're in the JSON response
+          if (parsedResponse.citations) {
+            citations = parsedResponse.citations;
+          }
+        } catch (jsonError) {
+          console.warn("⚠️ Failed to parse JSON response, using as-is:", jsonError);
         }
       }
-    } catch (error) {
-      console.error("Chat Error:", error);
-      toast.error("Failed to send message. Please try again.");
-      // Remove the user message on error
-      setConversation((prev) => prev.slice(0, -1));
-    } finally {
-      setIsLoading(false);
+
+      const assistantMessage = {
+        role: "assistant",
+        content: responseContent,
+        citations: response.data.citations || [],
+        follow_up_questions: response.data.follow_up_questions || [],
+        use_web_knowledge: response.data.use_web_knowledge || useWebMode,
+        response_length: response.data.response_length || responseLength,
+        response_format: response.data.response_format || responseFormat,
+        webSources: webSources, // Use processed web sources
+        sources_info: response.data.sources_info, // Store original sources_info
+        extracted_urls: response.data.extracted_urls, // Store original extracted_urls
+      };
+
+      console.log("Final assistant message with sources:", assistantMessage);
+
+      // Update conversation with the new assistant message
+      const updatedConversation = [...newConversation, assistantMessage];
+      setConversation(updatedConversation);
+      setMessage("");
+
+      // Update follow-up questions if available
+      if (response.data.follow_up_questions) {
+        let questions = response.data.follow_up_questions;
+        
+        // If it's a string that looks like JSON, parse it
+        if (typeof questions === 'string' && questions.includes('"questions"')) {
+          try {
+            const parsed = JSON.parse(questions);
+            questions = parsed.questions || [];
+          } catch (e) {
+            console.error("Failed to parse follow-up questions:", e);
+            questions = [];
+          }
+        }
+        
+        // Ensure it's an array
+        if (Array.isArray(questions) && questions.length > 0) {
+          setCurrentFollowUpQuestions(questions);
+          setFollowUpQuestions(questions);
+        }
+      }
+
+      // Ensure conversation_id is set for the entire chat session
+      if (!conversationId && response.data.conversation_id) {
+        setConversationId(response.data.conversation_id);
+      }
     }
-  };
+  } catch (error) {
+    console.error("\n❌ CHAT ERROR OCCURRED:", error);
+    toast.error("Failed to send message. Please try again.");
+    // Remove the user message on error
+    setConversation((prev) => prev.slice(0, -1));
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+const WebSourcesDisplay = ({ sources }) => {
+  if (!sources || sources.length === 0) return null;
+  
+  // Define file extensions that should not be clickable
+  const fileExtensions = [
+    '.pdf', '.docx', '.txt', '.pptx', '.jpg', '.jpeg', '.bmp', 
+    '.png', '.mp3', '.mp4', '.wav', '.mpeg', '.doc', '.xls', 
+    '.xlsx', '.ppt', '.gif', '.tiff', '.zip', '.rar'
+  ];
+  
+  // Process sources to determine if they're web links or files
+  const processedSources = sources.map((source, index) => {
+    // Remove any leading/trailing whitespace and asterisks
+    let cleanSource = source.trim().replace(/\*$/, '');
+    
+    // Check if it's a file by looking for file extensions
+    const isFile = fileExtensions.some(ext => 
+      cleanSource.toLowerCase().includes(ext.toLowerCase())
+    );
+    
+    if (isFile) {
+      // For files, just return the clean source as display text
+      return {
+        type: 'file',
+        display: cleanSource,
+        url: null
+      };
+    } else {
+      // For web sources, process as before
+      // If it's just a domain without http/https, add https://
+      if (!cleanSource.startsWith('http')) {
+        cleanSource = `https://${cleanSource}`;
+      }
+      
+      // Extract just the domain for display
+      const domainMatch = cleanSource.match(/^https?:\/\/(?:www\.)?([^\/]+)/i);
+      const displayText = domainMatch ? domainMatch[1] : cleanSource;
+      
+      return {
+        type: 'web',
+        url: cleanSource,
+        display: displayText
+      };
+    }
+  });
+
+  return (
+    <div className="web-sources-container">
+      <style>{`
+        .web-source-link {
+          color: #0066cc;
+          text-decoration: underline;
+          cursor: pointer;
+        }
+        
+        .web-source-link:hover {
+          color: #0052a3;
+        }
+        
+        .file-source-text {
+          color: #666;
+          font-style: italic;
+        }
+        
+        .sources-label {
+          font-weight: 500;
+          margin-right: 8px;
+        }
+        
+        .source-item {
+          display: inline;
+        }
+      `}</style>
+      <div className="web-sources-header">
+        <span className="sources-label">Sources:</span>
+      </div>
+      <div className="web-sources-list">
+        {processedSources.map((source, index) => (
+          <span key={index} className="source-item">
+            {source.type === 'web' ? (
+              <a 
+                href={source.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="web-source-link"
+              >
+                {source.display}
+              </a>
+            ) : (
+              <span className="file-source-text">
+                {source.display}
+              </span>
+            )}
+            {index < processedSources.length - 1 && ', '}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
   const toggleFollowUpQuestions = () => {
     setIsFollowUpQuestionsMinimized((prev) => !prev);
   };
@@ -1440,185 +1687,208 @@ const renderSummaryView = () => {
 
   // Replace the existing handleMessageUpdate function with this simpler implementation
   const handleMessageUpdate = async (messageIndex, newContent) => {
-    // Ignore if content hasn't changed
-    if (newContent === conversation[messageIndex].content) {
-      setEditingMessageId(null);
-      return;
+  // Ignore if content hasn't changed
+  if (newContent === conversation[messageIndex].content) {
+    setEditingMessageId(null);
+    return;
+  }
+
+  setIsLoading(true);
+
+  if (!isFollowUpQuestionsMinimized) {
+    setIsFollowUpQuestionsMinimized(true);
+  }
+
+  try {
+    // Get current message content and create a version entry
+    const originalContent = conversation[messageIndex].content;
+
+    // Store the original version if this is the first edit
+    if (!messageVersions[messageIndex]) {
+      // First time editing - store original content WITH its response
+      // Get the original response that comes after this message
+      const originalResponse = conversation[messageIndex + 1];
+
+      setMessageVersions((prev) => ({
+        ...prev,
+        [messageIndex]: [
+          {
+            content: originalContent,
+            response: originalResponse, // Store the full response object
+            timestamp: new Date().toISOString(),
+            isOriginal: true,
+          },
+        ],
+      }));
+
+      // Set current version to 0 (original)
+      setCurrentVersionIndex((prev) => ({
+        ...prev,
+        [messageIndex]: 0,
+      }));
+
+      console.log("Stored original message and response:", {
+        message: originalContent,
+        response: originalResponse,
+      });
     }
 
-    setIsLoading(true);
+    // Update the edited message in the conversation
+    const updatedMessage = {
+      ...conversation[messageIndex],
+      content: newContent,
+      edited: true,
+      editedAt: new Date().toISOString(),
+    };
 
-    if (!isFollowUpQuestionsMinimized) {
-      setIsFollowUpQuestionsMinimized(true);
+    // Create conversation array up to the edited message
+    const conversationUpToEdit = [
+      ...conversation.slice(0, messageIndex),
+      updatedMessage,
+    ];
+
+    // Update conversation state immediately for better UX
+    setConversation(conversationUpToEdit);
+
+    // Get current response format and length
+    const currentResponseFormat = responseFormat;
+    const currentResponseLength = responseLength;
+
+    // Force web mode when no documents are selected
+    const useWebMode =
+      localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+
+    // Prepare request data for the API
+    const requestData = {
+      message: newContent,
+      conversation_id: conversationId,
+      selected_documents: localSelectedDocuments,
+      main_project_id: mainProjectId,
+      context: conversationUpToEdit,
+      use_web_knowledge: useWebMode,
+      response_length: currentResponseLength,
+      response_format: currentResponseFormat,
+      general_chat_mode: localSelectedDocuments.length === 0,
+    };
+
+    // Send to API and get new response
+    const response = await chatService.sendMessage(requestData);
+    
+    // Parse the JSON response
+    let responseContent = response.data.response || response.data.content || "No response received";
+    let citations = response.data.citations || [];
+    
+    // Process web sources using the helper function
+    const webSources = processWebSources(response.data.sources_info, response.data.extracted_urls);
+    
+    // Handle JSON response format
+    if (typeof responseContent === 'string' && responseContent.startsWith('{')) {
+      try {
+        const parsedResponse = JSON.parse(responseContent);
+        responseContent = parsedResponse.content || responseContent;
+        if (parsedResponse.citations) {
+          citations = parsedResponse.citations;
+        }
+      } catch (jsonError) {
+        console.warn("Failed to parse JSON response:", jsonError);
+      }
     }
 
-    try {
-      // Get current message content and create a version entry
-      const originalContent = conversation[messageIndex].content;
+    // Add the new assistant response
+    const assistantMessage = {
+      role: "assistant",
+      content: responseContent,
+      citations: response.data.citations || [],
+      follow_up_questions: response.data.follow_up_questions || [],
+      use_web_knowledge: response.data.use_web_knowledge || useWebMode,
+      response_length: response.data.response_length || currentResponseLength,
+      response_format: response.data.response_format || currentResponseFormat,
+      general_chat_mode: localSelectedDocuments.length === 0,
+      webSources: webSources, // Add processed web sources
+      sources_info: response.data.sources_info, // Store original sources_info
+      extracted_urls: response.data.extracted_urls, // Store original extracted_urls
+    };
 
-      // Store the original version if this is the first edit
-      if (!messageVersions[messageIndex]) {
-        // First time editing - store original content WITH its response
-        // Get the original response that comes after this message
+    const finalConversation = [...conversationUpToEdit, assistantMessage];
+
+    // Update conversation with the new response
+    setConversation(finalConversation);
+
+    // Store the new version with its response
+    setMessageVersions((prev) => {
+      const versions = [...(prev[messageIndex] || [])];
+
+      // If this is the first edit and we don't have the original stored yet,
+      // store the original first before adding the new version
+      if (versions.length === 0) {
+        // Get the original message and response
+        const originalMessage = conversation[messageIndex].content;
         const originalResponse = conversation[messageIndex + 1];
 
-        setMessageVersions((prev) => ({
-          ...prev,
-          [messageIndex]: [
-            {
-              content: originalContent,
-              response: originalResponse, // Store the full response object
-              timestamp: new Date().toISOString(),
-              isOriginal: true,
-            },
-          ],
-        }));
+        versions.push({
+          content: originalMessage,
+          response: originalResponse,
+          timestamp: originalResponse?.created_at || new Date().toISOString(),
+          isOriginal: true,
+        });
 
-        // Set current version to 0 (original)
-        setCurrentVersionIndex((prev) => ({
-          ...prev,
-          [messageIndex]: 0,
-        }));
-
-        console.log("Stored original message and response:", {
-          message: originalContent,
+        console.log("Added original message and response to versions:", {
+          content: originalMessage,
           response: originalResponse,
         });
       }
 
-      // Update the edited message in the conversation
-      const updatedMessage = {
-        ...conversation[messageIndex],
+      // Add the new version
+      versions.push({
         content: newContent,
-        edited: true,
-        editedAt: new Date().toISOString(),
-      };
-
-      // Create conversation array up to the edited message
-      const conversationUpToEdit = [
-        ...conversation.slice(0, messageIndex),
-        updatedMessage,
-      ];
-
-      // Update conversation state immediately for better UX
-      setConversation(conversationUpToEdit);
-
-      // Get current response format and length
-      const currentResponseFormat = responseFormat;
-      const currentResponseLength = responseLength;
-
-      // Force web mode when no documents are selected
-      const useWebMode =
-        localSelectedDocuments.length === 0 ? true : useWebKnowledge;
-
-      // Prepare request data for the API
-      const requestData = {
-        message: newContent,
-        conversation_id: conversationId,
-        selected_documents: localSelectedDocuments,
-        main_project_id: mainProjectId,
-        context: conversationUpToEdit,
-        use_web_knowledge: useWebMode,
-        response_length: currentResponseLength,
-        response_format: currentResponseFormat,
-        general_chat_mode: localSelectedDocuments.length === 0,
-      };
-
-      // Send to API and get new response
-      const response = await chatService.sendMessage(requestData);
-
-      // Add the new assistant response
-      const assistantMessage = {
-        role: "assistant",
-        content:
-          response.data.response ||
-          response.data.content ||
-          "No response received",
-        citations: response.data.citations || [],
-        follow_up_questions: response.data.follow_up_questions || [],
-        use_web_knowledge: response.data.use_web_knowledge || useWebMode,
-        response_length: response.data.response_length || currentResponseLength,
-        response_format: response.data.response_format || currentResponseFormat,
-        general_chat_mode: localSelectedDocuments.length === 0,
-      };
-
-      const finalConversation = [...conversationUpToEdit, assistantMessage];
-
-      // Update conversation with the new response
-      setConversation(finalConversation);
-
-      // Store the new version with its response
-      setMessageVersions((prev) => {
-        const versions = [...(prev[messageIndex] || [])];
-
-        // If this is the first edit and we don't have the original stored yet,
-        // store the original first before adding the new version
-        if (versions.length === 0) {
-          // Get the original message and response
-          const originalMessage = conversation[messageIndex].content;
-          const originalResponse = conversation[messageIndex + 1];
-
-          versions.push({
-            content: originalMessage,
-            response: originalResponse,
-            timestamp: originalResponse?.created_at || new Date().toISOString(),
-            isOriginal: true,
-          });
-
-          console.log("Added original message and response to versions:", {
-            content: originalMessage,
-            response: originalResponse,
-          });
-        }
-
-        // Add the new version
-        versions.push({
-          content: newContent,
-          response: assistantMessage,
-          timestamp: new Date().toISOString(),
-          isOriginal: false, // Explicitly mark as not original
-          isEdited: true, // Add an explicit edited flag
-        });
-
-        console.log("Added new edited version to history:", {
-          content: newContent,
-          response: assistantMessage,
-        });
-
-        return {
-          ...prev,
-          [messageIndex]: versions,
-        };
+        response: assistantMessage,
+        timestamp: new Date().toISOString(),
+        isOriginal: false, // Explicitly mark as not original
+        isEdited: true, // Add an explicit edited flag
       });
 
-      // Update current version to the latest
-      setCurrentVersionIndex((prev) => {
-        const versions = messageVersions[messageIndex] || [];
-        return {
-          ...prev,
-          [messageIndex]: versions.length, // Point to the new version
-        };
+      console.log("Added new edited version to history:", {
+        content: newContent,
+        response: assistantMessage,
       });
 
-      setEditingMessageId(null);
+      return {
+        ...prev,
+        [messageIndex]: versions,
+      };
+    });
 
-      // Update follow-up questions if available
-      if (response.data.follow_up_questions?.length > 0) {
-        setCurrentFollowUpQuestions(response.data.follow_up_questions);
-        setFollowUpQuestions(response.data.follow_up_questions);
+    // Update current version to the latest
+    setCurrentVersionIndex((prev) => {
+      const versions = messageVersions[messageIndex] || [];
+      return {
+        ...prev,
+        [messageIndex]: versions.length, // Point to the new version
+      };
+    });
+
+    setEditingMessageId(null);
+
+    // Update follow-up questions if available
+    if (response.data.follow_up_questions) {
+      const validQuestions = processFollowUpQuestions(response.data.follow_up_questions);
+      if (validQuestions.length > 0) {
+        setCurrentFollowUpQuestions(validQuestions);
+        setFollowUpQuestions(validQuestions);
       }
-    } catch (error) {
-      console.error("Failed to update message:", error);
-      toast.error(
-        error.response?.data?.error ||
-          "Failed to update message. Please try again."
-      );
-      // Restore the original conversation state
-      setConversation(conversation);
-    } finally {
-      setIsLoading(false);
     }
-  };
+  } catch (error) {
+    console.error("Failed to update message:", error);
+    toast.error(
+      error.response?.data?.error ||
+        "Failed to update message. Please try again."
+    );
+    // Restore the original conversation state
+    setConversation(conversation);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Replace the previous handleRestoreVersion with this simpler version
   const handleRestoreVersion = (messageIndex, versionIndex) => {
@@ -1990,6 +2260,10 @@ const renderSummaryView = () => {
     />
   )
 )}
+{/* NEW: Display web sources if available */}
+    {msg.webSources && msg.webSources.length > 0 && (
+      <WebSourcesDisplay sources={msg.webSources} />
+    )}
 
                       {/* Add Copy option for Klarifai messages only */}
                       {msg.role !== "user" && (
@@ -2638,7 +2912,10 @@ MainContent.propTypes = {
       PropTypes.oneOfType([PropTypes.string, PropTypes.number])
     ),
   }),
+  
+  
 
+  sources: PropTypes.arrayOf(PropTypes.string),
   summary: PropTypes.string,
   followUpQuestions: PropTypes.array,
   isSummaryPopupOpen: PropTypes.bool.isRequired,

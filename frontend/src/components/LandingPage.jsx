@@ -1558,6 +1558,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
     <div className="flex flex-wrap gap-3">
       <button
   type="button"
+  title="Click to enhance the existing description using AI"
   onClick={() => {
     // Clear any errors before enhancing
     setError(null);
@@ -1589,10 +1590,11 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
         />
         <label
           htmlFor="documentUpload"
+          title="Upload a file to generate a description from its content"
           className="cursor-pointer px-3 py-2 bg-[#a68a70] dark:bg-emerald-600/20 hover:bg-[#8c715f] dark:hover:bg-emerald-600/30 text-white dark:text-emerald-300 rounded-lg transition-colors text-sm font-medium flex items-center"
         >
           <Paperclip className="w-4 h-4 mr-1.5" />
-          Upload document
+          Upload Files
         </label>
       </div>
       
@@ -1608,7 +1610,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
           ) : (
             <MessageSquare className="w-4 h-4 mr-1.5" />
           )}
-          Generate from document
+          Generate from file
         </button>
       )}
     </div>

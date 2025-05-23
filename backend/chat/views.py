@@ -1,3 +1,5 @@
+
+
 #views.py original
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
@@ -79,6 +81,7 @@ from rest_framework import status
 from rest_framework.response import Response
 import logging
 from django.db.models import F
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -438,6 +441,18 @@ class ManageConversationView(APIView):
         return self.update_conversation(request, conversation_id)
 
 class DocumentProcessingMixin:
+
+    def _parse_json_response(self, response_content, fallback_message="Error processing response"):
+        """Helper method to safely parse JSON responses from LLM"""
+        try:
+            return json.loads(response_content)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing failed: {str(e)}")
+            return {
+                "content": fallback_message,
+                "error": True,
+                "format_type": "error"
+            }
 
 
     def convert_video_to_audio(self, video_path):
@@ -935,17 +950,40 @@ class DocumentProcessingMixin:
             partial_summaries = []
             for idx, chunk in enumerate(chunks):
                 try:
+                    # Updated system message for JSON response
+                    system_message = """You are a document summarization expert.
+                    You must respond in JSON format with the following structure:
+                    {
+                        "summary": "Your formatted summary with HTML tags",
+                        "key_points": ["point1", "point2", "point3"],
+                        "document_section": "chunk_number"
+                    }"""
+
                     chunk_prompt = format_prompt.replace("{content}", chunk)
+                    chunk_prompt += f"""
+                    
+                    CRITICAL: Your response MUST be a valid JSON object with this structure:
+                    {{
+                        "summary": "Your summary with HTML formatting",
+                        "key_points": ["list", "of", "key", "points"],
+                        "document_section": "chunk_{idx}"
+                    }}
+                    """
+
                     completion = client.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "developer", "content": "You are a document summarization expert."},
+                            {"role": "system", "content": system_message},
                             {"role": "user", "content": chunk_prompt}
                         ],
+                        response_format={"type": "json_object"},  # Force JSON response
                         temperature=0.3,
                         max_tokens=500
                     )
-                    partial_summary = completion.choices[0].message.content
+
+                    # Parse JSON response
+                    json_response = self._parse_json_response(completion.choices[0].message.content)
+                    partial_summary = json_response.get("summary", f"Summary generation error for chunk {idx}.")
                     partial_summaries.append(partial_summary)
                 except Exception as e:
                     print(f"Error generating summary for chunk {idx}: {str(e)}")
@@ -953,6 +991,15 @@ class DocumentProcessingMixin:
             
             combined_text = "\n\n".join(partial_summaries)
             try:
+                # Updated system message for final summary
+                system_message = """You are a document summarization expert.
+                You must respond in JSON format with the following structure:
+                {
+                    "summary": "Your comprehensive summary with HTML formatting",
+                    "document_name": "document_filename",
+                    "summary_type": "consolidated"
+                }"""
+
                 final_prompt = f"""
                 Combine these partial summaries into a cohesive, comprehensive summary for document '{file_name}':
 
@@ -978,18 +1025,29 @@ class DocumentProcessingMixin:
 
                 <b>Detailed Insights</b>
                 <p>Expanded explanation of the document's core content and significance</p>
+                
+                CRITICAL: Your response MUST be a valid JSON object with this structure:
+                {{
+                    "summary": "Your comprehensive summary with HTML formatting",
+                    "document_name": "{file_name}",
+                    "summary_type": "consolidated"
+                }}
                 """
                 
                 final_completion = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "developer", "content": "You are a document summarization expert."},
+                        {"role": "system", "content": system_message},
                         {"role": "user", "content": final_prompt}
                     ],
+                    response_format={"type": "json_object"},  # Force JSON response
                     temperature=0.3,
                     max_tokens=1000
                 )
-                summary_text = final_completion.choices[0].message.content
+
+                # Parse JSON response
+                json_response = self._parse_json_response(final_completion.choices[0].message.content)
+                summary_text = json_response.get("summary", "")
                 
                 # Format the response
                 summary_text = self.format_summary_response(summary_text)
@@ -1000,17 +1058,40 @@ class DocumentProcessingMixin:
                 return self.format_summary_response("\n".join(partial_summaries)), []
         else:
             try:
+                # Updated system message for single summary
+                system_message = """You are a document summarization expert.
+                You must respond in JSON format with the following structure:
+                {
+                    "summary": "Your formatted summary with HTML tags",
+                    "document_name": "document_filename", 
+                    "summary_type": "complete"
+                }"""
+
                 full_prompt = format_prompt.replace("{content}", text)
+                full_prompt += f"""
+                
+                CRITICAL: Your response MUST be a valid JSON object with this structure:
+                {{
+                    "summary": "Your summary with HTML formatting",
+                    "document_name": "{file_name}",
+                    "summary_type": "complete"
+                }}
+                """
+
                 completion = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "developer", "content": "You are a document summarization expert."},
+                        {"role": "system", "content": system_message},
                         {"role": "user", "content": full_prompt}
                     ],
+                    response_format={"type": "json_object"},  # Force JSON response
                     temperature=0.3,
                     max_tokens=1000
                 )
-                summary_text = completion.choices[0].message.content
+
+                # Parse JSON response
+                json_response = self._parse_json_response(completion.choices[0].message.content)
+                summary_text = json_response.get("summary", "")
                 
                 # Format the response
                 summary_text = self.format_summary_response(summary_text)
@@ -1117,16 +1198,42 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
                     
                 # Generate summary for this group
                 try:
+                    # Updated system message for JSON response
+                    system_message = """You are a document summarization expert.
+                    You must respond in JSON format with the following structure:
+                    {
+                        "summary": "Your summary with HTML formatting",
+                        "source_document": "document_name",
+                        "group_number": "group_identifier"
+                    }"""
+
+                    group_prompt = f"""
+                    Summarize the following text from document '{source}'. Cover all key details:
+
+                    {group_text}
+                    
+                    CRITICAL: Your response MUST be a valid JSON object with this structure:
+                    {{
+                        "summary": "Your summary covering all key details",
+                        "source_document": "{source}",
+                        "group_number": "group_{i//group_size}"
+                    }}
+                    """
+
                     completion = client.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "developer", "content": "You are a document summarization expert."},
-                            {"role": "user", "content": f"Summarize the following text from document '{source}'. Cover all key details:\n\n{group_text}"}
+                            {"role": "system", "content": system_message},
+                            {"role": "user", "content": group_prompt}
                         ],
+                        response_format={"type": "json_object"},  # Force JSON response
                         temperature=0.3,
                         max_tokens=500
                     )
-                    group_summary = completion.choices[0].message.content
+
+                    # Parse JSON response
+                    json_response = self._parse_json_response(completion.choices[0].message.content)
+                    group_summary = json_response.get("summary", f"Summary generation error for group {i//group_size}.")
                     group_summaries.append(f"[From {source}] {group_summary}")
                 except Exception as e:
                     print(f"Error generating group summary for {source}: {str(e)}")
@@ -1136,16 +1243,42 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
             # Get document-level summary first
             document_summary = "\n\n".join(group_summaries)
             try:
+                # Updated system message for document summary
+                system_message = """You are a document summarization expert.
+                You must respond in JSON format with the following structure:
+                {
+                    "summary": "Your cohesive document summary",
+                    "document_name": "source_document",
+                    "summary_type": "document_level"
+                }"""
+
+                doc_prompt = f"""
+                Combine these partial summaries into a cohesive summary for document '{source}':
+
+                {document_summary}
+                
+                CRITICAL: Your response MUST be a valid JSON object with this structure:
+                {{
+                    "summary": "Your cohesive summary for the document",
+                    "document_name": "{source}",
+                    "summary_type": "document_level"
+                }}
+                """
+
                 doc_completion = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "developer", "content": "You are a document summarization expert."},
-                        {"role": "user", "content": f"Combine these partial summaries into a cohesive summary for document '{source}':\n\n{document_summary}"}
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": doc_prompt}
                     ],
+                    response_format={"type": "json_object"},  # Force JSON response
                     temperature=0.3,
                     max_tokens=800
                 )
-                doc_final_summary = f"<b>Document: {source}</b>\n{doc_completion.choices[0].message.content}"
+
+                # Parse JSON response
+                json_response = self._parse_json_response(doc_completion.choices[0].message.content)
+                doc_final_summary = f"<b>Document: {source}</b>\n{json_response.get('summary', document_summary)}"
                 all_group_summaries.append(doc_final_summary)
             except Exception as e:
                 print(f"Error generating document summary for {source}: {str(e)}")
@@ -1156,36 +1289,58 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
         
         # Generate final consolidated summary
         try:
+            # Updated system message for final consolidated summary
+            system_message = """You are a document summarization expert.
+            You must respond in JSON format with the following structure:
+            {
+                "summary": "Your comprehensive consolidated summary with HTML formatting",
+                "documents_analyzed": ["list", "of", "documents"],
+                "summary_type": "consolidated"
+            }"""
+
+            final_prompt = f"""
+            Combine these document summaries into a cohesive, comprehensive consolidated summary.
+            First provide a high-level overview of all documents, then highlight key points across documents,
+            and finally discuss any important similarities, differences, or connections between the documents.
+            
+            {aggregated_summary}
+            
+            Format your response with HTML-like tags:
+            <b>Consolidated Summary</b>
+            <p>Overall summary of all documents together</p>
+            
+            <b>Key Points Across Documents</b>
+            <ul>
+                <li>First key point across documents</li>
+                <li>Second key point across documents</li>
+                <li>Third key point across documents</li>
+            </ul>
+            
+            <b>Document Relationships</b>
+            <p>Analysis of how the documents relate to each other, including any contradictions, complementary information, or overlapping themes.</p>
+            
+            CRITICAL: Your response MUST be a valid JSON object with this structure:
+            {{
+                "summary": "Your consolidated summary with HTML formatting",
+                "documents_analyzed": [list of document names],
+                "summary_type": "consolidated"
+            }}
+            """
+
             final_completion = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "developer", "content": "You are a document summarization expert."},
-                    {"role": "user", "content": f"""
-                    Combine these document summaries into a cohesive, comprehensive consolidated summary.
-                    First provide a high-level overview of all documents, then highlight key points across documents,
-                    and finally discuss any important similarities, differences, or connections between the documents.
-                    
-                    {aggregated_summary}
-                    
-                    Format your response with HTML-like tags:
-                    <b>Consolidated Summary</b>
-                    <p>Overall summary of all documents together</p>
-                    
-                    <b>Key Points Across Documents</b>
-                    <ul>
-                        <li>First key point across documents</li>
-                        <li>Second key point across documents</li>
-                        <li>Third key point across documents</li>
-                    </ul>
-                    
-                    <b>Document Relationships</b>
-                    <p>Analysis of how the documents relate to each other, including any contradictions, complementary information, or overlapping themes.</p>
-                    """}
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": final_prompt}
                 ],
+                response_format={"type": "json_object"},  # Force JSON response
                 temperature=0.3,
                 max_tokens=1200
             )
-            final_summary = final_completion.choices[0].message.content
+
+            # Parse JSON response
+            json_response = self._parse_json_response(final_completion.choices[0].message.content)
+            final_summary = json_response.get("summary", "")
         except Exception as e:
             print(f"Error generating final consolidated summary: {str(e)}")
             # Fallback to a simpler message with the aggregated summaries
@@ -2480,15 +2635,25 @@ class ChatView(APIView):
                     
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
-                        web_knowledge_response, web_sources = self.get_web_knowledge_response(
+                        web_response_data = self.get_web_knowledge_response(
                             modified_message if has_url_content else message,
                             user=user,
                             document_context=similar_contents  # Pass document context to enhance web search  
                         )
+
+                        # Extract the components from the JSON response
+                        if isinstance(web_response_data, dict):
+                            web_knowledge_response = web_response_data.get("content", "No web response received")
+                            web_sources = web_response_data.get("web_sources", [])
+                        else:
+                            # Fallback for backward compatibility
+                            web_knowledge_response = str(web_response_data)
+                            web_sources = []
                         print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
                         
                         # Combine document and web responses
-                        answer, combined_citation_sources = self.combine_document_and_web_responses(
+                    
+                        combined_response_data, combined_citation_sources = self.combine_document_and_web_responses(
                             modified_message if has_url_content else message, 
                             document_answer, 
                             web_knowledge_response, 
@@ -2497,8 +2662,13 @@ class ChatView(APIView):
                             response_format,
                             conversation_context,
                             original_doc_context=similar_contents,
-                            doc_citation_sources=doc_citation_sources  # Pass citation sources
                         )
+
+                        # Extract the answer from the JSON response
+                        if isinstance(combined_response_data, dict):
+                            answer = combined_response_data.get("content", "Error combining responses")
+                        else:
+                            answer = str(combined_response_data)
                         print("Combined document and web responses")
                         
                         # Update citation sources with combined sources
@@ -2510,11 +2680,17 @@ class ChatView(APIView):
                     # No document content found
                     if use_web_knowledge:
                         # Only web knowledge available
-                        web_knowledge_response, web_sources = self.get_web_knowledge_response(
+                        web_response_data = self.get_web_knowledge_response(
                             modified_message if has_url_content else message,
                             user=user
                         )
-                        answer = web_knowledge_response
+
+                        if isinstance(web_response_data, dict):
+                            answer = web_response_data.get("content", "No web response received")
+                            web_sources = web_response_data.get("web_sources", [])
+                        else:
+                            answer = str(web_response_data)
+                            web_sources = []
                         print("Using web knowledge response as document search returned no results")
                     else:
                         print("No document content found and web knowledge not enabled")
@@ -2713,155 +2889,18 @@ class ChatView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-       
-    # def format_citation_content(self, snippet):
-    #     """
-    #     Format citation snippets to optimize display of complex tables with long content
-    #     """
-    #     if not snippet:
-    #         return snippet
-            
-    #     # Check if content likely contains a table
-    #     if '|' in snippet and ('|---' in snippet or '| ---' in snippet or '|----' in snippet or '------' in snippet):
-    #         try:
-    #             # Start with basic cleanup
-    #             content = snippet
-                
-    #             # Replace emoji arrows with text versions for better compatibility
-    #             content = content.replace('🔻', '↓').replace('🔼', '↑')
-                
-    #             # Step 1: Ensure all section headers are properly formatted and on their own lines
-    #             content = re.sub(r'(#{1,6}\s*[^\n#]+)([^#\n])', r'\1\n\2', content)
-                
-    #             # Step 2: Identify table sections
-    #             lines = content.split('\n')
-    #             formatted_lines = []
-                
-    #             in_table = False
-    #             table_lines = []
-                
-    #             for line in lines:
-    #                 # Check if this is a table line
-    #                 is_table_line = '|' in line and line.strip().startswith('|') and line.strip().endswith('|')
-                    
-    #                 # Check if this is a separator line
-    #                 is_separator = is_table_line and ('-' in line or '=' in line)
-                    
-    #                 if is_table_line:
-    #                     if not in_table:
-    #                         # Start of a new table
-    #                         in_table = True
-    #                         # If we have pending lines, add them with a separator
-    #                         if formatted_lines:
-    #                             formatted_lines.append('')  # Empty line before table
-                        
-    #                     # Add to current table
-    #                     table_lines.append(line)
-    #                 else:
-    #                     if in_table:
-    #                         # End of table, process it
-    #                         in_table = False
-                            
-    #                         # Process and optimize the table
-    #                         optimized_table = self.optimize_table_structure(table_lines)
-                            
-    #                         # Add the optimized table
-    #                         formatted_lines.extend(optimized_table)
-    #                         formatted_lines.append('')  # Empty line after table
-    #                         table_lines = []
-                        
-    #                     # Add non-table line
-    #                     formatted_lines.append(line)
-                
-    #             # Don't forget to process any table that's at the end
-    #             if in_table and table_lines:
-    #                 optimized_table = self.optimize_table_structure(table_lines)
-    #                 formatted_lines.extend(optimized_table)
-                
-    #             # Join everything back together
-    #             content = '\n'.join(formatted_lines)
-                
-    #             # Step 3: Final cleanup, remove excessive newlines
-    #             content = re.sub(r'\n{3,}', '\n\n', content)
-                
-    #             return content
-                
-    #         except Exception as e:
-    #             print(f"Error formatting complex table content: {str(e)}")
-    #             # Return original content on error
-    #             return snippet
-        
-    #     # If not a table or processing failed, return the original content
-    #     return snippet
-
-    # def optimize_table_structure(self, table_lines):
-    #     """
-    #     Process and optimize a table's structure for better display
-    #     """
-    #     if not table_lines:
-    #         return []
-        
-    #     # Find separator row (has dashes or equals signs)
-    #     separator_idx = -1
-    #     for i, line in enumerate(table_lines):
-    #         if '-' in line or '=' in line:
-    #             separator_idx = i
-    #             break
-        
-    #     # If no separator found, this doesn't look like a proper table
-    #     if separator_idx == -1:
-    #         return table_lines
-        
-    #     # Identify header row (typically above separator)
-    #     header_idx = max(0, separator_idx - 1)
-        
-    #     # Count columns in the header
-    #     header_parts = table_lines[header_idx].split('|')
-    #     num_columns = len([p for p in header_parts if p.strip()])
-        
-    #     # Check for long content cells
-    #     has_long_cells = False
-    #     for line in table_lines:
-    #         parts = line.split('|')
-    #         for part in parts:
-    #             if part and len(part.strip()) > 20:
-    #                 has_long_cells = True
-    #                 break
-    #         if has_long_cells:
-    #             break
-        
-    #     # If we have long cells, let's optimize the table formatting
-    #     if has_long_cells:
-    #         # Add extra spacing for readability
-    #         optimized_lines = []
-            
-    #         # Add the header
-    #         optimized_lines.append(table_lines[header_idx])
-            
-    #         # Add the separator
-    #         optimized_lines.append(table_lines[separator_idx])
-            
-    #         # Process data rows with better spacing
-    #         for i in range(separator_idx + 1, len(table_lines)):
-    #             # Clean up spacing in cells for better readability
-    #             parts = table_lines[i].split('|')
-    #             formatted_parts = ['']  # Start with empty part for leading pipe
-                
-    #             for part in parts[1:-1]:  # Skip first and last (empty parts)
-    #                 # Clean up whitespace but maintain padding
-    #                 cleaned = part.strip()
-    #                 formatted_parts.append(f" {cleaned} ")
-                
-    #             formatted_parts.append('')  # End with empty part for trailing pipe
-                
-    #             # Join back into a well-formatted line
-    #             formatted_line = '|'.join(formatted_parts)
-    #             optimized_lines.append(formatted_line)
-            
-    #         return optimized_lines
-        
-    #     # If no long cells, just return the original table lines
-    #     return table_lines
+    def _parse_json_response(self, response_content, fallback_message="Error processing response"):
+        """Helper method to safely parse JSON responses from LLM"""
+        try:
+            return json.loads(response_content)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing failed: {str(e)}")
+            return {
+                "content": fallback_message,
+                "error": True,
+                "format_type": "error"
+            }
+   
 
     def format_citation_content(self, snippet):
         """
@@ -3573,14 +3612,26 @@ class ChatView(APIView):
         
         return modified_query, url_context, extracted_urls
     
+    def extract_domain(self, url):
+        """Extract domain from URL safely"""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc
+            if domain.startswith("www."):
+                domain = domain[4:]
+            return domain if domain else "unknown.com"
+        except Exception:
+            return "unknown.com"
+ 
     def get_web_knowledge_response(self, query, user=None, document_context=None):
         """
-        Search the web for information and generate a response, using document context to enhance the search.
-        
+        Search the web for information and return direct search results without GPT reformatting.
+        PRIMARY METHOD: Uses search_web function to get structured search results and returns them directly.
+       
         Args:
             query (str): The user's query
             document_context (list, optional): List of context chunks from document search
-            
+           
         Returns:
             tuple: (response, sources)
         """
@@ -3588,32 +3639,32 @@ class ChatView(APIView):
             # Step 1: Extract keywords and context from document context if available
             enhanced_query = query
             doc_context_text = ""
-            
+           
             if document_context and len(document_context) > 0:
                 # Combine all document context into a single text for analysis
                 combined_context = " ".join(document_context[:3])  # Use top 3 context chunks
-                
+               
                 # Extract keywords using a smarter prompt that identifies entity types
                 keyword_prompt = f"""
                 Analyze the following document context and the user query to extract key information for a web search.
-
+ 
                 USER QUERY: "{query}"
-                
+               
                 DOCUMENT CONTEXT:
                 {combined_context[:2500]}
-                
+               
                 Follow these steps:
                 1. Identify the main entities (brands, products, organizations, etc.) in the document
                 2. For each entity, determine its type (e.g., "cosmetic brand", "financial service", "software company")
                 3. Extract distinctive attributes or features of these entities
                 4. Identify industry-specific terminology that might help with search precision
                 5. Include geographical context if relevant
-                
+               
                 Return ONLY a comma-separated list of 5-8 search terms that would help find the most relevant information online.
-                
+               
                 Note: Focus on terms that will disambiguate search results and prevent confusion with similarly-named but unrelated entities.
                 """
-                
+               
                 try:
                     # Extract context-aware keywords using OpenAI
                     keyword_response = client.chat.completions.create(
@@ -3625,23 +3676,23 @@ class ChatView(APIView):
                         temperature=0.3,
                         max_tokens=150
                     )
-                    
+                   
                     search_terms = keyword_response.choices[0].message.content.strip()
                     logger.info(f"Extracted search terms: {search_terms}")
-                    
+                   
                     # Create a more precise enhanced query that includes both the original query and the extracted search terms
                     enhanced_query = f"{query} {search_terms}"
-                    
+                   
                     # Also extract key passages for the context section of our prompt
                     context_prompt = f"""
                     Analyze the following document context and select 2-3 short passages (2-3 sentences each) that contain the most important information related to this query: "{query}"
-                    
+                   
                     DOCUMENT CONTEXT:
                     {combined_context[:3000]}
-                    
+                   
                     Return ONLY the extracted passages with no additional commentary.
                     """
-                    
+                   
                     context_response = client.chat.completions.create(
                         model="gpt-4o",
                         messages=[
@@ -3651,312 +3702,517 @@ class ChatView(APIView):
                         temperature=0.3,
                         max_tokens=300
                     )
-                    
+                   
                     # Get key passages for later use in the main prompt
                     doc_context_text = context_response.choices[0].message.content.strip()
                     logger.info(f"Extracted key passages for context")
-                    
+                   
                 except Exception as ke:
                     logger.warning(f"Error extracting keywords: {str(ke)}, proceeding with original query")
                     enhanced_query = query
-            
+           
             # Log the queries for comparison
             logger.info(f"Original query: {query}")
             logger.info(f"Enhanced query: {enhanced_query}")
-            
-            # Step 2: Directly use Google Genai API to search and generate response
-            try:
-                # Import required libraries
-                import os
-                from google.genai.types import Tool, GoogleSearch, GenerateContentConfig
-                from google import genai
-                
-                # Get API key from environment
-                user_api_tokens = UserAPITokens.objects.get(user=user)
-                GOOGLE_API_KEY = user_api_tokens.gemini_token
-
-                if not GOOGLE_API_KEY:
-                    logger.error("GEMINI_API_KEY not found in environment variables.")
-                    return "I couldn't access web search. API key is missing.", []
-                
-                # Initialize Google Genai client
-                genai_client = genai.Client(api_key=GOOGLE_API_KEY)
-                model_id = "gemini-2.0-flash-exp"
-                
-                # Configure search tool
-                search_tool = Tool(google_search=GoogleSearch())
-                
-                # Prepare document context if available
-                doc_context_section = ""
-                if doc_context_text:
-                    doc_context_section = f"""
-                    Consider this additional context when searching:
-                    {doc_context_text}
-                    """
-                
-                # Configure system instruction
-                system_instruction = (
-                    f"You are a helpful assistant that provides up-to-date information about: {enhanced_query}. "
-                    f"{doc_context_section}"
-                    "Format your response with appropriate headings (<b>), paragraphs (<p>), and lists (<ul>, <li>) for readability. "
-                    "Include specific details and cite the sources of information when possible."
-                )
-                
-                # Set up the configuration
-                config = GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    tools=[search_tool],
-                    response_modalities=["TEXT"],
-                    temperature=0.3,
-                    candidate_count=1
-                )
-                
-                # Generate content with search
-                logger.info(f"Sending query to Google Genai: {enhanced_query}")
-                response = genai_client.models.generate_content(
-                    model=model_id,
-                    contents=f"Find and provide detailed information about: {enhanced_query}",
-                    config=config
-                )
-                
-                # Get the response text
-                web_response = response.text
-                logger.info("Successfully received response from Google Genai")
-                
-                # Extract URLs to use as sources
-                import re
-                url_pattern = r'https?://[^\s\)\]\"\']+' 
-                urls = re.findall(url_pattern, web_response)
-                
-                # Create sources from extracted URLs
-                web_sources = []
-                domains_seen = set()
-                
-                # Process extracted URLs
-                for url in urls[:5]:
-                    domain = self.extract_domain(url)
-                    if domain not in domains_seen:
-                        domains_seen.add(domain)
-                        web_sources.append({
-                            'title': f"Information from {domain}",
-                            'url': url,
-                            'snippet': f"Content retrieved from {domain}"
-                        })
-                
-                # If no URLs found in response, add a generic source
-                if not web_sources:
-                    web_sources = [{
-                        'title': 'Information from Google Search',
-                        'url': 'https://www.google.com',
-                        'snippet': 'Information retrieved via Google Search API'
-                    }]
-                
+           
+            # Step 2: PRIMARY METHOD - Use search_web function to get structured search results
+            logger.info("PRIMARY: Using search_web function to get search results")
+            web_results = self.search_web(enhanced_query, max_results=8, user=user)
+           
+            if not web_results:
+                logger.warning("No search results found")
+                return "I couldn't find relevant information on the web for your query.", []
+           
+            # Step 3: Process search results and format them directly without GPT
+            web_sources = []
+            domains_seen = set()
+           
+            for i, result in enumerate(web_results, 1):
+                title = result.get('title', 'Unknown Source')
+                url = result.get('href', '')
+                snippet = result.get('body', 'No description available')
+               
+                domain = self.extract_domain(url)
+                if domain not in domains_seen and domain != "unknown.com":
+                    domains_seen.add(domain)
+                   
+                    # Add to sources for return
+                    web_sources.append({
+                        'title': title,
+                        'url': url,
+                        'snippet': snippet[:300]
+                    })
+               
                 # Format source information for display
                 source_domains = list(domains_seen) if domains_seen else ["Google Search"]
                 source_info = ", ".join(source_domains)
-                
-                return f"{web_response}\n\n*Sources: {source_info}*", web_sources
-                
-            except Exception as search_error:
-                logger.error(f"Error using Google Genai: {str(search_error)}", exc_info=True)
-                
-                # Fall back to search_web method
-                web_results = self.search_web(enhanced_query, max_results=5)
-                
-                if not web_results:
-                    return "I couldn't find relevant information on the web for your query.", []
-                    
-                # Create a fallback response using OpenAI (simplified from original implementation)
-                prompt = f"Please provide information about {enhanced_query}. Be concise and factual."
-                
-                fallback_response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant providing factual information."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.3,
-                    max_tokens=500
-                )
-                
-                web_sources = []
-                for result in web_results:
-                    web_sources.append({
-                        'title': result.get('title', 'Unknown Source'),
-                        'url': result.get('href', 'https://www.google.com'),
-                        'snippet': result.get('body', 'No description available')[:300]
-                    })
-                
-                return f"{fallback_response.choices[0].message.content}\n\n*Note: This response was generated without direct web access.*", web_sources
-            
+               
+                logger.info("Successfully formatted direct search results")
+                print("###########################################", web_results)
+                return f"{web_results}\n\n*Sources: {source_info}*", web_sources
+            else:
+                logger.warning("No valid search results to format")
+                return "I couldn't find relevant information on the web for your query.", []
+           
         except Exception as e:
             logger.error(f"Error in web knowledge search: {str(e)}", exc_info=True)
             return f"An error occurred while searching the web: {str(e)}", []
-
+ 
     def search_web(self, query, max_results=5, user=None):
-        """Search the web using Google Genai and return results"""
+        """Search the web using Google Genai and return raw results with extracted sources"""
         try:
             # Initialize Google Genai client and tools
             import os
+            import requests
             from google.genai.types import Tool, GoogleSearch, GenerateContentConfig
             from google import genai
-            
+           
             # Get API key from environment
             user_api_tokens = UserAPITokens.objects.get(user=user)
             GOOGLE_API_KEY = user_api_tokens.gemini_token
             if not GOOGLE_API_KEY:
                 logger.error("GOOGLE_API_KEY not found in environment variables.")
                 return []
-            
+           
             # Initialize Google Genai client
             genai_client = genai.Client(api_key=GOOGLE_API_KEY)
             model_id = "gemini-2.0-flash-exp"
-            
+           
             # Configure search tool
             search_tool = Tool(google_search=GoogleSearch())
-            
-            # Configure generation parameters specifically for search results extraction
+           
+            # System instruction to get raw search results
+            system_instruction = (
+                f"Search the web for: {query}. "
+                f"Return the search results exactly as you find them with all original content, titles, URLs, and snippets. "
+                f"CRITICAL: I need the ACTUAL source website URLs, not redirect URLs. "
+                f"When you find search results, provide the original website URLs from where you found them (like moneycontrol.com, economictimes.com, etc.) NOT redirect URLs from vertexaisearch.cloud.google.com. "
+                f"VERY IMPORTANT: Only include links that are VALID and ACCESSIBLE. Before including any link, verify that it leads to a real and working webpage (i.e., not a 404 or unreachable site). "
+                f"Do NOT include placeholder links, broken URLs, or websites that fail to load. "
+                f"Preserve all numerical data, prices, and specific information exactly as found."
+            )
+           
+            # Configure generation parameters for raw results
             config = GenerateContentConfig(
-                system_instruction=(
-                    f"You are a search assistant that finds and extracts web search results."
-                    f"Search the web for information about: {query}. "
-                    f"Return the top {max_results} search results in a structured format."
-                    f"For each result, include the title, URL, and a brief description/snippet."
-                    f"Format each result as a separate JSON object."
-                ),
+                system_instruction=system_instruction,
                 tools=[search_tool],
                 response_modalities=["TEXT"],
                 temperature=0.1,
                 candidate_count=1
             )
-            
+           
             # Generate search results using Gemini
             logger.info(f"Searching for: {query}")
             response = genai_client.models.generate_content(
                 model=model_id,
-                contents=f"Find and list the most relevant web search results for: {query}",
+                contents=f"Search for: {query}. Return complete search results with titles, URLs, and content.",
                 config=config
             )
-            
+           
             # Get the response text
             result_text = response.text
             logger.info("Received search response from Google Genai")
-            
-            # Extract results using both JSON parsing and URL extraction
-            import re
-            import json
-            
+           
             results = []
-            
-            # First try to find JSON objects in the response
-            json_pattern = r'\{[^{}]*"(?:url|href)"[^{}]*\}'
-            json_matches = re.findall(json_pattern, result_text, re.DOTALL)
-            
-            for json_str in json_matches[:max_results]:
-                try:
-                    # Clean up the JSON string - remove line breaks, etc.
-                    clean_json = re.sub(r'\s+', ' ', json_str)
-                    # Make sure it's valid JSON
-                    clean_json = re.sub(r'([{,])\s*([a-zA-Z0-9_]+):', r'\1"\2":', clean_json)
-                    
-                    # Parse the JSON
-                    result = json.loads(clean_json)
-                    
-                    # Check if it has a URL/href
-                    if 'url' in result or 'href' in result:
-                        # Normalize the result structure
-                        normalized_result = {
-                            'title': result.get('title', 'No title'),
-                            'href': result.get('href', result.get('url', '')),
-                            'body': result.get('body', result.get('snippet', result.get('description', 'No description')))
-                        }
-                        results.append(normalized_result)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(f"Failed to parse JSON: {e}")
-                    continue
-            
-            # If we don't have enough results, extract URLs directly
-            if len(results) < max_results:
-                url_pattern = r'https?://[^\s\)\]\"\']+' 
-                urls = re.findall(url_pattern, result_text)
-                
-                # Filter URLs that are already in results
-                existing_urls = [r.get('href') for r in results]
-                new_urls = [url for url in urls if url not in existing_urls]
-                
-                # Add URL-only results
-                for url in new_urls[:max_results - len(results)]:
-                    domain = self.extract_domain(url)
+           
+            # Extract URLs from the response for source tracking
+            url_pattern = r'https?://[^\s\)\]\"\'>]+'
+            all_urls = re.findall(url_pattern, result_text)
+           
+            # Clean and filter URLs
+            domains_seen = set()
+           
+            for url in all_urls:
+                clean_url = url.rstrip('.,);\'\"')
+               
+                # Skip Google redirect URLs but try to resolve them
+                if 'vertexaisearch.cloud.google.com' in clean_url:
+                    try:
+                        resolved_url = self.resolve_redirect_url(clean_url)
+                        if resolved_url and resolved_url != clean_url:
+                            clean_url = resolved_url
+                        else:
+                            continue  # Skip if can't resolve
+                    except:
+                        continue
+               
+                domain = self.extract_domain(clean_url)
+                if domain != "unknown.com" and domain not in domains_seen:
+                    domains_seen.add(domain)
+                   
+                    # Create individual result for each unique source
                     results.append({
                         'title': f"Information from {domain}",
-                        'href': url,
-                        'body': f"Search result from {domain}"
+                        'href': clean_url,
+                        'body': result_text  # Use the raw response text directly
                     })
-            
-            if results:
-                logger.info(f"Found {len(results)} search results")
-                return results
-            else:
-                # If still no results, try one more approach - extract titles and URLs
-                title_url_pattern = r'(?:Title|Source):\s*(.*?)\s*(?:URL|Link):\s*(https?://[^\s]+)'
-                title_url_matches = re.findall(title_url_pattern, result_text, re.IGNORECASE)
-                
-                for title, url in title_url_matches[:max_results]:
-                    results.append({
-                        'title': title.strip(),
-                        'href': url.strip(),
-                        'body': f"Source: {self.extract_domain(url)}"
-                    })
-                
-                if results:
-                    logger.info(f"Extracted {len(results)} results using title-URL pattern")
-                    return results
-                else:
-                    logger.warning("No structured results could be extracted from Gemini response")
-                    return []
-                
+                   
+                    if len(results) >= max_results:
+                        break
+           
+            # If no sources found, return the raw content with generic source
+            if not results:
+                results = [{
+                    'title': f"Search Results for: {query}",
+                    'href': 'https://www.google.com',
+                    'body': result_text  # Raw unprocessed content
+                }]
+           
+            logger.info(f"Found {len(results)} search results with sources")
+            return results
+           
         except Exception as e:
             logger.error(f"Error searching the web via Google Genai: {str(e)}", exc_info=True)
             return []
-
-    def extract_domain(self, url):
-        """Extract a readable domain name from URL"""
+ 
+    def resolve_redirect_url(self, redirect_url):
+        """Resolve a redirect URL to get the actual destination URL"""
         try:
-            domain = urlparse(url).netloc
-            if domain.startswith('www.'):
-                domain = domain[4:]
-            return domain
-        except:
-            return url
+            import requests
+           
+            # Set a reasonable timeout and don't follow too many redirects
+            response = requests.head(redirect_url, allow_redirects=True, timeout=5,
+                                headers={'User-Agent': 'Mozilla/5.0 (compatible; SearchBot)'})
+           
+            # Return the final URL after following redirects
+            final_url = response.url
+            logger.info(f"Resolved redirect: {redirect_url} -> {final_url}")
+            return final_url
+           
+        except Exception as e:
+            logger.warning(f"Failed to resolve redirect URL {redirect_url}: {e}")
+            return None
+ 
+    def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural', user=None):
+        """
+        Generate an answer for general chat mode, optionally using web knowledge.
+       
+        Args:
+            query (str): The user's query
+            use_web_knowledge (bool): Whether to use web search
+            response_length (str): 'short' or 'comprehensive'
+            response_format (str): The format to use for the response
+           
+        Returns:
+            str: Generated response
+        """
+        # Check if the query is a simple greeting
+        greeting_keywords = [
+            # Basic greetings
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning",
+            "good afternoon", "good evening", "what's up", "sup", "hiya",
+           
+            # Variations with repeated letters
+            "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
+           
+            # Short forms/abbreviations
+            "hlw", "g'day", "yo", "heya",
+           
+            # Informal greetings
+            "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
+            "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
+           
+            # Time-specific with variations
+            "morning", "afternoon", "evening", "gm", "ga", "ge",
+           
+            # Other languages and cultural greetings
+            "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
+           
+            # Casual text-style greetings
+            "sup", "yo yo", "hiya", "hai", "hullo"
+        ]
+       
+        # Convert to lowercase and strip to properly detect greetings
+        query_lower = query.lower().strip()
+       
+        # Check if the query is just a greeting or a greeting followed by a name/simple phrase
+        is_greeting = False
+       
+        # Exact matches
+        if query_lower in greeting_keywords:
+            is_greeting = True
+       
+        # Starting with a greeting
+        for greeting in greeting_keywords:
+            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
+                is_greeting = True
+                break
+       
+        # If it's a greeting, respond directly without using more complex logic
+        if is_greeting:
+            greeting_responses = [
+                f"Hello! How can I assist you today?",
+                f"Hi there! What can I help you with?",
+                f"Greetings! How may I be of service?",
+                f"Hello! I'm here to help. What do you need?",
+                f"Hey! What questions do you have for me today?"
+            ]
+            # Select a response using a simple hash of the query to ensure consistent responses
+            response_index = hash(query_lower) % len(greeting_responses)
+            return greeting_responses[response_index]
+       
+        # If not a greeting, proceed with the regular flow
+        # If web knowledge is enabled, implement the full web search flow
+        if use_web_knowledge:
+            try:
+                # Step 1: Search the web using DuckDuckGo
+                print(f"Searching web for: {query}")
+                web_response, web_sources = self.get_web_knowledge_response(query, user=user, document_context=None)
+ 
+                if not web_response or not web_sources:
+                    return "I couldn't find relevant information on the web for your query."
+                   
+                # Extract web source domains for display
+                web_source_domains = []
+                for source in web_sources:
+                    domain = self.extract_domain(source.get('url', ''))
+                    if domain and domain != "unknown.com":
+                        web_source_domains.append(domain)
+               
+                # Remove existing sources from web_response to avoid duplication in GPT processing
+                if "*Sources:" in web_response:
+                    web_response_clean = web_response.split("*Sources:")[0].strip()
+                else:
+                    web_response_clean = web_response
+ 
+                # Get format-specific guidance
+                format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
+               
+                # Create the prompt for OpenAI
+                # Replace your existing prompt section with this:
+ 
+                prompt = f"""
+                You are a web research assistant. Based ONLY on the following information from multiple web sources, answer the user question.
+ 
+                If relevant details are missing or contradictory, clearly acknowledge this and summarize available related content. Be helpful by highlighting potentially useful information even if it doesn't fully resolve the question. Provide quantitative details where available.
+ 
+                RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
+ 
+                {format_guidance}
+ 
+                RESPONSE GENERATION GUIDELINES:
+                - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
+                - Include ALL relevant information from the web sources below.
+                - Prioritize completeness over brevity — include important details.
+                - If multiple perspectives or data points exist, include all of them.
+                - When appropriate, structure the information clearly with headings.
+                - Maintain a natural, conversational tone.
+                - If the web sources do NOT contain relevant information, clearly state that and summarize any related or tangential insights.
+ 
+                QUESTION: {query}
+ 
+                INFORMATION FROM WEB SOURCES:
+                {web_response_clean}
+ 
+                RESPONSE FORMAT REQUIREMENTS:
+                1. Follow with detailed elaboration on each relevant point.
+                2. Include specific details, examples, and support from the source content.
+                3. Use clear, logical sections when needed.
+                4. Conclude with any other contextually relevant insights.
+                5. Use <b> for section headers.
+                6. Use <p> for body text.
+                7. Use <ul> / <li> for lists.
+                8. Use <table>, <tr>, <td> for tables, if applicable.
+                9. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
+ 
+                CRITICAL INSTRUCTION - MUST BE FOLLOWED:
+                At the very end of your response, after all content, add a new line and provide ONLY this exact format:
+                SOURCES_JSON: {{"sources": ["domain1.com", "domain2.com", "domain3.com"]}}
+ 
+                Extract the actual website domains mentioned in the web sources content. Do not include generic domains. Look for domain names that appear in the source content.
+ 
+                RESPONSE LENGTH: {'Provide a focused, concise response prioritizing the most important information.' if response_length == 'short' else 'Provide a comprehensive, detailed response that thoroughly covers the topic.'}
+                """
+ 
+                system_message = "You are a web search analysis expert. Provide an EXTREMELY DETAILED and COMPREHENSIVE response and ALWAYS end with the SOURCES_JSON format."
+ 
+                temperature = 0.3 if response_format in ['factual_brief', 'technical_deep_dive'] else 0.5
+                max_tokens = 2000 if response_length == 'short' else 2000
+ 
+                print(f"Calling OpenAI API with temperature={temperature}, max_tokens={max_tokens}")
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+ 
+                formatted_web_response = response.choices[0].message.content
+ 
+                # Debug: Print the full response to see what GPT returned
+                print("=== FULL GPT RESPONSE ===")
+                print(formatted_web_response)
+                print("=== END FULL RESPONSE ===")
+ 
+                # Extract JSON sources from the response
+                import json
+                import re
+                sources_extracted = []
+ 
+                if "SOURCES_JSON:" in formatted_web_response:
+                    try:
+                        # Split the response to get the JSON part
+                        parts = formatted_web_response.split("SOURCES_JSON:")
+                        main_response = parts[0].strip()
+                        json_part = parts[1].strip()
+                       
+                        print(f"=== JSON PART EXTRACTED ===")
+                        print(f"JSON part: '{json_part}'")
+                        print("=== END JSON PART ===")
+                       
+                        # Parse the JSON
+                        sources_data = json.loads(json_part)
+                        sources_extracted = sources_data.get("sources", [])
+                       
+                        print(f"=== EXTRACTED SOURCES ===")
+                        print(f"Sources: {sources_extracted}")
+                        print("=== END EXTRACTED SOURCES ===")
+                       
+                        # Use the main response without the JSON part
+                        formatted_web_response = main_response
+                       
+                    except (json.JSONDecodeError, IndexError) as e:
+                        logger.warning(f"Failed to parse sources JSON: {e}")
+                        print(f"=== JSON PARSING ERROR ===")
+                        print(f"Error: {e}")
+                        print(f"Raw JSON part: '{json_part if 'json_part' in locals() else 'Not extracted'}'")
+                        print("=== END JSON ERROR ===")
+                       
+                        # Manual extraction as fallback - look for patterns in the response
+                        sources_extracted = []
+                       
+                        # Look for domain patterns in the response using regex
+                        domain_pattern = r'([a-zA-Z0-9-]+\.(?:com|in|org|net|co\.in|co\.uk))'
+                        domains_found = re.findall(domain_pattern, formatted_web_response.lower())
+                       
+                        # Filter out common generic domains
+                        generic_domains = ['google.com', 'search.com', 'example.com', 'website.com']
+                        for domain in domains_found:
+                            if domain not in generic_domains and domain not in sources_extracted:
+                                sources_extracted.append(domain)
+                       
+                        print(f"=== MANUAL EXTRACTION RESULTS ===")
+                        print(f"Manually extracted sources: {sources_extracted}")
+                        print("=== END MANUAL EXTRACTION ===")
+                       
+                else:
+                    print("=== NO SOURCES_JSON FOUND ===")
+                    print("SOURCES_JSON marker not found in response")
+                   
+                    # Manual extraction as fallback - look for domain patterns
+                    sources_extracted = []
+                   
+                    # Look for domain patterns in the response using regex
+                    domain_pattern = r'([a-zA-Z0-9-]+\.(?:com|in|org|net|co\.in|co\.uk))'
+                    domains_found = re.findall(domain_pattern, formatted_web_response.lower())
+                   
+                    # Filter out common generic domains
+                    generic_domains = ['google.com', 'search.com', 'example.com', 'website.com']
+                    for domain in domains_found:
+                        if domain not in generic_domains and domain not in sources_extracted:
+                            sources_extracted.append(domain)
+                   
+                    print(f"=== FALLBACK EXTRACTION RESULTS ===")
+                    print(f"Fallback extracted sources: {sources_extracted}")
+                    print("=== END FALLBACK EXTRACTION ===")
+ 
+                # Use extracted sources if available, otherwise fall back to web_source_domains
+                if sources_extracted:
+                    source_info = ", ".join(sources_extracted)
+                    final_response = f"{formatted_web_response}\n\n*Sources: {source_info}*"
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", final_response)
+                    return final_response
+                else:
+                    # Fallback to existing method
+                    if web_source_domains:
+                        source_info = ", ".join(web_source_domains)
+                        final_response = f"{formatted_web_response}\n\n*Sources: {source_info}*"
+                        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", final_response)
+                        return final_response
+                    else:
+                        return formatted_web_response
+ 
+               
+            except Exception as e:
+                logger.error(f"Error in web knowledge general chat: {str(e)}", exc_info=True)
+                return f"I encountered an error while searching the web: {str(e)}. Please try a different question or try again later."
+       
+        # If no web knowledge requested, use standard chat completion
+        else:
+            # Format-specific guidance
+            format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
+           
+            # Configure conciseness based on response length
+            conciseness = "Be concise and to-the-point." if response_length == 'short' else "Provide a comprehensive and detailed response."
+           
+            # Create a prompt for the general chat
+            prompt = f"""
+            Please answer the following question in a helpful, informative way.
+           
+            RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
+           
+            {format_guidance}
+           
+            {conciseness}
+           
+            Use HTML tags for structure (<b>, <p>, <ul>, <li>) to enhance readability.
+           
+            USER QUERY: {query}
+            """
+           
+            try:
+                # Use the OpenAI API
+                completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful, friendly AI assistant providing informative and thoughtful responses."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.5,
+                    max_tokens=2000 if response_length == 'comprehensive' else 800
+                )
+               
+                return completion.choices[0].message.content
+               
+            except Exception as e:
+                logger.error(f"Error in general chat: {str(e)}", exc_info=True)
+                return f"I'm sorry, I encountered an error while processing your request. Please try again or rephrase your question."
+ 
+ 
     
-    def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format, conversation_context, original_doc_context=None):
+    def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format, conversation_context, original_doc_context=None, doc_citation_sources=None):
         """
         Combine document-based response and web-based response into a single coherent answer.
+        Returns JSON format with enhanced citation handling.
         
         Args:
             query (str): The original user query
             document_response (str): Response generated from document context
-            web_response (str): Response generated from web search
+            web_response (str or dict): Response generated from web search (can be JSON)
             doc_sources (list): Document sources
             web_sources (list): Web sources
             response_format (str): Desired format for the response
             conversation_context (str): Previous conversation context
             original_doc_context (list, optional): The original document context chunks
+            doc_citation_sources (dict, optional): Document citation sources
             
         Returns:
-            str: Combined response
+            tuple: (combined_response_dict, combined_citation_sources)
         """
         # Check if the query is a simple greeting
         greeting_keywords = [
             # Basic greetings
-            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning",
             "good afternoon", "good evening", "what's up", "sup", "hiya",
             
             # Variations with repeated letters
             "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
             
             # Short forms/abbreviations
-            "hlw", "g'day", "yo", "heya", 
+            "hlw", "g'day", "yo", "heya",
             
             # Informal greetings
             "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
@@ -3999,21 +4255,45 @@ class ChatView(APIView):
             ]
             # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
-            return greeting_responses[response_index]
+            
+            return {
+                "content": greeting_responses[response_index],
+                "sources": "",
+                "citation_sources": {},
+                "response_type": "greeting",
+                "json_response": True
+            }, {}
 
         # Initialize combined citation sources with document citations
         combined_citation_sources = doc_citation_sources.copy() if doc_citation_sources else {}
+        
+        # Handle web response format (could be string or dict)
+        if isinstance(web_response, dict):
+            web_content = web_response.get("content", str(web_response))
+            web_sources_from_response = web_response.get("sources", [])
+        else:
+            web_content = str(web_response)
+            web_sources_from_response = []
         
         # If not a greeting, proceed with the regular flow
         # Clean up responses by removing source sections
         if "\n\n*Sources:" in document_response:
             document_response = document_response.split("\n\n*Sources:")[0]
             
-        if "\n\n*Sources:" in web_response:
-            web_response = web_response.split("\n\n*Sources:")[0]
+        if "\n\n*Sources:" in web_content:
+            web_response_clean = web_content.split("\n\n*Sources:")[0]
+        else:
+            web_response_clean = web_content
+        
+        # Extract web source domains for final source list
+        web_source_domains = []
+        for source in web_sources:
+            domain = self.extract_domain(source.get('url', ''))
+            if domain and domain != "unknown.com":
+                web_source_domains.append(domain)
         
         # Detect if this is a comparison query that needs special handling
-        comparison_words = ["compare", "comparison", "versus", "vs", "difference", "similarities", 
+        comparison_words = ["compare", "comparison", "versus", "vs", "difference", "similarities",
                             "better than", "worse than", "alternative", "competitors", "competition",
                             "similar to", "different from", "compared to"]
         
@@ -4026,6 +4306,7 @@ class ChatView(APIView):
             # Use up to 5 most relevant chunks from the original document context
             doc_context_text = "\n\n".join(original_doc_context[:5])
         
+        # Create analysis prompt for JSON response
         analyze_prompt = f"""
         Analyze the following information to identify key details about the topic being discussed.
         
@@ -4036,25 +4317,17 @@ class ChatView(APIView):
         
         {f"ORIGINAL DOCUMENT CONTEXT:{doc_context_text}" if doc_context_text else ""}
         
-        Your task is to identify:
-        
-        1. The main entities (products, services, concepts, etc.) being discussed - be very specific with exact names
-        2. The domain or category these entities belong to (e.g., "protein supplements", "accounting software", etc.)
-        3. Any attributes or aspects mentioned about these entities that would be useful for comparison
-        4. Any competitors or alternatives that are explicitly mentioned
-        5. If this appears to be a comparison query, what specifically is being compared?
-        6. Any specific industry, market, or specialized field this query relates to
-        
-        Return your analysis in this format:
-        MAIN_ENTITIES: [List the exact names of main entities]
-        DOMAIN: [Domain/category these entities belong to - be specific]
-        KEY_ATTRIBUTES: [Important attributes mentioned]
-        MENTIONED_COMPETITORS: [Any competitors explicitly mentioned]
-        IS_COMPARISON: [Yes/No - is this a comparison query?]
-        COMPARISON_FOCUS: [If it's a comparison, what aspects are being compared?]
-        INDUSTRY_CONTEXT: [Specific industry or market context]
-        MISSING_INFORMATION: [What important information seems to be missing that would help with a comparison?]
-
+        CRITICAL: Your response MUST be a valid JSON object with this structure:
+        {{
+            "main_entities": ["list", "of", "exact", "entity", "names"],
+            "domain": "specific domain or category",
+            "key_attributes": ["important", "attributes", "mentioned"],
+            "mentioned_competitors": ["any", "competitors", "mentioned"],
+            "is_comparison": true/false,
+            "comparison_focus": "what aspects are being compared if applicable",
+            "industry_context": "specific industry or market context",
+            "missing_information": ["what", "important", "info", "seems", "missing"]
+        }}
         """
         
         try:
@@ -4062,26 +4335,21 @@ class ChatView(APIView):
             analysis_response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert analyst who extracts structured information from text."},
+                    {"role": "system", "content": "You are an expert analyst who extracts structured information from text. Respond only in JSON format."},
                     {"role": "user", "content": analyze_prompt}
                 ],
+                response_format={"type": "json_object"},  # Force JSON
                 temperature=0.2,
                 max_tokens=500
             )
             
-            doc_analysis = analysis_response.choices[0].message.content.strip()
-            logger.info(f"Document analysis: {doc_analysis}")
-            
-            # Parse the analysis to extract key components
-            analysis_dict = {}
-            for line in doc_analysis.split('\n'):
-                if ':' in line:
-                    key, value = line.split(':', 1)
-                    analysis_dict[key.strip()] = value.strip()
+            # Parse JSON analysis
+            analysis_json = self._parse_json_response(analysis_response.choices[0].message.content)
+            logger.info(f"Document analysis: {analysis_json}")
             
             # Check if web response seems insufficient based on analysis
             web_info_lacking = False
-            if "Unfortunately, there was no additional relevant information found on the web" in web_response or "no relevant information" in web_response.lower():
+            if "Unfortunately, there was no additional relevant information found on the web" in web_response_clean or "no relevant information" in web_response_clean.lower():
                 web_info_lacking = True
                 logger.info("Web information appears to be lacking")
             
@@ -4094,27 +4362,38 @@ class ChatView(APIView):
                 logger.info("Using model knowledge to supplement missing web information for comparison")
             
             # If web is lacking information about mentioned entities, use model knowledge
-            if web_info_lacking and analysis_dict.get('MAIN_ENTITIES'):
+            if web_info_lacking and analysis_json.get('main_entities'):
                 use_model_knowledge = True
                 logger.info("Using model knowledge to supplement information about entities")
             
-            # Create a custom prompt based on the analysis and whether to use model knowledge
+            # Create system message for JSON response combination
+            system_message = """You are an expert at combining information from multiple sources and using your knowledge to provide comprehensive answers.
+            You must respond in JSON format with the following structure:
+            {
+                "content": "Your comprehensive response with proper HTML formatting and citations",
+                "sources_combined": ["list", "of", "all", "sources", "used"],
+                "response_sections": {
+                    "document_info": "key points from documents",
+                    "web_info": "key points from web",
+                    "additional_knowledge": "any additional knowledge provided"
+                },
+                "combination_type": "standard/knowledge_enhanced",
+                "citations_included": true/false,
+                "web_sources_extracted": ["domain1.com", "domain2.com"]
+            }
+            
+            CRITICAL INSTRUCTION FOR WEB SOURCES - MUST BE FOLLOWED:
+            In your JSON response, include a "web_sources_extracted" field that contains an array of actual website domains mentioned in the web response content. Extract the actual website domains mentioned in the web response content. Do not include generic domains. Look for domain names that appear in the web source content."""
+            
+            # Create enhanced prompt based on the analysis and whether to use model knowledge
             if use_model_knowledge:
                 # Extract key information from the analysis
-                main_entities = analysis_dict.get('MAIN_ENTITIES', '[]').strip('[]').split(',')
-                domain = analysis_dict.get('DOMAIN', '')
-                mentioned_competitors = analysis_dict.get('MENTIONED_COMPETITORS', '[]').strip('[]').split(',')
-                industry_context = analysis_dict.get('INDUSTRY_CONTEXT', '')
+                main_entities = analysis_json.get('main_entities', [])
+                domain = analysis_json.get('domain', '')
+                mentioned_competitors = analysis_json.get('mentioned_competitors', [])
+                industry_context = analysis_json.get('industry_context', '')
                 
-                # Clean up the extracted items
-                main_entities = [entity.strip() for entity in main_entities if entity.strip()]
-                mentioned_competitors = [comp.strip() for comp in mentioned_competitors if comp.strip()]
-                domain = domain.strip()
-                industry_context = industry_context.strip()
-                
-                # Craft a knowledge-enhanced prompt
-                # Enhanced prompt without any explicit brand examples:
-
+                # Enhanced prompt without any explicit brand examples
                 enhanced_prompt = f"""
                 You have a document response and a web response to the user's query. Your task is to combine these into a coherent response.
 
@@ -4130,7 +4409,7 @@ class ChatView(APIView):
                 {document_response}
 
                 WEB RESPONSE:
-                {web_response}
+                {web_response_clean}
 
                 SPECIAL INSTRUCTIONS:
                 1. The web search did not return sufficiently helpful information, especially about additional competitors or alternatives not mentioned in the document.
@@ -4173,22 +4452,24 @@ class ChatView(APIView):
                 - Use proper HTML formatting (<h3>, <b>, <p>, <ul>, <li>, <table> if appropriate)
 
                 The response format should be: {response_format.replace('_', ' ').title()}
+                
+                CRITICAL: Your response MUST be a valid JSON object with this structure:
+                {{
+                    "content": "Your comprehensive response with HTML formatting",
+                    "sources_combined": ["document sources", "web sources", "knowledge base"],
+                    "response_sections": {{
+                        "document_info": "summary of document insights",
+                        "web_info": "summary of web insights", 
+                        "additional_knowledge": "summary of additional knowledge provided"
+                    }},
+                    "combination_type": "knowledge_enhanced",
+                    "citations_included": false,
+                    "web_sources_extracted": ["domain1.com", "domain2.com"]
+                }}
                 """
                 
-                completion = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are an expert at combining information from multiple sources and using your knowledge to provide comprehensive answers."},
-                        {"role": "user", "content": enhanced_prompt}
-                    ],
-                    temperature=0.3,
-                    max_tokens=2500
-                )
-                
-                combined_response = completion.choices[0].message.content
-                
             else:
-                # Update the prompt to include citation information
+                # Update the prompt to include citation information and source JSON extraction
                 citation_instructions = """
                 CITATION GUIDELINES:
                 When referencing information from the document sources, cite the source using [n] format.
@@ -4197,13 +4478,12 @@ class ChatView(APIView):
                 Place citations immediately after the information they support.
                 """
                 
-                
                 # Standard combination prompt if we don't need model knowledge
-                prompt = f"""
+                enhanced_prompt = f"""
                 You have two responses to the user's query: one based on their documents and one based on web search.
                 Your task is to combine these into a single coherent response that prioritizes the document information
                 (since that is more specific to the user) but supplements with web information when valuable.
-                
+
                 {citation_instructions}
 
                 The response format should be: {response_format.replace('_', ' ').title()}
@@ -4217,7 +4497,7 @@ class ChatView(APIView):
                 {document_response}
 
                 RESPONSE FROM WEB SEARCH:
-                {web_response}
+                {web_response_clean}
 
                 GUIDELINES FOR COMBINATION:
                 1. When information appears in both sources, prioritize the document information.
@@ -4245,30 +4525,77 @@ class ChatView(APIView):
                 9. For document information, maintain the existing citation numbers [n].
                 10. For web information, use [W1], [W2], etc. format.
 
+                11. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
+
                 Create a single, coherent, well-structured response that combines both sources of information.
                 Make sure your response is contextually relevant to the ongoing conversation.
 
-                IMPORTANT: If the web search doesn't provide much additional information beyond what's in the documents, 
-                use your background knowledge to expand the response with additional relevant information about competitors, 
+                IMPORTANT: If the web search doesn't provide much additional information beyond what's in the documents,
+                use your background knowledge to expand the response with additional relevant information about competitors,
                 alternatives, or market players that aren't mentioned in either source.
+                
+                CRITICAL: Your response MUST be a valid JSON object with this structure:
+                {{
+                    "content": "Your comprehensive response with HTML formatting",
+                    "sources_combined": ["list", "of", "all", "sources"],
+                    "response_sections": {{
+                        "document_info": "key insights from documents",
+                        "web_info": "key insights from web"
+                    }},
+                    "combination_type": "standard",
+                    "citations_included": true,
+                    "web_sources_extracted": ["domain1.com", "domain2.com"]
+                }}
                 """
+            
+            # Generate combined response with JSON format
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": enhanced_prompt}
+                ],
+                response_format={"type": "json_object"},  # Force JSON
+                temperature=0.3,
+                max_tokens=2500
+            )
+            
+            # Parse the JSON response
+            combined_json = self._parse_json_response(completion.choices[0].message.content)
+            combined_response = combined_json.get("content", "Error generating combined response")
+            
+            # Debug: Print the full response to see what GPT returned
+            print("=== FULL COMBINED RESPONSE ===")
+            print(combined_response)
+            print("=== END FULL RESPONSE ===")
+            
+            # Extract web sources from JSON response
+            web_sources_extracted = combined_json.get("web_sources_extracted", [])
+            
+            print(f"=== EXTRACTED WEB SOURCES FROM JSON ===")
+            print(f"Web Sources: {web_sources_extracted}")
+            print("=== END EXTRACTED WEB SOURCES ===")
+            
+            # If no web sources extracted from JSON, fall back to manual extraction
+            if not web_sources_extracted:
+                import re
+                # Look for domain patterns in the response using regex
+                domain_pattern = r'([a-zA-Z0-9-]+\.(?:com|in|org|net|co\.in|co\.uk))'
+                domains_found = re.findall(domain_pattern, combined_response.lower())
                 
-                completion = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are an expert at synthesizing information from multiple sources."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.3,
-                    max_tokens=2500
-                )
+                # Filter out common generic domains
+                generic_domains = ['google.com', 'search.com', 'example.com', 'website.com']
+                for domain in domains_found:
+                    if domain not in generic_domains and domain not in web_sources_extracted:
+                        web_sources_extracted.append(domain)
                 
-                combined_response = completion.choices[0].message.content
+                print(f"=== FALLBACK EXTRACTION RESULTS ===")
+                print(f"Fallback extracted web sources: {web_sources_extracted}")
+                print("=== END FALLBACK EXTRACTION ===")
             
             # Process citations in the combined response to include web sources
             web_citation_pattern = r'\[W(\d+)\]'
             web_citations = re.findall(web_citation_pattern, combined_response)
-
 
             # Add web sources to combined_citation_sources
             if web_citations and web_sources:
@@ -4293,10 +4620,22 @@ class ChatView(APIView):
                         # Replace [Wn] with [citation_num]
                         combined_response = combined_response.replace(f"[W{web_citation}]", f"[{citation_num}]")
 
-            # Add all sources
+            # Create combined sources list for final display
             all_doc_sources = list(set(doc_sources))
-            all_web_domains = [self.extract_domain(source.get('url', '')) for source in web_sources]
-            all_sources = all_doc_sources + all_web_domains
+            
+            # Use extracted web sources if available, otherwise fall back to web_source_domains
+            if web_sources_extracted:
+                final_web_sources = web_sources_extracted
+            elif web_source_domains:
+                final_web_sources = web_source_domains
+            else:
+                final_web_sources = []
+            
+            # Include web sources from JSON response if available
+            if isinstance(web_response, dict) and web_response.get("sources"):
+                final_web_sources.extend(web_response["sources"])
+            
+            all_sources = all_doc_sources + list(set(final_web_sources))
             
             # If we used model knowledge, add a note
             if use_model_knowledge:
@@ -4309,33 +4648,123 @@ class ChatView(APIView):
 
             # Clean up and process citations in the final response
             processed_response, processed_citation_sources = self._format_citations_for_response(combined_response, combined_citation_sources)
-        
             
-            return f"{processed_response}\n\n*Sources: {all_sources_str}*", processed_citation_sources
+            # Return JSON structure instead of plain text
+            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ FINAL COMBINED RESPONSE", f"{processed_response}\n\n*Sources: {all_sources_str}*")
+            return {
+                "content": f"{processed_response}\n\n*Sources: {all_sources_str}*",
+                "sources": all_sources_str,
+                "citation_sources": processed_citation_sources,
+                "document_sources": all_doc_sources,
+                "web_sources": final_web_sources,
+                "combination_type": combined_json.get("combination_type", "standard"),
+                "response_sections": combined_json.get("response_sections", {}),
+                "used_model_knowledge": use_model_knowledge,
+                "is_comparison_query": is_comparison_query,
+                "json_response": True,
+                "success": True
+            }, processed_citation_sources
             
         except Exception as e:
             logger.error(f"Error combining responses: {str(e)}", exc_info=True)
             
-            # Fallback: Simply concatenate the responses with a divider
-            fallback_response = f"""
-            <h3>Information from Your Documents:</h3>
-            <div>
-            {document_response}
-            </div>
+            # Fallback: Simply concatenate the responses with a divider in JSON format
+            fallback_system_message = """You are an assistant that combines information from multiple sources.
+            You must respond in JSON format with this structure:
+            {
+                "content": "Your combined response with HTML formatting",
+                "sources": "list of sources used",
+                "combination_type": "fallback",
+                "error_handled": true,
+                "web_sources_extracted": ["domain1.com", "domain2.com"]
+            }"""
             
-            <h3>Additional Information from Web Search:</h3>
-            <div>
-            {web_response}
-            </div>
+            fallback_prompt = f"""
+            Combine the following information sources for the user's query: "{query}"
+            
+            Document Information:
+            {document_response}
+            
+            Web Information:
+            {web_response_clean}
+            
+            Create a coherent response that includes both sources of information.
+            Use <h3>Information from Your Documents:</h3> and <h3>Additional Information from Web Search:</h3> as section headers.
+            
+            CRITICAL: Your response MUST be a valid JSON object with this structure:
+            {{
+                "content": "Your combined response with HTML formatting",
+                "sources": "list of sources",
+                "combination_type": "fallback",
+                "error_handled": true,
+                "web_sources_extracted": ["domain1.com", "domain2.com"]
+            }}
             """
             
-            # Add sources
-            all_doc_sources = list(set(doc_sources))
-            all_web_domains = [self.extract_domain(source.get('url', '')) for source in web_sources]
-            all_sources = all_doc_sources + all_web_domains
-            all_sources_str = ", ".join(all_sources)
+            try:
+                fallback_response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": fallback_system_message},
+                        {"role": "user", "content": fallback_prompt}
+                    ],
+                    response_format={"type": "json_object"},  # Force JSON
+                    temperature=0.3,
+                    max_tokens=1500
+                )
+                
+                fallback_json = self._parse_json_response(fallback_response.choices[0].message.content)
+                fallback_content = fallback_json.get("content", "Error generating fallback response")
+                fallback_web_sources = fallback_json.get("web_sources_extracted", [])
+                
+            except Exception as fallback_error:
+                logger.error(f"Fallback response generation failed: {str(fallback_error)}")
+                # Ultimate fallback - create JSON manually
+                fallback_content = f"""
+                <h3>Information from Your Documents:</h3>
+                <div>
+                {document_response}
+                </div>
+                
+                <h3>Additional Information from Web Search:</h3>
+                <div>
+                {web_response_clean}
+                </div>
+                """
+                fallback_web_sources = []
             
-            return f"{fallback_response}\n\n*Sources: {all_sources_str}*", doc_citation_sources
+            # Add sources for fallback
+            all_doc_sources = list(set(doc_sources))
+            
+            # Use extracted web sources if available from fallback, otherwise fall back to web_source_domains
+            if fallback_web_sources:
+                final_web_sources = fallback_web_sources
+            elif web_source_domains:
+                final_web_sources = web_source_domains
+            else:
+                final_web_sources = []
+                
+            # Include web sources from JSON response if available
+            if isinstance(web_response, dict) and web_response.get("sources"):
+                final_web_sources.extend(web_response["sources"])
+                
+            all_sources = all_doc_sources + list(set(final_web_sources))
+            all_sources_str = ", ".join(all_sources) if all_sources else "Document and web sources"
+            
+            return {
+                "content": f"{fallback_content}\n\n*Sources: {all_sources_str}*",
+                "sources": all_sources_str,
+                "citation_sources": doc_citation_sources if doc_citation_sources else {},
+                "document_sources": all_doc_sources,
+                "web_sources": final_web_sources,
+                "combination_type": "fallback",
+                "error": str(e),
+                "error_handled": True,
+                "json_response": True,
+                "success": False
+            }, doc_citation_sources if doc_citation_sources else {}
+
+    
 
     def detect_question_format(self, query, context_snippets=None):
         """
@@ -4642,7 +5071,7 @@ class ChatView(APIView):
 
 
     def _clean_citations(self, text, citation_sources):
-        """Clean up citation format to ensure consistent [n] format."""
+        """Clean up citation format to ensure consistent [n] format and remove duplicates."""
         # Fix citations that might not have brackets
         text = re.sub(r'(\s)(\d+)(\s)', lambda m: m.group(1) + '[' + m.group(2) + ']' + m.group(3) 
                     if self._is_likely_citation(int(m.group(2)), citation_sources) else m.group(0), text)
@@ -4650,26 +5079,37 @@ class ChatView(APIView):
         # Fix spaces in citations
         text = re.sub(r'\[\s*(\d+)\s*\]', r'[\1]', text)
         
+        # Remove duplicate citations in the same sentence/line
+        text = self._remove_consecutive_duplicate_citations(text)
+        
         return text
-
     def _is_likely_citation(self, num, citation_sources):
         """Check if a number is likely to be a citation based on available sources."""
         return num in citation_sources and 1 <= num <= len(citation_sources)
 
     def _format_citations_for_response(self, response_text, citation_sources):
-        """Format the citations for response."""
+        """Format the citations for response and remove duplicates."""
         # Extract all citations from the text
         citation_pattern = r'\[(\d+)\]'
         citations = re.findall(citation_pattern, response_text)
+        
+        # Use set to get unique citations, then convert back to sorted list
         unique_citations = sorted(set([int(c) for c in citations if c.isdigit()]))
         
         # Create mapping from original citation numbers to sequential display numbers
         citation_mapping = {original_num: display_num for display_num, original_num in enumerate(unique_citations, 1)}
         
         # Replace original citation numbers with sequential display numbers
+        # Process in reverse order to avoid issues with overlapping replacements
         processed_text = response_text
         for original_num in sorted(citation_mapping.keys(), reverse=True):
-            processed_text = re.sub(r'\[' + str(original_num) + r'\]', f'[{citation_mapping[original_num]}]', processed_text)
+            # Use word boundaries to avoid partial matches
+            pattern = r'\[' + str(original_num) + r'\]'
+            replacement = f'[{citation_mapping[original_num]}]'
+            processed_text = re.sub(pattern, replacement, processed_text)
+        
+        # Remove duplicate citations that appear consecutively
+        processed_text = self._remove_consecutive_duplicate_citations(processed_text)
         
         # Create new citation sources dictionary with display numbers
         display_citation_sources = {}
@@ -4680,17 +5120,36 @@ class ChatView(APIView):
                 snippet_length = 1500 
                 display_citation_sources[display_num] = {
                     'source_file': source_info.get('source_file', 'Unknown'),
-                    'page_number': 'Unknown',  # Or get chunk number if available
+                    'page_number': 'Unknown',
                     'section_title': 'Unknown',
                     'snippet': snippet[:snippet_length] + "..." if len(snippet) > snippet_length else snippet,
                     'document_id': source_info.get('document_id', 'Unknown')
                 }
         
         return processed_text, display_citation_sources
+
+    def _remove_consecutive_duplicate_citations(self, text):
+        """Remove consecutive duplicate citations like [1][1] or [1] [1]."""
+        # Pattern to match consecutive identical citations with optional whitespace
+        pattern = r'\[(\d+)\]\s*(?:\[\1\]\s*)+' 
+        
+        def replace_duplicates(match):
+            citation_num = match.group(1)
+            return f'[{citation_num}]'
+        
+        # Remove consecutive duplicates
+        cleaned_text = re.sub(pattern, replace_duplicates, text)
+        
+        # Also handle cases where citations are separated by minimal text (like punctuation)
+        # Pattern for citations separated by only punctuation and whitespace
+        pattern2 = r'\[(\d+)\]\s*[,.;:!?]*\s*\[\1\]'
+        cleaned_text = re.sub(pattern2, r'[\1]', cleaned_text)
+        
+        return cleaned_text
     def generate_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a response using the provided context and sources with web search capability.
-        Enhanced to handle URL content in context. Also Enhnaced with accurate citation
+        Enhanced to handle URL content in context. Also Enhanced with accurate citation
         
         Args:
             query (str): User's original query
@@ -4795,11 +5254,6 @@ class ChatView(APIView):
             }
             contextualized_content.append(f"Source {i}:\n{content}")
             
-        # # Add URL context if available
-        # if url_context:
-        #     contextualized_content.append(f"From URLs in query:\n{url_context}")
-        #     selected_sources.append("URL Content")
-
         if url_context:
             citation_count = len(contextualized_content) + 1
             contextualized_content.append(f"Source {citation_count}:\n{url_context}")
@@ -4812,7 +5266,6 @@ class ChatView(APIView):
                 "display_num": citation_count
             }
 
-            
         full_context = "\n\n".join(contextualized_content)
 
         # Get format-specific guidance
@@ -4844,36 +5297,36 @@ class ChatView(APIView):
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
-    
+
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
-    
+
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
-    
+
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
 
+        # Updated system message for JSON response
+        system_message = """You are a document analysis expert with conversation memory. 
+        You must respond in JSON format with the following structure:
+        {
+            "content": "Your detailed response content here with proper HTML formatting and citations",
+            "citations_used": [list of citation numbers used in the response],
+            "format_type": "response_format_used",
+            "sources_referenced": ["list", "of", "source", "names"]
+        }
+        
+        In the content field, use HTML tags for formatting (<b>, <p>, <ul>, <li>, <table>, etc.).
+        Use source citations [n] for all information from the documents.
+        Provide a comprehensive and detailed answer while maintaining conversation continuity."""
 
-        # Add citation instruction to the prompt
-        citation_instructions = """
-        CITATION GUIDELINES:
-        When referencing information from the provided sources, cite the appropriate source using its corresponding number within square brackets (e.g., [1], [2], etc.). 
-        Every statement that comes from a specific source should include a citation.
-        When multiple sources support a statement, cite all relevant sources: [1][2].
-        Place citations immediately after the information they support.
-        Ensure all facts and information are properly cited with their source number.
-        Only cite a source when you are explicitly referencing information from it.
-        """
-
-        # Define the user prompt - modified to handle URL content
+        # Define the user prompt for JSON response
         user_prompt = f"""
         Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
-
-        {citation_instructions}
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -4902,18 +5355,13 @@ class ChatView(APIView):
 
         USER QUERY: {query}
 
-        RESPONSE FORMAT REQUIREMENTS:
-        1. Begin with a comprehensive summary of all key information related to the query
-        2. Follow with detailed elaboration on each aspect of the question
-        3. Include specific details, examples, and supporting evidence from the documents
-        4. When appropriate, organize information into logical sections
-        5. Conclude with any additional relevant information from the context
-        6. Use <b> tags for key section headings
-        7. Use <p> tags for detailed explanations
-        8. Use <ul> and <li> for list-based information
-        9. Use <table> and <tr>, <td> for tabular information
-        10. IMPORTANT: Cite sources using [n] format after each statement that comes from a specific source
-
+        CRITICAL: Your response MUST be a valid JSON object with this exact structure:
+        {{
+            "content": "Your comprehensive response with HTML formatting and [n] citations",
+            "citations_used": [list of citation numbers used],
+            "format_type": "{response_format}",
+            "sources_referenced": ["list of source names referenced"]
+        }}
 
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document and URL context.
@@ -4925,21 +5373,40 @@ class ChatView(APIView):
         - If the context contains URL content, clearly attribute information from URLs in your response.
         """
         
-        # Define system message
-        system_message = "You are a document analysis expert with conversation memory. Provide a comprehensive and detailed answer using only available information while maintaining conversation continuity. Use source citations [n] for all information from the documents."
-        
         try:
-            # Call the OpenAI chat completion API
+            # Call the OpenAI chat completion API with JSON format
             completion = client.chat.completions.create(
-                model="o3-mini",
+                model="o4-mini",
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_prompt}
-                ]
+                ],
+                response_format={"type": "json_object"},  # Force JSON response
+              
+               
             )
+             # ===== LOG RAW LLM RESPONSE =====
+            raw_llm_response = completion.choices[0].message.content
+            print("\n" + "="*100)
+            print("🤖 RAW LLM RESPONSE FROM OPENAI (generate_short_response)")
+            print("="*100)
+            print("Model used:", completion.model)
+            print("Response ID:", completion.id)
+            print("Raw response content:")
+            print(raw_llm_response)
+            print("Response length:", len(raw_llm_response))
+            print("Response type:", type(raw_llm_response))
+            print("="*100)
+            # ===== END LOG RAW LLM RESPONSE =====
+            # Parse the JSON response
+            json_response = self._parse_json_response(completion.choices[0].message.content)
             
-            # Extract the answer from the response
-            answer = completion.choices[0].message.content
+            if json_response.get("error"):
+                # If JSON parsing failed, return the fallback message
+                answer = json_response.get("content", "An error occurred while generating the response.")
+            else:
+                # Extract the content from JSON response
+                answer = json_response.get("content", "No response content found.")
 
             # Clean and process citations in the answer
             answer = self._clean_citations(answer, citation_sources)
@@ -4947,17 +5414,31 @@ class ChatView(APIView):
             
             # If answer seems too short, try to generate a more detailed one
             if len(answer.split()) < 100:  # If less than ~100 words
-                enhanced_system_message = "You are a document analysis expert with conversation memory. Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity. Use source citations [n] for all information from the documents."
+                enhanced_system_message = """You are a document analysis expert with conversation memory. 
+                You must respond in JSON format with the following structure:
+                {
+                    "content": "Your EXTREMELY DETAILED and COMPREHENSIVE response with proper HTML formatting and citations",
+                    "citations_used": [list of citation numbers used],
+                    "format_type": "response_format_used",
+                    "sources_referenced": ["list", "of", "source", "names"]
+                }
+                
+                Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity. Use source citations [n] for all information from the documents."""
                 
                 completion = client.chat.completions.create(
-                    model="o3-mini",
+                    model="o4-mini",
                     messages=[
                         {"role": "system", "content": enhanced_system_message},
                         {"role": "user", "content": user_prompt}
-                    ]
+                    ],
+                    response_format={"type": "json_object"},  # Force JSON response
+                   
+                   
                 )
                 
-                answer = completion.choices[0].message.content
+                # Parse the enhanced JSON response
+                json_response = self._parse_json_response(completion.choices[0].message.content)
+                answer = json_response.get("content", answer)  # Use original if parsing fails
                 answer = self._clean_citations(answer, citation_sources)
                 processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
                 
@@ -4977,24 +5458,36 @@ class ChatView(APIView):
             CONTEXT:
             {reduced_context}
             
-            Ensure the response is detailed and covers all relevant information from the context while maintaining conversational continuity.
+            CRITICAL: Respond in JSON format:
+            {{
+                "content": "Your detailed response with HTML formatting",
+                "citations_used": [],
+                "format_type": "fallback",
+                "sources_referenced": []
+            }}
             """
             
             try:
                 fallback_completion = client.chat.completions.create(
-                    model="o3-mini",
+                    model="o4-mini",
                     messages=[
-                        {"role": "system", "content": "You are a document analysis expert with conversation memory."},
+                        {"role": "system", "content": "You are a document analysis expert. Respond in JSON format."},
                         {"role": "user", "content": fallback_prompt}
-                    ]
+                    ],
+                    response_format={"type": "json_object"},  # Force JSON response
+                    
+                  
                 )
                 
-                answer = fallback_completion.choices[0].message.content
+                json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
+                answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
                 processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
             except Exception as nested_e:
                 # Last resort fallback
                 answer = f"An error occurred while generating the response: {str(e)}. Please try a more specific question or with fewer documents."
+                processed_answer = answer
+                processed_citations = {}
 
         # Add source information
         source_list = list(set(selected_sources))
@@ -5017,49 +5510,30 @@ class ChatView(APIView):
         Returns:
             str: Generated response based on the context and/or web search
         """
-        # Check if the query is a simple greeting
+        # Check if the query is a simple greeting (same logic as above)
         greeting_keywords = [
-            # Basic greetings
             "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
             "good afternoon", "good evening", "what's up", "sup", "hiya",
-            
-            # Variations with repeated letters
             "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
-            
-            # Short forms/abbreviations
             "hlw", "g'day", "yo", "heya", 
-            
-            # Informal greetings
             "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
             "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
-            
-            # Time-specific with variations
             "morning", "afternoon", "evening", "gm", "ga", "ge",
-            
-            # Other languages and cultural greetings
             "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
-            
-            # Casual text-style greetings
             "sup", "yo yo", "hiya", "hai", "hullo"
         ]
         
-        # Convert to lowercase and strip to properly detect greetings
         query_lower = query.lower().strip()
-        
-        # Check if the query is just a greeting or a greeting followed by a name/simple phrase
         is_greeting = False
         
-        # Exact matches
         if query_lower in greeting_keywords:
             is_greeting = True
         
-        # Starting with a greeting
         for greeting in greeting_keywords:
-            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
+            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:
                 is_greeting = True
                 break
         
-        # If it's a greeting, respond directly without using more complex logic
         if is_greeting:
             greeting_responses = [
                 f"Hello! How can I assist you today?",
@@ -5068,21 +5542,18 @@ class ChatView(APIView):
                 f"Hello! I'm here to help. What do you need?",
                 f"Hey! What questions do you have for me today?"
             ]
-            # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
-            return greeting_responses[response_index], {}  # Return empty citation dict
+            return greeting_responses[response_index], {}
         
-        # If not a greeting, proceed with the regular flow
         if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents."
         
-        # Check for URL content in the context
+        # [Same URL and context processing logic as in generate_response]
         url_context = ""
         document_context = []
         document_sources = []
         url_sources = []
         
-        # Separate URL content from document content
         for i, content_item in enumerate(context):
             if i < len(sources) and sources[i] == "URL Content" and "CONTENT FROM URLS IN QUERY:" in content_item:
                 url_context = content_item
@@ -5092,27 +5563,19 @@ class ChatView(APIView):
                 if i < len(sources):
                     document_sources.append(sources[i])
         
-        # Standard document-based response (no web search) - mostly the same as original
         citation_sources = {}
         selected_context, selected_sources = self._prepare_context(document_context, document_sources)
         
-        # Create context with source information
         contextualized_content = []
         for i, (content, source) in enumerate(zip(selected_context, selected_sources), 1):
-            # Add citation number to each chunk
             citation_sources[i] = {
                 "source_file": source,
                 "text": content,
-                "document_id": "Unknown",  # You might need to add logic to get the document ID
-                "score": 1.0 - (i * 0.05),  # Simple scoring based on position (higher for earlier chunks)
+                "document_id": "Unknown",
+                "score": 1.0 - (i * 0.05),
                 "display_num": i
             }
             contextualized_content.append(f"Source {i}:\n{content}")
-            
-        # # Add URL context if available
-        # if url_context:
-        #     contextualized_content.append(f"From URLs in query:\n{url_context}")
-        #     selected_sources.append("URL Content")
 
         if url_context:
             citation_count = len(contextualized_content) + 1
@@ -5122,18 +5585,16 @@ class ChatView(APIView):
                 "source_file": "URL Content",
                 "text": url_context,
                 "document_id": "url_content",
-                "score": 0.8,  # Fixed score for URL content
+                "score": 0.8,
                 "display_num": citation_count
             }
 
-
-            
         full_context = "\n\n".join(contextualized_content)
 
         # Get format-specific guidance for short responses
         format_guidance = self._get_format_guidance(response_format, 'short')
         
-        # Include conversation context if available
+        # Include conversation context if available (same as above)
         conversation_prompt = ""
         if conversation_context:
             conversation_prompt = f"""
@@ -5154,7 +5615,6 @@ class ChatView(APIView):
         # Get project description if available
         project_description = self._get_project_description(query)
         
-        # Update to include project description in response guidelines
         project_guidance = ""
         if project_description and len(project_description.strip()) > 5:
             project_guidance = f"""
@@ -5172,21 +5632,22 @@ class ChatView(APIView):
             
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
-        # Add citation instruction to the prompt
-        citation_instructions = """
-        CITATION GUIDELINES:
-        When referencing information from the provided sources, cite the appropriate source using its corresponding number within square brackets (e.g., [1], [2], etc.). 
-        Every statement that comes from a specific source should include a citation.
-        When multiple sources support a statement, cite all relevant sources: [1][2].
-        Place citations immediately after the information they support.
-        Ensure all facts and information are properly cited with their source number.
-        Only cite a source when you are explicitly referencing information from it.
-        """
+
+        # Updated system message for JSON response
+        system_message = """You are a document analysis expert with conversation memory. 
+        You must respond in JSON format with the following structure:
+        {
+            "content": "Your concise yet informative response with proper HTML formatting and citations",
+            "citations_used": [list of citation numbers used],
+            "format_type": "response_format_used",
+            "sources_referenced": ["list", "of", "source", "names"]
+        }
+        
+        Provide a concise yet informative response that maintains conversation continuity. Use source citations [n] for information from the documents."""
+
         # Define the user prompt for short response with conversation context
         user_prompt = f"""
         Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
-
-        {citation_instructions}
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -5214,16 +5675,13 @@ class ChatView(APIView):
 
         USER QUERY: {query}
 
-        RESPONSE FORMAT REQUIREMENTS:
-        1. Begin with a direct answer to the query
-        2. Include only the most relevant details and evidence from the documents
-        3. When appropriate, use concise bullet points or short paragraphs
-        4. Be selective about what information to include - focus on what matters most
-        5. Use <b> tags for key points
-        6. Use <p> tags for explanations
-        7. Use <ul> and <li> for list-based information
-        8. Use <table> and <tr>, <td> for tabular information if absolutely necessary
-        9. IMPORTANT: Cite sources using [n] format after each statement that comes from a specific source
+        CRITICAL: Your response MUST be a valid JSON object with this exact structure:
+        {{
+            "content": "Your concise response with HTML formatting and [n] citations",
+            "citations_used": [list of citation numbers used],
+            "format_type": "{response_format}",
+            "sources_referenced": ["list of source names referenced"]
+        }}
 
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document and URL context.
@@ -5233,22 +5691,34 @@ class ChatView(APIView):
         - If the context contains URL content, clearly attribute information from URLs in your response.
         """
         
-        # Define system message for short response
-        system_message = "You are a document analysis expert with conversation memory. Provide a concise yet informative response that maintains conversation continuity. Use source citations [n] for information from the documents."
-        
         try:
-            # Call the OpenAI chat completion API for short response
+            # Call the OpenAI chat completion API for short response with JSON format
             completion = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_prompt}
                 ],
+                response_format={"type": "json_object"},  # Force JSON response
                 temperature=0.4,
                 max_tokens=2000
             )
-            
-            answer = completion.choices[0].message.content
+                # ===== LOG RAW LLM RESPONSE =====
+            raw_llm_response = completion.choices[0].message.content
+            print("\n" + "="*100)
+            print("🤖 RAW LLM RESPONSE FROM OPENAI (generate_short_response)")
+            print("="*100)
+            print("Model used:", completion.model)
+            print("Response ID:", completion.id)
+            print("Raw response content:")
+            print(raw_llm_response)
+            print("Response length:", len(raw_llm_response))
+            print("Response type:", type(raw_llm_response))
+            print("="*100)
+            # ===== END LOG RAW LLM RESPONSE =====
+            # Parse the JSON response
+            json_response = self._parse_json_response(completion.choices[0].message.content)
+            answer = json_response.get("content", "No response content found.")
             answer = self._clean_citations(answer, citation_sources)
             processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
                 
@@ -5260,25 +5730,37 @@ class ChatView(APIView):
             
             CONTEXT:
             {reduced_context}
+            
+            CRITICAL: Respond in JSON format:
+            {{
+                "content": "Your brief response with HTML formatting",
+                "citations_used": [],
+                "format_type": "fallback",
+                "sources_referenced": []
+            }}
             """
             
             try:
                 fallback_completion = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "You are a document analysis expert. Be brief."},
+                        {"role": "system", "content": "You are a document analysis expert. Be brief. Respond in JSON format."},
                         {"role": "user", "content": fallback_prompt}
                     ],
+                    response_format={"type": "json_object"},  # Force JSON response
                     temperature=0.4,
                     max_tokens=1024
                 )
                 
-                answer = fallback_completion.choices[0].message.content
+                json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
+                answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
                 processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
             except Exception as nested_e:
                 # Last resort fallback
                 answer = f"An error occurred while generating the response. Please try a more specific question."
+                processed_answer = answer
+                processed_citations = {}
 
         # Add source information
         source_list = list(set(selected_sources))
@@ -5314,58 +5796,58 @@ class ChatView(APIView):
     def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural', user=None):
         """
         Generate an answer for general chat mode, optionally using web knowledge.
-        
+    
         Args:
             query (str): The user's query
             use_web_knowledge (bool): Whether to use web search
             response_length (str): 'short' or 'comprehensive'
             response_format (str): The format to use for the response
-            
+        
         Returns:
             str: Generated response
         """
         # Check if the query is a simple greeting
         greeting_keywords = [
             # Basic greetings
-            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning",
             "good afternoon", "good evening", "what's up", "sup", "hiya",
-            
+        
             # Variations with repeated letters
             "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
-            
+        
             # Short forms/abbreviations
-            "hlw", "g'day", "yo", "heya", 
-            
+            "hlw", "g'day", "yo", "heya",
+        
             # Informal greetings
             "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
             "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
-            
+        
             # Time-specific with variations
             "morning", "afternoon", "evening", "gm", "ga", "ge",
-            
+        
             # Other languages and cultural greetings
             "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
-            
+        
             # Casual text-style greetings
             "sup", "yo yo", "hiya", "hai", "hullo"
         ]
-        
+    
         # Convert to lowercase and strip to properly detect greetings
         query_lower = query.lower().strip()
-        
+    
         # Check if the query is just a greeting or a greeting followed by a name/simple phrase
         is_greeting = False
-        
+    
         # Exact matches
         if query_lower in greeting_keywords:
             is_greeting = True
-        
+    
         # Starting with a greeting
         for greeting in greeting_keywords:
             if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
                 is_greeting = True
                 break
-        
+    
         # If it's a greeting, respond directly without using more complex logic
         if is_greeting:
             greeting_responses = [
@@ -5378,26 +5860,49 @@ class ChatView(APIView):
             # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
             return greeting_responses[response_index]
-        
+    
         # If not a greeting, proceed with the regular flow
         # If web knowledge is enabled, implement the full web search flow
         if use_web_knowledge:
             try:
                 # Step 1: Search the web using DuckDuckGo
                 print(f"Searching web for: {query}")
-                web_results = self.get_web_knowledge_response(query, user=user, document_context=None )
-                
-                if not web_results:
+                web_response, web_sources = self.get_web_knowledge_response(query, user=user, document_context=None)
+
+                if not web_response or not web_sources:
                     return "I couldn't find relevant information on the web for your query."
                 
+                # Extract web source domains for display
+                web_source_domains = []
+                for source in web_sources:
+                    domain = self.extract_domain(source.get('url', ''))
+                    if domain and domain != "unknown.com":
+                        web_source_domains.append(domain)
+            
+                # Remove existing sources from web_response to avoid duplication in GPT processing
+                if "*Sources:" in web_response:
+                    web_response_clean = web_response.split("*Sources:")[0].strip()
+                else:
+                    web_response_clean = web_response
 
-                
                 # Get format-specific guidance
                 format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
+            
+                # Updated system message for JSON response
+                system_message = """You are a web research assistant. 
+                You must respond in JSON format with the following structure:
+                {
+                    "content": "Your response with proper HTML formatting",
+                    "web_sources_used": true,
+                    "response_type": "web_enhanced",
+                    "format_type": "response_format_used"
+                }
                 
-                # Create the prompt for OpenAI
+                Provide detailed, comprehensive responses based on web sources."""
+
+                # Create the prompt for OpenAI with JSON requirement
                 prompt = f"""
-                You are a web research assistant. Based ONLY on the following information from multiple web sources, answer the user question. 
+                You are a web research assistant. Based ONLY on the following information from multiple web sources, answer the user question.
 
                 If relevant details are missing or contradictory, clearly acknowledge this and summarize available related content. Be helpful by highlighting potentially useful information even if it doesn't fully resolve the question. Provide quantitative details where available.
 
@@ -5417,7 +5922,15 @@ class ChatView(APIView):
                 QUESTION: {query}
 
                 INFORMATION FROM WEB SOURCES:
-                {web_results}
+                {web_response_clean}
+
+                CRITICAL: Your response MUST be a valid JSON object with this exact structure:
+                {{
+                    "content": "Your response with HTML tags for structure and formatting",
+                    "web_sources_used": true,
+                    "response_type": "web_enhanced",
+                    "format_type": "{response_format}"
+                }}
 
                 RESPONSE FORMAT REQUIREMENTS:
                 1. Follow with detailed elaboration on each relevant point.
@@ -5430,12 +5943,17 @@ class ChatView(APIView):
                 8. Use <table>, <tr>, <td> for tables, if applicable.
                 9. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
 
+                CRITICAL INSTRUCTION - MUST BE FOLLOWED:
+                At the very end of your content (within the JSON content field), after all content, add a new line and provide ONLY this exact format:
+                SOURCES_JSON: {{"sources": ["domain1.com", "domain2.com", "domain3.com"]}}
+
+                Extract the actual website domains mentioned in the web sources content. Do not include generic domains. Look for domain names that appear in the source content.
+
                 CRITICAL CONSTRAINTS:
                 - Ensure clarity, accuracy, and full coverage of the relevant content.
 
                 RESPONSE LENGTH: {'Provide a focused, concise response prioritizing the most important information.' if response_length == 'short' else 'Provide a comprehensive, detailed response that thoroughly covers the topic.'}
                 """
-                system_message = "You are a web search analysis expert. Provide an EXTREMELY DETAILED and COMPREHENSIVE response."
 
                 temperature = 0.3 if response_format in ['factual_brief', 'technical_deep_dive'] else 0.5
                 max_tokens = 2000 if response_length == 'short' else 2000
@@ -5447,28 +5965,133 @@ class ChatView(APIView):
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": prompt}
                     ],
+                    response_format={"type": "json_object"},  # Force JSON response
                     temperature=temperature,
                     max_tokens=max_tokens
                 )
 
-                web_response = response.choices[0].message.content
+                # Parse the JSON response
+                json_response = self._parse_json_response(response.choices[0].message.content)
+                formatted_web_response = json_response.get("content", "No response content found.")
 
-                return f"{web_response}"
+                # Debug: Print the full response to see what GPT returned
+                print("=== FULL GPT RESPONSE ===")
+                print(formatted_web_response)
+                print("=== END FULL RESPONSE ===")
 
+                # Extract JSON sources from the response
+                import json
+                import re
+                sources_extracted = []
+
+                if "SOURCES_JSON:" in formatted_web_response:
+                    try:
+                        # Split the response to get the JSON part
+                        parts = formatted_web_response.split("SOURCES_JSON:")
+                        main_response = parts[0].strip()
+                        json_part = parts[1].strip()
+                    
+                        print(f"=== JSON PART EXTRACTED ===")
+                        print(f"JSON part: '{json_part}'")
+                        print("=== END JSON PART ===")
+                    
+                        # Parse the JSON
+                        sources_data = json.loads(json_part)
+                        sources_extracted = sources_data.get("sources", [])
+                    
+                        print(f"=== EXTRACTED SOURCES ===")
+                        print(f"Sources: {sources_extracted}")
+                        print("=== END EXTRACTED SOURCES ===")
+                    
+                        # Use the main response without the JSON part
+                        formatted_web_response = main_response
+                    
+                    except (json.JSONDecodeError, IndexError) as e:
+                        logger.warning(f"Failed to parse sources JSON: {e}")
+                        print(f"=== JSON PARSING ERROR ===")
+                        print(f"Error: {e}")
+                        print(f"Raw JSON part: '{json_part if 'json_part' in locals() else 'Not extracted'}'")
+                        print("=== END JSON ERROR ===")
+                    
+                        # Manual extraction as fallback - look for patterns in the response
+                        sources_extracted = []
+                    
+                        # Look for domain patterns in the response using regex
+                        domain_pattern = r'([a-zA-Z0-9-]+\.(?:com|in|org|net|co\.in|co\.uk))'
+                        domains_found = re.findall(domain_pattern, formatted_web_response.lower())
+                    
+                        # Filter out common generic domains
+                        generic_domains = ['google.com', 'search.com', 'example.com', 'website.com']
+                        for domain in domains_found:
+                            if domain not in generic_domains and domain not in sources_extracted:
+                                sources_extracted.append(domain)
+                    
+                        print(f"=== MANUAL EXTRACTION RESULTS ===")
+                        print(f"Manually extracted sources: {sources_extracted}")
+                        print("=== END MANUAL EXTRACTION ===")
+                    
+                else:
+                    print("=== NO SOURCES_JSON FOUND ===")
+                    print("SOURCES_JSON marker not found in response")
                 
+                    # Manual extraction as fallback - look for domain patterns
+                    sources_extracted = []
+                
+                    # Look for domain patterns in the response using regex
+                    domain_pattern = r'([a-zA-Z0-9-]+\.(?:com|in|org|net|co\.in|co\.uk))'
+                    domains_found = re.findall(domain_pattern, formatted_web_response.lower())
+                
+                    # Filter out common generic domains
+                    generic_domains = ['google.com', 'search.com', 'example.com', 'website.com']
+                    for domain in domains_found:
+                        if domain not in generic_domains and domain not in sources_extracted:
+                            sources_extracted.append(domain)
+                
+                    print(f"=== FALLBACK EXTRACTION RESULTS ===")
+                    print(f"Fallback extracted sources: {sources_extracted}")
+                    print("=== END FALLBACK EXTRACTION ===")
+
+                # Use extracted sources if available, otherwise fall back to web_source_domains
+                if sources_extracted:
+                    source_info = ", ".join(sources_extracted)
+                    final_response = f"{formatted_web_response}\n\n*Sources: {source_info}*"
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", final_response)
+                    return final_response
+                else:
+                    # Fallback to existing method
+                    if web_source_domains:
+                        source_info = ", ".join(web_source_domains)
+                        final_response = f"{formatted_web_response}\n\n*Sources: {source_info}*"
+                        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", final_response)
+                        return final_response
+                    else:
+                        return formatted_web_response
+            
             except Exception as e:
                 logger.error(f"Error in web knowledge general chat: {str(e)}", exc_info=True)
                 return f"I encountered an error while searching the web: {str(e)}. Please try a different question or try again later."
-        
+    
         # If no web knowledge requested, use standard chat completion
         else:
             # Format-specific guidance
             format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
-            
+        
             # Configure conciseness based on response length
             conciseness = "Be concise and to-the-point." if response_length == 'short' else "Provide a comprehensive and detailed response."
+        
+            # Updated system message for JSON response
+            system_message = """You are a helpful, friendly AI assistant. 
+            You must respond in JSON format with the following structure:
+            {
+                "content": "Your response with proper HTML formatting",
+                "response_type": "general_chat",
+                "format_type": "response_format_used",
+                "web_sources_used": false
+            }
             
-            # Create a prompt for the general chat
+            Provide informative and thoughtful responses using HTML tags for structure."""
+
+            # Create a prompt for the general chat with JSON requirement
             prompt = f"""
             Please answer the following question in a helpful, informative way.
             
@@ -5481,22 +6104,33 @@ class ChatView(APIView):
             Use HTML tags for structure (<b>, <p>, <ul>, <li>) to enhance readability.
             
             USER QUERY: {query}
-            """
             
+            CRITICAL: Your response MUST be a valid JSON object with this exact structure:
+            {{
+                "content": "Your response with HTML formatting",
+                "response_type": "general_chat",
+                "format_type": "{response_format}",
+                "web_sources_used": false
+            }}
+            """
+        
             try:
-                # Use the OpenAI API
+                # Use the OpenAI API with JSON format
                 completion = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "You are a helpful, friendly AI assistant providing informative and thoughtful responses."},
+                        {"role": "system", "content": system_message},
                         {"role": "user", "content": prompt}
                     ],
+                    response_format={"type": "json_object"},  # Force JSON response
                     temperature=0.5,
                     max_tokens=2000 if response_length == 'comprehensive' else 800
                 )
                 
-                return completion.choices[0].message.content
-                
+                # Parse the JSON response
+                json_response = self._parse_json_response(completion.choices[0].message.content)
+                return json_response.get("content", "No response content found.")
+            
             except Exception as e:
                 logger.error(f"Error in general chat: {str(e)}", exc_info=True)
                 return f"I'm sorry, I encountered an error while processing your request. Please try again or rephrase your question."
@@ -5516,22 +6150,252 @@ class ChatView(APIView):
             logger.error(f"Error getting embeddings: {str(e)}")
             return []
     
-    # Improved search_similar_content with TF-IDF ranking from Streamlit
+    # # Improved search_similar_content with TF-IDF ranking from Streamlit
+    # def search_similar_content(self, query, processed_docs, metadata_store, k=40):
+    #     """
+    #     Enhanced search function that handles both LlamaParse and local document parsing
+    #     """
+    #     # Get embeddings for the query
+    #     query_embedding = self.get_embeddings([query])
+    #     if not query_embedding:
+    #         return [], [], {}  # Return empty citation mapping to
+        
+    #     # Search each document's FAISS index separately
+    #     all_results = []
+    #     all_distances = []
+    #     all_sources = []
+    #     citation_mapping = {}  # Add citation mapping
+    #     citation_count = 0
+        
+    #     # Track content to avoid duplicates
+    #     seen_content_hashes = set()
+        
+    #     # Check if we have any valid documents to search
+    #     valid_docs_found = False
+        
+    #     for proc_doc in processed_docs:
+    #         # Skip documents without FAISS indices
+    #         if not proc_doc.faiss_index or not proc_doc.metadata:
+    #             continue
+            
+    #         # Skip if files don't exist
+    #         if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
+    #             continue
+            
+    #         # First check if this is a LlamaParse document with markdown
+    #         markdown_content = None
+    #         if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+    #             try:
+    #                 with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+    #                     markdown_content = f.read()
+    #                 # If we have markdown content, we'll use it later in our results
+    #                 valid_docs_found = True
+    #             except Exception as e:
+    #                 logger.error(f"Error reading markdown file for {proc_doc.document.filename}: {str(e)}")
+            
+    #         # Load metadata for both document types
+    #         try:
+    #             with open(proc_doc.metadata, 'rb') as f:
+    #                 chunks = pickle.load(f)
+                
+    #             # Make sure chunks is a list - sometimes it might be empty or None
+    #             if not chunks:
+    #                 logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
+    #                 chunks = []
+    #             elif not isinstance(chunks, list):
+    #                 logger.warning(f"Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
+    #                 chunks = []
+                
+    #             # Add document source information to each chunk if missing
+    #             for chunk in chunks:
+    #                 if isinstance(chunk, dict) and 'source_file' not in chunk:
+    #                     chunk['source_file'] = proc_doc.document.filename
+    #                 # Ensure 'text' field exists in chunk
+    #                 if isinstance(chunk, dict) and not chunk.get('text'):
+    #                     # Try alternate field names
+    #                     for field in ['content', 'document_content', 'chunk_text']:
+    #                         if field in chunk:
+    #                             chunk['text'] = chunk[field]
+    #                             break
+                
+    #             # Try vector search with FAISS index
+    #             valid_docs_found = True
+    #             try:
+    #                 index = faiss.read_index(proc_doc.faiss_index)
+    #                 # Search this index with increased k for better diversity
+    #                 distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
+                    
+    #                 # Extract results for this document
+    #                 for i, idx in enumerate(indices[0]):
+    #                     if idx < len(chunks):
+    #                         content = chunks[idx].get('text', '')
+    #                         # Only add non-empty content
+    #                         if content and content.strip():
+    #                             # Add numbered citation
+    #                             citation_count += 1
+    #                             citation_key = citation_count
+
+    #                             # Store citation mapping with metadata
+    #                             citation_mapping[citation_key] = {
+    #                                 'source': proc_doc.document.filename,
+    #                                 'text': content,
+    #                                 'relevance_score': float(distances[0][i]),
+    #                                 'document_id': proc_doc.document.id,
+    #                                 'chunk_idx': idx
+    #                             }
+    #                             all_results.append(content)
+    #                             all_distances.append(distances[0][i])
+    #                             all_sources.append(proc_doc.document.filename)
+    #             except Exception as e:
+    #                 logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
+                    
+    #                 # Fallback to basic text search for simple documents if vector search fails
+    #                 if chunks:
+    #                     # Use TF-IDF for matching if FAISS fails
+    #                     query_lower = query.lower()
+    #                     matched_chunks = []
+                        
+    #                     for chunk in chunks:
+    #                         if isinstance(chunk, dict):
+    #                             chunk_text = chunk.get('text', '')
+    #                             if chunk_text and query_lower in chunk_text.lower():
+    #                                 matched_chunks.append(chunk)
+                        
+    #                     # Sort by simple text similarity
+    #                     if matched_chunks:
+    #                         logger.info(f"Found {len(matched_chunks)} text matches for {proc_doc.document.filename}")
+    #                         for chunk in matched_chunks[:5]:  # Limit to top 5 matches
+    #                             all_results.append(chunk.get('text', ''))
+    #                             all_distances.append(0.5)  # Middle value since we don't have real distances
+    #                             all_sources.append(proc_doc.document.filename)
+                
+    #             # If we have markdown content but no vector results, do fallback text search on whole content
+    #             if markdown_content and not all_results:
+    #                 query_lower = query.lower()
+    #                 if query_lower in markdown_content.lower():
+    #                     # Split into paragraphs and find matching ones
+    #                     paragraphs = markdown_content.split('\n\n')
+    #                     for para in paragraphs:
+    #                         if query_lower in para.lower():
+    #                             all_results.append(para)
+    #                             all_distances.append(0.5)  # Middle value since we don't have real distances
+    #                             all_sources.append(proc_doc.document.filename)
+                    
+    #         except Exception as e:
+    #             logger.error(f"Error processing metadata for {proc_doc.document.filename}: {str(e)}")
+    #             continue
+        
+    #     # Combine and sort results by similarity score
+    #     if not all_results:
+    #         if valid_docs_found:
+    #             logger.warning(f"No matching content found in documents for query: {query}")
+    #         else:
+    #             logger.warning(f"No valid documents found to search")
+    #         return [], []
+            
+    #     # Apply TF-IDF ranking using the Streamlit approach
+    #     try:
+    #         from sklearn.feature_extraction.text import TfidfVectorizer
+            
+    #         # Create a TF-IDF vectorizer with increased max_features
+    #         vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+    #         try:
+    #             tfidf_matrix = vectorizer.fit_transform([query] + all_results)
+                
+    #             # Calculate similarity scores
+    #             tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
+                
+    #             # Convert embedding distances to similarity scores
+    #             similarity_scores = [1 / (1 + dist) for dist in all_distances]
+                
+    #             # Combine scores with same weighting (70% TF-IDF, 30% embedding)
+    #             combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
+                
+    #             # Re-sort results by combined score
+    #             combined_results = list(zip(all_results, all_sources, combined_scores))
+    #             sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
+                
+    #             # Extract sorted content and sources
+    #             results = [res[0] for res in sorted_results]
+    #             sources = [res[1] for res in sorted_results]
+
+    #              # Update citation mapping with new ranking
+    #             reordered_citation_mapping = {}
+    #             for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+    #                 if old_key in citation_mapping:
+    #                     reordered_citation_mapping[new_idx] = citation_mapping[old_key]
+    #                     reordered_citation_mapping[new_idx]['display_num'] = new_idx
+                
+    #             citation_mapping = reordered_citation_mapping
+    #         except Exception as e:
+    #             logger.error(f"Error in TF-IDF processing: {str(e)}")
+    #             # Fallback to original results if TF-IDF fails
+    #             results = all_results
+    #             sources = all_sources
+    #     except Exception as e:
+    #         logger.error(f"Error applying TF-IDF ranking: {str(e)}")
+    #         # Fall back to basic distance-based ranking
+    #         combined_results = list(zip(all_results, all_sources, all_distances))
+    #         # Note: In the fallback, we sort by distance (smaller is better) so no reverse=True
+    #         sorted_results = sorted(combined_results, key=lambda x: x[2])
+            
+    #         results = [res[0] for res in sorted_results]
+    #         sources = [res[1] for res in sorted_results]
+
+    #         # Update citation mapping with new ranking
+    #         reordered_citation_mapping = {}
+    #         for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+    #             if old_key in citation_mapping:
+    #                 reordered_citation_mapping[new_idx] = citation_mapping[old_key]
+    #                 reordered_citation_mapping[new_idx]['display_num'] = new_idx
+            
+    #         citation_mapping = reordered_citation_mapping
+        
+    #     # Remove duplicates while preserving order
+    #     seen_content = set()
+    #     filtered_results = []
+    #     filtered_sources = []
+    #     filtered_citation_mapping = {}
+    #     new_citation_count = 0
+        
+    #     for content, source in zip(results, sources):
+    #         # Use first 100 chars as a content signature
+    #         content_hash = content[:100] if content else ""
+    #         if content_hash and content_hash not in seen_content:
+    #             seen_content.add(content_hash)
+    #             filtered_results.append(content)
+    #             filtered_sources.append(source)
+
+    #             # Update citation mapping
+    #             new_citation_count += 1
+    #             old_idx = i + 1
+    #             if old_idx in citation_mapping:
+    #                 filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx]
+    #                 filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
+        
+    #     # Return top matches (limit to 15 most relevant)
+    #     max_results = min(len(filtered_results), 15)
+    #     return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
+    
     def search_similar_content(self, query, processed_docs, metadata_store, k=40):
         """
         Enhanced search function that handles both LlamaParse and local document parsing
+        with improved citation deduplication
         """
         # Get embeddings for the query
         query_embedding = self.get_embeddings([query])
         if not query_embedding:
-            return [], [], {}  # Return empty citation mapping to
+            return [], [], {}
         
         # Search each document's FAISS index separately
         all_results = []
         all_distances = []
         all_sources = []
-        citation_mapping = {}  # Add citation mapping
+        citation_mapping = {}
         citation_count = 0
+        
+        # Track content to avoid duplicates
+        seen_content_hashes = set()
         
         # Check if we have any valid documents to search
         valid_docs_found = False
@@ -5551,7 +6415,6 @@ class ChatView(APIView):
                 try:
                     with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
                         markdown_content = f.read()
-                    # If we have markdown content, we'll use it later in our results
                     valid_docs_found = True
                 except Exception as e:
                     logger.error(f"Error reading markdown file for {proc_doc.document.filename}: {str(e)}")
@@ -5561,7 +6424,6 @@ class ChatView(APIView):
                 with open(proc_doc.metadata, 'rb') as f:
                     chunks = pickle.load(f)
                 
-                # Make sure chunks is a list - sometimes it might be empty or None
                 if not chunks:
                     logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
                     chunks = []
@@ -5573,9 +6435,7 @@ class ChatView(APIView):
                 for chunk in chunks:
                     if isinstance(chunk, dict) and 'source_file' not in chunk:
                         chunk['source_file'] = proc_doc.document.filename
-                    # Ensure 'text' field exists in chunk
                     if isinstance(chunk, dict) and not chunk.get('text'):
-                        # Try alternate field names
                         for field in ['content', 'document_content', 'chunk_text']:
                             if field in chunk:
                                 chunk['text'] = chunk[field]
@@ -5585,33 +6445,38 @@ class ChatView(APIView):
                 valid_docs_found = True
                 try:
                     index = faiss.read_index(proc_doc.faiss_index)
-                    # Search this index with increased k for better diversity
                     distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
                     
                     # Extract results for this document
                     for i, idx in enumerate(indices[0]):
                         if idx < len(chunks):
                             content = chunks[idx].get('text', '')
-                            # Only add non-empty content
                             if content and content.strip():
-                                # Add numbered citation
-                                citation_count += 1
-                                citation_key = citation_count
+                                # Create content hash to check for duplicates
+                                content_hash = hash(content[:200])  # Use first 200 chars for hash
+                                
+                                if content_hash not in seen_content_hashes:
+                                    seen_content_hashes.add(content_hash)
+                                    
+                                    # Add numbered citation
+                                    citation_count += 1
+                                    citation_key = citation_count
 
-                                # Store citation mapping with metadata
-                                citation_mapping[citation_key] = {
-                                    'source': proc_doc.document.filename,
-                                    'text': content,
-                                    'relevance_score': float(distances[0][i]),
-                                    'document_id': proc_doc.document.id,
-                                    'chunk_idx': idx
-                                }
-                                all_results.append(content)
-                                all_distances.append(distances[0][i])
-                                all_sources.append(proc_doc.document.filename)
+                                    # Store citation mapping with metadata
+                                    citation_mapping[citation_key] = {
+                                        'source': proc_doc.document.filename,
+                                        'text': content,
+                                        'relevance_score': float(distances[0][i]),
+                                        'document_id': proc_doc.document.id,
+                                        'chunk_idx': idx
+                                    }
+                                    all_results.append(content)
+                                    all_distances.append(distances[0][i])
+                                    all_sources.append(proc_doc.document.filename)
+                                    
                 except Exception as e:
                     logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
-                    
+                    # Fallback logic here...
                     # Fallback to basic text search for simple documents if vector search fails
                     if chunks:
                         # Use TF-IDF for matching if FAISS fails
@@ -5648,41 +6513,33 @@ class ChatView(APIView):
                 logger.error(f"Error processing metadata for {proc_doc.document.filename}: {str(e)}")
                 continue
         
-        # Combine and sort results by similarity score
+        # Rest of the method remains the same but with improved deduplication
         if not all_results:
             if valid_docs_found:
                 logger.warning(f"No matching content found in documents for query: {query}")
             else:
                 logger.warning(f"No valid documents found to search")
-            return [], []
-            
-        # Apply TF-IDF ranking using the Streamlit approach
+            return [], [], {}
+        
+        # Apply TF-IDF ranking and final deduplication
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             
-            # Create a TF-IDF vectorizer with increased max_features
             vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
             try:
                 tfidf_matrix = vectorizer.fit_transform([query] + all_results)
-                
-                # Calculate similarity scores
                 tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
-                
-                # Convert embedding distances to similarity scores
                 similarity_scores = [1 / (1 + dist) for dist in all_distances]
-                
-                # Combine scores with same weighting (70% TF-IDF, 30% embedding)
                 combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
                 
-                # Re-sort results by combined score
-                combined_results = list(zip(all_results, all_sources, combined_scores))
+                # Combine results with citation keys for proper tracking
+                combined_results = list(zip(all_results, all_sources, combined_scores, range(1, len(all_results) + 1)))
                 sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
                 
-                # Extract sorted content and sources
                 results = [res[0] for res in sorted_results]
                 sources = [res[1] for res in sorted_results]
-
-                 # Update citation mapping with new ranking
+                
+                # Update citation mapping with new ranking
                 reordered_citation_mapping = {}
                 for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
                     if old_key in citation_mapping:
@@ -5690,46 +6547,32 @@ class ChatView(APIView):
                         reordered_citation_mapping[new_idx]['display_num'] = new_idx
                 
                 citation_mapping = reordered_citation_mapping
+                
             except Exception as e:
                 logger.error(f"Error in TF-IDF processing: {str(e)}")
-                # Fallback to original results if TF-IDF fails
                 results = all_results
                 sources = all_sources
+                
         except Exception as e:
             logger.error(f"Error applying TF-IDF ranking: {str(e)}")
-            # Fall back to basic distance-based ranking
-            combined_results = list(zip(all_results, all_sources, all_distances))
-            # Note: In the fallback, we sort by distance (smaller is better) so no reverse=True
-            sorted_results = sorted(combined_results, key=lambda x: x[2])
-            
-            results = [res[0] for res in sorted_results]
-            sources = [res[1] for res in sorted_results]
-
-            # Update citation mapping with new ranking
-            reordered_citation_mapping = {}
-            for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
-                if old_key in citation_mapping:
-                    reordered_citation_mapping[new_idx] = citation_mapping[old_key]
-                    reordered_citation_mapping[new_idx]['display_num'] = new_idx
-            
-            citation_mapping = reordered_citation_mapping
+            # Fallback processing...
+            results = all_results
+            sources = all_sources
         
-        # Remove duplicates while preserving order
+        # Final deduplication while preserving order
         seen_content = set()
         filtered_results = []
         filtered_sources = []
         filtered_citation_mapping = {}
         new_citation_count = 0
         
-        for content, source in zip(results, sources):
-            # Use first 100 chars as a content signature
+        for i, (content, source) in enumerate(zip(results, sources)):
             content_hash = content[:100] if content else ""
             if content_hash and content_hash not in seen_content:
                 seen_content.add(content_hash)
                 filtered_results.append(content)
                 filtered_sources.append(source)
 
-                # Update citation mapping
                 new_citation_count += 1
                 old_idx = i + 1
                 if old_idx in citation_mapping:
@@ -5781,14 +6624,18 @@ class ChatView(APIView):
             
     # Keep general follow-up question generation as is
     def generate_general_follow_up_questions(self, question, answer, user=None):
-        
         prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
         The questions should be short, interesting, and directly related to the topic.
         
         User Question: {question}
-        
         Your Answer (abbreviated): {answer[:500]}...
+        
+        CRITICAL: Your response MUST be a valid JSON object with this structure:
+        {{
+            "questions": ["question1", "question2", "question3"],
+            "topic": "main_topic_discussed"
+        }}
         """
         
         try:
@@ -5796,26 +6643,41 @@ class ChatView(APIView):
             gemini_api_key = user_api_tokens.gemini_token
             genai.configure(api_key=gemini_api_key)
             
-            # Create a generative model instance
-            model = genai.GenerativeModel("gemini-2.0-flash-exp")
+            # For Gemini, we need to be more explicit about JSON format
+            model = genai.GenerativeModel(
+                "gemini-2.0-flash-exp",
+                generation_config={
+                    'temperature': 0.3,
+                    'response_mime_type': 'application/json'  # ✅ ADD THIS
+                }
+            )
             response = model.generate_content(prompt)
-            questions = response.text.split('\n')
-            # Filter out empty lines and remove numbering if present
-            questions = [q.strip().lstrip('0123456789. ') for q in questions if q.strip()]
+            
+            # Parse JSON response
+            json_response = json.loads(response.text)
+            questions = json_response.get("questions", [])
             return questions[:3]
+            
         except Exception as e:
+            logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
                 "What else would you like to know about this topic?",
-                "Would you like me to elaborate on any specific point?",
+                "Would you like me to elaborate on any specific point?", 
                 "Do you have any other questions I can help with?"
             ]
-            
-    # Keep document follow-up questions as is
+
     def generate_follow_up_questions(self, context, user=None):
         context_sample = "\n".join(context[:3]) if context else ""
         prompt = f"""
-        Based on this context, suggest 3 relevant follow-up questions, the length of the questions should be short:
-        {context_sample}
+        Based on this context, suggest 3 relevant follow-up questions. The questions should be short and directly related to the content.
+        
+        Context: {context_sample}
+        
+        CRITICAL: Your response MUST be a valid JSON object with this structure:
+        {{
+            "questions": ["question1", "question2", "question3"],
+            "context_topic": "main_topic_from_context"
+        }}
         """
         
         try:
@@ -5823,20 +6685,28 @@ class ChatView(APIView):
             gemini_api_key = user_api_tokens.gemini_token
             genai.configure(api_key=gemini_api_key)
             
-            # Create a generative model instance
-            model = genai.GenerativeModel("gemini-2.0-flash-exp")
+            model = genai.GenerativeModel(
+                "gemini-2.0-flash-exp",
+                generation_config={
+                    'temperature': 0.3,
+                    'response_mime_type': 'application/json'  # ✅ ADD THIS
+                }
+            )
             response = model.generate_content(prompt)
-            questions = response.text.split('\n')
-            # Filter out empty lines and remove numbering if present
-            questions = [q.strip().lstrip('0123456789. ') for q in questions if q.strip()]
+            
+            # Parse JSON response
+            json_response = json.loads(response.text)
+            questions = json_response.get("questions", [])
             return questions[:3]
+            
         except Exception as e:
+            logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
                 "What additional information would you like to know?",
                 "Would you like me to elaborate on any specific point?",
                 "How can I help clarify this information further?"
             ]
-        
+                
 class GetConversationView(APIView):
     permission_classes = [IsAuthenticated]
     

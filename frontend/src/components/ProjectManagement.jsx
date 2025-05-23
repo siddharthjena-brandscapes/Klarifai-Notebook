@@ -261,7 +261,7 @@ const ProjectCard = ({ project, onNavigate, onDelete }) => {
           <div className="space-y-3 text-[#5a544a] dark:text-gray-400 text-sm">
             <p className="flex items-center gap-2">
               <Clock size={14} className="text-[#8c715f] dark:text-gray-500" />
-              Created at: {format(new Date(displayData.lastModified), 'MMM d, yyyy')}
+              Updated at: {format(new Date(displayData.lastModified), 'MMM d, yyyy')}
             </p>
             
             <p className="flex items-center gap-2">
@@ -480,61 +480,27 @@ const ProjectProvider = ({ children }) => {
   const [showProjectList, setShowProjectList] = useState(true);
 
   const saveProject = async (projectData) => {
-    try {
-      // Transform the generated images back to the expected format for storage
-      const transformedAcceptedIdeas = projectData.acceptedIdeas.map(idea => ({
-        id: idea.idea_id,
-        title: idea.product_name,
-        description: idea.description,
-        visualization_prompt: idea.visualization_prompt,
-        image_url: projectData.generatedImages[idea.idea_id]?.replace('data:image/png;base64,', '') || null
-      }));
+  try {
+    // Extract the ID for the API call
+    const projectId = projectData.id;
+    
+    // Remove id from the data being sent
+    const { id, ...dataToSend } = projectData;
+    
+    // Make the API call
+    const response = await ideaService.updateProject(projectId, dataToSend);
 
-      // Prepare the complete form data including dynamic fields
-      const completeFormData = {
-        ...projectData.formData,
-        dynamicFields: projectData.dynamicFields,
-        customFields: projectData.customFields,
-        fieldActivation: projectData.fieldActivation
-      };
-
-      // Ensure visualization_prompt is preserved in the stored metadata
-      const enhancedIdeaMetadata = Object.entries(projectData.ideaMetadata || {}).reduce((acc, [key, value]) => {
-        acc[key] = {
-          ...value,
-          baseData: {
-            ...value.baseData,
-            visualization_prompt: value.baseData?.visualization_prompt || 
-                                projectData.ideas.find(i => i.idea_id.toString() === key)?.visualization_prompt
-          }
-        };
-        return acc;
-      }, {});
-
-      const response = await ideaService.updateProject({
-        id: currentProject.id,
-        name: projectData.name,
-        formData: completeFormData,
-        acceptedIdeas: transformedAcceptedIdeas,
-        lastModified: new Date().toISOString(),
-        ideaMetadata: enhancedIdeaMetadata,
-        ideaSetCounter: projectData.ideaSetCounter
-      });
-
-      if (response.data.success) {
-        setCurrentProject({
-          ...projectData,
-          ideaMetadata: enhancedIdeaMetadata,
-          lastModified: new Date().toISOString()
-        });
-      } else {
-        console.error('Error saving project:', response.data.error);
-      }
-    } catch (error) {
-      console.error('Error saving project:', error);
+    if (response.data.success) {
+      // Important: Don't update currentProject here with the server response
+      // Just keep the local projectData as is
+      setCurrentProject(projectData);
+    } else {
+      console.error('Error saving project:', response.data.error);
     }
-  };
-
+  } catch (error) {
+    console.error('Error saving project:', error);
+  }
+};
   const loadProject = async (project) => {
     try {
       const response = await ideaService.getSingleProjectDetails(project.id);

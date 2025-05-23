@@ -280,6 +280,27 @@ const Sidebar = ({
     fetchProjectModules();
   }, [mainProjectId, projectModules]);
 
+
+  const processWebSources = (sourcesInfo, extractedUrls) => {
+  let webSources = [];
+  
+  if (sourcesInfo) {
+    if (typeof sourcesInfo === 'string') {
+      webSources = sourcesInfo
+        .split(',')
+        .map(source => source.trim())
+        .filter(source => source && source !== '*');
+    } else if (Array.isArray(sourcesInfo)) {
+      webSources = sourcesInfo;
+    }
+  } else if (extractedUrls && Array.isArray(extractedUrls) && extractedUrls.length > 0) {
+    webSources = extractedUrls;
+  }
+  
+  return webSources;
+};
+
+
   // Function to check if a module is disabled
   const isModuleDisabled = (moduleId) => {
     return disabledModules[moduleId] === true;
@@ -671,52 +692,57 @@ const handleGenerateIdeas = async () => {
 
   // Enhanced chat selection handler
   const handleChatSelection = async (selectedChat) => {
-    try {
-      setActiveConversationId(selectedChat.conversation_id);
-      console.log(
-        "Fetching conversation details for:",
-        selectedChat.conversation_id
+  try {
+    setActiveConversationId(selectedChat.conversation_id);
+    console.log("Fetching conversation details for:", selectedChat.conversation_id);
+
+    const response = await chatService.getConversationDetails(
+      selectedChat.conversation_id,
+      mainProjectId
+    );
+
+    if (response && response.data) {
+      console.log("Fetched conversation details:", response.data);
+
+      // Process messages to include webSources
+      const processedMessages = (response.data.messages || []).map(msg => {
+        if (msg.sources_info || msg.extracted_urls || msg.webSources) {
+          return {
+            ...msg,
+            webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
+          };
+        }
+        return msg;
+      });
+
+      // Prepare the full chat data with processed messages
+      const fullChatData = {
+        ...response.data,
+        conversation_id: selectedChat.conversation_id,
+        messages: processedMessages, // ← Use processed messages instead
+        selected_documents: response.data.selected_documents || [],
+        title: response.data.title,
+        follow_up_questions: response.data.follow_up_questions || [],
+      };
+
+      const chatDocIds = fullChatData.selected_documents.map((doc) =>
+        doc.toString ? doc.toString() : String(doc)
       );
 
-      const response = await chatService.getConversationDetails(
-        selectedChat.conversation_id,
-        mainProjectId
-      );
-
-      if (response && response.data) {
-        console.log("Fetched conversation details:", response.data);
-
-        // Prepare the full chat data
-        const fullChatData = {
-          ...response.data,
-          conversation_id: selectedChat.conversation_id,
-          messages: response.data.messages || [],
-          selected_documents: response.data.selected_documents || [],
-          title: response.data.title,
-          follow_up_questions: response.data.follow_up_questions || [],
-        };
-
-        // Log the follow-up questions for debugging
-        console.log("Follow-up questions:", fullChatData.follow_up_questions);
-
-        const chatDocIds = fullChatData.selected_documents.map((doc) =>
-          doc.toString ? doc.toString() : String(doc)
-        );
-
-        if (chatDocIds.length > 0) {
-          scrollToSelectedDocument(chatDocIds[0]);
-        }
-
-        if (onSelectChat) {
-          onSelectChat(fullChatData);
-        }
+      if (chatDocIds.length > 0) {
+        scrollToSelectedDocument(chatDocIds[0]);
       }
-    } catch (error) {
-      console.error("Error fetching conversation details:", error);
-      toast.error("Failed to load conversation history");
+
+      if (onSelectChat) {
+        onSelectChat(fullChatData);
+      }
     }
-    setSidebarView("chats");
-  };
+  } catch (error) {
+    console.error("Error fetching conversation details:", error);
+    toast.error("Failed to load conversation history");
+  }
+  setSidebarView("chats");
+};
 
   // New function to scroll to a selected document with visual feedback
   const scrollToSelectedDocument = (documentId) => {
