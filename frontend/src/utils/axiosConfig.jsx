@@ -938,4 +938,296 @@ export const adminService = {
   
 };
 
+
+
+
+
+
+
+
+//for notebook as NB-----/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+// Export services for NB app
+export const documentServiceNB = {
+  uploadDocument: (formData, mainProjectId, config = {}, targetUserId = null) => {
+    // Ensure mainProjectId is added to formData
+    formData.append("main_project_id", mainProjectId);
+    
+    // Add target_user_id if provided (for admin uploads)
+    if (targetUserId) {
+      formData.append("target_user_id", targetUserId);
+    }
+  
+    return axiosInstance.post("/upload-documents-NB/", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      ...config,
+    });
+  },
+
+  // Add this new method for custom upload handling
+  getCustomInstance: () => {
+    // Create a fresh instance with the same base config
+    const customInstance = axios.create({
+      baseURL: axiosInstance.defaults.baseURL,
+      headers: {
+        ...axiosInstance.defaults.headers,
+        "Content-Type": "multipart/form-data",
+      },
+      timeout: 120000, // Longer timeout for large uploads (2 minutes)
+    });
+
+    // Add the auth token
+    const token = localStorage.getItem("token");
+    if (token) {
+      customInstance.defaults.headers.common[
+        "Authorization"
+      ] = `Token ${token}`;
+    }
+
+    return customInstance;
+  },
+
+  setActiveDocument: (documentId, mainProjectId) =>
+    axiosInstance.post("/set-active-document-NB/", {
+      document_id: documentId,
+      main_project_id: mainProjectId,
+    }),
+
+  getUserDocuments: async (mainProjectId) => {
+    if (!mainProjectId) {
+      console.warn("No mainProjectId provided to getUserDocuments");
+      return { data: [] };
+    }
+
+    try {
+      console.log("Fetching documents for project:", mainProjectId);
+      const response = await axiosInstance.get("/user-documents-NB/", {
+        params: { main_project_id: mainProjectId },
+      });
+      console.log("Documents response:", response.data);
+      return response;
+    } catch (error) {
+      console.error("Error in getUserDocuments:", error);
+      return { data: [] };
+    }
+  },
+
+  getChatHistory: () => {
+    return axiosInstance.get("/chat-history-NB/", {
+      params: {
+        limit: 50, // Optional: limit number of chats
+        include_messages: true,
+        include_documents: true,
+      },
+    });
+  },
+
+  generateSummary: (documentIds, mainProjectId) => {
+    return axiosInstance.post("/generate-document-summary-NB/", {
+      document_ids: documentIds,
+      main_project_id: mainProjectId,
+    });
+  },
+
+  generateConsolidatedSummary: (documentIds, projectId) => {
+    return axiosInstance.post("/consolidated_summary-NB/", {
+      document_ids: documentIds,
+      main_project_id: projectId,
+    });
+  },
+
+  deleteDocument: (documentId, mainProjectId) =>
+    axiosInstance.delete(`/documents-NB/${documentId}/delete/`, {
+      params: { main_project_id: mainProjectId },
+    }),
+};
+
+export const chatServiceNB = {
+  sendMessage: (data) => {
+    console.log("Sending message data:", data);
+
+    // Determine if we should use general chat mode based on document selection
+    const useGeneralChat =
+      !data.selected_documents ||
+      data.selected_documents.length === 0 ||
+      data.general_chat_mode === true;
+
+    // Add flag to request citation processing from the backend
+    const processOptions = {
+      process_citations: true, // Tell backend to process citations
+      citation_threshold: 0.3   // Minimum similarity threshold (optional)
+    };
+
+    return axiosInstance
+      .post("/chat-NB/", {
+        message: data.message,
+        conversation_id: data.conversation_id,
+        selected_documents: data.selected_documents,
+        main_project_id: data.main_project_id || data.mainProjectId, // Support both naming conventions
+        use_web_knowledge: data.use_web_knowledge || false,
+        general_chat_mode: useGeneralChat, // Automatically set based on document selection
+        response_length: data.response_length || "short", // For response length parameter
+        response_format: data.response_format || "auto_detect", // Add response format parameter
+        citation_options: processOptions // Add citation processing options
+      })
+      .then((response) => {
+        console.log("Chat service response:", response.data);
+        return response;
+      })
+      .catch((error) => {
+        console.error("Chat error:", error);
+        throw error;
+      });
+  },
+
+  updateConversationTitle: (conversationId, data) => {
+    console.log("Updating conversation title:", conversationId, data);
+
+    // Create a properly formatted request payload
+    const payload = {
+      title: data.title,
+      is_active: data.is_active || true,
+      // Include main_project_id if available
+      ...(data.main_project_id && { main_project_id: data.main_project_id }),
+    };
+
+    // Send PATCH request to the correct endpoint
+    return axiosInstance
+      .patch(`/conversations-NB/${conversationId}/`, payload)
+      .then((response) => {
+        console.log("Conversation title update response:", response.data);
+        return response;
+      })
+      .catch((error) => {
+        console.error(
+          "Conversation title update error:",
+          error.response || error
+        );
+        throw error;
+      });
+  },
+
+  manageConversation: (conversationId, data) => {
+    return axiosInstance
+      .patch(`/conversations-NB/${conversationId}/`, data)
+      .then((response) => {
+        console.log("Conversation management response:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Conversation management error:", error);
+        throw error;
+      });
+  },
+
+  getConversationDetails: async (conversationId, mainProjectId, processCitations = false) => {
+    try {
+      console.log(
+        "Fetching conversation:",
+        conversationId,
+        "for project:",
+        mainProjectId
+      );
+      const response = await axiosInstance.get(
+        `/conversations-NB/${conversationId}/`,
+        {
+          params: { main_project_id: mainProjectId },
+        }
+      );
+
+      // Process citations for messages if requested and needed
+      if (processCitations && response.data && response.data.messages) {
+        const messages = [...response.data.messages];
+        
+        // Note: Citation processing would need to be implemented separately
+        // as it's not included in the new URLs
+        response.data.messages = messages;
+      }
+
+      // Ensure the response is properly formatted
+      if (response.data) {
+        return {
+          data: {
+            ...response.data,
+            messages: response.data.messages || [],
+            selected_documents: response.data.selected_documents || [],
+            follow_up_questions: response.data.follow_up_questions || [],
+          },
+        };
+      }
+      return response;
+    } catch (error) {
+      console.error("Error fetching conversation details:", error);
+      throw error;
+    }
+  },
+
+  // Add a method to fetch all conversations
+  getAllConversations: async (mainProjectId) => {
+    if (!mainProjectId) {
+      console.warn("No mainProjectId provided to getAllConversations");
+      return { data: [] };
+    }
+
+    try {
+      const response = await axiosInstance.get("/chat-history-NB/", {
+        params: { main_project_id: mainProjectId },
+      });
+      console.log("Chat history response:", response.data);
+      return response;
+    } catch (error) {
+      console.error("Error fetching chat history:", error);
+      return { data: [] };
+    }
+  },
+
+  // Optional: Method to delete a conversation
+  deleteConversation: (conversationId) => {
+    return axiosInstance
+      .delete(`/conversations-NB/${conversationId}/delete/`)
+      .then((response) => {
+        console.log("Conversation deleted:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to delete conversation:",
+          error.response?.data || error.message
+        );
+        throw error;
+      });
+  },
+
+  startConversation: (documentId, message) => {
+    return axiosInstance.post("/conversation/start-NB/", {
+      document_id: documentId,
+      message: message,
+    });
+  },
+
+  continueConversation: (conversationId, message) => {
+    return axiosInstance.post("/conversation/continue-NB/", {
+      conversation_id: conversationId,
+      message: message,
+    });
+  },
+};
+
+export const userServiceNB = {
+  getUserProfile: () => {
+    return axiosInstance.get("/user/profile-NB/");
+  },
+
+  updateProfile: (data) => {
+    return axiosInstance.put("/user/profile-NB/", data);
+  },
+};
+
+
 export default axiosInstance;

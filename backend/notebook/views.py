@@ -1,5 +1,3 @@
-
-
 #views.py original
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
@@ -26,16 +24,14 @@ from .models import (
     ChatMessage,
     Document,
     ProcessedIndex,
-    UserAPITokens,
     ConversationMemoryBuffer,
     UserModulePermissions,
-    UserUploadPermissions
 )
 import uuid
 from rest_framework.authtoken.models import Token
 from django.utils.safestring import mark_safe
 import logging
-from .models import UserProfile
+
 logger = logging.getLogger(__name__)
 from core.models import Project
 from openai import OpenAI
@@ -115,208 +111,208 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 #     }
 # )
 
-class SignupView(APIView):
-    # Explicitly set permission to allow any user (including unauthenticated)
-    permission_classes = [AllowAny]
-    authentication_classes = []  # Disable authentication checks
+# class SignupView(APIView):
+#     # Explicitly set permission to allow any user (including unauthenticated)
+#     permission_classes = [AllowAny]
+#     authentication_classes = []  # Disable authentication checks
 
-    def post(self, request):
-        # Extract data from request
-        username = request.data.get('username')
-        email = request.data.get('email')
-        password = request.data.get('password')
-        huggingface_token = request.data.get('huggingface_token', '')
-        gemini_token = request.data.get('gemini_token', '')
-        llama_token = request.data.get('llama_token', '')  # New field for Llama API token
+#     def post(self, request):
+#         # Extract data from request
+#         username = request.data.get('username')
+#         email = request.data.get('email')
+#         password = request.data.get('password')
+#         huggingface_token = request.data.get('huggingface_token', '')
+#         gemini_token = request.data.get('gemini_token', '')
+#         llama_token = request.data.get('llama_token', '')  # New field for Llama API token
 
-        # Validate input
-        if not username or not email or not password:
-            return Response({
-                'error': 'Please provide username, email, and password'
-            }, status=status.HTTP_400_BAD_REQUEST)
+#         # Validate input
+#         if not username or not email or not password:
+#             return Response({
+#                 'error': 'Please provide username, email, and password'
+#             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if user already exists
-        if User.objects.filter(username=username).exists():
-            return Response({
-                'error': 'Username already exists'
-            }, status=status.HTTP_400_BAD_REQUEST)
+#         # Check if user already exists
+#         if User.objects.filter(username=username).exists():
+#             return Response({
+#                 'error': 'Username already exists'
+#             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create new user
-        try:
-            user = User.objects.create_user(
-                username=username, 
-                email=email, 
-                password=password
-            )
+#         # Create new user
+#         try:
+#             user = User.objects.create_user(
+#                 username=username, 
+#                 email=email, 
+#                 password=password
+#             )
             
-            # Create API tokens record
-            UserAPITokens.objects.create(
-                user=user,
-                huggingface_token=huggingface_token,
-                gemini_token=gemini_token,
-                llama_token=llama_token  # Save the Llama API token
-            )
+#             # Create API tokens record
+#             UserAPITokens.objects.create(
+#                 user=user,
+#                 huggingface_token=huggingface_token,
+#                 gemini_token=gemini_token,
+#                 llama_token=llama_token  # Save the Llama API token
+#             )
             
-            # Generate token for the new user
-            token, _ = Token.objects.get_or_create(user=user)
+#             # Generate token for the new user
+#             token, _ = Token.objects.get_or_create(user=user)
             
-            return Response({
-                'message': 'User created successfully',
-                'token': token.key,
-                'username': user.username
-            }, status=status.HTTP_201_CREATED)
+#             return Response({
+#                 'message': 'User created successfully',
+#                 'token': token.key,
+#                 'username': user.username
+#             }, status=status.HTTP_201_CREATED)
 
-        except Exception as e:
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#         except Exception as e:
+#             return Response({
+#                 'error': str(e)
+#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class LoginView(APIView):
-    # Explicitly set permission to allow any user (including unauthenticated)
-    permission_classes = [AllowAny]
-    authentication_classes = []  # Disable authentication checks
+# class LoginView(APIView):
+#     # Explicitly set permission to allow any user (including unauthenticated)
+#     permission_classes = [AllowAny]
+#     authentication_classes = []  # Disable authentication checks
 
-    def post(self, request):
-        username = request.data.get('username')
-        password = request.data.get('password')
+#     def post(self, request):
+#         username = request.data.get('username')
+#         password = request.data.get('password')
 
-        # Validate input
-        if not username or not password:
-            return Response({
-                'error': 'Please provide username and password'
-            }, status=status.HTTP_400_BAD_REQUEST)
+#         # Validate input
+#         if not username or not password:
+#             return Response({
+#                 'error': 'Please provide username and password'
+#             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Authenticate user
-        user = authenticate(username=username, password=password)
+#         # Authenticate user
+#         user = authenticate(username=username, password=password)
 
-        if user:
-            # Generate or get existing token
-            token, _ = Token.objects.get_or_create(user=user)
+#         if user:
+#             # Generate or get existing token
+#             token, _ = Token.objects.get_or_create(user=user)
             
-            return Response({
-                'token': token.key,
-                'username': user.username
-            }, status=status.HTTP_200_OK)
+#             return Response({
+#                 'token': token.key,
+#                 'username': user.username
+#             }, status=status.HTTP_200_OK)
         
-        return Response({
-            'error': 'Invalid credentials'
-        }, status=status.HTTP_401_UNAUTHORIZED)
+#         return Response({
+#             'error': 'Invalid credentials'
+#         }, status=status.HTTP_401_UNAUTHORIZED)
 
 
-class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
+# class ChangePasswordView(APIView):
+#     permission_classes = [IsAuthenticated]
  
-    def post(self, request):
-        user = request.user
-        current_password = request.data.get('current_password')
-        new_password = request.data.get('new_password')
+#     def post(self, request):
+#         user = request.user
+#         current_password = request.data.get('current_password')
+#         new_password = request.data.get('new_password')
  
-        if not current_password or not new_password:
-            return Response({'message': 'Both current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
+#         if not current_password or not new_password:
+#             return Response({'message': 'Both current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
  
-        if not user.check_password(current_password):  # Use user.check_password()
-            return Response({'message': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+#         if not user.check_password(current_password):  # Use user.check_password()
+#             return Response({'message': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
  
-        user.set_password(new_password)
-        user.save()
-        update_session_auth_hash(request, user)  # Important: Keep user logged in
+#         user.set_password(new_password)
+#         user.save()
+#         update_session_auth_hash(request, user)  # Important: Keep user logged in
  
-        return Response({'message': 'Password updated successfully'}, status=status.HTTP_200_OK)
+#         return Response({'message': 'Password updated successfully'}, status=status.HTTP_200_OK)
 
 #new
-class UserProfileView(APIView):
-    permission_classes = [IsAuthenticated]
-    parser_classes = (MultiPartParser, FormParser)
+# class UserProfileView(APIView):
+#     permission_classes = [IsAuthenticated]
+#     parser_classes = (MultiPartParser, FormParser)
 
-    def get(self, request):
-        user = request.user
-        try:
-            profile = UserProfile.objects.get(user=user)
-            if profile.profile_picture:
-                profile_picture = request.build_absolute_uri(profile.profile_picture.url)
-            else:
-                profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
-        except UserProfile.DoesNotExist:
-            profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
+#     def get(self, request):
+#         user = request.user
+#         try:
+#             profile = UserProfile.objects.get(user=user)
+#             if profile.profile_picture:
+#                 profile_picture = request.build_absolute_uri(profile.profile_picture.url)
+#             else:
+#                 profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
+#         except UserProfile.DoesNotExist:
+#             profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
 
 
-         # Get module permissions data
-        try:
-            module_permissions = user.module_permissions.disabled_modules
-        except (AttributeError, UserModulePermissions.DoesNotExist):
-            # Create module permissions if they don't exist
-            module_permissions = {}
-            UserModulePermissions.objects.create(user=user, disabled_modules={})
+#          # Get module permissions data
+#         try:
+#             module_permissions = user.module_permissions.disabled_modules
+#         except (AttributeError, UserModulePermissions.DoesNotExist):
+#             # Create module permissions if they don't exist
+#             module_permissions = {}
+#             UserModulePermissions.objects.create(user=user, disabled_modules={})
 
         
-        return Response({
-            'username': user.username,
-            'email': user.email,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'profile_picture': profile_picture,
-            'date_joined': user.date_joined,
-             'disabled_modules': module_permissions
-        }, status=status.HTTP_200_OK)
+#         return Response({
+#             'username': user.username,
+#             'email': user.email,
+#             'first_name': user.first_name,
+#             'last_name': user.last_name,
+#             'profile_picture': profile_picture,
+#             'date_joined': user.date_joined,
+#              'disabled_modules': module_permissions
+#         }, status=status.HTTP_200_OK)
 
-    def post(self, request):
-        try:
-            user = request.user
-            profile_picture = request.FILES.get('profile_picture')
+#     def post(self, request):
+#         try:
+#             user = request.user
+#             profile_picture = request.FILES.get('profile_picture')
             
-            if not profile_picture:
-                return Response({
-                    'error': 'No profile picture provided'
-                }, status=status.HTTP_400_BAD_REQUEST)
+#             if not profile_picture:
+#                 return Response({
+#                     'error': 'No profile picture provided'
+#                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Validate file type
-            allowed_types = ['image/jpeg', 'image/png', 'image/gif']
-            if profile_picture.content_type not in allowed_types:
-                return Response({
-                    'error': 'Invalid file type. Only JPG, PNG, and GIF are allowed.'
-                }, status=status.HTTP_400_BAD_REQUEST)
+#             # Validate file type
+#             allowed_types = ['image/jpeg', 'image/png', 'image/gif']
+#             if profile_picture.content_type not in allowed_types:
+#                 return Response({
+#                     'error': 'Invalid file type. Only JPG, PNG, and GIF are allowed.'
+#                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Validate file size (2MB limit)
-            if profile_picture.size > 2 * 1024 * 1024:
-                return Response({
-                    'error': 'File size too large. Maximum size is 2MB.'
-                }, status=status.HTTP_400_BAD_REQUEST)
+#             # Validate file size (2MB limit)
+#             if profile_picture.size > 2 * 1024 * 1024:
+#                 return Response({
+#                     'error': 'File size too large. Maximum size is 2MB.'
+#                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Get or create profile
-            profile, created = UserProfile.objects.get_or_create(user=user)
+#             # Get or create profile
+#             profile, created = UserProfile.objects.get_or_create(user=user)
             
-            # Delete old profile picture if it exists
-            if profile.profile_picture:
-                try:
-                    old_file_path = profile.profile_picture.path
-                    if os.path.exists(old_file_path):
-                        os.remove(old_file_path)
-                except Exception as e:
-                    print(f"Error deleting old profile picture: {e}")
+#             # Delete old profile picture if it exists
+#             if profile.profile_picture:
+#                 try:
+#                     old_file_path = profile.profile_picture.path
+#                     if os.path.exists(old_file_path):
+#                         os.remove(old_file_path)
+#                 except Exception as e:
+#                     print(f"Error deleting old profile picture: {e}")
             
-            # Generate unique filename
-            file_extension = os.path.splitext(profile_picture.name)[1]
-            unique_filename = f"{user.username}_{uuid.uuid4().hex[:8]}{file_extension}"
+#             # Generate unique filename
+#             file_extension = os.path.splitext(profile_picture.name)[1]
+#             unique_filename = f"{user.username}_{uuid.uuid4().hex[:8]}{file_extension}"
             
-            # Save the new profile picture
-            profile.profile_picture.save(
-                unique_filename,
-                profile_picture,
-                save=True
-            )
+#             # Save the new profile picture
+#             profile.profile_picture.save(
+#                 unique_filename,
+#                 profile_picture,
+#                 save=True
+#             )
             
-            # Build the full URL
-            profile_picture_url = request.build_absolute_uri(profile.profile_picture.url)
+#             # Build the full URL
+#             profile_picture_url = request.build_absolute_uri(profile.profile_picture.url)
             
-            return Response({
-                'message': 'Profile picture updated successfully',
-                'profile_picture': profile_picture_url
-            }, status=status.HTTP_200_OK)
+#             return Response({
+#                 'message': 'Profile picture updated successfully',
+#                 'profile_picture': profile_picture_url
+#             }, status=status.HTTP_200_OK)
             
-        except Exception as e:
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#         except Exception as e:
+#             return Response({
+#                 'error': str(e)
+#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class GetUserDocumentsView(APIView):
     def get(self, request):
@@ -7036,635 +7032,6 @@ class DeleteConversationView(APIView):
             )
 
 
-class GenerateIdeaContextView(APIView):
-    """
-    API endpoint to extract structured idea generation parameters
-    from documents or query results.
-    """
-   
-    def post(self, request):
-        user = request.user
-        document_id = request.data.get('document_id')
-        query = request.data.get('query')
-        main_project_id = request.data.get('main_project_id')
-       
-        # Validate input - need either document_id or query
-        if not document_id and not query:
-            return Response({
-                'error': 'Either document_id or query parameter is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-           
-        try:
-            # Case 1: Using Document ID - fetch existing parameters or extract new ones
-            if document_id:
-                document = get_object_or_404(Document, id=document_id, user=user)
-                
-                # Get document name without extension
-                document_name_no_ext = self.remove_file_extension(document.filename)
-                
-                # Generate a unique project name - handle the case when main_project_id is None
-                suggested_project_name = f"Ideas from {document_name_no_ext}"
-                if main_project_id:
-                    try:
-                        suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
-                    except Exception as e:
-                        # Log the error but continue with the default name
-                        print(f"Error generating unique project name: {str(e)}")
-               
-                try:
-                    # Check if we already have parameters stored
-                    processed_index = ProcessedIndex.objects.get(document=document)
-                   
-                    # If parameters exist, return them
-                    if processed_index.idea_parameters:
-                        return Response({
-                            'document_id': document_id,
-                            'document_name': document.filename,
-                            'document_name_no_ext': document_name_no_ext,
-                            'idea_parameters': processed_index.idea_parameters,
-                            'suggested_project_name': suggested_project_name
-                        })
-                   
-                    # If no parameters yet, extract them from the document
-                    index_file = processed_index.faiss_index
-                    metadata_file = processed_index.metadata
-                    
-                    # First check if the document has a markdown path (LlamaParse document)
-                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
-                        # This is a LlamaParse document, read the markdown content directly
-                        try:
-                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
-                                full_text = f.read()
-                                
-                            # Extract parameters from markdown content
-                            idea_params = self.extract_idea_parameters(full_text)
-                            
-                            # Save the parameters for future use
-                            processed_index.idea_parameters = idea_params
-                            processed_index.save()
-                            
-                            return Response({
-                                'document_id': document_id,
-                                'document_name': document.filename,
-                                'document_name_no_ext': document_name_no_ext,
-                                'idea_parameters': idea_params,
-                                'suggested_project_name': suggested_project_name
-                            })
-                        except Exception as e:
-                            print(f"Error reading markdown file: {str(e)}")
-                            # Continue with FAISS approach as fallback
-                   
-                    # Load index and metadata
-                    index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
-                    
-                    if not chunks:
-                        return Response({
-                            'error': 'No content found in the document'
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                   
-                    # Extract parameters from document content
-                    full_text = " ".join([chunk.get('text', '') for chunk in chunks])
-                    idea_params = self.extract_idea_parameters(full_text, chunks)
-                   
-                    # Save the parameters for future use
-                    processed_index.idea_parameters = idea_params
-                    processed_index.save()
-
-                    if main_project_id:
-                        update_project_timestamp(main_project_id, user)
-            
-                   
-                    return Response({
-                        'document_id': document_id,
-                        'document_name': document.filename,
-                        'document_name_no_ext': document_name_no_ext,
-                        'idea_parameters': idea_params,
-                        'suggested_project_name': suggested_project_name
-                    })
-                   
-                except ProcessedIndex.DoesNotExist:
-                    return Response({
-                        'error': 'Document has not been processed yet'
-                    }, status=status.HTTP_404_NOT_FOUND)
-           
-            # Case 2: Using Query - search across documents and extract from relevant chunks
-            else:
-                # Get active/selected document
-                active_doc_id = request.session.get('active_document_id')
-                if not active_doc_id:
-                    return Response({
-                        'error': 'No active document selected'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-               
-                document = get_object_or_404(Document, id=active_doc_id, user=user)
-                processed_index = get_object_or_404(ProcessedIndex, document=document)
-                
-                # Get document name without extension
-                document_name_no_ext = self.remove_file_extension(document.filename)
-                
-                # Generate a unique project name - handle the case when main_project_id is None
-                suggested_project_name = f"Ideas from {document_name_no_ext}"
-                if main_project_id:
-                    try:
-                        suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
-                    except Exception as e:
-                        # Log the error but continue with the default name
-                        print(f"Error generating unique project name: {str(e)}")
-                
-                # First check if the document has a markdown path (LlamaParse document)
-                if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
-                    # This is a LlamaParse document, read the markdown content directly
-                    try:
-                        with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
-                            full_text = f.read()
-                            
-                        # Extract parameters from markdown content
-                        idea_params = self.extract_idea_parameters(query, None, full_text)
-                        
-                        return Response({
-                            'document_id': active_doc_id,
-                            'document_name': document.filename,
-                            'document_name_no_ext': document_name_no_ext,
-                            'query': query,
-                            'idea_parameters': idea_params,
-                            'suggested_project_name': suggested_project_name
-                        })
-                    except Exception as e:
-                        print(f"Error reading markdown file: {str(e)}")
-                        # Continue with FAISS approach as fallback
-               
-                # Load index and metadata for FAISS approach
-                index_file = processed_index.faiss_index
-                metadata_file = processed_index.metadata
-                index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
-               
-                # Get embedding for query
-                query_embedding = self.get_query_embedding(query)
-               
-                # Search for relevant chunks
-                relevant_chunks = self.search_faiss_index(index, chunks, query_embedding, k=5)
-               
-                # Extract parameters from relevant chunks
-                idea_params = self.extract_idea_parameters(query, relevant_chunks)
-
-                if main_project_id:
-                    update_project_timestamp(main_project_id, user)
-            
-               
-                return Response({
-                    'document_id': active_doc_id,
-                    'document_name': document.filename,
-                    'document_name_no_ext': document_name_no_ext,
-                    'query': query,
-                    'idea_parameters': idea_params,
-                    'suggested_project_name': suggested_project_name
-                })
-               
-        except Exception as e:
-            print(f"Error generating idea context: {str(e)}")
-            return Response({
-                'error': str(e),
-                'detail': 'An error occurred while generating idea context'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def remove_file_extension(self, filename):
-        """
-        Remove file extension from filename
-        """
-        import os
-        return os.path.splitext(filename)[0]
-    
-    def generate_unique_project_name(self, document_name, main_project_id):
-        """
-        Generate a unique project name based on document name,
-        adding (1), (2), etc. if needed to avoid duplicates
-        """
-        from ideaGen.models import Project
-        
-        base_name = f"Ideas from {document_name}"
-        project_name = base_name
-        counter = 1
-        
-        # Check for existing projects with this name in the main project
-        while Project.objects.filter(
-            name=project_name,
-            main_project_id=main_project_id
-        ).exists():
-            # Increment counter and update name
-            project_name = f"{base_name} ({counter})"
-            counter += 1
-            
-        return project_name
-   
-    def load_faiss_index_from_paths(self, index_file, metadata_file):
-        """Load FAISS index and metadata from file paths"""
-        import faiss
-        import pickle
-       
-        try:
-            index = faiss.read_index(index_file)
-            with open(metadata_file, "rb") as f:
-                chunks = pickle.load(f)
-            return index, chunks
-        except Exception as e:
-            print(f"Error loading FAISS index: {str(e)}")
-            return None, []
-   
-    def get_query_embedding(self, query):
-        """Get embedding for the query"""
-        from openai import OpenAI
-        client = OpenAI()  # Initialize the client
-       
-        try:
-            response = client.embeddings.create(
-                input=[query],
-                model="text-embedding-3-small"
-            )
-            return response.data[0].embedding
-        except Exception as e:
-            print(f"Error getting embedding for query: {str(e)}")
-            raise
-   
-    def search_faiss_index(self, index, chunks, query_embedding, k=5):
-        """Search FAISS index for relevant chunks"""
-        import numpy as np
-       
-        # Check if index is None
-        if index is None:
-            return []
-            
-        # Convert embedding to numpy array
-        query_vector = np.array([query_embedding]).astype('float32')
-       
-        # Search index
-        distances, indices = index.search(query_vector, k=k)
-       
-        # Get relevant chunks
-        results = []
-        for i in indices[0]:
-            if i < len(chunks):
-                results.append(chunks[i])
-       
-        return results
-   
-    def extract_idea_parameters(self, context, relevant_chunks=None, full_text=None):
-        """
-        Extract structured parameters for the Idea Generator
-       
-        Args:
-            context (str): Either full document content or query
-            relevant_chunks (list, optional): List of relevant chunks from search
-            full_text (str, optional): For LlamaParse documents, the full markdown text
-           
-        Returns:
-            dict: Structured parameters for idea generation
-        """
-        from openai import OpenAI
-        client = OpenAI()  # Initialize the client
-        import json
-       
-        try:
-            # Determine extraction context source
-            if full_text:
-                # If we have full text (e.g., from markdown), use that
-                extraction_context = full_text
-            elif relevant_chunks and len(relevant_chunks) > 0:
-                # If relevant chunks are provided, use them for extraction context
-                extraction_context = "\n\n".join([chunk.get('text', '') for chunk in relevant_chunks])
-            else:
-                # If no chunks available, use the context directly
-                extraction_context = context
-               
-            # Create extraction prompt
-            extraction_prompt = f"""
-            Extract the following key parameters from the provided context.
-            If a parameter isn't explicitly mentioned, infer it from context or leave it blank.
-           
-            Context:
-            {extraction_context}
-           
-            Extract these parameters:
-            - Brand_Name: The company or product brand mentioned
-            - Category: The product category or market area
-            - Concept: The main idea, campaign, or product concept
-            - Benefits: Key benefits or value propositions (list up to 3)
-            - RTB: Reason to Believe - evidence supporting the benefits (list up to 3)
-            - Ingredients: Key ingredients or components (if applicable)
-            - Features: Notable product/service features (list up to 3)
-            - Theme: Overall theme or tone
-            - Demographics: Target audience demographics
-           
-            Format the response as a valid JSON object with these fields.
-            """
-           
-            # Call LLM to extract parameters
-            response = client.chat.completions.create(
-                model="gpt-4o",  
-                messages=[
-                    {"role": "system", "content": "You are a specialist in extracting structured information from documents."},
-                    {"role": "user", "content": extraction_prompt}
-                ],
-                response_format={"type": "json_object"}
-            )
-           
-            # Parse JSON response
-            extracted_params = json.loads(response.choices[0].message.content)
-           
-            return extracted_params
-       
-        except Exception as e:
-            print(f"Error extracting idea parameters: {str(e)}")
-            # Return empty structure if extraction fails
-            return {
-                "Brand_Name": "",
-                "Category": "",
-                "Concept": "",
-                "Benefits": "",
-                "RTB": "",
-                "Ingredients": "",
-                "Features": "",
-                "Theme": "",
-                "Demographics": ""
-            }
-
-from django.db import transaction
-from .models import UserAPITokens
- 
-class AdminUserManagementView(APIView):
-    def get(self, request):
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can access this endpoint'
-                }, status=status.HTTP_403_FORBIDDEN)
-           
-            # Get all users with their API tokens
-            users = User.objects.all()
-           
-            user_data = []
-            for user in users:
-                # Get API tokens if they exist
-                api_tokens = None
-                try:
-                    api_tokens = user.api_tokens
-                except UserAPITokens.DoesNotExist:
-                    pass
-
-                # Get disabled modules
-                try:
-                    module_permissions = user.module_permissions.disabled_modules
-                except (AttributeError, UserModulePermissions.DoesNotExist):
-                    module_permissions = {}
-                    # Create module permissions if they don't exist
-                    UserModulePermissions.objects.create(user=user, disabled_modules={})
-
-                # Get upload permissions
-                try:
-                    upload_permissions = UserUploadPermissions.objects.get(user=user)
-                    can_upload = upload_permissions.can_upload
-                except UserUploadPermissions.DoesNotExist:
-                    # Default to allowed if permissions don't exist
-                    can_upload = True
-                    # Create default permissions
-                    UserUploadPermissions.objects.create(user=user, can_upload=True)
-               
-                user_info = {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email,
-                    'disabled_modules': module_permissions,
-                    'upload_permissions': {
-                    'can_upload': can_upload
-                },
-                    'api_tokens': {
-                        'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
-                        'gemini_token': api_tokens.gemini_token if api_tokens else None,
-                        'llama_token': api_tokens.llama_token if api_tokens else None  # Include Llama token
-                    }
-                }
-                user_data.append(user_info)
-           
-            return Response(user_data, status=status.HTTP_200_OK)
-           
-        except Exception as e:
-            print(f"Error in AdminUserManagementView.get: {str(e)}")
-            return Response(
-                {'error': f'Failed to fetch user data: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-   
-    @transaction.atomic
-    def post(self, request):
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can create new users'
-                }, status=status.HTTP_403_FORBIDDEN)
-           
-            # Extract data from request
-            username = request.data.get('username')
-            email = request.data.get('email')
-            password = request.data.get('password')
-            huggingface_token = request.data.get('huggingface_token')
-            gemini_token = request.data.get('gemini_token')
-            llama_token = request.data.get('llama_token')  # Get Llama token
-           
-            # Validate required fields
-            if not all([username, email, password]):
-                return Response({
-                    'error': 'Username, email, and password are required fields'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Check if username already exists
-            if User.objects.filter(username=username).exists():
-                return Response({
-                    'error': 'Username already exists'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Create the user
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password
-            )
-           
-            # Create API tokens for the user
-            UserAPITokens.objects.create(
-                user=user,
-                huggingface_token=huggingface_token,
-                gemini_token=gemini_token,
-                llama_token=llama_token  # Save Llama token
-            )
-           
-            return Response({
-                'success': True,
-                'message': f'User {username} created successfully',
-                'user_id': user.id
-            }, status=status.HTTP_201_CREATED)
-           
-        except Exception as e:
-            print(f"Error in AdminUserManagementView.post: {str(e)}")
-            return Response(
-                {'error': f'Failed to create user: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-   
-    @transaction.atomic
-    def put(self, request):
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can update user data'
-                }, status=status.HTTP_403_FORBIDDEN)
-           
-            # Extract data from request
-            user_id = request.data.get('user_id')
-            huggingface_token = request.data.get('huggingface_token')
-            gemini_token = request.data.get('gemini_token')
-            llama_token = request.data.get('llama_token')  # Get Llama token
-           
-            if not user_id:
-                return Response({
-                    'error': 'User ID is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Get the user
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response({
-                    'error': 'User not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-           
-            # Update API tokens
-            api_tokens, created = UserAPITokens.objects.get_or_create(user=user)
-           
-            if huggingface_token is not None:
-                api_tokens.huggingface_token = huggingface_token
-           
-            if gemini_token is not None:
-                api_tokens.gemini_token = gemini_token
-                
-            if llama_token is not None:
-                api_tokens.llama_token = llama_token  # Update Llama token
-           
-            api_tokens.save()
-           
-            return Response({
-                'success': True,
-                'message': f'API tokens for user {user.username} updated successfully'
-            }, status=status.HTTP_200_OK)
-           
-        except Exception as e:
-            print(f"Error in AdminUserManagementView.put: {str(e)}")
-            return Response(
-                {'error': f'Failed to update user API tokens: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-   
-    @transaction.atomic
-    def delete(self, request):
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can delete users'
-                }, status=status.HTTP_403_FORBIDDEN)
-           
-            # Extract user_id from query parameters
-            user_id = request.query_params.get('user_id')
-           
-            if not user_id:
-                return Response({
-                    'error': 'User ID is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Don't allow deleting the admin user
-            if User.objects.get(id=user_id).username == 'admin':
-                return Response({
-                    'error': 'Cannot delete the admin user'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Get and delete the user
-            try:
-                user = User.objects.get(id=user_id)
-                username = user.username
-                user.delete()  # This will also delete related UserAPITokens due to CASCADE
-               
-                return Response({
-                    'success': True,
-                    'message': f'User {username} deleted successfully'
-                }, status=status.HTTP_200_OK)
-               
-            except User.DoesNotExist:
-                return Response({
-                    'error': 'User not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-           
-        except Exception as e:
-            print(f"Error in AdminUserManagementView.delete: {str(e)}")
-            return Response(
-                {'error': f'Failed to delete user: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-class AdminUserModuleView(APIView):
-    def patch(self, request, user_id):
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can update module permissions'
-                }, status=status.HTTP_403_FORBIDDEN)
-            
-            # Get the user
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response({
-                    'error': 'User not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-                
-            # Extract disabled_modules from request data
-            disabled_modules = request.data.get('disabled_modules', {})
-            
-            # Get or create module permissions
-            module_permissions, created = UserModulePermissions.objects.get_or_create(user=user)
-            module_permissions.disabled_modules = disabled_modules
-            module_permissions.save()
-            
-            # Get API tokens if they exist
-            api_tokens = None
-            try:
-                api_tokens = user.api_tokens  # Assuming this relation exists
-            except AttributeError:
-                pass
-            
-            # Return updated user data
-            return Response({
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'disabled_modules': module_permissions.disabled_modules,
-                'api_tokens': {
-                    'huggingface_token': getattr(api_tokens, 'huggingface_token', None) if api_tokens else None,
-                    'gemini_token': getattr(api_tokens, 'gemini_token', None) if api_tokens else None,
-		            'llama_token': getattr(api_tokens, 'llama_token', None) if api_tokens else None
-                }
-            }, status=status.HTTP_200_OK)
-                
-        except Exception as e:
-            print(f"Error in AdminUserModuleView.patch: {str(e)}")
-            return Response(
-                {'error': f'Failed to update module permissions: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-# Add this to your views.py
-
 class OriginalDocumentView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -7899,168 +7266,6 @@ class DocumentContentSearchView(APIView):
                 'error': f'An error occurred: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-
-class AdminUserProjectsView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, user_id):
-        """Get all projects for a specific user"""
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can access this endpoint'
-                }, status=status.HTTP_403_FORBIDDEN)
-            
-            # Get the user
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response({
-                    'error': 'User not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-            
-            # Get projects for the user
-            projects = Project.objects.filter(user=user)
-            
-            # Format response
-            project_list = []
-            for project in projects:
-                project_list.append({
-                    'id': project.id,
-                    'name': project.name,
-                    'created_at': project.created_at.strftime('%Y-%m-%d %H:%M:%S')
-                })
-            
-            return Response(project_list, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Error in AdminUserProjectsView: {str(e)}")
-            return Response(
-                {'error': f'Failed to fetch user projects: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-
-class AdminUserUploadPermissionsView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def patch(self, request, user_id):
-        """Update a user's upload permissions"""
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can update upload permissions',
-                    'success': False
-                }, status=status.HTTP_403_FORBIDDEN)
-            
-            # Get the user
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response({
-                    'error': 'Target user not found',
-                    'success': False
-                }, status=status.HTTP_404_NOT_FOUND)
-                
-            # Extract permissions data - with explicit conversion to boolean
-            can_upload = request.data.get('can_upload', True)
-            
-            # Convert can_upload to boolean if it's a string
-            if isinstance(can_upload, str):
-                can_upload = can_upload.lower() in ('true', 't', 'yes', 'y', '1')
-            
-            # Get or create upload permissions
-            permissions, created = UserUploadPermissions.objects.get_or_create(
-                user=user,
-                defaults={'can_upload': can_upload}
-            )
-            
-            # Update permissions if not created
-            if not created:
-                permissions.can_upload = can_upload
-                permissions.save()
-            
-            # Log the update for troubleshooting
-            print(f"Admin user {request.user.username} set upload permissions for user {user.username} to {can_upload}")
-            
-            return Response({
-                'id': user.id,
-                'username': user.username,
-                'upload_permissions': {
-                    'can_upload': permissions.can_upload
-                },
-                'success': True
-            }, status=status.HTTP_200_OK)
-                
-        except Exception as e:
-            print(f"Error in AdminUserUploadPermissionsView: {str(e)}")
-            return Response({
-                'error': f'Failed to update upload permissions: {str(e)}',
-                'success': False
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-
-class UserUploadPermissionsMiddleware(MiddlewareMixin):
-    def process_request(self, request):
-        # Skip middleware for admin or non-upload endpoints
-        if request.path_info.startswith('/admin/') or not request.path_info.endswith('/upload/'):
-            return None
-        
-        # Skip for non-authenticated requests
-        if not hasattr(request, 'user') or not request.user.is_authenticated:
-            return None
-        
-        # Skip for admin users (they can always upload)
-        if request.user.username == 'admin':
-            return None
-        
-        # Check if user is allowed to upload
-        try:
-            permissions = UserUploadPermissions.objects.get(user=request.user)
-            if not permissions.can_upload:
-                return JsonResponse({
-                    'error': 'You do not have permission to upload documents. Please contact your administrator.'
-                }, status=403)
-        except UserUploadPermissions.DoesNotExist:
-            # Default to allowed if no permissions are explicitly set
-            pass
-        
-        # Continue with the request
-        return None
-    
-class CheckUploadPermissionsView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        try:
-            user = request.user
-            
-            # Skip permission check for admin users
-            if user.username == 'admin':
-                return Response({
-                    'can_upload': True
-                }, status=status.HTTP_200_OK)
-            
-            # Check if the user has upload permissions
-            try:
-                permissions = UserUploadPermissions.objects.get(user=user)
-                can_upload = permissions.can_upload
-            except UserUploadPermissions.DoesNotExist:
-                # Default to allowed if no permissions are explicitly set
-                can_upload = True
-            
-            return Response({
-                'can_upload': can_upload
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Error in CheckUploadPermissionsView: {str(e)}")
-            return Response({
-                'error': f'Failed to check upload permissions: {str(e)}',
-                'can_upload': False  # Default to disallowing upload on error
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ProcessCitationsView(APIView):
     """
@@ -8595,5 +7800,3 @@ class ChatExportView(APIView):
                 paragraph.add_run("\n")
             elif child.name not in ['ul', 'ol']:
                 self.process_inline_elements(paragraph, child)
-
-

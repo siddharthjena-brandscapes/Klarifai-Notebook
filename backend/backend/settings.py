@@ -51,7 +51,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'chat',
     'ideaGen',
-    'core'
+    'core',
+    'notebook', 
    
 ]
 
@@ -110,7 +111,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'klarifai-bbsr-app-database',
+        'NAME': 'Klarifai_Latest',
         'USER': 'postgres',
         'PASSWORD': 'root',
         'HOST': 'localhost',
