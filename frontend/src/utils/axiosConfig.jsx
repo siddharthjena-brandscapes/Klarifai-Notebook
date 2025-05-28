@@ -1042,6 +1042,25 @@ export const documentServiceNB = {
     });
   },
 
+  getOriginalDocument: (documentId) => {
+    return axiosInstance.get(`/documents-NB/${documentId}/original/`, {
+      responseType: "blob", // Important for handling binary files
+    });
+  },
+
+  trackDocumentView: (documentId, mainProjectId) => {
+    return axiosInstance.post(`/documents-NB/${documentId}/view-log/`, {
+      main_project_id: mainProjectId,
+    });
+  },
+
+  searchDocumentContent: (data) => {
+    return axiosInstance.post("/search-document-content-NB/", {
+      query: data.query,
+      main_project_id: data.main_project_id,
+    });
+  },
+
   deleteDocument: (documentId, mainProjectId) =>
     axiosInstance.delete(`/documents-NB/${documentId}/delete/`, {
       params: { main_project_id: mainProjectId },
@@ -1217,6 +1236,57 @@ export const chatServiceNB = {
       message: message,
     });
   },
+   exportChatAsDocx: (data, config = {}) => {
+    return axiosInstance.post('/export-chat-NB/', {...data, format: 'docx'}, config);
+  },
+};
+
+export const citationServiceNB = {
+  // Process citations on demand (frontend approach)
+  processCitations: (responseText, citations) => {
+    return axiosInstance.post("/process-citations-NB/", {
+      response_text: responseText,
+      citations: citations
+    })
+    .then(response => {
+      console.log("Citations processed successfully");
+      return response.data;
+    })
+    .catch(error => {
+      console.error("Error processing citations:", error);
+      throw error;
+    });
+  },
+
+  // Get citation details for a specific citation (future enhancement)
+  getCitationDetails: (documentId, pageNumber, sectionTitle) => {
+    return axiosInstance.get("/citation-details-NB/", {
+      params: {
+        document_id: documentId,
+        page_number: pageNumber,
+        section_title: sectionTitle
+      }
+    })
+    .then(response => {
+      return response.data;
+    })
+    .catch(error => {
+      console.error("Error fetching citation details:", error);
+      throw error;
+    });
+  },
+
+  // View original source document at specific citation
+  viewSourceDocument: (documentId, pageNumber) => {
+    // Generate URL for viewing the document at specific page
+    const url = `/documents-NB/${documentId}/original/?page=${pageNumber || 1}`;
+    
+    // Open in new tab or handle as needed
+    window.open(url, '_blank');
+    
+    // Return success for promise chaining
+    return Promise.resolve({ success: true });
+  }
 };
 
 export const userServiceNB = {

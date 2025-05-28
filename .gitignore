@@ -4,6 +4,7 @@ venv/
 myVenv/
 *.dll
 .vscode/
+myenv/
  
 # Node
 node_modules/
@@ -67,6 +68,7 @@ Thumbs.db
 venv/
 env/
 .venv/
+myenv/
  
 # IDE specific settings
 .vscode/

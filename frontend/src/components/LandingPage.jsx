@@ -25,6 +25,7 @@ import {
   Edit2,
   Check,
   Paperclip,
+  NotebookPen,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Header from "./dashboard/Header";
@@ -97,14 +98,14 @@ const allModules = [
     ],
   },
   {
-    id: "topic-modeling",
-    name: "Topic Modeling",
+    id: "klarifai-notebook",
+    name: "Klarifai Notebook",
     description:
-      "A smart data analysis tool that extracts topics and provides natural language insights.",
-    path: "/topic-modeling",
+      "Klarifai-Notebook is your smart, document-aware research assistant — analyze, query, and gain clarity from your notes and PDFs effortlessly.",
+    path: "/klarifai-notebook",
     actionText: "Analyze Topics",
-    icon: Lock,
-    active: false,
+    icon:  NotebookPen,
+    active: true,
     features: [
       {
         id: "upload",
@@ -127,11 +128,11 @@ const allModules = [
     ],
   },
   {
-    id: "structured-data-query",
-    name: "Structured Data Query",
+    id: "ad-campaign-generator",
+    name: "Ad Campaign Generator",
     description:
       "Transform natural language into precise SQL queries, enabling intuitive data exploration without complex database syntax.",
-    path: "/structured-data-query",
+    path: "/ad-campaign-generator",
     actionText: "Start Querying",
     icon: Lock,
     active: false,
@@ -776,34 +777,64 @@ const handleDocumentChange = (e) => {
     );
   };
 
-  const handleModuleSelect = (moduleId) => {
-    const selectedModule = modules.find((m) => m.id === moduleId);
+  // Updated handleModuleSelect function with enhanced debugging
+const handleModuleSelect = (moduleId) => {
+  const selectedModule = modules.find((m) => m.id === moduleId);
 
-    if (selectedModule) {
-      // Include project information in navigation
-      const projectId = currentProject?.id;
-      const projectName = currentProject?.name;
+  if (selectedModule) {
+    // Include project information in navigation
+    const projectId = currentProject?.id;
+    const projectName = currentProject?.name;
 
-      if (moduleId === "document-qa") {
-        // Navigate to document-qa module (dashboard path)
-        navigate(`/dashboard/${projectId}`, {
-          state: { projectName, projectId },
-        });
-      } else if (moduleId === "idea-generator") {
-        // Navigate to idea generation module
-        navigate(`/idea-generation/${projectId}`, {
-          state: { projectName, projectId },
-        });
-      } else {
-        // Handle other modules
-        navigate(selectedModule.path, {
-          state: { projectName, projectId },
-        });
-      }
+    console.log('=== NAVIGATION DEBUG ===');
+    console.log('Module ID clicked:', moduleId);
+    console.log('Selected Module:', selectedModule);
+    console.log('Project ID:', projectId);
+    console.log('Project Name:', projectName);
+    console.log('Current Project:', currentProject);
 
-      setCurrentModule({ moduleId, featureId: null });
+    if (moduleId === "document-qa") {
+      const path = `/dashboard/${projectId}`;
+      console.log('Navigating to Document Q&A:', path);
+      navigate(path, {
+        state: { projectName, projectId },
+      });
+    } else if (moduleId === "idea-generator") {
+      const path = `/idea-generation/${projectId}`;
+      console.log('Navigating to Idea Generator:', path);
+      navigate(path, {
+        state: { projectName, projectId },
+      });
+    } else if (moduleId === "klarifai-notebook") {
+      const path = `/klarifai-notebook/${projectId}`;
+      console.log('Navigating to Klarifai Notebook:', path);
+      console.log('Full navigation call:', {
+        path,
+        state: { projectName, projectId }
+      });
+      
+      // Add a small delay to ensure the navigation is processed
+      navigate(path, {
+        state: { projectName, projectId },
+      });
+      
+      // Also log after navigation attempt
+      setTimeout(() => {
+        console.log('Navigation completed, current location:', window.location.pathname);
+      }, 100);
+    } else {
+      // Handle other modules
+      console.log('Navigating to other module:', selectedModule.path);
+      navigate(selectedModule.path, {
+        state: { projectName, projectId },
+      });
     }
-  };
+
+    setCurrentModule({ moduleId, featureId: null });
+  } else {
+    console.error('No module found for ID:', moduleId);
+  }
+};
 
   const handleFeatureSelect = (featureId) => {
     setCurrentModule((prev) => ({ ...prev, featureId }));
