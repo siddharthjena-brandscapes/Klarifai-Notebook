@@ -994,7 +994,7 @@ export const documentServiceNB = {
   },
 
   setActiveDocument: (documentId, mainProjectId) =>
-    axiosInstance.post("/set-active-document-NB/", {
+    axiosInstance.post("notebook/set-active-document-NB/", {
       document_id: documentId,
       main_project_id: mainProjectId,
     }),
@@ -1007,7 +1007,7 @@ export const documentServiceNB = {
 
     try {
       console.log("Fetching documents for project:", mainProjectId);
-      const response = await axiosInstance.get("/user-documents-NB/", {
+      const response = await axiosInstance.get("notebook/user-documents-NB/", {
         params: { main_project_id: mainProjectId },
       });
       console.log("Documents response:", response.data);
@@ -1019,7 +1019,7 @@ export const documentServiceNB = {
   },
 
   getChatHistory: () => {
-    return axiosInstance.get("/chat-history-NB/", {
+    return axiosInstance.get("notebook/chat-history-NB/", {
       params: {
         limit: 50, // Optional: limit number of chats
         include_messages: true,
@@ -1029,40 +1029,40 @@ export const documentServiceNB = {
   },
 
   generateSummary: (documentIds, mainProjectId) => {
-    return axiosInstance.post("/generate-document-summary-NB/", {
+    return axiosInstance.post("notebook/generate-document-summary-NB/", {
       document_ids: documentIds,
       main_project_id: mainProjectId,
     });
   },
 
   generateConsolidatedSummary: (documentIds, projectId) => {
-    return axiosInstance.post("/consolidated_summary-NB/", {
+    return axiosInstance.post("notebook/consolidated_summary-NB/", {
       document_ids: documentIds,
       main_project_id: projectId,
     });
   },
 
   getOriginalDocument: (documentId) => {
-    return axiosInstance.get(`/documents-NB/${documentId}/original/`, {
+    return axiosInstance.get(`notebook/documents-NB/${documentId}/original/`, {
       responseType: "blob", // Important for handling binary files
     });
   },
 
   trackDocumentView: (documentId, mainProjectId) => {
-    return axiosInstance.post(`/documents-NB/${documentId}/view-log/`, {
+    return axiosInstance.post(`notebook/documents-NB/${documentId}/view-log/`, {
       main_project_id: mainProjectId,
     });
   },
 
   searchDocumentContent: (data) => {
-    return axiosInstance.post("/search-document-content-NB/", {
+    return axiosInstance.post("notebook/search-document-content-NB/", {
       query: data.query,
       main_project_id: data.main_project_id,
     });
   },
 
   deleteDocument: (documentId, mainProjectId) =>
-    axiosInstance.delete(`/documents-NB/${documentId}/delete/`, {
+    axiosInstance.delete(`notebook/documents-NB/${documentId}/delete/`, {
       params: { main_project_id: mainProjectId },
     }),
 };
@@ -1118,7 +1118,7 @@ export const chatServiceNB = {
 
     // Send PATCH request to the correct endpoint
     return axiosInstance
-      .patch(`/conversations-NB/${conversationId}/`, payload)
+      .patch(`notebook/conversations-NB/${conversationId}/`, payload)
       .then((response) => {
         console.log("Conversation title update response:", response.data);
         return response;
@@ -1134,7 +1134,7 @@ export const chatServiceNB = {
 
   manageConversation: (conversationId, data) => {
     return axiosInstance
-      .patch(`/conversations-NB/${conversationId}/`, data)
+      .patch(`notebook/conversations-NB/${conversationId}/`, data)
       .then((response) => {
         console.log("Conversation management response:", response.data);
         return response.data;
@@ -1154,7 +1154,7 @@ export const chatServiceNB = {
         mainProjectId
       );
       const response = await axiosInstance.get(
-        `/conversations-NB/${conversationId}/`,
+        `notebook/conversations-NB/${conversationId}/`,
         {
           params: { main_project_id: mainProjectId },
         }
@@ -1195,7 +1195,7 @@ export const chatServiceNB = {
     }
 
     try {
-      const response = await axiosInstance.get("/chat-history-NB/", {
+      const response = await axiosInstance.get("notebook/chat-history-NB/", {
         params: { main_project_id: mainProjectId },
       });
       console.log("Chat history response:", response.data);
@@ -1209,7 +1209,7 @@ export const chatServiceNB = {
   // Optional: Method to delete a conversation
   deleteConversation: (conversationId) => {
     return axiosInstance
-      .delete(`/conversations-NB/${conversationId}/delete/`)
+      .delete(`notebook/conversations-NB/${conversationId}/delete/`)
       .then((response) => {
         console.log("Conversation deleted:", response.data);
         return response.data;
@@ -1224,27 +1224,27 @@ export const chatServiceNB = {
   },
 
   startConversation: (documentId, message) => {
-    return axiosInstance.post("/conversation/start-NB/", {
+    return axiosInstance.post("notebook/conversation/start-NB/", {
       document_id: documentId,
       message: message,
     });
   },
 
   continueConversation: (conversationId, message) => {
-    return axiosInstance.post("/conversation/continue-NB/", {
+    return axiosInstance.post("notebook/conversation/continue-NB/", {
       conversation_id: conversationId,
       message: message,
     });
   },
    exportChatAsDocx: (data, config = {}) => {
-    return axiosInstance.post('/export-chat-NB/', {...data, format: 'docx'}, config);
+    return axiosInstance.post('notebook/export-chat-NB/', {...data, format: 'docx'}, config);
   },
 };
 
 export const citationServiceNB = {
   // Process citations on demand (frontend approach)
   processCitations: (responseText, citations) => {
-    return axiosInstance.post("/process-citations-NB/", {
+    return axiosInstance.post("notebook/process-citations-NB/", {
       response_text: responseText,
       citations: citations
     })
@@ -1260,7 +1260,7 @@ export const citationServiceNB = {
 
   // Get citation details for a specific citation (future enhancement)
   getCitationDetails: (documentId, pageNumber, sectionTitle) => {
-    return axiosInstance.get("/citation-details-NB/", {
+    return axiosInstance.get("notebook/citation-details-NB/", {
       params: {
         document_id: documentId,
         page_number: pageNumber,
@@ -1279,7 +1279,7 @@ export const citationServiceNB = {
   // View original source document at specific citation
   viewSourceDocument: (documentId, pageNumber) => {
     // Generate URL for viewing the document at specific page
-    const url = `/documents-NB/${documentId}/original/?page=${pageNumber || 1}`;
+    const url = `notebook/documents-NB/${documentId}/original/?page=${pageNumber || 1}`;
     
     // Open in new tab or handle as needed
     window.open(url, '_blank');
