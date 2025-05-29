@@ -962,7 +962,7 @@ export const documentServiceNB = {
       formData.append("target_user_id", targetUserId);
     }
   
-    return axiosInstance.post("/upload-documents-NB/", formData, {
+    return axiosInstance.post("notebook/upload-documents-NB/", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
@@ -1084,7 +1084,7 @@ export const chatServiceNB = {
     };
 
     return axiosInstance
-      .post("/chat-NB/", {
+      .post("notebook/chat-NB/", {
         message: data.message,
         conversation_id: data.conversation_id,
         selected_documents: data.selected_documents,

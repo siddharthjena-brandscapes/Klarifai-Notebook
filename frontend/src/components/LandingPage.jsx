@@ -101,7 +101,7 @@ const allModules = [
     id: "klarifai-notebook",
     name: "Klarifai Notebook",
     description:
-      "Klarifai-Notebook is your smart, document-aware research assistant — analyze, query, and gain clarity from your notes and PDFs effortlessly.",
+      "Klarifai-Notebook is your smart, document-aware research assistant — analyze, query, and gain clarity from your notes and Files effortlessly.",
     path: "/klarifai-notebook",
     actionText: "Analyze Topics",
     icon:  NotebookPen,

@@ -11,7 +11,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/ideas/', include('ideaGen.urls')),
     
-    path('api/', include('chat.urls')),
+    path('api/', include('chat.urls',)),
+    path('api/notebook/', include('notebook.urls')),
 
     path('api/core/', include('core.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
