@@ -2151,7 +2151,7 @@ class GetChatHistoryView(APIView):
             
             history = []
             for conversation in conversations:
-                messages = conversation.messages.all().order_by('created_at')
+                messages = conversation.messages_NB.all().order_by('created_at')
                 message_list = [
                     {
                         'role': message.role,
@@ -2160,7 +2160,7 @@ class GetChatHistoryView(APIView):
                         'citations': message.citations or []
                     } for message in messages
                 ]
-                
+            
                 history.append({
                     'conversation_id': str(conversation.conversation_id),
                     'title': conversation.title or f"Chat from {conversation.created_at.strftime('%Y-%m-%d %H:%M')}",
@@ -2170,7 +2170,7 @@ class GetChatHistoryView(APIView):
                     'follow_up_questions': conversation.follow_up_questions or [],
                     'selected_documents': [str(doc.id) for doc in conversation.documents.all()]
                 })
-
+            print("##############################", history)
             return Response(history, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -6873,7 +6873,7 @@ class GetConversationView(APIView):
                     )
                     
                     # Retrieve all messages for this conversation
-                    messages = conversation.messages.all().order_by('created_at')
+                    messages = conversation.messages_NB.all().order_by('created_at')
                     
                     # Prepare message list - UPDATED to include all badge properties
                     message_list = []
@@ -6920,7 +6920,7 @@ class GetConversationView(APIView):
                 conversation_list = []
                 for conversation in conversations:
                     # Get the first and last messages
-                    messages = conversation.messages.all().order_by('created_at')
+                    messages = conversation.messages_NB.all().order_by('created_at')
                     
                     if messages:
                         first_message = messages.first()

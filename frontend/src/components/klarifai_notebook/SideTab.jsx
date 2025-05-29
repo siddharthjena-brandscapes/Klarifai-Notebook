@@ -32,17 +32,17 @@ import {
   PanelLeft,
   HelpCircle,
 } from "lucide-react";
-import { documentService, chatService } from "../../utils/axiosConfig";
+import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
 import { toast } from "react-toastify";
 import DeleteModal from "../dashboard/DeleteModal";
 import DeleteChatModal from "../dashboard/DeleteChatModal";
 import { ideaService, coreService } from "../../utils/axiosConfig";
-import DocumentViewer from "../dashboard/DocumentViewer";
 import DocumentSearchModal from "../dashboard/DocumentSearchModal";
 import ChatDownloadFeature from "../dashboard/ChatDownloadFeature";
 import BulkDeleteModal from "../dashboard/BulkDeleteModal";
 import FaqButton from "../faq/FaqButton";
 import { ThemeContext } from "../../context/ThemeContext";
+import ViewDoc from "./ViewDoc";
 
 const SideTab = ({
   isOpen,
@@ -197,7 +197,7 @@ const SideTab = ({
 
       // Create an array of promises for each document delete operation
       const deletePromises = selectedDocuments.map((docId) =>
-        documentService.deleteDocument(parseInt(docId), mainProjectId)
+        documentServiceNB.deleteDocument(parseInt(docId), mainProjectId)
       );
 
       // Wait for all delete operations to complete
@@ -326,204 +326,7 @@ const SideTab = ({
     }
   };
 
-  // Function to handle generating ideas from selected documents
-  // Update the handleGenerateIdeas function in your Sidebar.jsx
-  // const handleGenerateIdeas = async () => {
-  //   // Check if the idea-generator module is disabled or not included in project
-  //   if (!isModuleAvailable("idea-generator")) {
-  //     toast.error("Idea Generator is not available for this project");
-  //     return;
-  //   }
-  //   if (!selectedDocuments || selectedDocuments.length === 0) {
-  //     toast.warning("Please select at least one document first");
-  //     return;
-  //   }
 
-  //   const mainProjectName = await getMainProjectName();
-
-  //   try {
-  //     // Show animation while processing
-  //     setIsGenerateIdeasAnimating(true);
-
-  //     toast.info("Extracting idea parameters from document...", {
-  //       autoClose: 3000,
-  //     });
-
-  //     // Call the backend API to extract parameters from the first selected document
-  //     const response = await documentService.generateIdeaContext({
-  //       document_id: selectedDocuments[0],
-  //       main_project_id: mainProjectId,
-  //     });
-
-  //     // Stop animation
-  //     setIsGenerateIdeasAnimating(false);
-
-  //     if (response.data && response.data.idea_parameters) {
-  //       // Find the selected document's name for project title
-  //       const selectedDoc = documents.find(
-  //         (doc) => doc.id.toString() === selectedDocuments[0]
-  //       );
-  //       const documentName = selectedDoc ? selectedDoc.filename : "Document";
-
-  //       // Create a default project name from document
-  //       const projectName =
-  //         response.data.suggested_project_name ||
-  //         `Ideas from ${
-  //           response.data.document_name_no_ext || response.data.document_name
-  //         }`;
-
-  //       // Create a new project first
-  //       const projectResponse = await ideaService.createProject({
-  //         name: projectName,
-  //         main_project_id: mainProjectId,
-  //       });
-
-  //       if (projectResponse.data && projectResponse.data.success) {
-  //         // Now navigate to the regular IdeaForm route with the new project ID
-  //         const newProjectId = projectResponse.data.project.id;
-
-  //         // Navigate to the form endpoint for this new project
-  //         navigate(`/idea-generation/${mainProjectId}/form`, {
-  //           state: {
-  //             fromDocQA: true,
-  //             document_id: response.data.document_id,
-  //             document_name: response.data.document_name,
-  //             idea_parameters: response.data.idea_parameters,
-  //             main_project_id: mainProjectId,
-  //             newProject: {
-  //               id: newProjectId,
-  //               name: projectName,
-  //             },
-  //             projectName: mainProjectName,
-  //           },
-  //         });
-
-  //         toast.success("New project created! Loading Idea Generator...");
-  //       } else {
-  //         throw new Error("Failed to create a new project");
-  //       }
-  //     } else {
-  //       toast.error("Failed to extract idea parameters from the document.");
-  //     }
-  //   } catch (error) {
-  //     // Stop animation on error
-  //     setIsGenerateIdeasAnimating(false);
-  //     console.error("Error generating idea context:", error);
-  //     toast.error("Failed to extract idea parameters. Please try again.");
-  //   }
-  // };
-
- // Updated handleGenerateIdeas function with loading overlay that removes on navigation
-const handleGenerateIdeas = async () => {
-  // Check if the idea-generator module is disabled or not included in project
-  if (!isModuleAvailable("idea-generator")) {
-    toast.error("Idea Generator is not available for this project");
-    return;
-  }
-  if (!selectedDocuments || selectedDocuments.length === 0) {
-    toast.warning("Please select at least one document first");
-    return;
-  }
-
-  // Create and show loading overlay
-  const loadingOverlay = document.createElement('div');
-  loadingOverlay.id = 'idea-generator-loading-overlay';
-  loadingOverlay.className = `fixed inset-0 flex items-center justify-center z-50 ${theme === "dark" ? 'bg-gray-900/80' : 'bg-white/80'} backdrop-blur-sm`;
-  
-  // Create the loader element
-  const loaderHTML = `
-    <div class="flex flex-col items-center">
-      <span class="idea-generator-loader mb-4"></span>
-      <div class="${theme === "dark" ? 'text-white' : 'text-[#a55233]'} text-lg font-medium">
-        Analyzing document and preparing ideas...
-      </div>
-    </div>
-  `;
-  
-  loadingOverlay.innerHTML = loaderHTML;
-  document.body.appendChild(loadingOverlay);
-
-  try {
-    // Show animation while processing
-    setIsGenerateIdeasAnimating(true);
-
-    // toast.info("Extracting idea parameters from document...", {
-    //   autoClose: 3000,
-    // });
-
-    const mainProjectName = await getMainProjectName();
-
-    // Call the backend API to extract parameters from the first selected document
-    const response = await documentService.generateIdeaContext({
-      document_id: selectedDocuments[0],
-      main_project_id: mainProjectId,
-    });
-
-    // Find the selected document's name for project title
-    const selectedDoc = documents.find(
-      (doc) => doc.id.toString() === selectedDocuments[0]
-    );
-    const documentName = selectedDoc ? selectedDoc.filename : "Document";
-
-    // Create a default project name from document
-    const projectName =
-      response.data.suggested_project_name ||
-      `Ideas from ${
-        response.data.document_name_no_ext || response.data.document_name
-      }`;
-
-    // Create a new project first
-    const projectResponse = await ideaService.createProject({
-      name: projectName,
-      main_project_id: mainProjectId,
-    });
-
-    if (projectResponse.data && projectResponse.data.success) {
-      // Now navigate to the regular IdeaForm route with the new project ID
-      const newProjectId = projectResponse.data.project.id;
-
-      // Remove the loading overlay before navigation
-      const loadingElement = document.getElementById('idea-generator-loading-overlay');
-      if (loadingElement) {
-        document.body.removeChild(loadingElement);
-      }
-      
-      // Reset animation state
-      setIsGenerateIdeasAnimating(false);
-
-      // Navigate to the idea generator form
-      navigate(`/idea-generation/${mainProjectId}/form`, {
-        state: {
-          fromDocQA: true,
-          document_id: response.data.document_id,
-          document_name: response.data.document_name,
-          idea_parameters: response.data.idea_parameters,
-          main_project_id: mainProjectId,
-          newProject: {
-            id: newProjectId,
-            name: projectName,
-          },
-          projectName: mainProjectName,
-        },
-      });
-
-      toast.success("New project created!");
-    } else {
-      throw new Error("Failed to create a new project");
-    }
-  } catch (error) {
-    // Remove the loading overlay on error
-    const loadingElement = document.getElementById('idea-generator-loading-overlay');
-    if (loadingElement) {
-      document.body.removeChild(loadingElement);
-    }
-    
-    // Stop animation on error
-    setIsGenerateIdeasAnimating(false);
-    console.error("Error generating idea context:", error);
-    toast.error("Failed to extract idea parameters. Please try again.");
-  }
-};
 
   const handleResetSearch = () => {
     setDocumentSearchTerm("");
@@ -532,7 +335,7 @@ const handleGenerateIdeas = async () => {
   const handleDeleteDocument = async (documentId) => {
     try {
       // Call delete service
-      await documentService.deleteDocument(documentId, mainProjectId);
+      await documentServiceNB.deleteDocument(documentId, mainProjectId);
 
       // Remove document from local state
       setDocuments((prevDocs) =>
@@ -635,7 +438,7 @@ const handleGenerateIdeas = async () => {
       setLoading(true);
       console.log("Fetching chat history for project:", mainProjectId);
 
-      const response = await chatService.getAllConversations(mainProjectId);
+      const response = await chatServiceNB.getAllConversations(mainProjectId);
 
       if (response && response.data) {
         // Process chat history to ensure proper grouping of messages
@@ -696,7 +499,7 @@ const handleGenerateIdeas = async () => {
     setActiveConversationId(selectedChat.conversation_id);
     console.log("Fetching conversation details for:", selectedChat.conversation_id);
 
-    const response = await chatService.getConversationDetails(
+    const response = await chatServiceNB.getConversationDetails(
       selectedChat.conversation_id,
       mainProjectId
     );
@@ -820,7 +623,7 @@ const handleGenerateIdeas = async () => {
     }
 
     try {
-      const response = await documentService.getUserDocuments(mainProjectId);
+      const response = await documentServiceNB.getUserDocuments(mainProjectId);
 
       if (response?.data) {
         const sortedDocs = Array.isArray(response.data)
@@ -875,7 +678,7 @@ const handleGenerateIdeas = async () => {
     const doc = documents.find((d) => d.id === documentId);
     if (doc) {
       try {
-        await documentService.setActiveDocument(doc.id, mainProjectId);
+        await documentServiceNB.setActiveDocument(doc.id, mainProjectId);
         setActiveDocumentId(doc.id);
 
         if (onDocumentSelect) {
@@ -955,7 +758,7 @@ const handleGenerateIdeas = async () => {
     // Set the active document if it's being selected
     if (!selectedDocuments.includes(stringDocumentId)) {
       try {
-        await documentService.setActiveDocument(documentId); // Set the active document
+        await documentServiceNB.setActiveDocument(documentId); // Set the active document
       } catch (error) {
         console.error("Failed to set active document:", error);
         toast.error("Failed to set active document");
@@ -1026,7 +829,7 @@ const handleGenerateIdeas = async () => {
       console.log("Update payload:", updateData);
 
       // Enhanced error handling in the service call
-      const response = await chatService.updateConversationTitle(
+      const response = await chatServiceNB.updateConversationTitle(
         conversationId,
         updateData
       );
@@ -1081,7 +884,7 @@ const handleGenerateIdeas = async () => {
   // Replace the existing handleDeleteConversation function with this updated version
   const handleDeleteConversation = async (conversationId) => {
     try {
-      await chatService.deleteConversation(conversationId);
+      await chatServiceNB.deleteConversation(conversationId);
 
       // Remove from chat history state
       setChatHistory((prevHistory) =>
@@ -1187,7 +990,7 @@ const handleGenerateIdeas = async () => {
         main_project_id: mainProjectId, // Make sure this is available in your component
       };
 
-      const response = await chatService.updateConversationTitle(
+      const response = await chatServiceNB.updateConversationTitle(
         conversationId,
         updateData
       );
@@ -1217,7 +1020,7 @@ const handleGenerateIdeas = async () => {
   // Add a new method to handle viewing the original document
   const handleViewOriginalDocument = (doc) => {
     // Track document view (optional)
-    documentService
+    documentServiceNB
       .trackDocumentView(doc.id)
       .catch((error) => console.error("Failed to track document view:", error));
 
@@ -1662,61 +1465,7 @@ const handleGenerateIdeas = async () => {
                 <span>New Chat</span>
               </button>
 
-              {/* Generate Ideas Button - only shown if user has access */}
-              {isModuleAvailable("idea-generator") && (
-                <button
-                  onClick={handleGenerateIdeas}
-                  disabled={
-                    !selectedDocuments || selectedDocuments.length === 0
-                  }
-                  className={`
-                flex-1 py-2 px-2 rounded-lg text-sm
-                ${
-                  selectedDocuments && selectedDocuments.length > 0
-                    ? theme === "dark"
-                      ? "bg-gradient-to-r from-indigo-600/80 to-purple-500/70 hover:from-indigo-600 hover:to-purple-500"
-                      : "bg-[#556052] hover:bg-[#425142] text-white"
-                    : theme === "dark"
-                    ? "bg-gray-700/40 cursor-not-allowed opacity-60"
-                    : "bg-[#d6cbbf] cursor-not-allowed opacity-60"
-                }
-                text-white transition-all duration-300
-                flex items-center justify-center gap-2
-                shadow-sm hover:shadow-md active:scale-95
-                border ${
-                  selectedDocuments && selectedDocuments.length > 0
-                    ? theme === "dark"
-                      ? "border-indigo-400/20"
-                      : "border-[#556052]/20"
-                    : theme === "dark"
-                    ? "border-gray-600/20"
-                    : "border-[#d6cbbf]"
-                }
-                relative overflow-hidden
-              `}
-                >
-                  <Lightbulb
-                    size={16}
-                    className={`
-                  ${
-                    selectedDocuments && selectedDocuments.length > 0
-                      ? "text-yellow-300"
-                      : "text-gray-400"
-                  }
-                  ${isGenerateIdeasAnimating ? "animate-pulse" : ""}
-                `}
-                  />
-                  <span>Ideas</span>
-
-                  {/* Sparkles only visible when enabled */}
-                  {selectedDocuments && selectedDocuments.length > 0 && (
-                    <Sparkles
-                      size={12}
-                      className="absolute top-1 right-2 text-yellow-200/70 animate-pulse"
-                    />
-                  )}
-                </button>
-              )}
+            
             </div>
           )}
           {isOpen && (
@@ -2612,7 +2361,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
 `}</style>
 
       {viewingDocument && (
-        <DocumentViewer
+        <ViewDoc
           documentId={viewingDocument.id}
           filename={viewingDocument.filename}
           onClose={closeDocumentViewer}
