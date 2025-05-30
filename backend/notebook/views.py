@@ -78,6 +78,7 @@ from rest_framework.response import Response
 import logging
 from django.db.models import F
 import json
+from typing import List, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -449,6 +450,268 @@ class DocumentProcessingMixin:
                 "error": True,
                 "format_type": "error"
             }
+
+    def init_gemini(self, user=None):
+        """Initialize Gemini 2.0 Flash client"""
+        try:
+            # Get the user's Gemini API token
+            gemini_api_key = None
+            if user:
+                try:
+                    from .models import UserAPITokens  # Adjust import based on your models location
+                    user_api_tokens = UserAPITokens.objects.get(user=user)
+                    gemini_api_key = user_api_tokens.gemini_token
+                    
+                    if not gemini_api_key:
+                        logger.warning(f"No Gemini API token found for user {user.username}")
+                        # Fallback to environment variable
+                        gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                        if not gemini_api_key:
+                            raise ValueError("Gemini API token is required for processing")
+                        
+                except Exception as e:
+                    logger.error(f"Error getting API tokens for user {user.username}: {str(e)}")
+                    # Fallback to environment variable
+                    gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                    if not gemini_api_key:
+                        raise ValueError("Gemini API token is required for processing")
+            else:
+                # Fallback to environment variable if no user provided
+                gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                if not gemini_api_key:
+                    raise ValueError("Gemini API token is required for processing")
+            
+            genai.configure(api_key=gemini_api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            return model
+        except Exception as e:
+            logger.error(f"Error initializing Gemini: {str(e)}")
+            return None
+
+    def detect_document_structure(self, text: str, model) -> str:
+        """Analyze document structure to determine if it has clear headings/titles"""
+        try:
+            prompt = f"""
+            Analyze this document text and determine if it has clear structure with headings, titles, or sections:
+            
+            Text: {text[:2000]}
+            
+            Look for:
+            - Clear headings (numbered sections, bold titles, etc.)
+            - Section breaks
+            - Structured format
+            - Table of contents references
+            
+            Respond with only: "STRUCTURED" or "UNSTRUCTURED"
+            """
+            
+            response = model.generate_content(prompt)
+            return response.text.strip().upper()
+        except Exception as e:
+            logger.error(f"Error detecting document structure: {str(e)}")
+            return "UNSTRUCTURED"  # Default to unstructured if analysis fails
+
+    def generate_topics_from_content(self, text: str, model) -> List[str]:
+        """Generate key topics from document content when no clear headings exist"""
+        try:
+            prompt = f"""
+            Analyze this document and identify 5-7 main topics or themes discussed:
+            
+            Text: {text[:6000]}
+            
+            Generate concise topic phrases (3-5 words each) that represent the main concepts, ideas, or subjects covered in this document.
+            
+            IMPORTANT:
+            - Focus on the most important themes and concepts
+            - Use clear, descriptive phrases
+            - Make topics specific to the document content
+            - Avoid generic terms
+            - Each topic should be 3-5 words
+            
+            Format as a simple numbered list:
+            1. Topic phrase
+            2. Topic phrase
+            ...
+            """
+            
+            response = model.generate_content(prompt)
+            topics = []
+            
+            # Parse the numbered list
+            lines = response.text.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
+                    # Extract topic after number/bullet
+                    topic = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
+                    if topic:
+                        topics.append(topic)
+            
+            return topics[:7]  # Limit to 7 topics
+        except Exception as e:
+            logger.error(f"Error generating topics: {str(e)}")
+            return []
+
+    def extract_headings_from_structured_doc(self, text: str, model) -> List[str]:
+        """Extract actual headings from structured documents"""
+        try:
+            prompt = f"""
+            Extract the main headings and section titles from this structured document:
+            
+            Text: {text[:8000]}
+            
+            IMPORTANT: 
+            - Extract ONLY actual headings, titles, or section names that appear in the document
+            - Use exact words from the document (3-6 words per heading)
+            - Look for numbered sections, bold text, capitalized headings
+            - Do not create new phrases - use exact text from document
+            
+            Format as a simple numbered list:
+            1. Exact heading from document
+            2. Exact heading from document
+            ...
+            """
+            
+            response = model.generate_content(prompt)
+            headings = []
+            
+            # Parse the numbered list
+            lines = response.text.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
+                    # Extract heading after number/bullet
+                    heading = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
+                    if heading:
+                        headings.append(heading)
+            
+            return headings[:7]  # Limit to 7 headings
+        except Exception as e:
+            logger.error(f"Error extracting headings: {str(e)}")
+            return []
+
+    def generate_summary(self, text, file_name, user=None):
+        """
+        REPLACED: Generate summary and key points using Gemini 2.0 Flash with smart topic detection
+        Returns: (summary_text, key_points_list)
+        """
+        if not text.strip():
+            return "No extractable text found in the document.", []
+        
+        try:
+            # Initialize Gemini model
+            model = self.init_gemini(user)
+            if not model:
+                logger.error("Failed to initialize Gemini model")
+                return self.format_error_message(file_name), []
+            
+            # First, detect if document has structure
+            doc_structure = self.detect_document_structure(text, model)
+            
+            # Generate summary
+            summary_prompt = f"""
+            Please analyze the following document '{file_name}' and provide a comprehensive quick summary (8-10 lines):
+            
+            Text: {text[:8000]}
+            
+            IMPORTANT FOR SUMMARY: 
+            - Must be 8-10 lines providing comprehensive coverage
+            - FOCUS ON EXECUTION AND VALIDATION: Emphasize practical implementation steps, validation methods, testing approaches, and measurable outcomes
+            - DESCRIBE MORE CLEARLY: Use specific language, avoid vague terms, provide clear explanations of processes and concepts
+            - MENTION SPECIFIC SECTORS: Identify and name the exact industries, market segments, business sectors, or domains discussed
+            - BE MORE CONCRETE: Include specific numbers, percentages, timeframes, locations, company names, product names, or measurable data points
+            - COMPREHENSIVE AND APPLIED PICTURE: Show how the analysis translates to real-world applications, practical benefits, and actionable insights
+            - Include key findings, main themes, important data/statistics if present
+            - Cover methodology, results, conclusions, and recommendations if applicable
+            - Explain the context, significance, and implications with specific examples
+            - Make it thorough but still readable and well-structured
+            
+            ### Expected Response Format:
+            <b>Summary Overview</b>
+            <p>High-level introduction to the document's main theme</p>
+
+            <b>Key Highlights</b>
+            <ul>
+                <li>First major insight</li>
+                <li>Second major insight</li>
+                <li>Third major insight</li>
+            </ul>
+
+            <b>Detailed Insights</b>
+            <p>Expanded explanation of the document's core content and significance</p>
+            """
+            
+            summary_response = model.generate_content(summary_prompt)
+            summary = summary_response.text.strip()
+            
+            # Format the summary response to ensure proper HTML-like formatting
+            summary = self.format_summary_response(summary)
+            
+            # Generate key points based on document structure
+            if doc_structure == "STRUCTURED":
+                key_points = self.extract_headings_from_structured_doc(text, model)
+            else:
+                key_points = self.generate_topics_from_content(text, model)
+            
+            # Fallback if no key points were generated
+            if not key_points:
+                fallback_prompt = f"""
+                From this document, identify 5 main topics or themes:
+                
+                Text: {text[:4000]}
+                
+                Provide 5 short phrases (3-4 words each) that capture the main ideas.
+                Format as:
+                1. Topic phrase
+                2. Topic phrase
+                ...
+                """
+                
+                fallback_response = model.generate_content(fallback_prompt)
+                lines = fallback_response.text.strip().split('\n')
+                key_points = []
+                for line in lines:
+                    line = line.strip()
+                    if line and (line[0].isdigit() or line.startswith('•')):
+                        topic = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
+                        if topic:
+                            key_points.append(topic)
+            
+            logger.info(f"Successfully generated summary and {len(key_points)} key points for {file_name}")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", key_points)
+            return summary, key_points
+            
+        except Exception as e:
+            logger.error(f"Error generating content with Gemini 2.0 Flash: {str(e)}")
+            return self.format_error_message(file_name), []
+
+    def format_summary_response(self, response_text):
+        """Ensures proper HTML-like formatting in the summary response."""
+        import re
+        
+        # Wrap paragraphs in <p> tags if not already wrapped
+        response_text = re.sub(r'^(?!<[p|b|u|ul|li])(.*?)$', r'<p>\1</p>', response_text, flags=re.MULTILINE)
+        
+        # Ensure bold tags for section headers
+        section_headers = ['Summary Overview', 'Key Highlights', 'Detailed Insights']
+        for header in section_headers:
+            response_text = response_text.replace(header, f'<b>{header}</b>')
+        
+        return response_text
+
+    def format_error_message(self, file_name):
+        """Returns a formatted error message."""
+        return f"""
+        <b>Summary Generation Error</b>
+        <p>Unable to generate a comprehensive summary for {file_name}</p>
+        
+        <b>Possible Reasons</b>
+        <ul>
+            <li>Document may be too complex</li>
+            <li>Parsing issues encountered</li>
+            <li>Insufficient context extracted</li>
+        </ul>
+        """
 
 
     def convert_video_to_audio(self, video_path):
@@ -920,235 +1183,7 @@ class DocumentProcessingMixin:
         
         return text
 
-    def generate_summary(self, text, file_name):
-        """Generates a summary covering the entire text using GPT-4 with formatted HTML-like output."""
-        import tiktoken
-        import re
-        
-        if not text.strip():
-            return "No extractable text found in the document.", []
-        
-        # Create the detailed prompt with formatting instructions
-        format_prompt = f"""
-        Please analyze this document '{file_name}' and provide:
-        1. A concise summary of the main points and key findings
-        
-        Content: {{content}}
-
-        ### Instructions:
-        - Use semantic HTML-like tags for structure
-        - Provide a clear, organized summary
-        - Highlight key insights with <b> tags
-        - Use <p> tags for paragraphs
-        - Use <ul> and <li> for list-based information
-
-        ### Expected Response Format:
-        <b>Summary Overview</b>
-        <p>High-level introduction to the document's main theme</p>
-
-        <b>Key Highlights</b>
-        <ul>
-            <li>First major insight</li>
-            <li>Second major insight</li>
-            <li>Third major insight</li>
-        </ul>
-
-        <b>Detailed Insights</b>
-        <p>Expanded explanation of the document's core content and significance</p>
-        """
-        
-        encoding = tiktoken.get_encoding("cl100k_base")
-        tokens = encoding.encode(text)
-        MAX_TOKENS_ALLOWED = 3500
-        
-        if len(tokens) > MAX_TOKENS_ALLOWED:
-            # Split into chunks that do not exceed the token limit
-            chunk_size = MAX_TOKENS_ALLOWED
-            chunks = []
-            for i in range(0, len(tokens), chunk_size):
-                chunk_tokens = tokens[i:i+chunk_size]
-                chunk_text = encoding.decode(chunk_tokens)
-                chunks.append(chunk_text)
-                
-            partial_summaries = []
-            for idx, chunk in enumerate(chunks):
-                try:
-                    # Updated system message for JSON response
-                    system_message = """You are a document summarization expert.
-                    You must respond in JSON format with the following structure:
-                    {
-                        "summary": "Your formatted summary with HTML tags",
-                        "key_points": ["point1", "point2", "point3"],
-                        "document_section": "chunk_number"
-                    }"""
-
-                    chunk_prompt = format_prompt.replace("{content}", chunk)
-                    chunk_prompt += f"""
-                    
-                    CRITICAL: Your response MUST be a valid JSON object with this structure:
-                    {{
-                        "summary": "Your summary with HTML formatting",
-                        "key_points": ["list", "of", "key", "points"],
-                        "document_section": "chunk_{idx}"
-                    }}
-                    """
-
-                    completion = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": chunk_prompt}
-                        ],
-                        response_format={"type": "json_object"},  # Force JSON response
-                        temperature=0.3,
-                        max_tokens=500
-                    )
-
-                    # Parse JSON response
-                    json_response = self._parse_json_response(completion.choices[0].message.content)
-                    partial_summary = json_response.get("summary", f"Summary generation error for chunk {idx}.")
-                    partial_summaries.append(partial_summary)
-                except Exception as e:
-                    print(f"Error generating summary for chunk {idx}: {str(e)}")
-                    partial_summaries.append(f"Summary generation error for chunk {idx}.")
-            
-            combined_text = "\n\n".join(partial_summaries)
-            try:
-                # Updated system message for final summary
-                system_message = """You are a document summarization expert.
-                You must respond in JSON format with the following structure:
-                {
-                    "summary": "Your comprehensive summary with HTML formatting",
-                    "document_name": "document_filename",
-                    "summary_type": "consolidated"
-                }"""
-
-                final_prompt = f"""
-                Combine these partial summaries into a cohesive, comprehensive summary for document '{file_name}':
-
-                {combined_text}
-
-                ### Instructions:
-                - Use semantic HTML-like tags for structure
-                - Provide a clear, organized summary
-                - Highlight key insights with <b> tags
-                - Use <p> tags for paragraphs
-                - Use <ul> and <li> for list-based information
-
-                ### Expected Response Format:
-                <b>Summary Overview</b>
-                <p>High-level introduction to the document's main theme</p>
-
-                <b>Key Highlights</b>
-                <ul>
-                    <li>First major insight</li>
-                    <li>Second major insight</li>
-                    <li>Third major insight</li>
-                </ul>
-
-                <b>Detailed Insights</b>
-                <p>Expanded explanation of the document's core content and significance</p>
-                
-                CRITICAL: Your response MUST be a valid JSON object with this structure:
-                {{
-                    "summary": "Your comprehensive summary with HTML formatting",
-                    "document_name": "{file_name}",
-                    "summary_type": "consolidated"
-                }}
-                """
-                
-                final_completion = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": final_prompt}
-                    ],
-                    response_format={"type": "json_object"},  # Force JSON response
-                    temperature=0.3,
-                    max_tokens=1000
-                )
-
-                # Parse JSON response
-                json_response = self._parse_json_response(final_completion.choices[0].message.content)
-                summary_text = json_response.get("summary", "")
-                
-                # Format the response
-                summary_text = self.format_summary_response(summary_text)
-                
-                return summary_text, []
-            except Exception as e:
-                print(f"Error generating final summary: {str(e)}")
-                return self.format_summary_response("\n".join(partial_summaries)), []
-        else:
-            try:
-                # Updated system message for single summary
-                system_message = """You are a document summarization expert.
-                You must respond in JSON format with the following structure:
-                {
-                    "summary": "Your formatted summary with HTML tags",
-                    "document_name": "document_filename", 
-                    "summary_type": "complete"
-                }"""
-
-                full_prompt = format_prompt.replace("{content}", text)
-                full_prompt += f"""
-                
-                CRITICAL: Your response MUST be a valid JSON object with this structure:
-                {{
-                    "summary": "Your summary with HTML formatting",
-                    "document_name": "{file_name}",
-                    "summary_type": "complete"
-                }}
-                """
-
-                completion = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": full_prompt}
-                    ],
-                    response_format={"type": "json_object"},  # Force JSON response
-                    temperature=0.3,
-                    max_tokens=1000
-                )
-
-                # Parse JSON response
-                json_response = self._parse_json_response(completion.choices[0].message.content)
-                summary_text = json_response.get("summary", "")
-                
-                # Format the response
-                summary_text = self.format_summary_response(summary_text)
-                
-                return summary_text, []
-            except Exception as e:
-                print(f"Error generating summary: {str(e)}")
-                return self.format_error_message(file_name), []
-        
-    def format_summary_response(self, response_text):
-        """Ensures proper HTML-like formatting in the summary response."""
-        # Wrap paragraphs in <p> tags if not already wrapped
-        response_text = re.sub(r'^(?!<[p|b|u|ul|li])(.*?)$', r'<p>\1</p>', response_text, flags=re.MULTILINE)
-        
-        # Ensure bold tags for section headers
-        section_headers = ['Summary Overview', 'Key Highlights', 'Detailed Insights']
-        for header in section_headers:
-            response_text = response_text.replace(header, f'<b>{header}</b>')
-        
-        return response_text
-
-    def format_error_message(self, file_name):
-        """Returns a formatted error message."""
-        return f"""
-        <b>Summary Generation Error</b>
-        <p>Unable to generate a comprehensive summary for {file_name}</p>
-        
-        <b>Possible Reasons</b>
-        <ul>
-            <li>Document may be too complex</li>
-            <li>Parsing issues encountered</li>
-            <li>Insufficient context extracted</li>
-        </ul>
-        """
+    
     
 from rest_framework.parsers import JSONParser
 
@@ -2038,6 +2073,10 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
         main_project_id = request.data.get('main_project_id')
 
         try:
+            # Import your models here (adjust based on your project structure)
+            from .models import Document, ProcessedIndex
+                      # Adjust import as needed
+            
             documents = Document.objects.filter(
                 id__in=document_ids,
                 user=user,
@@ -2051,27 +2090,49 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
 
             all_summaries = []
             for document in documents:
-                with open(document.file.path, 'rb') as file:
-                    # Using inherited methods from the mixin
-                    text = self.extract_text_from_file(file.name)
+                try:
+                    # Extract text from the document (your existing flow)
+                    text = self.extract_text_from_file(document.file.path, user)
                     cleaned_text = self.clean_text(text)
-                    summary, _ = self.generate_summary(cleaned_text, document.filename)
                     
+                    # Generate summary and key points using NEW Gemini-based function
+                    summary, key_points = self.generate_summary(cleaned_text, document.filename, user)
+                    
+                    # Save to database - update existing ProcessedIndex
                     processed_index, created = ProcessedIndex.objects.get_or_create(
                         document=document,
                         defaults={
-                            'summary': summary
+                            'summary': summary,
+                            'key_points': key_points,  # Store key points in new field
+                            'faiss_index': '',  # Set appropriate defaults for required fields
+                            'metadata': '',
+                            'markdown_path': ''
                         }
                     )
                     if not created:
                         processed_index.summary = summary
+                        processed_index.key_points = key_points  # Update key points
                         processed_index.save()
 
                     all_summaries.append({
                         'document_id': document.id,
                         'filename': document.filename,
-                        'summary': summary
+                        'summary': summary,
+                        'key_points': key_points,  # Include key points in response
+                        'success': True
                     })
+                        
+                except Exception as e:
+                    logger.error(f"Error processing document {document.id}: {str(e)}")
+                    all_summaries.append({
+                        'document_id': document.id,
+                        'filename': document.filename,
+                        'summary': f'Error processing document: {str(e)}',
+                        'key_points': [],
+                        'success': False,
+                        'error': str(e)
+                    })
+
             if main_project_id:
                 update_project_timestamp(main_project_id, user)        
 
@@ -2081,6 +2142,7 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Error in GenerateDocumentSummaryView: {str(e)}")
             return Response({
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)     
