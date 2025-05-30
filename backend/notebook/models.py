@@ -51,7 +51,8 @@ class UserUploadPermissions(models.Model):
     def __str__(self):
         return f"{self.user.username} - Can Upload: {self.can_upload}"
 class ProcessedIndex(models.Model):
-    document = models.OneToOneField(Document, on_delete=models.CASCADE)
+    # Existing fields
+    document = models.OneToOneField('Document', on_delete=models.CASCADE)
     faiss_index = models.CharField(max_length=255, help_text="Path to saved FAISS index file")
     metadata = models.CharField(max_length=255, help_text="Path to saved metadata file")
     summary = models.TextField(help_text="Generated summary of the document")
@@ -61,7 +62,25 @@ class ProcessedIndex(models.Model):
     follow_up_question_2 = models.TextField(blank=True, null=True, help_text="Second follow-up question")
     follow_up_question_3 = models.TextField(blank=True, null=True, help_text="Third follow-up question")
     processed_at = models.DateTimeField(auto_now_add=True)
-
+    
+    # New field for enhanced summary with key points
+    key_points = models.JSONField(default=list, blank=True, help_text="Key points/topics extracted from document")
+    
+    def get_key_points(self):
+        """Helper method to get key points as a list"""
+        if isinstance(self.key_points, list):
+            return self.key_points
+        elif isinstance(self.key_points, str):
+            try:
+                return json.loads(self.key_points)
+            except json.JSONDecodeError:
+                return []
+        return []
+    
+    def set_key_points(self, key_points_list):
+        """Helper method to set key points"""
+        self.key_points = key_points_list if isinstance(key_points_list, list) else []
+    
     def __str__(self):
         return f"Processed Index for {self.document.filename}"
 
