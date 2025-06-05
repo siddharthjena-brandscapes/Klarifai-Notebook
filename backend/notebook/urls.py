@@ -17,6 +17,8 @@ from .views import ( DocumentUploadView,
     ProcessCitationsView,
     DocumentContentSearchView,
     ChatExportView,
+    YouTubeUploadView,
+    NoteManagementView
 
 
 
@@ -56,13 +58,9 @@ urlpatterns = [
     path('export-chat-NB/', ChatExportView.as_view(), name='export-chat'),
     path('search-document-content-NB/', DocumentContentSearchView.as_view(), name='search-document-content'),
     path('process-citations-NB/', ProcessCitationsView.as_view(), name='process-citations'),
+    path('upload-youtube-NB/', YouTubeUploadView.as_view(), name='upload-youtube'),
+    path('notes-NB/', NoteManagementView.as_view(), name='note-management'),
 
-
-
-
-
-
-    
    
     
 ]   
