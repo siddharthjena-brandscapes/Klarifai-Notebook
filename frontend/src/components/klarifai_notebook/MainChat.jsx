@@ -21,6 +21,7 @@ import {
   Mic,
   Check,
   Loader,
+  Youtube
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
@@ -38,7 +39,7 @@ import {
   SummaryGenerationLoader,
   SummaryFormatter,
   summaryStyles,
-} from "../dashboard/EnhancedSummaryFormatter";
+} from "./EnhancedSummaryFormatter-NB";
 
 import MessageVersionHistory from "../dashboard/MessageVersionHistory";
 import DocumentProcessingLoader from "../dashboard/DocumentUpload/DocumentProcessingLoader";
@@ -68,6 +69,7 @@ const MainChat = ({
   selectedDocuments: propSelectedDocuments,
   setSelectedDocuments,
   onChatInputFocus,
+  onOpenYouTubeModal, // 
 }) => {
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState("");
@@ -88,6 +90,7 @@ const MainChat = ({
   // New state for persistent summary
   const [persistentSummary, setPersistentSummary] = useState("");
   const [isSummaryVisible, setIsSummaryVisible] = useState(true);
+  const [keyPoints, setKeyPoints] = useState([]);
 
   // New state for view toggle
   const [currentView, setCurrentView] = useState("chat");
@@ -135,7 +138,7 @@ const MainChat = ({
   const [regeneratedResponses, setRegeneratedResponses] = useState({});
   const [currentResponseIndex, setCurrentResponseIndex] = useState({});
   const [textSize, setTextSize] = useState("medium");
-
+  const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
   // Add this inside your MainContent component
   useEffect(() => {
     // Configure DOMPurify to allow standard HTML tags but sanitize potentially dangerous content
@@ -162,6 +165,18 @@ const MainChat = ({
       setTextSize(savedTextSize);
     }
   }, []);
+
+  useEffect(() => {
+    // Set key points when active document changes
+    if (activeDocumentForSummary && documents.length > 0) {
+      fetchExistingKeyPoints(activeDocumentForSummary);
+    } else if (localSelectedDocuments && localSelectedDocuments.length > 0 && documents.length > 0) {
+      // If no active document is set, use the first selected document
+      fetchExistingKeyPoints(localSelectedDocuments[0]);
+    } else {
+      setKeyPoints([]);
+    }
+  }, [activeDocumentForSummary, localSelectedDocuments, documents]);
 
 
   // Add this right after the imports and before the MainContent component definition
@@ -244,6 +259,32 @@ const processFollowUpQuestions = (questionsData) => {
   const handleTextareaFocus = () => {
     if (onChatInputFocus) onChatInputFocus();
   };
+
+  const fetchExistingKeyPoints = (documentId) => {
+    if (!documentId) {
+      setKeyPoints([]);
+      return;
+    }
+
+    try {
+      console.log("🔍 Fetching key points for document:", documentId);
+      
+      // Find the document in the already loaded documents array
+      const document = documents.find(doc => doc.id.toString() === documentId);
+      
+      if (document && document.key_points && Array.isArray(document.key_points)) {
+        console.log("🔍 Found key points for document:", document.filename, document.key_points);
+        setKeyPoints(document.key_points);
+      } else {
+        console.log("🔍 No key points found for document:", documentId);
+        setKeyPoints([]);
+      }
+    } catch (error) {
+      console.error("Error fetching key points:", error);
+      setKeyPoints([]);
+    }
+  };
+
   
 
   // Updated handleRegenerateResponse function
@@ -744,8 +785,11 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
         mainProjectId
       );
 
-        
+      console.log("🔍 Full generateSummary response:", response.data); // Debug log
+          
       if (response.data.summaries) {
+        console.log("🔍 Processing summaries:", response.data.summaries); // Debug log
+        
         const combinedSummary = response.data.summaries
           .map((summary) => {
             // Parse summary content if it's JSON
@@ -763,8 +807,26 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
           })
           .join('<hr class="my-4 border-blue-500/20" />');
 
+        // Extract key points from the active document only
+        const allKeyPoints = [];
+        if (response.data.summaries && response.data.summaries.length > 0) {
+          // Find the summary for the active document
+          const activeDocId = activeDocumentForSummary || localSelectedDocuments[0];
+          const activeSummary = response.data.summaries.find(
+            summary => summary.document_id.toString() === activeDocId
+          );
+          
+          if (activeSummary && activeSummary.key_points && Array.isArray(activeSummary.key_points)) {
+            allKeyPoints.push(...activeSummary.key_points);
+            console.log("🔍 Key points for active document:", activeSummary.filename, allKeyPoints);
+          }
+        }
+
+        console.log("🔍 Final extracted key points for active document:", allKeyPoints);
+
         setSummary(combinedSummary);
         setPersistentSummary(combinedSummary);
+        setKeyPoints(allKeyPoints); // Store key points for active document only
         setIsSummaryVisible(true);
         toast.success("Summary generated successfully!");
       }
@@ -775,6 +837,32 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
       setIsSummaryGenerating(false);
     }
   };
+
+const handleTopicClick = (topic) => {
+  console.log("Topic clicked:", topic);
+  
+  // Create the message with "Discuss " prefix
+  const discussMessage = `Discuss ${topic}`;
+  
+  // Set the message in the input field (optional - for user to see what's being sent)
+  setMessage(discussMessage);
+  
+  // Automatically send the message
+  handleSendMessage(discussMessage);
+  
+  // Optional: Show a toast notification to indicate the action
+  // toast.info(`Discussing: ${topic}`);
+  
+  // Optional: Switch to chat view if currently in summary view
+  if (currentView === "summary") {
+    setCurrentView("chat");
+  }
+  
+  // Optional: Minimize follow-up questions to focus on the new discussion
+  if (!isFollowUpQuestionsMinimized) {
+    setIsFollowUpQuestionsMinimized(true);
+  }
+};
 
  // This code focuses on the renderSummaryView method and related styling
 // to be updated in your MainContent.jsx file
@@ -819,32 +907,35 @@ const renderSummaryView = () => {
       persistentSummary ||
       "No summary available";
 
-  // Handler for document selection change
-  const handleDocumentChange = (event) => {
-    const newDocId = event.target.value;
-    setActiveDocumentForSummary(newDocId);
+    // Handler for document selection change
+    const handleDocumentChange = (event) => {
+      const newDocId = event.target.value;
+      setActiveDocumentForSummary(newDocId);
 
-    if (newDocId === "consolidated") {
-      setIsConsolidatedView(true);
-      // Generate consolidated summary if it doesn't exist
-      if (!consolidatedSummary) {
-        handleGenerateConsolidatedSummary();
+      if (newDocId === "consolidated") {
+        setIsConsolidatedView(true);
+        setKeyPoints([]); // Clear key points for consolidated view
+        // Generate consolidated summary if it doesn't exist
+        if (!consolidatedSummary) {
+          handleGenerateConsolidatedSummary();
+        }
+      } else {
+        setIsConsolidatedView(false);
+
+        // Move selected document to front of array
+        const updatedDocs = [
+          newDocId,
+          ...localSelectedDocuments.filter((id) => id !== newDocId),
+        ];
+        setLocalSelectedDocuments(updatedDocs);
+
+        if (setSelectedDocuments) {
+          setSelectedDocuments(updatedDocs);
+        }
+
+        // Key points will be automatically updated by the useEffect
       }
-    } else {
-      setIsConsolidatedView(false);
-
-      // Move selected document to front of array
-      const updatedDocs = [
-        newDocId,
-        ...localSelectedDocuments.filter((id) => id !== newDocId),
-      ];
-      setLocalSelectedDocuments(updatedDocs);
-
-      if (setSelectedDocuments) {
-        setSelectedDocuments(updatedDocs);
-      }
-    }
-  };
+    };
 
   return (
     <div className="absolute inset-0 pt-16 backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-300 ease-in-out">
@@ -979,7 +1070,11 @@ const renderSummaryView = () => {
                 </p>
               </div>
             ) : (
-              <SummaryFormatter content={summaryToShow} />
+              <SummaryFormatter 
+                content={summaryToShow} 
+                keyPoints={keyPoints}
+                onTopicClick={handleTopicClick}
+              />
             )}
           </div>
         </div>
@@ -1040,68 +1135,80 @@ const renderSummaryView = () => {
     fetchUserDocuments();
   }, []);
 
- useEffect(() => {
-  if (selectedChat) {
-    console.log("Loading selected chat:", selectedChat);
+    useEffect(() => {
+    if (selectedChat) {
+      console.log("Loading selected chat:", selectedChat);
 
-    // Set conversation state with messages
-    const chatMessages = selectedChat.messages || [];
-    
-    // Process messages and ensure webSources are included
-    const processedMessages = chatMessages.map(msg => {
-      if (msg.sources_info || msg.extracted_urls || msg.webSources) {
-        return {
-          ...msg,
-          webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
-        };
-      }
-      return msg;
-    });
-    
-    setConversation(
-      [...processedMessages].sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
-      )
-    );
-
-    // Set conversation ID
-    setConversationId(selectedChat.conversation_id);
-
-    // Set summary state
-    if (selectedChat.summary) {
-      setSummary(selectedChat.summary);
-      setPersistentSummary(selectedChat.summary);
-    }
-
-    // Handle documents
-    if (selectedChat.selected_documents?.length > 0) {
-      const documentIds = selectedChat.selected_documents.map((doc) =>
-        typeof doc === "object" ? doc.id.toString() : doc.toString()
+      // Set conversation state with messages
+      const chatMessages = selectedChat.messages || [];
+      
+      // Process messages and ensure webSources are included
+      const processedMessages = chatMessages.map(msg => {
+        if (msg.sources_info || msg.extracted_urls || msg.webSources) {
+          return {
+            ...msg,
+            webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
+          };
+        }
+        return msg;
+      });
+      
+      setConversation(
+        [...processedMessages].sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        )
       );
-      setLocalSelectedDocuments(documentIds);
-      setActiveDocumentForSummary(documentIds[0]);
 
-      // Important: Also update the parent's selectedDocuments
-      if (setSelectedDocuments) {
-        setSelectedDocuments(documentIds);
+      // Set conversation ID
+      setConversationId(selectedChat.conversation_id);
+
+      // Set summary state
+      if (selectedChat.summary) {
+        setSummary(selectedChat.summary);
+        setPersistentSummary(selectedChat.summary);
+      }
+
+      // Handle key points from selected chat
+      if (selectedChat.key_points && Array.isArray(selectedChat.key_points)) {
+        setKeyPoints(selectedChat.key_points);
+      } else {
+        setKeyPoints([]); // Reset if no key points
+      }
+
+      // Handle documents
+      if (selectedChat.selected_documents?.length > 0) {
+        const documentIds = selectedChat.selected_documents.map((doc) =>
+          typeof doc === "object" ? doc.id.toString() : doc.toString()
+        );
+        setLocalSelectedDocuments(documentIds);
+        setActiveDocumentForSummary(documentIds[0]);
+
+        // Important: Also update the parent's selectedDocuments
+        if (setSelectedDocuments) {
+          setSelectedDocuments(documentIds);
+        }
+
+        // Key points will be set by the useEffect that watches activeDocumentForSummary
+      } else {
+        // Reset key points if no documents are selected
+        setKeyPoints([]);
+      }
+
+      // Handle follow-up questions
+      const followUps = selectedChat.follow_up_questions || [];
+      const processedFollowUps = processFollowUpQuestions(followUps);
+
+      if (processedFollowUps.length > 0) {
+        console.log("Setting follow-up questions:", processedFollowUps);
+        setCurrentFollowUpQuestions(processedFollowUps);
+        setFollowUpQuestions(processedFollowUps);
+      } else {
+        // Reset follow-up questions if none exist
+        setCurrentFollowUpQuestions([]);
+        setFollowUpQuestions([]);
       }
     }
-
-    // Handle follow-up questions
-    const followUps = selectedChat.follow_up_questions || [];
-    const processedFollowUps = processFollowUpQuestions(followUps);
-
-    if (processedFollowUps.length > 0) {
-      console.log("Setting follow-up questions:", processedFollowUps);
-      setCurrentFollowUpQuestions(processedFollowUps);
-      setFollowUpQuestions(processedFollowUps);
-    } else {
-      // Reset follow-up questions if none exist
-      setCurrentFollowUpQuestions([]);
-      setFollowUpQuestions([]);
-    }
-  }
-}, [selectedChat, setFollowUpQuestions, setSummary, setSelectedDocuments]);
+  }, [selectedChat, setFollowUpQuestions, setSummary, setSelectedDocuments]);
 
   useEffect(() => {
     // Cleanup function to reset states when component unmounts or chat changes
@@ -1191,13 +1298,30 @@ const renderSummaryView = () => {
     try {
       const response = await documentServiceNB.getUserDocuments(mainProjectId);
       if (response?.data) {
-        setDocuments(Array.isArray(response.data) ? response.data : []);
+        const documentsData = Array.isArray(response.data) ? response.data : [];
+        console.log("🔍 Loaded documents with key points:", documentsData);
+        setDocuments(documentsData);
+        
+        // If we have an active document, fetch its key points from the loaded data
+        if (activeDocumentForSummary) {
+          console.log("🔍 Setting key points for active document after documents loaded");
+          const activeDoc = documentsData.find(doc => doc.id.toString() === activeDocumentForSummary);
+          if (activeDoc && activeDoc.key_points) {
+            setKeyPoints(activeDoc.key_points);
+          }
+        } else if (localSelectedDocuments && localSelectedDocuments.length > 0) {
+          console.log("🔍 Setting key points for first selected document");
+          const firstDoc = documentsData.find(doc => doc.id.toString() === localSelectedDocuments[0]);
+          if (firstDoc && firstDoc.key_points) {
+            setKeyPoints(firstDoc.key_points);
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to fetch documents:", error);
       toast.error("Failed to fetch documents");
     }
-  }, [mainProjectId]);
+  }, [mainProjectId, activeDocumentForSummary, localSelectedDocuments]);
 
   // Update the useEffect for document fetching
   useEffect(() => {
@@ -2529,6 +2653,13 @@ const WebSourcesDisplay = ({ sources }) => {
                 <Paperclip className="h-4 w-4" />
               </button>
             )}
+           <button
+  title="Upload YouTube video"
+  onClick={() => onOpenYouTubeModal && onOpenYouTubeModal()}
+  className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
+>
+  <Youtube className="h-4 w-4" />
+</button>
 
             {/* Mic button with recording indicator */}
             {!message && (
@@ -2890,6 +3021,24 @@ const WebSourcesDisplay = ({ sources }) => {
   
             
           `}</style>
+          {/* YouTube Upload Modal */}
+{/* <YouTubeUploadModal
+  isOpen={isYouTubeModalOpen}
+  onClose={() => setIsYouTubeModalOpen(false)}
+  mainProjectId={mainProjectId}
+  onUploadSuccess={(data) => {
+    // Refresh documents list
+    fetchUserDocuments();
+    // Auto-select the uploaded document
+    if (data.document?.id) {
+      const newDocId = data.document.id.toString();
+      setLocalSelectedDocuments([newDocId]);
+      if (setSelectedDocuments) {
+        setSelectedDocuments([newDocId]);
+      }
+    }
+  }}
+/> */}
     </div>
   );
 };
@@ -2913,6 +3062,8 @@ MainChat.propTypes = {
     ),
   }),
   
+  // Move onOpenYouTubeModal outside of selectedChat - it's a separate prop
+  onOpenYouTubeModal: PropTypes.func,
   
 
   sources: PropTypes.arrayOf(PropTypes.string),
