@@ -50,6 +50,9 @@ class UserUploadPermissions(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - Can Upload: {self.can_upload}"
+from django.db import models
+import json
+
 class ProcessedIndex(models.Model):
     # Existing fields
     document = models.OneToOneField('Document', on_delete=models.CASCADE)
@@ -232,3 +235,23 @@ def save_user_module_permissions(sender, instance, **kwargs):
         instance.module_permissions.save()
     except UserModulePermissions.DoesNotExist:
         UserModulePermissions.objects.create(user=instance)
+
+
+
+class Note(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notebook_notes')
+    title = models.CharField(max_length=255, blank=True, null=True)
+    content = models.TextField()
+    main_project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='notes_NB', null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_converted_to_document = models.BooleanField(default=False)
+    converted_document = models.ForeignKey(Document, on_delete=models.SET_NULL, null=True, blank=True, related_name='source_note')
+   
+    def __str__(self):
+        title = self.title or f"Note {self.id}"
+        return f"{self.user.username} - {title}"
+    
+
+
+
