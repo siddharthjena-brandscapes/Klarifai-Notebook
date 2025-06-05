@@ -26,6 +26,7 @@ from .models import (
     ProcessedIndex,
     ConversationMemoryBuffer,
     UserModulePermissions,
+    Note,
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -79,8 +80,11 @@ import logging
 from django.db.models import F
 import json
 from typing import List, Dict, Tuple
+import yt_dlp
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
+
 
 
 
@@ -337,6 +341,7 @@ class GetUserDocumentsView(APIView):
                         'filename': doc.filename,
                         'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M'),
                         'summary': processed.summary,
+                        'key_points' : processed.key_points,
                         'follow_up_questions': [
                             processed.follow_up_question_1,
                             processed.follow_up_question_2,
@@ -360,7 +365,7 @@ class GetUserDocumentsView(APIView):
             
             # Update project timestamp to track activity
             update_project_timestamp(main_project_id, user)
-            
+            # print("########################", document_list)
             return Response(document_list, status=status.HTTP_200_OK)
         
         except Exception as e:
@@ -2065,7 +2070,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
 
 
 
-
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
     def post(self, request):
         document_ids = request.data.get('document_ids', [])
@@ -2232,7 +2236,7 @@ class GetChatHistoryView(APIView):
                     'follow_up_questions': conversation.follow_up_questions or [],
                     'selected_documents': [str(doc.id) for doc in conversation.documents.all()]
                 })
-            print("##############################", history)
+            #print("##############################", history)
             return Response(history, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -5704,10 +5708,12 @@ class ChatView(APIView):
         source_info = ", ".join(source_list)
         return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
 
+    #  generate_short_response function with this fixed version:
+
     def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a shorter, concise response using the provided context with web search capability.
-        Enhanced to handle URL content in context.
+        Enhanced to handle URL content in context using Gemini Flash 2.0.
         
         Args:
             query (str): User's original query
@@ -5843,18 +5849,6 @@ class ChatView(APIView):
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
 
-        # Updated system message for JSON response
-        system_message = """You are a document analysis expert with conversation memory. 
-        You must respond in JSON format with the following structure:
-        {
-            "content": "Your concise yet informative response with proper HTML formatting and citations",
-            "citations_used": [list of citation numbers used],
-            "format_type": "response_format_used",
-            "sources_referenced": ["list", "of", "source", "names"]
-        }
-        
-        Provide a concise yet informative response that maintains conversation continuity. Use source citations [n] for information from the documents."""
-
         # Define the user prompt for short response with conversation context
         user_prompt = f"""
         Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
@@ -5870,9 +5864,8 @@ class ChatView(APIView):
         RESPONSE GENERATION GUIDELINES:
         - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
         - Previous conversation context should only inform your response when directly relevant to the current query.
-        - Provide a CONCISE yet THOROUGH answer.
         - Focus on the most relevant information from the context.
-        - Prioritize clarity and directness over excessive detail.
+        - Prioritize clarity and comprehensiveness.
         - When appropriate, organize information with clear sections and structure.
         - Maintain a natural, conversational tone.
         - Ensure the response is directly derived from the provided document and URL context.
@@ -5899,41 +5892,72 @@ class ChatView(APIView):
         - Your response must be based EXCLUSIVELY on the document and URL context provided.
         - Ensure clarity, accuracy, and comprehensive coverage of key relevant details.
         - If the context contains URL content, clearly attribute information from URLs in your response.
+        - You are a document analysis expert with conversation memory. 
+        - You must respond in JSON format with the structure specified above.
+        - Provide a concise yet informative response that maintains conversation continuity. 
+        - Use source citations [n] for information from the documents.
         """
         
         try:
-            # Call the OpenAI chat completion API for short response with JSON format
-            completion = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_prompt}
-                ],
-                response_format={"type": "json_object"},  # Force JSON response
-                temperature=0.4,
-                max_tokens=2000
+            # Get user's Gemini API key
+            gemini_api_key = None
+            try:
+                if hasattr(self, 'request') and hasattr(self.request, 'user'):
+                    user_api_tokens = UserAPITokens.objects.get(user=self.request.user)
+                    gemini_api_key = user_api_tokens.gemini_token
+                    
+                    if not gemini_api_key:
+                        logger.warning(f"No Gemini API token found for user {self.request.user.username}")
+                        # Fallback to environment variable
+                        gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                        if not gemini_api_key:
+                            raise ValueError("Gemini API token is required")
+                            
+            except (UserAPITokens.DoesNotExist, AttributeError):
+                logger.error("No API tokens record found or user not available")
+                # Fallback to environment variable
+                gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                if not gemini_api_key:
+                    raise ValueError("Gemini API token is required")
+            
+            # Configure Gemini client
+            from google import genai
+            client = genai.Client(api_key=gemini_api_key)
+            model = "gemini-2.0-flash-exp"
+            
+            # Call Gemini API for short response with JSON format
+            response = client.models.generate_content(
+                model=model,
+                contents=[user_prompt],
+                config={
+                    "temperature" : 0.4,
+                    "max_output_tokens":2000,
+                    "response_mime_type" : "application/json"  # Force JSON response
+                }
             )
-                # ===== LOG RAW LLM RESPONSE =====
-            raw_llm_response = completion.choices[0].message.content
+            
+            # ===== LOG RAW LLM RESPONSE =====
+            raw_llm_response = response.text
             print("\n" + "="*100)
-            print("🤖 RAW LLM RESPONSE FROM OPENAI (generate_short_response)")
+            print("🤖 RAW LLM RESPONSE FROM GEMINI (generate_short_response)")
             print("="*100)
-            print("Model used:", completion.model)
-            print("Response ID:", completion.id)
+            print("Model used:", model)
             print("Raw response content:")
             print(raw_llm_response)
             print("Response length:", len(raw_llm_response))
             print("Response type:", type(raw_llm_response))
             print("="*100)
             # ===== END LOG RAW LLM RESPONSE =====
+            
             # Parse the JSON response
-            json_response = self._parse_json_response(completion.choices[0].message.content)
+            json_response = self._parse_json_response(response.text)
             answer = json_response.get("content", "No response content found.")
             answer = self._clean_citations(answer, citation_sources)
             answer = self._ensure_separate_citation_brackets(answer)
             processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
                 
         except Exception as e:
+            print(f"Error in main Gemini call: {str(e)}")
             # If there's an error, try with even fewer context chunks
             reduced_context = "\n\n".join(contextualized_content[:5])
             fallback_prompt = f"""
@@ -5949,26 +5973,29 @@ class ChatView(APIView):
                 "format_type": "fallback",
                 "sources_referenced": []
             }}
+            
+            You are a document analysis expert. Be brief. Respond in JSON format.
             """
             
             try:
-                fallback_completion = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are a document analysis expert. Be brief. Respond in JSON format."},
-                        {"role": "user", "content": fallback_prompt}
-                    ],
-                    response_format={"type": "json_object"},  # Force JSON response
-                    temperature=0.4,
-                    max_tokens=1024
+                # Fallback Gemini call
+                fallback_response = client.models.generate_content(
+                    model=model,
+                    contents=[fallback_prompt],
+                    config={
+                        "temperature" : 0.4,
+                        "max_output_tokens":2000,
+                        "response_mime_type" : "application/json"  # Force JSON response
+                    }
                 )
                 
-                json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
+                json_response = self._parse_json_response(fallback_response.text)
                 answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
                 answer = self._ensure_separate_citation_brackets(answer)
                 processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
             except Exception as nested_e:
+                print(f"Error in fallback Gemini call: {str(nested_e)}")
                 # Last resort fallback
                 answer = f"An error occurred while generating the response. Please try a more specific question."
                 processed_answer = answer
@@ -5978,7 +6005,7 @@ class ChatView(APIView):
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
-
+        
     def _get_project_description(self, query):
         """
         Get the project description for the current main project
@@ -6591,13 +6618,19 @@ class ChatView(APIView):
     
     def search_similar_content(self, query, processed_docs, metadata_store, k=40):
         """
-        Enhanced search function that handles both LlamaParse and local document parsing
-        with improved citation deduplication
+        Simplified search function that prioritizes FAISS similarity scores
+        with basic deduplication and citation mapping
         """
+        print(f"\n🔍 SEARCH DEBUG: Starting search for query: '{query}'")
+        print(f"🔍 SEARCH DEBUG: Number of processed docs: {len(processed_docs)}")
+        
         # Get embeddings for the query
         query_embedding = self.get_embeddings([query])
         if not query_embedding:
+            print("❌ SEARCH DEBUG: Failed to get query embedding")
             return [], [], {}
+        
+        print("✅ SEARCH DEBUG: Got query embedding")
         
         # Search each document's FAISS index separately
         all_results = []
@@ -6612,63 +6645,85 @@ class ChatView(APIView):
         # Check if we have any valid documents to search
         valid_docs_found = False
         
-        for proc_doc in processed_docs:
+        for i, proc_doc in enumerate(processed_docs):
+            print(f"\n🔍 SEARCH DEBUG: Processing document {i+1}: {proc_doc.document.filename}")
+            
             # Skip documents without FAISS indices
             if not proc_doc.faiss_index or not proc_doc.metadata:
+                print(f"❌ SEARCH DEBUG: Missing FAISS index or metadata for {proc_doc.document.filename}")
                 continue
             
             # Skip if files don't exist
             if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
+                print(f"❌ SEARCH DEBUG: Files don't exist for {proc_doc.document.filename}")
+                print(f"   FAISS exists: {os.path.exists(proc_doc.faiss_index)}")
+                print(f"   Metadata exists: {os.path.exists(proc_doc.metadata)}")
                 continue
             
-            # First check if this is a LlamaParse document with markdown
-            markdown_content = None
-            if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
-                try:
-                    with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
-                        markdown_content = f.read()
-                    valid_docs_found = True
-                except Exception as e:
-                    logger.error(f"Error reading markdown file for {proc_doc.document.filename}: {str(e)}")
-            
-            # Load metadata for both document types
+            # Load metadata
             try:
                 with open(proc_doc.metadata, 'rb') as f:
                     chunks = pickle.load(f)
                 
+                print(f"✅ SEARCH DEBUG: Loaded {len(chunks)} chunks from {proc_doc.document.filename}")
+                
                 if not chunks:
-                    logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
-                    chunks = []
+                    print(f"⚠️ SEARCH DEBUG: No chunks found in metadata for {proc_doc.document.filename}")
+                    continue
                 elif not isinstance(chunks, list):
-                    logger.warning(f"Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
-                    chunks = []
+                    print(f"⚠️ SEARCH DEBUG: Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
+                    continue
+                
+                # Debug: Print first few chunks
+                for idx, chunk in enumerate(chunks[:3]):
+                    if isinstance(chunk, dict):
+                        chunk_text = chunk.get('text', chunk.get('content', ''))
+                        print(f"   Chunk {idx}: {chunk_text[:100]}...")
+                    else:
+                        print(f"   Chunk {idx}: {str(chunk)[:100]}...")
                 
                 # Add document source information to each chunk if missing
                 for chunk in chunks:
-                    if isinstance(chunk, dict) and 'source_file' not in chunk:
-                        chunk['source_file'] = proc_doc.document.filename
-                    if isinstance(chunk, dict) and not chunk.get('text'):
-                        for field in ['content', 'document_content', 'chunk_text']:
-                            if field in chunk:
-                                chunk['text'] = chunk[field]
-                                break
+                    if isinstance(chunk, dict):
+                        if 'source_file' not in chunk:
+                            chunk['source_file'] = proc_doc.document.filename
+                        
+                        # Ensure we have a 'text' field
+                        if not chunk.get('text'):
+                            for field in ['content', 'document_content', 'chunk_text']:
+                                if field in chunk:
+                                    chunk['text'] = chunk[field]
+                                    break
                 
                 # Try vector search with FAISS index
                 valid_docs_found = True
                 try:
                     index = faiss.read_index(proc_doc.faiss_index)
-                    distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
+                    print(f"✅ SEARCH DEBUG: Loaded FAISS index with {index.ntotal} vectors")
+                    
+                    distances, indices = index.search(
+                        np.array([query_embedding[0]]).astype('float32'), 
+                        min(k, index.ntotal)
+                    )
+                    
+                    print(f"✅ SEARCH DEBUG: FAISS search returned {len(indices[0])} results")
+                    print(f"   Best distances: {distances[0][:5]}")
+                    print(f"   Best indices: {indices[0][:5]}")
                     
                     # Extract results for this document
+                    doc_results_count = 0
                     for i, idx in enumerate(indices[0]):
-                        if idx < len(chunks):
-                            content = chunks[idx].get('text', '')
+                        if idx < len(chunks) and distances[0][i] < 1.5:  # Distance threshold
+                            chunk = chunks[idx]
+                            content = chunk.get('text', '') if isinstance(chunk, dict) else str(chunk)
+                            
                             if content and content.strip():
                                 # Create content hash to check for duplicates
                                 content_hash = hash(content[:200])  # Use first 200 chars for hash
                                 
                                 if content_hash not in seen_content_hashes:
                                     seen_content_hashes.add(content_hash)
+                                    doc_results_count += 1
                                     
                                     # Add numbered citation
                                     citation_count += 1
@@ -6680,96 +6735,96 @@ class ChatView(APIView):
                                         'text': content,
                                         'relevance_score': float(distances[0][i]),
                                         'document_id': proc_doc.document.id,
-                                        'chunk_idx': idx
+                                        'chunk_idx': idx,
+                                        'display_num': citation_key
                                     }
+                                    
                                     all_results.append(content)
                                     all_distances.append(distances[0][i])
                                     all_sources.append(proc_doc.document.filename)
                                     
+                                    print(f"   ✅ Added result {citation_count}: distance={distances[0][i]:.4f}, content='{content[:100]}...'")
+                    
+                    print(f"✅ SEARCH DEBUG: Added {doc_results_count} results from {proc_doc.document.filename}")
+                                    
                 except Exception as e:
-                    logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
-                    # Fallback logic here...
-                    # Fallback to basic text search for simple documents if vector search fails
+                    print(f"❌ SEARCH DEBUG: Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
+                    
+                    # Fallback to basic text search if FAISS fails
                     if chunks:
-                        # Use TF-IDF for matching if FAISS fails
+                        print(f"🔄 SEARCH DEBUG: Falling back to text search for {proc_doc.document.filename}")
                         query_lower = query.lower()
                         matched_chunks = []
                         
-                        for chunk in chunks:
+                        for chunk_idx, chunk in enumerate(chunks):
                             if isinstance(chunk, dict):
                                 chunk_text = chunk.get('text', '')
-                                if chunk_text and query_lower in chunk_text.lower():
-                                    matched_chunks.append(chunk)
+                            else:
+                                chunk_text = str(chunk)
+                                
+                            if chunk_text and query_lower in chunk_text.lower():
+                                matched_chunks.append((chunk_idx, chunk_text))
                         
-                        # Sort by simple text similarity
-                        if matched_chunks:
-                            logger.info(f"Found {len(matched_chunks)} text matches for {proc_doc.document.filename}")
-                            for chunk in matched_chunks[:5]:  # Limit to top 5 matches
-                                all_results.append(chunk.get('text', ''))
-                                all_distances.append(0.5)  # Middle value since we don't have real distances
+                        print(f"   Found {len(matched_chunks)} text matches")
+                        
+                        # Add top 5 text matches
+                        for chunk_idx, chunk_text in matched_chunks[:5]:
+                            content_hash = hash(chunk_text[:200])
+                            if content_hash not in seen_content_hashes:
+                                seen_content_hashes.add(content_hash)
+                                citation_count += 1
+                                
+                                citation_mapping[citation_count] = {
+                                    'source': proc_doc.document.filename,
+                                    'text': chunk_text,
+                                    'relevance_score': 0.5,  # Medium relevance for text matches
+                                    'document_id': proc_doc.document.id,
+                                    'chunk_idx': chunk_idx,
+                                    'display_num': citation_count
+                                }
+                                
+                                all_results.append(chunk_text)
+                                all_distances.append(0.5)
                                 all_sources.append(proc_doc.document.filename)
-                
-                # If we have markdown content but no vector results, do fallback text search on whole content
-                if markdown_content and not all_results:
-                    query_lower = query.lower()
-                    if query_lower in markdown_content.lower():
-                        # Split into paragraphs and find matching ones
-                        paragraphs = markdown_content.split('\n\n')
-                        for para in paragraphs:
-                            if query_lower in para.lower():
-                                all_results.append(para)
-                                all_distances.append(0.5)  # Middle value since we don't have real distances
-                                all_sources.append(proc_doc.document.filename)
+                                
+                                print(f"   ✅ Added text match {citation_count}: '{chunk_text[:100]}...'")
                     
             except Exception as e:
-                logger.error(f"Error processing metadata for {proc_doc.document.filename}: {str(e)}")
+                print(f"❌ SEARCH DEBUG: Error processing metadata for {proc_doc.document.filename}: {str(e)}")
                 continue
         
-        # Rest of the method remains the same but with improved deduplication
+        print(f"\n🔍 SEARCH DEBUG: Search completed. Found {len(all_results)} total results")
+        
         if not all_results:
             if valid_docs_found:
-                logger.warning(f"No matching content found in documents for query: {query}")
+                print(f"⚠️ SEARCH DEBUG: No matching content found in documents for query: {query}")
             else:
-                logger.warning(f"No valid documents found to search")
+                print(f"❌ SEARCH DEBUG: No valid documents found to search")
             return [], [], {}
         
-        # Apply TF-IDF ranking and final deduplication
-        try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            
-            vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-            try:
-                tfidf_matrix = vectorizer.fit_transform([query] + all_results)
-                tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
-                similarity_scores = [1 / (1 + dist) for dist in all_distances]
-                combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
-                
-                # Combine results with citation keys for proper tracking
-                combined_results = list(zip(all_results, all_sources, combined_scores, range(1, len(all_results) + 1)))
-                sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
-                
-                results = [res[0] for res in sorted_results]
-                sources = [res[1] for res in sorted_results]
-                
-                # Update citation mapping with new ranking
-                reordered_citation_mapping = {}
-                for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
-                    if old_key in citation_mapping:
-                        reordered_citation_mapping[new_idx] = citation_mapping[old_key]
-                        reordered_citation_mapping[new_idx]['display_num'] = new_idx
-                
-                citation_mapping = reordered_citation_mapping
-                
-            except Exception as e:
-                logger.error(f"Error in TF-IDF processing: {str(e)}")
-                results = all_results
-                sources = all_sources
-                
-        except Exception as e:
-            logger.error(f"Error applying TF-IDF ranking: {str(e)}")
-            # Fallback processing...
-            results = all_results
-            sources = all_sources
+        # Simple sorting by FAISS distance (lower is better)
+        # Combine results with their metadata for sorting
+        combined_results = list(zip(all_results, all_sources, all_distances, range(1, len(all_results) + 1)))
+        
+        # Sort by distance (ascending - lower distance = more similar)
+        sorted_results = sorted(combined_results, key=lambda x: x[2])
+        
+        print(f"🔍 SEARCH DEBUG: Sorted results by distance")
+        for i, (content, source, distance, _) in enumerate(sorted_results[:5]):
+            print(f"   Result {i+1}: distance={distance:.4f}, source='{source}', content='{content[:100]}...'")
+        
+        # Extract sorted results
+        results = [res[0] for res in sorted_results]
+        sources = [res[1] for res in sorted_results]
+        
+        # Update citation mapping with new ranking
+        reordered_citation_mapping = {}
+        for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+            if old_key in citation_mapping:
+                reordered_citation_mapping[new_idx] = citation_mapping[old_key].copy()
+                reordered_citation_mapping[new_idx]['display_num'] = new_idx
+        
+        citation_mapping = reordered_citation_mapping
         
         # Final deduplication while preserving order
         seen_content = set()
@@ -6788,12 +6843,20 @@ class ChatView(APIView):
                 new_citation_count += 1
                 old_idx = i + 1
                 if old_idx in citation_mapping:
-                    filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx]
+                    filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx].copy()
                     filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
         
         # Return top matches (limit to 15 most relevant)
         max_results = min(len(filtered_results), 15)
-        return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
+        final_results = filtered_results[:max_results]
+        final_sources = filtered_sources[:max_results]
+        final_citations = {k: v for k, v in filtered_citation_mapping.items() if k <= max_results}
+        
+        print(f"\n✅ SEARCH DEBUG: Final results: {len(final_results)} items")
+        for i, (content, source) in enumerate(zip(final_results[:3], final_sources[:3])):
+            print(f"   Final {i+1}: source='{source}', content='{content[:100]}...'")
+        
+        return final_results, final_sources, final_citations
     
     # Helper method to prepare context for response generation
     def _prepare_context(self, context, sources):
@@ -7862,3 +7925,964 @@ class ChatExportView(APIView):
                 paragraph.add_run("\n")
             elif child.name not in ['ul', 'ol']:
                 self.process_inline_elements(paragraph, child)
+
+
+
+class YouTubeUploadView(DocumentProcessingMixin, APIView):
+    parser_classes = (JSONParser,)
+   
+    def is_valid_youtube_url(self, url):
+        """Check if the provided URL is a valid YouTube URL."""
+        youtube_patterns = [
+            r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/)([a-zA-Z0-9_-]{11})',
+            r'(?:https?://)?(?:www\.)?youtube\.com/shorts/([a-zA-Z0-9_-]{11})',
+        ]
+       
+        for pattern in youtube_patterns:
+            if re.search(pattern, url):
+                return True
+        return False
+   
+    def download_youtube_audio(self, url):
+        """
+        Download YouTube video as audio using yt_dlp.
+        Returns the path to the downloaded audio file and video title.
+        """
+        try:
+            if not self.is_valid_youtube_url(url):
+                raise ValueError("Invalid YouTube URL provided")
+           
+            # Set up download directory
+            DOWNLOAD_DIR = "youtube_downloads"
+            os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+           
+            # Configure yt_dlp options for audio only
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
+                'extractaudio': True,
+                'audioformat': 'mp3',
+                'audioquality': '192K',
+                'noplaylist': True,
+                'quiet': False,
+                'no_warnings': False,
+            }
+           
+            logger.info(f"Starting download from: {url}")
+           
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Get video info first
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title', 'Unknown')
+                duration = info.get('duration', 0)
+               
+                # Check duration (optional limit)
+                if duration > 7200:  # 2 hour limit
+                    raise ValueError(f"Video is too long ({duration//60} minutes). Maximum allowed is 120 minutes.")
+               
+                logger.info(f"Title: {title}, Duration: {duration//60}:{duration%60:02d}")
+               
+                # Download the audio
+                ydl.download([url])
+               
+                # Find the downloaded file
+                expected_filename = ydl.prepare_filename(info)
+               
+                # Handle different possible extensions
+                possible_files = []
+                base_name = os.path.splitext(expected_filename)[0]
+               
+                # Common audio extensions when downloading audio
+                audio_extensions = ['.mp3', '.m4a', '.webm', '.opus']
+                for ext in audio_extensions:
+                    possible_files.append(base_name + ext)
+               
+                # Find which file actually exists
+                downloaded_file = None
+                for file_path in possible_files:
+                    if os.path.exists(file_path):
+                        downloaded_file = file_path
+                        break
+               
+                # If not found in expected locations, search the download directory
+                if not downloaded_file:
+                    for file in os.listdir(DOWNLOAD_DIR):
+                        if title.replace('/', '_').replace('\\', '_') in file:
+                            downloaded_file = os.path.join(DOWNLOAD_DIR, file)
+                            break
+               
+                if not downloaded_file:
+                    raise Exception("Downloaded file not found")
+               
+                logger.info(f"Successfully downloaded: {downloaded_file}")
+                return downloaded_file, title
+       
+        except Exception as e:
+            logger.error(f"Error downloading YouTube video: {str(e)}")
+            raise Exception(f"Failed to download YouTube video: {str(e)}")
+   
+    def process_document_from_text(self, text, filename):
+        """
+        Process extracted text directly without file operations.
+        Creates FAISS index and metadata from the provided text.
+        """
+        import numpy as np
+        import faiss
+        import pickle
+       
+        try:
+            # Clean the text
+            cleaned_text = self.clean_text(text)
+           
+            all_chunks = []
+            # Split text into chunks
+            chunks = self.split_text_into_chunks(cleaned_text)
+            for i, chunk in enumerate(chunks):
+                all_chunks.append({
+                    'content': chunk,  # Use 'content' key for consistency
+                    'source_file': filename,
+                    'chunk_id': i
+                })
+           
+            # Get embeddings for all chunks
+            text_chunks = [chunk['content'] for chunk in all_chunks]
+            logger.info(f"Getting embeddings for {len(text_chunks)} text chunks")
+            embeddings = self.get_embeddings(text_chunks)
+           
+            if not embeddings:
+                raise ValueError("Failed to generate embeddings for document chunks")
+           
+            # Create FAISS index
+            index = self.create_faiss_index(embeddings)
+           
+            # Generate a unique session ID for this document
+            session_id = uuid.uuid4().hex
+           
+            # Save the index and chunks
+            index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
+           
+            logger.info(f"Text processed successfully: {len(all_chunks)} chunks created")
+           
+            return {
+                'index_path': index_file,
+                'metadata_path': pickle_file,
+                'full_text': cleaned_text
+            }
+           
+        except Exception as e:
+            logger.error(f"Error in process_document_from_text: {str(e)}")
+            raise
+   
+    def post(self, request):
+        youtube_url = request.data.get('youtube_url')
+        user = request.user
+        main_project_id = request.data.get('main_project_id')
+        target_user_id = request.data.get('target_user_id')
+       
+        if not youtube_url:
+            return Response({
+                'error': 'YouTube URL is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        if not main_project_id:
+            return Response({
+                'error': 'Main project ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        if target_user_id and request.user.username == 'admin':
+            # Admin uploading for another user
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # Regular upload
+            user = request.user
+ 
+        try:
+            permissions = UserModulePermissions.objects.get(user=user)
+            if permissions.disabled_modules.get('document-upload', False):
+                return Response({
+                    'error': 'Document uploads are disabled for this user'
+                }, status=status.HTTP_403_FORBIDDEN)
+        except UserModulePermissions.DoesNotExist:
+            pass
+ 
+        try:
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Validate YouTube URL
+            if not self.is_valid_youtube_url(youtube_url):
+                return Response({
+                    'error': 'Invalid YouTube URL provided'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Download audio from YouTube
+            logger.info(f"Processing YouTube URL: {youtube_url}")
+            downloaded_file, video_title = self.download_youtube_audio(youtube_url)
+           
+            try:
+                # Extract text from downloaded audio
+                logger.info(f"Extracting text from downloaded audio: {video_title}")
+                extracted_text = self.extract_text_from_youtube_audio(downloaded_file, user=user)
+               
+                if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
+                    return Response({
+                        'error': f'Failed to extract text from YouTube video: {video_title}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+               
+                # Create transcript filename based on video title
+                # Clean the title for filename use
+                safe_title = re.sub(r'[^\w\s-]', '', video_title)
+                safe_title = re.sub(r'[-\s]+', '_', safe_title)
+                transcript_filename = f"{safe_title}_youtube_transcript.txt"
+               
+                # Check for existing document with similar name
+                existing_doc = Document.objects.filter(
+                    user=user,
+                    filename__icontains=safe_title,
+                    main_project=main_project
+                ).first()
+               
+                # Create a temporary file with the transcript
+                transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
+                with open(transcript_file_path, 'w', encoding='utf-8') as f:
+                    f.write(extracted_text)
+               
+                # Create a Django File object from the transcript
+                with open(transcript_file_path, 'rb') as f:
+                    from django.core.files import File
+                    django_file = File(f, name=transcript_filename)
+                   
+                    # Create or update document with transcript
+                    if existing_doc:
+                        # Update existing document
+                        existing_doc.file = django_file
+                        existing_doc.filename = transcript_filename
+                        existing_doc.save()
+                        document = existing_doc
+                        logger.info(f"Updated existing document: {document.id}")
+                    else:
+                        # Create new document with transcript
+                        document = Document.objects.create(
+                            user=user,
+                            file=django_file,
+                            filename=transcript_filename,
+                            main_project=main_project
+                        )
+                        logger.info(f"Created new document: {document.id}")
+               
+                # Delete the temporary transcript file
+                os.unlink(transcript_file_path)
+               
+                # Process the document for RAG
+                processed_data = self.process_document_from_text(extracted_text, transcript_filename)
+               
+                # Create or update ProcessedIndex
+                processed_index, created = ProcessedIndex.objects.get_or_create(
+                    document=document,
+                    defaults={
+                        'faiss_index': processed_data['index_path'],
+                        'metadata': processed_data['metadata_path'],
+                        'summary': "",
+                        'markdown_path': processed_data.get('markdown_path', '')
+                    }
+                )
+               
+                if not created:
+                    # Update existing ProcessedIndex
+                    processed_index.faiss_index = processed_data['index_path']
+                    processed_index.metadata = processed_data['metadata_path']
+                    processed_index.markdown_path = processed_data.get('markdown_path', '')
+                    processed_index.save()
+               
+                # Store the document ID in the session
+                request.session['active_document_id'] = document.id
+               
+                # Update project timestamp to track activity
+                update_project_timestamp(main_project_id, user)
+               
+                return Response({
+                    'message': 'YouTube video processed successfully',
+                    'document': {
+                        'id': document.id,
+                        'filename': transcript_filename,
+                        'original_video_title': video_title,
+                        'youtube_url': youtube_url
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
+           
+            finally:
+                # Clean up downloaded audio file
+                try:
+                    if os.path.exists(downloaded_file):
+                        os.unlink(downloaded_file)
+                        logger.info(f"Cleaned up downloaded file: {downloaded_file}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
+ 
+        except Exception as e:
+            logger.error(f"Error processing YouTube video: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while processing the YouTube video'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    # Add this method to your YouTubeUploadView class
+
+    def extract_text_from_youtube_audio(self, audio_file_path, user=None):
+        """
+        Extract text from audio file specifically for YouTube uploads using Google Gemini API.
+        Includes proper file state checking and fallback mechanisms.
+        """
+        import google.generativeai as genai
+        import time
+        import os
+        from pathlib import Path
+        
+        try:
+            # Configure the API (make sure you have GOOGLE_API_KEY in settings)
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+            
+            # Get file info
+            file_size = os.path.getsize(audio_file_path)
+            duration_minutes = file_size / (1024 * 1024 * 0.1)  # Rough estimate
+            
+            logger.info(f"Audio file: {audio_file_path}, Size: {file_size/(1024*1024):.2f}MB, Duration: {duration_minutes:.2f} minutes")
+            
+            # Check file format and size limitations
+            file_extension = Path(audio_file_path).suffix.lower()
+            if file_size > 500 * 1024 * 1024:  # 20MB limit
+                raise Exception(f"File too large: {file_size/(1024*1024):.2f}MB. Maximum size is 500MB.")
+            
+            # Upload the file with metadata
+            logger.info("Uploading audio file to Google API...")
+            try:
+                audio_file = genai.upload_file(
+                    path=audio_file_path,
+                    display_name=os.path.basename(audio_file_path),
+                    mime_type=f"audio/{file_extension.lstrip('.')}" if file_extension in ['.mp3', '.wav', '.m4a'] else 'audio/webm'
+                )
+            except Exception as upload_error:
+                logger.error(f"Upload failed: {upload_error}")
+                # Try different approach or return error
+                raise Exception(f"Failed to upload file to Google API: {upload_error}")
+            
+            logger.info(f"File uploaded successfully: {audio_file.name}")
+            
+            # Wait for the file to be processed with better error handling
+            logger.info(f"Waiting for file {audio_file.name} to be processed...")
+            max_wait_time = 180  # 3 minutes max wait (reduced from 5)
+            wait_interval = 3    # Check every 3 seconds
+            waited_time = 0
+            
+            while waited_time < max_wait_time:
+                try:
+                    current_file = genai.get_file(audio_file.name)
+                    state_name = getattr(current_file.state, 'name', str(current_file.state))
+                    logger.info(f"File state: {state_name}, waited: {waited_time}s")
+                    
+                    if state_name == "ACTIVE":
+                        logger.info(f"File {audio_file.name} is now ACTIVE and ready for processing")
+                        break
+                    elif state_name == "FAILED" or str(current_file.state) == "10":
+                        # Clean up failed file
+                        try:
+                            genai.delete_file(audio_file.name)
+                        except:
+                            pass
+                        raise Exception(f"Google API failed to process the audio file. This might be due to: unsupported format, corrupted audio, or content policy restrictions.")
+                    elif state_name == "PROCESSING":
+                        time.sleep(wait_interval)
+                        waited_time += wait_interval
+                    else:
+                        logger.warning(f"Unknown file state: {state_name}")
+                        time.sleep(wait_interval)
+                        waited_time += wait_interval
+                        
+                except Exception as status_error:
+                    logger.error(f"Error checking file status: {status_error}")
+                    time.sleep(wait_interval)
+                    waited_time += wait_interval
+            
+            # Final check
+            try:
+                final_file = genai.get_file(audio_file.name)
+                final_state = getattr(final_file.state, 'name', str(final_file.state))
+                if final_state != "ACTIVE":
+                    raise Exception(f"File processing timeout or failed. Final state: {final_state}")
+            except Exception as final_check_error:
+                raise Exception(f"File not ready for transcription: {final_check_error}")
+            
+            # Configure the model with a more stable version
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")  # Using more stable model
+            except:
+                model = genai.GenerativeModel("gemini-pro")  # Fallback
+            
+            # Create the prompt for transcription
+            prompt = """
+            Please transcribe this audio file accurately. 
+            Return only the spoken text content without any additional commentary.
+            Provide proper punctuation and formatting.
+            """
+            
+            # Generate the transcription with timeout
+            logger.info("Starting transcription...")
+            try:
+                response = model.generate_content([prompt, audio_file])
+                logger.info("Transcription completed")
+            except Exception as transcription_error:
+                logger.error(f"Transcription failed: {transcription_error}")
+                raise Exception(f"Failed to transcribe audio: {transcription_error}")
+            
+            # Clean up the uploaded file from Google's servers
+            try:
+                genai.delete_file(audio_file.name)
+                logger.info(f"Cleaned up file {audio_file.name} from Google's servers")
+            except Exception as cleanup_error:
+                logger.warning(f"Could not clean up file from Google's servers: {cleanup_error}")
+            
+            if response and response.text:
+                transcribed_text = response.text.strip()
+                if len(transcribed_text) < 10:  # Very short transcription might indicate an issue
+                    logger.warning(f"Transcription seems unusually short: '{transcribed_text}'")
+                return transcribed_text
+            else:
+                raise Exception("No transcription text was generated")
+                
+        except Exception as e:
+            logger.error(f"Error in extract_text_from_youtube_audio: {str(e)}")
+            return f"Error transcribing audio: {str(e)}"
+    def split_text_into_chunks(self, text, chunk_size=1000, overlap=200):
+        """
+        Split text into overlapping chunks for processing.
+        """
+        if not text or len(text.strip()) == 0:
+            return []
+        
+        words = text.split()
+        chunks = []
+        
+        for i in range(0, len(words), chunk_size - overlap):
+            chunk_words = words[i:i + chunk_size]
+            chunk_text = ' '.join(chunk_words)
+            if chunk_text.strip():
+                chunks.append(chunk_text)
+        
+        return chunks
+
+    def clean_text(self, text):
+        """
+        Clean and normalize text content.
+        """
+        import re
+        
+        if not text:
+            return ""
+        
+        # Remove extra whitespace and normalize line breaks
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\n+', '\n', text)
+        
+        # Remove special characters that might cause issues
+        text = re.sub(r'[^\w\s\.\,\!\?\;\:\-\(\)\[\]\"\'\n]', '', text)
+        
+        return text.strip()
+
+    def get_embeddings(self, texts):
+        """
+        Generate embeddings for text chunks using OpenAI or similar service.
+        """
+        try:
+            # You'll need to implement this based on your embedding service
+            # This is a placeholder - replace with your actual embedding logic
+            
+            import openai
+            from django.conf import settings
+            
+            if hasattr(settings, 'OPENAI_API_KEY'):
+                openai.api_key = settings.OPENAI_API_KEY
+                
+                embeddings = []
+                for text in texts:
+                    try:
+                        response = openai.embeddings.create(
+                            model="text-embedding-ada-002",
+                            input=text
+                        )
+                        embeddings.append(response.data[0].embedding)
+                    except Exception as e:
+                        logger.error(f"Error getting embedding: {e}")
+                        # Create a dummy embedding if API fails
+                        embeddings.append([0.0] * 1536)  # Ada-002 embedding size
+                
+                return embeddings
+            else:
+                # Fallback: create dummy embeddings
+                logger.warning("No OpenAI API key found, creating dummy embeddings")
+                return [[0.0] * 1536 for _ in texts]  # Dummy embeddings
+                
+        except Exception as e:
+            logger.error(f"Error in get_embeddings: {e}")
+            # Return dummy embeddings as fallback
+            return [[0.0] * 1536 for _ in texts]
+
+    def create_faiss_index(self, embeddings):
+        """
+        Create FAISS index from embeddings.
+        """
+        import numpy as np
+        import faiss
+        
+        if not embeddings:
+            raise ValueError("No embeddings provided")
+        
+        # Convert to numpy array
+        embeddings_array = np.array(embeddings, dtype=np.float32)
+        
+        # Create FAISS index
+        dimension = embeddings_array.shape[1]
+        index = faiss.IndexFlatL2(dimension)
+        index.add(embeddings_array)
+        
+        return index
+
+    def save_faiss_index(self, index, chunks, session_id):
+        """
+        Save FAISS index and metadata to files.
+        """
+        import pickle
+        import os
+        from django.conf import settings
+        
+        try:
+            # Create directory for indexes
+            index_dir = os.path.join(settings.MEDIA_ROOT, 'faiss_indexes')
+            os.makedirs(index_dir, exist_ok=True)
+            
+            # File paths
+            index_file = os.path.join(index_dir, f'index_{session_id}.faiss')
+            pickle_file = os.path.join(index_dir, f'metadata_{session_id}.pkl')
+            
+            # Save FAISS index
+            import faiss
+            faiss.write_index(index, index_file)
+            
+            # Save metadata
+            with open(pickle_file, 'wb') as f:
+                pickle.dump(chunks, f)
+            
+            logger.info(f"Saved FAISS index to {index_file}")
+            logger.info(f"Saved metadata to {pickle_file}")
+            
+            return index_file, pickle_file
+            
+        except Exception as e:
+            logger.error(f"Error in save_faiss_index: {str(e)}")
+            raise Exception(f"Failed to save FAISS index: {str(e)}")
+       
+
+class NoteManagementView(YouTubeUploadView, APIView):
+    parser_classes = (JSONParser,)
+   
+    def post(self, request):
+        """Handle note saving and conversion to document"""
+        action = request.data.get('action')  # 'save' or 'convert'
+       
+        if action == 'save':
+            return self.save_note(request)
+        elif action == 'convert':
+            return self.convert_note_to_document(request)
+        else:
+            return Response({
+                'error': 'Invalid action. Use "save" or "convert"'
+            }, status=status.HTTP_400_BAD_REQUEST)
+   
+    def save_note(self, request):
+        """Save or update a note"""
+        user = request.user
+        note_id = request.data.get('note_id')  # For updating existing note
+        title = request.data.get('title', '').strip()
+        content = request.data.get('content', '').strip()
+        main_project_id = request.data.get('main_project_id')
+        target_user_id = request.data.get('target_user_id')
+       
+        # Validate required fields
+        if not content:
+            return Response({
+                'error': 'Note content is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        if not main_project_id:
+            return Response({
+                'error': 'Main project ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        # Handle admin uploading for another user
+        if target_user_id and request.user.username == 'admin':
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+       
+        # Check user permissions
+        try:
+            permissions = UserModulePermissions.objects.get(user=user)
+            if permissions.disabled_modules.get('note-management', False):
+                return Response({
+                    'error': 'Note management is disabled for this user'
+                }, status=status.HTTP_403_FORBIDDEN)
+        except UserModulePermissions.DoesNotExist:
+            pass
+       
+        try:
+            # Verify project exists and belongs to user
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Generate title if not provided
+            if not title:
+                title = self.generate_note_title(content)
+           
+            # Save or update note
+            if note_id:
+                # Update existing note
+                try:
+                    note = Note.objects.get(id=note_id, user=user, main_project=main_project)
+                    note.title = title
+                    note.content = content
+                    note.save()
+                    logger.info(f"Updated note: {note.id}")
+                except Note.DoesNotExist:
+                    return Response({
+                        'error': 'Note not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # Create new note
+                note = Note.objects.create(
+                    user=user,
+                    title=title,
+                    content=content,
+                    main_project=main_project
+                )
+                logger.info(f"Created new note: {note.id}")
+           
+            # Update project timestamp
+            update_project_timestamp(main_project_id, user)
+           
+            return Response({
+                'message': 'Note saved successfully',
+                'note': {
+                    'id': note.id,
+                    'title': note.title,
+                    'content': note.content,
+                    'created_at': note.created_at,
+                    'updated_at': note.updated_at,
+                    'is_converted_to_document': note.is_converted_to_document
+                }
+            }, status=status.HTTP_201_CREATED if not note_id else status.HTTP_200_OK)
+           
+        except Project.DoesNotExist:
+            return Response({
+                'error': 'Project not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error saving note: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while saving the note'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+   
+    def convert_note_to_document(self, request):
+        """Convert a note to a document and process it for RAG"""
+        user = request.user
+        note_id = request.data.get('note_id')
+        target_user_id = request.data.get('target_user_id')
+ 
+        if not note_id:
+            return Response({
+                'error': 'Note ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+ 
+        # Handle admin converting for another user
+        if target_user_id and request.user.username == 'admin':
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+ 
+        # Check user permissions
+        try:
+            permissions = UserModulePermissions.objects.get(user=user)
+            if permissions.disabled_modules.get('document-upload', False):
+                return Response({
+                    'error': 'Document uploads are disabled for this user'
+                }, status=status.HTTP_403_FORBIDDEN)
+        except UserModulePermissions.DoesNotExist:
+            pass
+ 
+        try:
+            # Get the note
+            note = Note.objects.get(id=note_id, user=user)
+       
+            # Check if already converted
+            if note.is_converted_to_document and note.converted_document:
+                return Response({
+                    'error': 'This note has already been converted to a document',
+                    'document': {
+                        'id': note.converted_document.id,
+                        'filename': note.converted_document.filename
+                    }
+                }, status=status.HTTP_400_BAD_REQUEST)
+       
+            # Generate filename from note title
+            safe_title = self.sanitize_filename(note.title or f"Note_{note.id}")
+            filename = f"{safe_title}.txt"
+       
+            # Create temporary file with note content
+            temp_file_path = os.path.join(tempfile.gettempdir(), filename)
+       
+            try:
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    # Add title as header if available
+                    if note.title:
+                        f.write(f"Title: {note.title}\n")
+                        f.write("=" * (len(note.title) + 7) + "\n\n")
+                    f.write(note.content)
+           
+                # Create Django File object
+                with open(temp_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+               
+                    # Use transaction to ensure data consistency
+                    with transaction.atomic():
+                        # Create document
+                        document = Document.objects.create(
+                            user=user,
+                            file=django_file,
+                            filename=filename,
+                            main_project=note.main_project
+                        )
+                   
+                        logger.info(f"Created document from note: {document.id}")
+                   
+                        # Process the document for RAG using the inherited method
+                        try:
+                            # Prepare the content with title
+                            full_content = ""
+                            if note.title:
+                                full_content += f"Title: {note.title}\n"
+                                full_content += "=" * (len(note.title) + 7) + "\n\n"
+                            full_content += note.content
+                           
+                            # Use the process_document_from_text method from YouTubeUploadView
+                            processed_data = self.process_document_from_text(full_content, filename)
+                           
+                            logger.info(f"Note processed successfully for RAG")
+                           
+                        except Exception as processing_error:
+                            logger.error(f"Error processing note for RAG: {str(processing_error)}")
+                            # If processing fails, still create the document but without processing
+                            processed_data = {
+                                'index_path': '',
+                                'metadata_path': '',
+                                'full_text': full_content
+                            }
+                   
+                        # Create ProcessedIndex only if we have valid processing data
+                        if processed_data.get('index_path') and processed_data.get('metadata_path'):
+                            processed_index = ProcessedIndex.objects.create(
+                                document=document,
+                                faiss_index=processed_data['index_path'],
+                                metadata=processed_data['metadata_path'],
+                                summary="",
+                                markdown_path=processed_data.get('markdown_path', '')
+                            )
+                            logger.info(f"Created ProcessedIndex for document: {document.id}")
+                        else:
+                            logger.warning(f"Created document without ProcessedIndex due to processing error")
+                            # Re-raise the error if processing completely failed
+                            return Response({
+                                'error': 'Failed to process note content for search functionality'
+                            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                   
+                        # Update note to mark as converted
+                        note.is_converted_to_document = True
+                        note.converted_document = document
+                        note.save()
+                   
+                        # Store the document ID in the session
+                        request.session['active_document_id'] = document.id
+                   
+                        # Update project timestamp
+                        update_project_timestamp(note.main_project.id, user)
+           
+                return Response({
+                    'message': 'Note converted to document successfully',
+                    'note': {
+                        'id': note.id,
+                        'title': note.title,
+                        'is_converted_to_document': True
+                    },
+                    'document': {
+                        'id': document.id,
+                        'filename': filename,
+                        'uploaded_at': document.uploaded_at
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
+           
+            finally:
+                # Clean up temporary file
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+                        logger.info(f"Cleaned up temporary file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
+       
+        except Note.DoesNotExist:
+            return Response({
+                'error': 'Note not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error converting note to document: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while converting the note to document'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+       
+   
+    def get(self, request):
+        """Get notes for a user and project"""
+        user = request.user
+        main_project_id = request.GET.get('main_project_id')
+        target_user_id = request.GET.get('target_user_id')
+       
+        # Handle admin viewing notes for another user
+        if target_user_id and request.user.username == 'admin':
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+       
+        try:
+            # Filter notes
+            notes_query = Note.objects.filter(user=user)
+           
+            if main_project_id:
+                notes_query = notes_query.filter(main_project_id=main_project_id)
+           
+            notes = notes_query.order_by('-updated_at')
+           
+            notes_data = []
+            for note in notes:
+                note_data = {
+                    'id': note.id,
+                    'title': note.title,
+                    'content': note.content,
+                    'created_at': note.created_at,
+                    'updated_at': note.updated_at,
+                    'is_converted_to_document': note.is_converted_to_document,
+                    'main_project_id': note.main_project.id if note.main_project else None
+                }
+               
+                if note.converted_document:
+                    note_data['converted_document'] = {
+                        'id': note.converted_document.id,
+                        'filename': note.converted_document.filename
+                    }
+               
+                notes_data.append(note_data)
+           
+            return Response({
+                'notes': notes_data,
+                'count': len(notes_data)
+            }, status=status.HTTP_200_OK)
+           
+        except Exception as e:
+            logger.error(f"Error retrieving notes: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while retrieving notes'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+   
+    def delete(self, request):
+        """Delete a note"""
+        user = request.user
+        note_id = request.data.get('note_id')
+        target_user_id = request.data.get('target_user_id')
+       
+        if not note_id:
+            return Response({
+                'error': 'Note ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        # Handle admin deleting for another user
+        if target_user_id and request.user.username == 'admin':
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+       
+        try:
+            note = Note.objects.get(id=note_id, user=user)
+            note_title = note.title or f"Note {note.id}"
+            note.delete()
+           
+            logger.info(f"Deleted note: {note_id}")
+           
+            return Response({
+                'message': f'Note "{note_title}" deleted successfully'
+            }, status=status.HTTP_200_OK)
+           
+        except Note.DoesNotExist:
+            return Response({
+                'error': 'Note not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error deleting note: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while deleting the note'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+   
+    # Helper methods
+    def generate_note_title(self, content):
+        """Generate a title from note content"""
+        # Take first 50 characters and clean them up
+        title = content[:50].strip()
+        # Remove newlines and extra spaces
+        title = ' '.join(title.split())
+        # Add ellipsis if truncated
+        if len(content) > 50:
+            title += "..."
+        return title or "Untitled Note"
+   
+    def sanitize_filename(self, filename):
+        """Sanitize filename to make it safe for file system"""
+        import re
+       
+        # Remove or replace characters that are not allowed in filenames
+        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        # Remove leading/trailing dots and spaces
+        filename = filename.strip('. ')
+        # Ensure the filename is not empty
+        if not filename:
+            filename = 'untitled'
+        # Limit length to avoid file system issues
+        if len(filename) > 200:
+            filename = filename[:200]
+       
+        return filename
