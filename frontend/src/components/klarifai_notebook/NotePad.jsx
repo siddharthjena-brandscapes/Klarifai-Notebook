@@ -1,0 +1,671 @@
+// NotePad.jsx
+import  { useState, useEffect, useRef } from 'react';
+import { 
+  Plus, 
+  Save, 
+  Trash2, 
+  Edit3, 
+  X, 
+  Search,
+  StickyNote,
+  BookOpen,
+  Calendar,
+  FileUp,
+  Loader,
+  Expand 
+} from 'lucide-react';
+import { toast } from 'react-toastify';
+import { noteServiceNB } from '../../utils/axiosConfig';
+import NoteEditorModal from './NoteEditorModal';  
+import PropTypes from 'prop-types';
+
+const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
+  const [notes, setNotes] = useState([]);
+  const [selectedNote, setSelectedNote] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertingNoteId, setConvertingNoteId] = useState(null); // Track which note is converting
+  const textareaRef = useRef(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleExpandEditor = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleModalSave = async (title, content) => {
+    setNoteTitle(title);
+    setNoteContent(content);
+    await handleSaveNote();
+    setIsModalOpen(false);
+  };
+
+  // Fetch notes on component mount
+  useEffect(() => {
+    if (mainProjectId && isOpen) {
+      fetchNotes();
+    }
+  }, [mainProjectId, isOpen]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const minHeight = 150; // minimum height in pixels
+      const maxHeight = 350; // maximum height in pixels
+      const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  }, [noteContent]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchNotes(); // Refresh the notes list
+    };
+
+    document.addEventListener('refreshNotePad', handleRefresh);
+    
+    return () => {
+      document.removeEventListener('refreshNotePad', handleRefresh);
+    };
+  }, [mainProjectId]); 
+
+  const fetchNotes = async () => {
+    setIsLoading(true);
+    try {
+      console.log('Fetching notes for project:', mainProjectId);
+      const response = await noteServiceNB.getNotes(mainProjectId);
+      console.log('Notes fetch response:', response.data);
+      
+      if (response.data) {
+        // Handle different response formats
+        const notesData = response.data.notes || response.data.data || response.data || [];
+        setNotes(Array.isArray(notesData) ? notesData : []);
+        console.log('Notes loaded:', notesData.length);
+      } else {
+        setNotes([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch notes:', error);
+      toast.error('Failed to fetch notes');
+      setNotes([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Silent refresh function that doesn't show loading state
+  const refreshNotesQuietly = async () => {
+    try {
+      console.log('Quietly refreshing notes for project:', mainProjectId);
+      const response = await noteServiceNB.getNotes(mainProjectId);
+      console.log('Quiet notes fetch response:', response.data);
+      
+      if (response.data) {
+        const notesData = response.data.notes || response.data.data || response.data || [];
+        setNotes(Array.isArray(notesData) ? notesData : []);
+        console.log('Notes quietly updated:', notesData.length);
+      }
+    } catch (error) {
+      console.error('Failed to quietly refresh notes:', error);
+      // Don't show error toast for quiet refresh
+    }
+  };
+
+  const handleCreateNote = () => {
+    setSelectedNote(null);
+    setNoteTitle('');
+    setNoteContent('');
+    setIsEditing(true);
+  };
+
+  const handleSelectNote = (note) => {
+    if (isEditing && (noteTitle !== (selectedNote?.title || '') || noteContent !== (selectedNote?.content || ''))) {
+      if (window.confirm('You have unsaved changes. Are you sure you want to switch notes?')) {
+        setSelectedNote(note);
+        setNoteTitle(note.title || '');
+        setNoteContent(note.content || '');
+        setIsEditing(false);
+      }
+    } else {
+      setSelectedNote(note);
+      setNoteTitle(note.title || '');
+      setNoteContent(note.content || '');
+      setIsEditing(false);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteContent.trim()) {
+      toast.warning('Note content cannot be empty');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      console.log('Saving note:', {
+        title: noteTitle.trim() || 'Untitled Note',
+        content: noteContent.trim(),
+        mainProjectId,
+        noteId: selectedNote?.id
+      });
+
+      const response = await noteServiceNB.saveNote(
+        noteTitle.trim() || 'Untitled Note',
+        noteContent.trim(),
+        mainProjectId,
+        {},
+        null,
+        selectedNote?.id || null
+      );
+
+      console.log('Save note response:', response.data);
+
+      if (response.data) {
+        const isUpdate = selectedNote?.id;
+        toast.success(isUpdate ? 'Note updated successfully' : 'Note created successfully');
+        
+        const savedNote = response.data.note;
+        if (savedNote) {
+          // Update the notes list immediately without loading state
+          if (isUpdate) {
+            // Update existing note in the list
+            setNotes(prevNotes => 
+              prevNotes.map(note => 
+                note.id === savedNote.id ? savedNote : note
+              )
+            );
+          } else {
+            // Add new note to the beginning of the list
+            setNotes(prevNotes => [savedNote, ...prevNotes]);
+          }
+          
+          // Update selected note with the returned data
+          setSelectedNote(savedNote);
+          setNoteTitle(savedNote.title || '');
+          setNoteContent(savedNote.content || '');
+        }
+        
+        setIsEditing(false);
+        
+        // Optional: Do a quiet refresh after a short delay to ensure sync
+        setTimeout(() => {
+          refreshNotesQuietly();
+        }, 1000);
+      } else {
+        throw new Error('No response data received');
+      }
+    } catch (error) {
+      console.error('Failed to save note:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Failed to save note';
+      toast.error(errorMessage);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    if (window.confirm('Are you sure you want to delete this note?')) {
+      try {
+        console.log('Deleting note:', noteId);
+        const response = await noteServiceNB.deleteNote(noteId);
+        console.log('Delete note response:', response.data);
+        
+        toast.success('Note deleted successfully');
+        
+        // Remove note from list immediately
+        setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+        
+        if (selectedNote?.id === noteId) {
+          setSelectedNote(null);
+          setNoteTitle('');
+          setNoteContent('');
+          setIsEditing(false);
+        }
+        
+        // Optional: Do a quiet refresh after a short delay to ensure sync
+        setTimeout(() => {
+          refreshNotesQuietly();
+        }, 500);
+      } catch (error) {
+        console.error('Failed to delete note:', error);
+        const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Failed to delete note';
+        toast.error(errorMessage);
+      }
+    }
+  };
+
+  const handleConvertToDocument = async (noteId) => {
+    if (window.confirm('Convert this note to a document source? This will make it available for chat queries.')) {
+      setIsConverting(true);
+      setConvertingNoteId(noteId);
+      try {
+        console.log('Converting note to document:', noteId);
+        const response = await noteServiceNB.convertNoteToDocument(noteId);
+        console.log('Convert note response:', response.data);
+        
+        toast.success('Note converted to document successfully');
+        
+        // Update the notes array immediately
+        setNotes(prevNotes => 
+          prevNotes.map(note => 
+            note.id === noteId 
+              ? { ...note, is_converted_to_document: true }
+              : note
+          )
+        );
+        
+        // Update selected note if it's the one being converted
+        if (selectedNote?.id === noteId) {
+          setSelectedNote(prev => ({ ...prev, is_converted_to_document: true }));
+        }
+        
+        // Dispatch event to refresh documents in SideTab
+        const refreshDocsEvent = new CustomEvent('refreshDocuments');
+        document.dispatchEvent(refreshDocsEvent);
+        
+        // Optional: Do a quiet refresh after a short delay to ensure sync
+        setTimeout(() => {
+          refreshNotesQuietly();
+        }, 500);
+        
+      } catch (error) {
+        console.error('Failed to convert note:', error);
+        const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Failed to convert note to document';
+        toast.error(errorMessage);
+      } finally {
+        setIsConverting(false);
+        setConvertingNoteId(null);
+      }
+    }
+  };
+
+  // Fixed search functionality
+  const filteredNotes = notes.filter(note => {
+    if (!searchTerm.trim()) return true;
+    const searchLower = searchTerm.toLowerCase();
+    const titleMatch = (note.title || '').toLowerCase().includes(searchLower);
+    const contentMatch = (note.content || '').toLowerCase().includes(searchLower);
+    return titleMatch || contentMatch;
+  });
+
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Invalid date';
+    }
+  };
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={onToggle}
+        className="fixed right-4 top-1/2 transform -translate-y-1/2 z-30 
+                   bg-[#f5e6d8] dark:bg-gray-800/90 
+                   text-[#5e4636] dark:text-white
+                   p-3 rounded-l-xl shadow-lg
+                   hover:bg-[#e8d5c4] dark:hover:bg-gray-700/90
+                   transition-all duration-300 border-l border-t border-b
+                   border-[#d6cbbf] dark:border-blue-500/20"
+        title="Open Notes"
+      >
+        <StickyNote className="h-5 w-5" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed right-0 top-16 bottom-0 w-80 z-30  rounded-md
+                    bg-[#f9f7f4] dark:bg-gray-900/95 
+                    border-l border-[#e3d5c8] dark:border-blue-500/20 
+                    shadow-2xl backdrop-blur-md
+                    flex flex-col overflow-hidden">
+      
+      {/* Header */}
+      <div className="p-4 border-b border-[#e3d5c8] dark:border-blue-500/20 
+                      bg-[#f0eee5] dark:bg-gray-800/80">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <BookOpen className="h-5 w-5 text-[#a55233] dark:text-blue-400" />
+            <h2 className="text-lg font-semibold text-[#5e4636] dark:text-white">
+              Notes
+            </h2>
+          </div>
+          <button
+            onClick={onToggle}
+            className="text-[#8c715f] dark:text-gray-400 hover:text-[#5e4636] dark:hover:text-white
+                       p-1 rounded-full hover:bg-[#e8d5c4] dark:hover:bg-gray-700/50
+                       transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Search and Create */}
+        <div className="flex space-x-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 
+                             h-4 w-4 text-[#8c715f] dark:text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search notes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg
+                         bg-white dark:bg-gray-700/50
+                         border border-[#d6cbbf] dark:border-blue-500/20
+                         text-[#5e4636] dark:text-white
+                         placeholder:text-[#8c715f] dark:placeholder:text-gray-400
+                         focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
+                         focus:border-transparent"
+            />
+          </div>
+          <button
+            onClick={handleCreateNote}
+            disabled={isSaving}
+            className="p-2 bg-[#a55233] dark:bg-blue-600 
+                       hover:bg-[#8b4513] dark:hover:bg-blue-700
+                       text-white rounded-lg transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Create New Note"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Notes List */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {isLoading ? (
+          <div className="p-4 text-center text-[#8c715f] dark:text-gray-400">
+            <Loader className="h-5 w-5 animate-spin mx-auto mb-2" />
+            Loading notes...
+          </div>
+        ) : filteredNotes.length === 0 ? (
+          <div className="p-4 text-center text-[#8c715f] dark:text-gray-400">
+            {searchTerm ? 'No notes found matching your search' : 'No notes yet. Create your first note!'}
+          </div>
+        ) : (
+          <div className="p-2 space-y-2">
+            {filteredNotes.map((note) => (
+              <div
+                key={note.id}
+                onClick={() => handleSelectNote(note)}
+                className={`p-3 rounded-lg cursor-pointer transition-all duration-200
+                           border hover:shadow-md
+                           ${selectedNote?.id === note.id
+                             ? 'bg-[#a55233]/10 dark:bg-blue-600/20 border-[#a55233]/30 dark:border-blue-500/40'
+                             : 'bg-white dark:bg-gray-800/50 border-[#e3d5c8] dark:border-gray-700/50 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50'
+                           }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-[#5e4636] dark:text-white truncate text-sm">
+                      {note.title || 'Untitled Note'}
+                    </h3>
+                    <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1 line-clamp-2">
+                      {note.content ? note.content.substring(0, 100) + (note.content.length > 100 ? '...' : '') : 'No content'}
+                    </p>
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Calendar className="h-3 w-3 text-[#8c715f] dark:text-gray-500" />
+                      <span className="text-xs text-[#8c715f] dark:text-gray-500">
+                        {formatDate(note.updated_at || note.created_at)}
+                      </span>
+                      {note.is_converted_to_document && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs
+                                       bg-green-100 dark:bg-green-900/30 
+                                       text-green-800 dark:text-green-400">
+                          Document
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex space-x-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                    {!note.is_converted_to_document && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConvertToDocument(note.id);
+                        }}
+                        disabled={convertingNoteId === note.id}
+                        className="p-1 text-[#8c715f] dark:text-gray-400 
+                                   hover:text-green-600 dark:hover:text-green-400
+                                   hover:bg-green-50 dark:hover:bg-green-900/20 
+                                   rounded transition-colors
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Convert to Document Source"
+                      >
+                        {convertingNoteId === note.id ? (
+                          <Loader className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <FileUp className="h-3 w-3" />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteNote(note.id);
+                      }}
+                      className="p-1 text-[#8c715f] dark:text-gray-400 
+                                 hover:text-red-600 dark:hover:text-red-400
+                                 hover:bg-red-50 dark:hover:bg-red-900/20 
+                                 rounded transition-colors"
+                      title="Delete Note"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Note Editor */}
+      {(selectedNote || isEditing) && (
+        <div className="p-1 border-t border-[#e3d5c8] dark:border-blue-500/20 
+                bg-white dark:bg-gray-800/50 flex flex-col">
+
+          {/* Editor Header */}
+          <div className="p-2 border-b border-[#e3d5c8] dark:border-blue-500/20">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <Edit3 className="h-4 w-4 text-[#a55233] dark:text-blue-400" />
+                <span className="text-sm font-medium text-[#5e4636] dark:text-white">
+                  {isEditing ? 'Editing Note' : 'Viewing Note'}
+                </span>
+              </div>
+              <div className="flex space-x-1">
+                {isEditing && onOpenEditor && (
+                  <button
+                    onClick={() => onOpenEditor({
+                      id: selectedNote?.id,
+                      title: noteTitle,
+                      content: noteContent
+                    })}
+                    className="p-1.5 text-[#8c715f] dark:text-gray-400 
+                               hover:text-[#a55233] dark:hover:text-blue-400
+                               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
+                               rounded transition-colors"
+                    title="Expand Editor"
+                  >
+                    <Expand className="h-3 w-3" />
+                  </button>
+                )}
+
+                {!isEditing && (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="p-1.5 text-[#8c715f] dark:text-gray-400 
+                               hover:text-[#a55233] dark:hover:text-blue-400
+                               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
+                               rounded transition-colors"
+                    title="Edit Note"
+                  >
+                    <Edit3 className="h-3 w-3" />
+                  </button>
+                )}
+                {isEditing && (
+                  <>
+                    <button
+                      onClick={handleSaveNote}
+                      disabled={isSaving}
+                      className="p-1.5 text-white bg-[#a55233] dark:bg-blue-600 
+                                 hover:bg-[#8b4513] dark:hover:bg-blue-700
+                                 rounded transition-colors disabled:opacity-50
+                                 disabled:cursor-not-allowed"
+                      title="Save Note"
+                    >
+                      {isSaving ? (
+                        <Loader className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Save className="h-3 w-3" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditing(false);
+                        if (selectedNote) {
+                          setNoteTitle(selectedNote.title || '');
+                          setNoteContent(selectedNote.content || '');
+                        } else {
+                          setSelectedNote(null);
+                          setNoteTitle('');
+                          setNoteContent('');
+                        }
+                      }}
+                      className="p-1.5 text-[#8c715f] dark:text-gray-400 
+                                 hover:text-red-600 dark:hover:text-red-400
+                                 hover:bg-red-50 dark:hover:bg-red-900/20 
+                                 rounded transition-colors"
+                      title="Cancel"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <NoteEditorModal
+              isOpen={isModalOpen}
+              onClose={() => setIsModalOpen(false)}
+              noteTitle={noteTitle}
+              noteContent={noteContent}
+              onSave={handleModalSave}
+              isSaving={isSaving}
+            />
+
+            {/* Title Input */}
+            {isEditing ? (
+              <input
+                type="text"
+                value={noteTitle}
+                onChange={(e) => setNoteTitle(e.target.value)}
+                placeholder="Note title..."
+                className="w-full p-2 text-sm rounded-lg
+                           bg-[#f9f7f4] dark:bg-gray-700/50
+                           border border-[#d6cbbf] dark:border-blue-500/20
+                           text-[#5e4636] dark:text-white
+                           placeholder:text-[#8c715f] dark:placeholder:text-gray-400
+                           focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
+                           focus:border-transparent"
+              />
+            ) : (
+              <h3 className="text-sm font-medium text-[#5e4636] dark:text-white">
+                {noteTitle || 'Untitled Note'}
+              </h3>
+            )}
+          </div>
+
+          {/* Content Editor */}
+          <div className=" p-3 ">
+            {isEditing ? (
+              <textarea
+                ref={textareaRef}
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                placeholder="Start writing your note..."
+                className="w-full p-2 text-sm rounded-lg resize-none
+                           bg-[#f9f7f4] dark:bg-gray-700/50
+                           border border-[#d6cbbf] dark:border-blue-500/20
+                           text-[#5e4636] dark:text-white
+                           placeholder:text-[#8c715f] dark:placeholder:text-gray-400
+                           focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
+                           focus:border-transparent custom-scrollbar overflow-y-auto"
+                style={{ minHeight: '150px', height: 'auto' }}
+              />
+            ) : (
+              <div className="text-sm text-[#5e4636] dark:text-white 
+                  min-h-[150px] overflow-y-auto custom-scrollbar
+                  whitespace-pre-wrap p-2 bg-[#f9f7f4] dark:bg-gray-700/50
+                  border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg"
+                   style={{ maxHeight: Math.min(300, Math.max(150, (noteContent || '').split('\n').length * 20 + 40)) + 'px' }}>
+                {noteContent || 'No content'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Custom Scrollbar Styles */}
+      <style >{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 2px;
+          height: 2px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(214, 203, 191, 0.1);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(165, 82, 51, 0.3);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(165, 82, 51, 0.5);
+        }
+        
+        .dark .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(59, 130, 246, 0.1);
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(59, 130, 246, 0.3);
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(59, 130, 246, 0.5);
+        }
+
+        .line-clamp-2 {
+          overflow: hidden;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+NotePad.propTypes = {
+  mainProjectId: PropTypes.string.isRequired,
+  isOpen: PropTypes.bool.isRequired,
+  onToggle: PropTypes.func.isRequired,
+  onOpenEditor: PropTypes.func,
+};
+
+export default NotePad;
