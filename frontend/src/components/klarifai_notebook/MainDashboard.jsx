@@ -12,6 +12,10 @@ import backgroundImage from '../../assets/bg-main.jpg';
 import FaqButton from '../../components/faq/FaqButton';
 import { ThemeContext } from '../../context/ThemeContext'; // Import ThemeContext
 import SideTab from './SideTab';
+import YouTubeUploadModal from "../klarifai_notebook/YouTubeUploadModal";
+import NoteEditorModal from "../klarifai_notebook/NoteEditorModal";
+import NotePad from "../klarifai_notebook/Notepad";
+
 
 const MainDashboard = () => {
   const { mainProjectId } = useParams();
@@ -28,6 +32,62 @@ const MainDashboard = () => {
   const [chatInputFocused, setChatInputFocused] = useState(false);
   const { theme } = useContext(ThemeContext); // Get current theme from context\
   const [forceResetKey, setForceResetKey] = useState(0);
+  const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
+const [isNotePadOpen, setIsNotePadOpen] = useState(true);
+const [isNoteEditorModalOpen, setIsNoteEditorModalOpen] = useState(false);
+const handleToggleNotePad = () => {
+  setIsNotePadOpen(!isNotePadOpen);
+};
+
+const [modalNoteData, setModalNoteData] = useState({
+  id: null,
+  title: '',
+  content: ''
+});
+const [isModalSaving, setIsModalSaving] = useState(false);
+const handleOpenNoteEditor = (noteData = null) => {
+  setModalNoteData({
+    id: noteData?.id || null,
+    title: noteData?.title || '',
+    content: noteData?.content || ''
+  });
+  setIsNoteEditorModalOpen(true);
+};
+const handleCloseNoteEditor = () => {
+  setIsNoteEditorModalOpen(false);
+  setModalNoteData({ id: null, title: '', content: '' });
+};
+
+
+const handleSaveNoteFromModal = async (title, content) => {
+  setIsModalSaving(true);
+  try {
+    const { noteServiceNB } = await import('../../utils/axiosConfig');
+    
+    const response = await noteServiceNB.saveNote(
+      title.trim() || 'Untitled Note',
+      content.trim(),
+      mainProjectId,
+      {},
+      null,
+      modalNoteData.id || null
+    );
+
+    if (response.data) {
+      console.log('Note saved successfully from modal');
+      
+      // ADD THIS: Trigger NotePad refresh by dispatching custom event
+      const refreshEvent = new CustomEvent('refreshNotePad');
+      document.dispatchEvent(refreshEvent);
+      
+      handleCloseNoteEditor();
+    }
+  } catch (error) {
+    console.error('Failed to save note from modal:', error);
+  } finally {
+    setIsModalSaving(false);
+  }
+};
 
   // Pass this event handler to MainContent
   const handleChatInputFocus = () => {
@@ -202,37 +262,34 @@ const MainDashboard = () => {
           />
           
           {/* Centered Main Content Container */}
-          <div 
-            className={`
-              flex-1 
-              flex 
-              justify-center 
-              w-full 
-              overflow-hidden
-              transition-all 
-              duration-300 
-              ease-in-out 
-              ${!isMobile && isSidebarOpen 
-                ? 'px-0 max-w-[calc(100%-330px)]' 
-                : 'pl-0 max-w-full'
-              }
-            `}
-          >
-            <div 
-              className={`
-                w-full 
-                max-w-full 
-                transition-all 
-                duration-300 
-                ease-in-out 
-                pl-16
-                mx-16
-                ${!isMobile && isSidebarOpen 
-                  ? 'ml-0 w-[100%]' 
-                  : 'ml-0 w-full'
-                }
-              `}
-            >
+          <div className={`
+          flex-1 
+          flex 
+          justify-center 
+          w-full 
+          overflow-hidden
+          transition-all 
+          duration-300 
+          ease-in-out 
+          ${!isMobile && isSidebarOpen 
+            ? 'px-0 max-w-[calc(100%-330px)]' 
+            : 'pl-0 max-w-full'
+          }
+          ${isNotePadOpen ? 'pr-80' : 'pr-0'} // Add this line for notepad spacing
+        `}>
+            <div className={`
+            w-full 
+            max-w-full 
+            transition-all 
+            duration-300 
+            ease-in-out 
+            pl-16
+            mx-16
+            ${!isMobile && isSidebarOpen 
+              ? 'ml-0 w-[100%]' 
+              : 'ml-0 w-full'
+            }
+          `}>
               <MainChat
                 key={`chat-${forceResetKey}`} 
                 selectedChat={selectedChat}
@@ -250,12 +307,38 @@ const MainDashboard = () => {
                 selectedDocuments={selectedDocuments}
                 className="w-full"
                 onChatInputFocus={handleChatInputFocus}
+                onOpenYouTubeModal={() => setIsYouTubeModalOpen(true)}
               />
             </div>
           </div>
         </div>
       </div>
-     
+     <YouTubeUploadModal
+  isOpen={isYouTubeModalOpen}
+  onClose={() => setIsYouTubeModalOpen(false)}
+  mainProjectId={mainProjectId}
+  onUploadSuccess={(data) => {
+    console.log('Upload successful:', data);
+    // Add any additional success handling here
+  }}
+/>
+<NotePad
+  mainProjectId={mainProjectId}
+  isOpen={isNotePadOpen}
+  onToggle={handleToggleNotePad}
+  onOpenEditor={handleOpenNoteEditor} // ADD THIS PROP
+/>
+
+<NoteEditorModal
+  isOpen={isNoteEditorModalOpen}
+  onClose={handleCloseNoteEditor}
+  noteTitle={modalNoteData.title}
+  noteContent={modalNoteData.content}
+  onSave={handleSaveNoteFromModal}
+  isSaving={isModalSaving}
+/>
+
+
     </div>
   );
 };
