@@ -970,6 +970,26 @@ export const documentServiceNB = {
     });
   },
 
+  //added new instance for youtube links
+
+  uploadYouTubeVideo: (youtubeUrl, mainProjectId, config = {}, targetUserId = null) => {
+    const data = {
+      youtube_url: youtubeUrl,
+      main_project_id: mainProjectId,
+    };
+    
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+  
+    return axiosInstance.post("notebook/upload-youtube-NB/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    });
+  },
+
   // Add this new method for custom upload handling
   getCustomInstance: () => {
     // Create a fresh instance with the same base config
@@ -1298,6 +1318,121 @@ export const userServiceNB = {
     return axiosInstance.put("/user/profile-NB/", data);
   },
 };
+
+
+export const noteServiceNB = {
+  // Save or update a note
+  saveNote: (noteTitle, noteContent, mainProjectId, config = {}, targetUserId = null, noteId = null) => {
+    const data = {
+      action: 'save',
+      title: noteTitle?.trim() || '',
+      content: noteContent?.trim() || '',
+      main_project_id: mainProjectId,
+    };
+   
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+ 
+    if (noteId) {
+      data.note_id = noteId;
+    }
+ 
+    console.log('Saving note with data:', data);
+   
+    return axiosInstance.post("notebook/notes-NB/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    }).then(response => {
+      console.log('Note save response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Note save error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+ 
+  // Convert note to document source
+  convertNoteToDocument: (noteId, config = {}, targetUserId = null) => {
+    const data = {
+      action: 'convert',
+      note_id: noteId,
+    };
+   
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+ 
+    console.log('Converting note to document with data:', data);
+   
+    return axiosInstance.post("notebook/notes-NB/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    }).then(response => {
+      console.log('Note conversion response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Note conversion error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+ 
+  // Get notes for a project
+  getNotes: (mainProjectId, config = {}, targetUserId = null) => {
+    const params = {
+      main_project_id: mainProjectId,
+    };
+   
+    if (targetUserId) {
+      params.target_user_id = targetUserId;
+    }
+ 
+    console.log('Fetching notes with params:', params);
+    return axiosInstance.get("notebook/notes-NB/", {
+      params,
+      ...config,
+    }).then(response => {
+      console.log('Get notes response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Get notes error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+ 
+  // Delete a note
+  deleteNote: (noteId, config = {}, targetUserId = null) => {
+    const data = {
+      note_id: noteId,
+    };
+   
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+ 
+    console.log('Deleting note with data:', data);
+   
+    return axiosInstance.delete("notebook/notes-NB/", {
+      data,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    }).then(response => {
+      console.log('Note delete response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Note delete error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+};
+ 
+
 
 
 export default axiosInstance;
