@@ -15,7 +15,8 @@ import SideTab from './SideTab';
 import YouTubeUploadModal from "../klarifai_notebook/YouTubeUploadModal";
 import NoteEditorModal from "../klarifai_notebook/NoteEditorModal";
 import NotePad from "../klarifai_notebook/Notepad";
-
+import NoteViewerModal from "../klarifai_notebook/NoteViewerModal";
+import ConfirmationModal from "../klarifai_notebook/ConfirmationModal";
 
 const MainDashboard = () => {
   const { mainProjectId } = useParams();
@@ -35,15 +36,83 @@ const MainDashboard = () => {
   const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
 const [isNotePadOpen, setIsNotePadOpen] = useState(true);
 const [isNoteEditorModalOpen, setIsNoteEditorModalOpen] = useState(false);
+const [isNoteViewerModalOpen, setIsNoteViewerModalOpen] = useState(false);
+const [modalViewerNoteData, setModalViewerNoteData] = useState(null);
 const handleToggleNotePad = () => {
   setIsNotePadOpen(!isNotePadOpen);
 };
+
+const [confirmationModal, setConfirmationModal] = useState({
+  isOpen: false,
+  type: 'delete', // 'delete' | 'convert'
+  data: null,
+  isLoading: false
+});
+
+
 
 const [modalNoteData, setModalNoteData] = useState({
   id: null,
   title: '',
   content: ''
 });
+
+
+const handleOpenNoteViewer = (noteData) => {
+  setModalViewerNoteData(noteData);
+  setIsNoteViewerModalOpen(true);
+};
+
+const handleCloseNoteViewer = () => {
+  setIsNoteViewerModalOpen(false);
+  setModalViewerNoteData(null);
+};
+
+
+const handleDeleteNote = async () => {
+  if (!confirmationModal.data) return;
+  
+  try {
+    const { noteServiceNB } = await import('../../utils/axiosConfig');
+    await noteServiceNB.deleteNote(confirmationModal.data.id);
+    
+    // Trigger NotePad refresh
+    const refreshEvent = new CustomEvent('refreshNotePad');
+    document.dispatchEvent(refreshEvent);
+    
+    setConfirmationModal({ isOpen: false, type: 'delete', data: null, isLoading: false });
+  } catch (error) {
+    console.error('Failed to delete note:', error);
+    setConfirmationModal(prev => ({ ...prev, isLoading: false }));
+  }
+};
+
+const handleConvertToDocument = async () => {
+  if (!confirmationModal.data) return;
+  
+  setConfirmationModal(prev => ({ ...prev, isLoading: true }));
+  
+  try {
+    const { noteServiceNB } = await import('../../utils/axiosConfig');
+    await noteServiceNB.convertNoteToDocument(confirmationModal.data.id);
+    
+    // Trigger NotePad refresh
+    const refreshEvent = new CustomEvent('refreshNotePad');
+    document.dispatchEvent(refreshEvent);
+    
+    // Trigger documents refresh
+    const refreshDocsEvent = new CustomEvent('refreshDocuments');
+    document.dispatchEvent(refreshDocsEvent);
+    
+    setConfirmationModal({ isOpen: false, type: 'convert', data: null, isLoading: false });
+  } catch (error) {
+    console.error('Failed to convert note:', error);
+    setConfirmationModal(prev => ({ ...prev, isLoading: false }));
+  }
+};
+
+
+
 const [isModalSaving, setIsModalSaving] = useState(false);
 const handleOpenNoteEditor = (noteData = null) => {
   setModalNoteData({
@@ -110,6 +179,21 @@ const handleSaveNoteFromModal = async (title, content) => {
   const handleCloseSummary = useCallback(() => {
     setIsSummaryPopupOpen(false);
   }, []);
+
+// This should already exist in your MainDashboard.jsx
+useEffect(() => {
+  const handleRefresh = () => {
+    // NotePad will handle its own refresh through the event listener
+  };
+
+  document.addEventListener('refreshNotePad', handleRefresh);
+  
+  return () => {
+    document.removeEventListener('refreshNotePad', handleRefresh);
+  };
+}, []);
+
+
 
   useEffect(() => {
     console.log('Dashboard mounted with mainProjectId:', mainProjectId);
@@ -326,7 +410,9 @@ const handleSaveNoteFromModal = async (title, content) => {
   mainProjectId={mainProjectId}
   isOpen={isNotePadOpen}
   onToggle={handleToggleNotePad}
-  onOpenEditor={handleOpenNoteEditor} // ADD THIS PROP
+  onOpenEditor={handleOpenNoteEditor}
+  onOpenViewer={handleOpenNoteViewer}
+  onShowConfirmation={setConfirmationModal}   
 />
 
 <NoteEditorModal
@@ -337,7 +423,24 @@ const handleSaveNoteFromModal = async (title, content) => {
   onSave={handleSaveNoteFromModal}
   isSaving={isModalSaving}
 />
-
+<NoteViewerModal
+  isOpen={isNoteViewerModalOpen}
+  onClose={handleCloseNoteViewer}
+  note={modalViewerNoteData}
+  onEdit={() => {
+    handleOpenNoteEditor(modalViewerNoteData);
+    handleCloseNoteViewer();
+  }}
+/>
+<ConfirmationModal
+  isOpen={confirmationModal.isOpen}
+  type={confirmationModal.type}
+  onClose={() => setConfirmationModal({ isOpen: false, type: 'delete', data: null, isLoading: false })}
+  onConfirm={confirmationModal.type === 'delete' ? handleDeleteNote : handleConvertToDocument}
+  itemName={confirmationModal.data?.title || 'Untitled Note'}
+  isLoading={confirmationModal.isLoading}
+  loadingText={confirmationModal.type === 'convert' ? 'Converting...' : 'Deleting...'}
+/>
 
     </div>
   );
