@@ -1081,6 +1081,49 @@ export const documentServiceNB = {
     });
   },
 
+    // Upload website content
+  uploadWebsite: (websiteUrl, mainProjectId, config = {}, targetUserId = null, customTitle = null) => {
+    const data = {
+      website_url: websiteUrl,
+      main_project_id: mainProjectId,
+    };
+   
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+   
+    if (customTitle) {
+      data.custom_title = customTitle;
+    }
+ 
+    return axiosInstance.post("notebook/upload-website-NB/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    });
+  },
+ 
+  // Upload plain text
+  uploadPlainText: (textContent, title, mainProjectId, config = {}, targetUserId = null) => {
+    const data = {
+      text_content: textContent,
+      title: title,
+      main_project_id: mainProjectId,
+    };
+   
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+ 
+    return axiosInstance.post("notebook/upload-text-NB/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    });
+  },
+
   deleteDocument: (documentId, mainProjectId) =>
     axiosInstance.delete(`notebook/documents-NB/${documentId}/delete/`, {
       params: { main_project_id: mainProjectId },

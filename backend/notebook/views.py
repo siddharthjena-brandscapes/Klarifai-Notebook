@@ -85,6 +85,24 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
+import requests
+from bs4 import BeautifulSoup
+import tempfile
+import os
+import re
+from urllib.parse import urlparse, urljoin
+from django.core.files import File
+from django.db import transaction
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.parsers import JSONParser
+from .models import Document, ProcessedIndex, UserModulePermissions
+from core.models import Project
+from core.utils import update_project_timestamp
+import logging
+ 
+logger = logging.getLogger(__name__)
 
 
 
@@ -7930,6 +7948,23 @@ class ChatExportView(APIView):
 
 class YouTubeUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
+
+    def sanitize_filename(self, filename):
+        """Sanitize filename to make it safe for file system"""
+        import re
+        
+        # Remove or replace characters that are not allowed in filenames
+        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        # Remove leading/trailing dots and spaces
+        filename = filename.strip('. ')
+        # Ensure the filename is not empty
+        if not filename:
+            filename = 'untitled'
+        # Limit length to avoid file system issues
+        if len(filename) > 200:
+            filename = filename[:200]
+        
+        return filename
    
     def is_valid_youtube_url(self, url):
         """Check if the provided URL is a valid YouTube URL."""
@@ -8886,3 +8921,452 @@ class NoteManagementView(YouTubeUploadView, APIView):
             filename = filename[:200]
        
         return filename
+
+
+
+ 
+class WebsiteLinkUploadView(YouTubeUploadView):
+    """
+    Inherits from YouTubeUploadView to reuse document processing methods.
+    Extracts text content from website URLs using BeautifulSoup.
+    """
+    parser_classes = (JSONParser,)
+   
+    def is_valid_url(self, url):
+        """Check if the provided URL is valid"""
+        try:
+            parsed = urlparse(url)
+            return bool(parsed.netloc) and bool(parsed.scheme)
+        except:
+            return False
+   
+    def extract_text_from_website(self, url, timeout=30):
+        """
+        Extract text content from a website URL using BeautifulSoup.
+        Returns the extracted text and page title.
+        """
+        try:
+            # Validate URL
+            if not self.is_valid_url(url):
+                raise ValueError("Invalid URL provided")
+           
+            # Add protocol if missing
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+           
+            logger.info(f"Fetching content from: {url}")
+           
+            # Set up headers to mimic a real browser
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+           
+            # Make request with timeout
+            response = requests.get(url, headers=headers, timeout=timeout, verify=True)
+            response.raise_for_status()
+           
+            # Check content type
+            content_type = response.headers.get('content-type', '').lower()
+            if 'text/html' not in content_type:
+                raise ValueError(f"URL does not contain HTML content. Content-Type: {content_type}")
+           
+            # Parse HTML content
+            soup = BeautifulSoup(response.content, 'html.parser')
+           
+            # Extract title
+            title_tag = soup.find('title')
+            page_title = title_tag.get_text().strip() if title_tag else 'Untitled Page'
+           
+            # Remove script and style elements
+            for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
+                script.decompose()
+           
+            # Try to find main content areas first
+            main_content = None
+            content_selectors = [
+                'main', 'article', '[role="main"]', '.main-content',
+                '.content', '.post-content', '.entry-content', '#content',
+                '.article-body', '.story-body', '.post-body'
+            ]
+           
+            for selector in content_selectors:
+                main_content = soup.select_one(selector)
+                if main_content:
+                    logger.info(f"Found main content using selector: {selector}")
+                    break
+           
+            # If no main content found, use body
+            if not main_content:
+                main_content = soup.find('body')
+                logger.info("Using body tag as main content")
+           
+            if not main_content:
+                raise ValueError("Could not find any content in the webpage")
+           
+            # Extract text content
+            text_content = main_content.get_text(separator='\n', strip=True)
+           
+            # Clean up the text
+            lines = text_content.split('\n')
+            cleaned_lines = []
+           
+            for line in lines:
+                line = line.strip()
+                # Skip empty lines and very short lines (likely navigation/UI elements)
+                if len(line) > 3 and not line.isdigit():
+                    cleaned_lines.append(line)
+           
+            cleaned_text = '\n'.join(cleaned_lines)
+           
+            # Remove excessive whitespace
+            cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
+            cleaned_text = re.sub(r' {2,}', ' ', cleaned_text)
+           
+            if len(cleaned_text.strip()) < 50:
+                raise ValueError("Extracted content is too short (less than 50 characters)")
+           
+            logger.info(f"Successfully extracted {len(cleaned_text)} characters from {url}")
+            logger.info(f"Page title: {page_title}")
+           
+            return cleaned_text, page_title
+           
+        except requests.exceptions.Timeout:
+            raise Exception(f"Request timeout while fetching URL: {url}")
+        except requests.exceptions.ConnectionError:
+            raise Exception(f"Connection error while fetching URL: {url}")
+        except requests.exceptions.HTTPError as e:
+            raise Exception(f"HTTP error {e.response.status_code} while fetching URL: {url}")
+        except Exception as e:
+            logger.error(f"Error extracting text from website: {str(e)}")
+            raise Exception(f"Failed to extract text from website: {str(e)}")
+   
+    def post(self, request):
+        website_url = request.data.get('website_url')
+        user = request.user
+        main_project_id = request.data.get('main_project_id')
+        target_user_id = request.data.get('target_user_id')
+        custom_title = request.data.get('custom_title', '')  # Optional custom title
+       
+        if not website_url:
+            return Response({
+                'error': 'Website URL is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        if not main_project_id:
+            return Response({
+                'error': 'Main project ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        # Handle admin uploading for another user
+        if target_user_id and request.user.username == 'admin':
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+       
+        # Check user permissions
+        try:
+            permissions = UserModulePermissions.objects.get(user=user)
+            if permissions.disabled_modules.get('document-upload', False):
+                return Response({
+                    'error': 'Document uploads are disabled for this user'
+                }, status=status.HTTP_403_FORBIDDEN)
+        except UserModulePermissions.DoesNotExist:
+            pass
+       
+        try:
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Extract text from website
+            logger.info(f"Processing website URL: {website_url}")
+            extracted_text, page_title = self.extract_text_from_website(website_url)
+           
+            if not extracted_text or len(extracted_text.strip()) < 10:
+                return Response({
+                    'error': f'Failed to extract meaningful content from website: {website_url}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Use custom title if provided, otherwise use page title
+            final_title = custom_title.strip() if custom_title.strip() else page_title
+           
+            # Create filename based on title
+            safe_title = self.sanitize_filename(final_title)
+            filename = f"{safe_title}_website_content.txt"
+           
+            # Check for existing document with similar name
+            existing_doc = Document.objects.filter(
+                user=user,
+                filename__icontains=safe_title,
+                main_project=main_project
+            ).first()
+           
+            # Create temporary file with the extracted content
+            temp_file_path = os.path.join(tempfile.gettempdir(), filename)
+           
+            try:
+                # Prepare content with metadata
+                full_content = f"Website URL: {website_url}\n"
+                full_content += f"Title: {final_title}\n"
+                full_content += "=" * (len(final_title) + 7) + "\n\n"
+                full_content += extracted_text
+               
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    f.write(full_content)
+               
+                # Create Django File object
+                with open(temp_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+                   
+                    # Use transaction to ensure data consistency
+                    with transaction.atomic():
+                        # Create or update document
+                        if existing_doc:
+                            existing_doc.file = django_file
+                            existing_doc.filename = filename
+                            existing_doc.save()
+                            document = existing_doc
+                            logger.info(f"Updated existing document: {document.id}")
+                        else:
+                            document = Document.objects.create(
+                                user=user,
+                                file=django_file,
+                                filename=filename,
+                                main_project=main_project
+                            )
+                            logger.info(f"Created new document: {document.id}")
+               
+                # Process the document for RAG
+                processed_data = self.process_document_from_text(full_content, filename)
+               
+                # Create or update ProcessedIndex
+                processed_index, created = ProcessedIndex.objects.get_or_create(
+                    document=document,
+                    defaults={
+                        'faiss_index': processed_data['index_path'],
+                        'metadata': processed_data['metadata_path'],
+                        'summary': "",
+                        'markdown_path': processed_data.get('markdown_path', '')
+                    }
+                )
+               
+                if not created:
+                    processed_index.faiss_index = processed_data['index_path']
+                    processed_index.metadata = processed_data['metadata_path']
+                    processed_index.markdown_path = processed_data.get('markdown_path', '')
+                    processed_index.save()
+               
+                # Store the document ID in the session
+                request.session['active_document_id'] = document.id
+               
+                # Update project timestamp
+                update_project_timestamp(main_project_id, user)
+               
+                return Response({
+                    'message': 'Website content processed successfully',
+                    'document': {
+                        'id': document.id,
+                        'filename': filename,
+                        'original_page_title': page_title,
+                        'website_url': website_url,
+                        'content_length': len(extracted_text)
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
+               
+            finally:
+                # Clean up temporary file
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+                        logger.info(f"Cleaned up temporary file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
+       
+        except Exception as e:
+            logger.error(f"Error processing website: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while processing the website content'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+ 
+# ===========================================
+# 2. PLAIN TEXT UPLOAD CLASS
+# ===========================================
+ 
+class PlainTextUploadView(YouTubeUploadView):
+    """
+    Inherits from YouTubeUploadView to reuse document processing methods.
+    Processes plain text content directly from frontend.
+    """
+    parser_classes = (JSONParser,)
+   
+    def post(self, request):
+        text_content = request.data.get('text_content')
+        user = request.user
+        main_project_id = request.data.get('main_project_id')
+        target_user_id = request.data.get('target_user_id')
+        custom_title = request.data.get('title', '')  # Optional title for the text
+       
+        if not text_content or not text_content.strip():
+            return Response({
+                'error': 'Text content is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        if not main_project_id:
+            return Response({
+                'error': 'Main project ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        # Validate text length
+        if len(text_content.strip()) < 10:
+            return Response({
+                'error': 'Text content must be at least 10 characters long'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        if len(text_content) > 1000000:  # 1MB text limit
+            return Response({
+                'error': 'Text content is too large (maximum 1MB)'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        # Handle admin uploading for another user
+        if target_user_id and request.user.username == 'admin':
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+       
+        # Check user permissions
+        try:
+            permissions = UserModulePermissions.objects.get(user=user)
+            if permissions.disabled_modules.get('document-upload', False):
+                return Response({
+                    'error': 'Document uploads are disabled for this user'
+                }, status=status.HTTP_403_FORBIDDEN)
+        except UserModulePermissions.DoesNotExist:
+            pass
+       
+        try:
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Generate title if not provided
+            if not custom_title.strip():
+                # Generate title from first 50 characters of content
+                first_line = text_content.strip().split('\n')[0]
+                custom_title = first_line[:50].strip()
+                if len(first_line) > 50:
+                    custom_title += "..."
+                if not custom_title:
+                    custom_title = "Plain Text Document"
+           
+            # Create filename based on title
+            safe_title = self.sanitize_filename(custom_title)
+            filename = f"{safe_title}_plain_text.txt"
+           
+            # Check for existing document with similar name
+            existing_doc = Document.objects.filter(
+                user=user,
+                filename__icontains=safe_title,
+                main_project=main_project
+            ).first()
+           
+            # Create temporary file with the text content
+            temp_file_path = os.path.join(tempfile.gettempdir(), filename)
+           
+            try:
+                # Prepare content with title header
+                full_content = f"Title: {custom_title}\n"
+                full_content += "=" * (len(custom_title) + 7) + "\n\n"
+                full_content += text_content.strip()
+               
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    f.write(full_content)
+               
+                # Create Django File object
+                with open(temp_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+                   
+                    # Use transaction to ensure data consistency
+                    with transaction.atomic():
+                        # Create or update document
+                        if existing_doc:
+                            existing_doc.file = django_file
+                            existing_doc.filename = filename
+                            existing_doc.save()
+                            document = existing_doc
+                            logger.info(f"Updated existing document: {document.id}")
+                        else:
+                            document = Document.objects.create(
+                                user=user,
+                                file=django_file,
+                                filename=filename,
+                                main_project=main_project
+                            )
+                            logger.info(f"Created new document: {document.id}")
+               
+                # Process the document for RAG
+                processed_data = self.process_document_from_text(full_content, filename)
+               
+                # Create or update ProcessedIndex
+                processed_index, created = ProcessedIndex.objects.get_or_create(
+                    document=document,
+                    defaults={
+                        'faiss_index': processed_data['index_path'],
+                        'metadata': processed_data['metadata_path'],
+                        'summary': "",
+                        'markdown_path': processed_data.get('markdown_path', '')
+                    }
+                )
+               
+                if not created:
+                    processed_index.faiss_index = processed_data['index_path']
+                    processed_index.metadata = processed_data['metadata_path']
+                    processed_index.markdown_path = processed_data.get('markdown_path', '')
+                    processed_index.save()
+               
+                # Store the document ID in the session
+                request.session['active_document_id'] = document.id
+               
+                # Update project timestamp
+                update_project_timestamp(main_project_id, user)
+               
+                return Response({
+                    'message': 'Plain text processed successfully',
+                    'document': {
+                        'id': document.id,
+                        'filename': filename,
+                        'title': custom_title,
+                        'content_length': len(text_content),
+                        'word_count': len(text_content.split())
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
+               
+            finally:
+                # Clean up temporary file
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+                        logger.info(f"Cleaned up temporary file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
+       
+        except Project.DoesNotExist:
+            return Response({
+                'error': 'Project not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error processing plain text: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while processing the plain text'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
