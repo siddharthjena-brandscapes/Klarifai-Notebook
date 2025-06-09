@@ -21,7 +21,8 @@ import {
   Mic,
   Check,
   Loader,
-  Youtube
+  Youtube,
+  Pin
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
@@ -177,6 +178,45 @@ const MainChat = ({
       setKeyPoints([]);
     }
   }, [activeDocumentForSummary, localSelectedDocuments, documents]);
+
+const handlePinMessage = async (message, messageIndex) => {
+  try {
+    const { noteServiceNB } = await import('../../utils/axiosConfig');
+    
+    // Create note title from first line or timestamp
+    const firstLine = message.content.split('\n')[0];
+    const noteTitle = firstLine.length > 50 
+      ? `Chat Response - ${new Date().toLocaleDateString()}`
+      : `Chat: ${firstLine.substring(0, 50)}...`;
+    
+    // Clean content for note
+    const tempElement = document.createElement("div");
+    tempElement.innerHTML = message.content;
+    const cleanContent = tempElement.textContent || tempElement.innerText;
+    
+    const response = await noteServiceNB.saveNote(
+      noteTitle,
+      cleanContent,
+      mainProjectId,
+      {},
+      null,
+      null // new note
+    );
+
+    if (response.data) {
+      toast.success('Response saved to notes!');
+      
+      // Trigger NotePad refresh
+      const refreshEvent = new CustomEvent('refreshNotePad');
+      document.dispatchEvent(refreshEvent);
+    }
+  } catch (error) {
+    console.error('Failed to save response to notes:', error);
+    toast.error('Failed to save to notes');
+  }
+};
+
+
 
 
   // Add this right after the imports and before the MainContent component definition
@@ -2432,7 +2472,14 @@ const WebSourcesDisplay = ({ sources }) => {
                               responseFormat={responseFormat}
                               isLoading={isLoading}
                             />
-
+<button
+    onClick={() => handlePinMessage(msg, index)}
+    className="flex items-center px-3 py-1 rounded-md dark:text-gray-400 text-[#602f1a] dark:hover:text-yellow-400 dark:hover:bg-yellow-900/20 hover:text-[#a55233] hover:bg-[#f5e6d8] active:scale-95 transition-all duration-150"
+    title="Save to Notes"
+  >
+    <Pin className="h-3 w-3 ml-1.5" />
+    <span className="text-xs pl-2">Pin</span>
+  </button>
                             {/* Copy button */}
                             <button
                               onClick={() =>
@@ -3021,24 +3068,6 @@ const WebSourcesDisplay = ({ sources }) => {
   
             
           `}</style>
-          {/* YouTube Upload Modal */}
-{/* <YouTubeUploadModal
-  isOpen={isYouTubeModalOpen}
-  onClose={() => setIsYouTubeModalOpen(false)}
-  mainProjectId={mainProjectId}
-  onUploadSuccess={(data) => {
-    // Refresh documents list
-    fetchUserDocuments();
-    // Auto-select the uploaded document
-    if (data.document?.id) {
-      const newDocId = data.document.id.toString();
-      setLocalSelectedDocuments([newDocId]);
-      if (setSelectedDocuments) {
-        setSelectedDocuments([newDocId]);
-      }
-    }
-  }}
-/> */}
     </div>
   );
 };
