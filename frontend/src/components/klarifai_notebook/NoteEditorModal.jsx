@@ -83,7 +83,7 @@ const NoteEditorModal = ({
         className={`absolute bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-[#e3d5c8] dark:border-blue-500/20 flex flex-col transition-all duration-300 ${
           isMaximized 
             ? 'inset-4' 
-            : 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[90vw] h-[80vh] max-w-4xl'
+            : 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[90vw] h-[85vh] max-w-5xl'
         }`}
       >
         {/* Header */}
@@ -140,65 +140,112 @@ const NoteEditorModal = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-6 overflow-hidden flex flex-col space-y-4">
-          {/* Title Input */}
-          <div className="flex items-center space-x-3">
-            <Type className="h-5 w-5 text-[#a55233] dark:text-blue-400 flex-shrink-0" />
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Note title..."
-              className="flex-1 p-3 text-lg font-medium rounded-lg
-                         bg-[#f9f7f4] dark:bg-gray-800/50
-                         border border-[#d6cbbf] dark:border-blue-500/20
-                         text-[#5e4636] dark:text-white
-                         placeholder:text-[#8c715f] dark:placeholder:text-gray-400
-                         focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
-                         focus:border-transparent"
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-
-          {/* Content Textarea */}
+        <div className="flex-1 overflow-hidden flex">
+          {/* Main Content Area */}
           <div className="flex-1 flex flex-col">
-            <label className="text-sm font-medium text-[#5e4636] dark:text-white mb-2">
-              Content
-            </label>
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={(e) => {
-                setContent(e.target.value);
-                autoResizeTextarea();
-              }}
-              placeholder="Start writing your note... (Ctrl+S to save)"
-              className="flex-1 p-4 text-base rounded-lg resize-none
-                         bg-[#f9f7f4] dark:bg-gray-800/50
-                         border border-[#d6cbbf] dark:border-blue-500/20
-                         text-[#5e4636] dark:text-white
-                         placeholder:text-[#8c715f] dark:placeholder:text-gray-400
-                         focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
-                         focus:border-transparent
-                         min-h-[300px] custom-scrollbar"
-              onKeyDown={handleKeyDown}
-            />
+            {/* Title Section */}
+            <div className="p-6 border-b border-[#e3d5c8] dark:border-blue-500/20">
+              <div className="flex items-start space-x-3">
+                <Type className="h-6 w-6 text-[#a55233] dark:text-blue-400 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Note title..."
+                    className="w-full text-2xl font-bold bg-transparent border-none outline-none
+                               text-[#5e4636] dark:text-white
+                               placeholder:text-[#8c715f] dark:placeholder:text-gray-400
+                               focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
+                               rounded-lg p-2 -m-2"
+                    onKeyDown={handleKeyDown}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Content Textarea */}
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  autoResizeTextarea();
+                }}
+                placeholder="Start writing your note... (Ctrl+S to save)"
+                className="w-full h-full min-h-[400px] p-4 text-base rounded-lg resize-none
+                           bg-[#f9f7f4] dark:bg-gray-800/50
+                           border border-[#d6cbbf] dark:border-blue-500/20
+                           text-[#5e4636] dark:text-white
+                           placeholder:text-[#8c715f] dark:placeholder:text-gray-400
+                           focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
+                           focus:border-transparent
+                           custom-scrollbar leading-relaxed"
+                onKeyDown={handleKeyDown}
+              />
+            </div>
+
+            {/* Footer Info */}
+            <div className="flex items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 p-6 pt-0">
+              <span>
+                {content.length} characters • {content.split(/\s+/).filter(word => word.length > 0).length} words
+              </span>
+              <span>
+                Press Ctrl+S to save • Esc to close
+              </span>
+            </div>
           </div>
 
-          {/* Footer Info */}
-          <div className="flex items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 pt-2 border-t border-[#e3d5c8] dark:border-blue-500/20">
-            <span>
-              {content.length} characters • {content.split(/\s+/).filter(word => word.length > 0).length} words
-            </span>
-            <span>
-              Press Ctrl+S to save • Esc to close
-            </span>
-          </div>
+          {/* Sidebar (only in maximized mode) */}
+          {isMaximized && (
+            <div className="w-80 border-l border-[#e3d5c8] dark:border-blue-500/20 bg-[#f9f7f4] dark:bg-gray-800/50 p-4 overflow-y-auto custom-scrollbar">
+              <h3 className="text-sm font-semibold text-[#5e4636] dark:text-white mb-4">
+                Editor Information
+              </h3>
+              
+              <div className="space-y-4">
+                {/* Statistics */}
+                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
+                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-2">Statistics</h4>
+                  <div className="space-y-2 text-sm text-[#5e4636] dark:text-white">
+                    <div className="flex justify-between">
+                      <span>Characters:</span>
+                      <span>{content ? content.length : 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Words:</span>
+                      <span>{content.split(/\s+/).filter(word => word.length > 0).length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Lines:</span>
+                      <span>{content ? content.split('\n').length : 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Keyboard Shortcuts */}
+                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
+                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-2">Shortcuts</h4>
+                  <div className="space-y-1 text-xs text-[#5e4636] dark:text-white">
+                    <div className="flex justify-between">
+                      <span>Save note:</span>
+                      <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-600 rounded text-xs">Ctrl+S</kbd>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Close editor:</span>
+                      <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-600 rounded text-xs">Esc</kbd>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Custom Scrollbar Styles */}
-      <style >{`
+      <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }
