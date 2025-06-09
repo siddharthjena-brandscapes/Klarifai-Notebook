@@ -12,14 +12,15 @@ import {
   Calendar,
   FileUp,
   Loader,
-  Expand 
+  Expand ,Eye
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { noteServiceNB } from '../../utils/axiosConfig';
 import NoteEditorModal from './NoteEditorModal';  
 import PropTypes from 'prop-types';
 
-const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
+
+const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor, onOpenViewer, onShowConfirmation }) => {
   const [notes, setNotes] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -33,16 +34,7 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
   const textareaRef = useRef(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleExpandEditor = () => {
-    setIsModalOpen(true);
-  };
 
-  const handleModalSave = async (title, content) => {
-    setNoteTitle(title);
-    setNoteContent(content);
-    await handleSaveNote();
-    setIsModalOpen(false);
-  };
 
   // Fetch notes on component mount
   useEffect(() => {
@@ -51,15 +43,11 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
     }
   }, [mainProjectId, isOpen]);
 
-  // Auto-resize textarea
+  // Auto-resize textarea - disabled to maintain consistent height
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      const scrollHeight = textareaRef.current.scrollHeight;
-      const minHeight = 150; // minimum height in pixels
-      const maxHeight = 350; // maximum height in pixels
-      const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
-      textareaRef.current.style.height = `${newHeight}px`;
+      // Keep fixed height instead of auto-resizing
+      textareaRef.current.style.height = '200px';
     }
   }, [noteContent]);
 
@@ -209,79 +197,27 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
     }
   };
 
-  const handleDeleteNote = async (noteId) => {
-    if (window.confirm('Are you sure you want to delete this note?')) {
-      try {
-        console.log('Deleting note:', noteId);
-        const response = await noteServiceNB.deleteNote(noteId);
-        console.log('Delete note response:', response.data);
-        
-        toast.success('Note deleted successfully');
-        
-        // Remove note from list immediately
-        setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
-        
-        if (selectedNote?.id === noteId) {
-          setSelectedNote(null);
-          setNoteTitle('');
-          setNoteContent('');
-          setIsEditing(false);
-        }
-        
-        // Optional: Do a quiet refresh after a short delay to ensure sync
-        setTimeout(() => {
-          refreshNotesQuietly();
-        }, 500);
-      } catch (error) {
-        console.error('Failed to delete note:', error);
-        const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Failed to delete note';
-        toast.error(errorMessage);
-      }
+  // Function to handle showing confirmation modal for delete
+  const handleShowDeleteConfirmation = (note) => {
+    if (onShowConfirmation) {
+      onShowConfirmation({
+        isOpen: true,
+        type: 'delete',
+        data: note,
+        isLoading: false
+      });
     }
   };
 
-  const handleConvertToDocument = async (noteId) => {
-    if (window.confirm('Convert this note to a document source? This will make it available for chat queries.')) {
-      setIsConverting(true);
-      setConvertingNoteId(noteId);
-      try {
-        console.log('Converting note to document:', noteId);
-        const response = await noteServiceNB.convertNoteToDocument(noteId);
-        console.log('Convert note response:', response.data);
-        
-        toast.success('Note converted to document successfully');
-        
-        // Update the notes array immediately
-        setNotes(prevNotes => 
-          prevNotes.map(note => 
-            note.id === noteId 
-              ? { ...note, is_converted_to_document: true }
-              : note
-          )
-        );
-        
-        // Update selected note if it's the one being converted
-        if (selectedNote?.id === noteId) {
-          setSelectedNote(prev => ({ ...prev, is_converted_to_document: true }));
-        }
-        
-        // Dispatch event to refresh documents in SideTab
-        const refreshDocsEvent = new CustomEvent('refreshDocuments');
-        document.dispatchEvent(refreshDocsEvent);
-        
-        // Optional: Do a quiet refresh after a short delay to ensure sync
-        setTimeout(() => {
-          refreshNotesQuietly();
-        }, 500);
-        
-      } catch (error) {
-        console.error('Failed to convert note:', error);
-        const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Failed to convert note to document';
-        toast.error(errorMessage);
-      } finally {
-        setIsConverting(false);
-        setConvertingNoteId(null);
-      }
+  // Function to handle showing confirmation modal for convert
+  const handleShowConvertConfirmation = (note) => {
+    if (onShowConfirmation) {
+      onShowConfirmation({
+        isOpen: true,
+        type: 'convert',
+        data: note,
+        isLoading: false
+      });
     }
   };
 
@@ -437,7 +373,7 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleConvertToDocument(note.id);
+                          handleShowConvertConfirmation(note);
                         }}
                         disabled={convertingNoteId === note.id}
                         className="p-1 text-[#8c715f] dark:text-gray-400 
@@ -457,7 +393,7 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteNote(note.id);
+                        handleShowDeleteConfirmation(note);
                       }}
                       className="p-1 text-[#8c715f] dark:text-gray-400 
                                  hover:text-red-600 dark:hover:text-red-400
@@ -504,6 +440,21 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
                     title="Expand Editor"
                   >
                     <Expand className="h-3 w-3" />
+                  </button>
+                )}
+               {onOpenViewer && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenViewer(selectedNote); // Use the currently selected note
+                    }}
+                    className="p-1 text-[#8c715f] dark:text-gray-400 
+                               hover:text-[#a55233] dark:hover:text-blue-400
+                               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
+                               rounded transition-colors"
+                    title="View Note"
+                  >
+                    <Eye className="h-3 w-3" />
                   </button>
                 )}
 
@@ -560,24 +511,17 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
                 )}
               </div>
             </div>
+          </div>
 
-            <NoteEditorModal
-              isOpen={isModalOpen}
-              onClose={() => setIsModalOpen(false)}
-              noteTitle={noteTitle}
-              noteContent={noteContent}
-              onSave={handleModalSave}
-              isSaving={isSaving}
-            />
-
-            {/* Title Input */}
+          {/* Title Input */}
+          <div className="p-3 border-b border-[#e3d5c8] dark:border-blue-500/20">
             {isEditing ? (
               <input
                 type="text"
                 value={noteTitle}
                 onChange={(e) => setNoteTitle(e.target.value)}
                 placeholder="Note title..."
-                className="w-full p-2 text-sm rounded-lg
+                className="w-full p-2 text-sm font-medium rounded-lg
                            bg-[#f9f7f4] dark:bg-gray-700/50
                            border border-[#d6cbbf] dark:border-blue-500/20
                            text-[#5e4636] dark:text-white
@@ -586,9 +530,11 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
                            focus:border-transparent"
               />
             ) : (
-              <h3 className="text-sm font-medium text-[#5e4636] dark:text-white">
+              <div className="text-sm font-medium text-[#5e4636] dark:text-white 
+                            p-2 bg-[#f9f7f4] dark:bg-gray-700/50
+                            border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg">
                 {noteTitle || 'Untitled Note'}
-              </h3>
+              </div>
             )}
           </div>
 
@@ -600,21 +546,21 @@ const NotePad = ({ mainProjectId, isOpen, onToggle, onOpenEditor }) => {
                 value={noteContent}
                 onChange={(e) => setNoteContent(e.target.value)}
                 placeholder="Start writing your note..."
-                className="w-full p-2 text-sm rounded-lg resize-none
+                className="w-full text-sm rounded-lg resize-none
                            bg-[#f9f7f4] dark:bg-gray-700/50
                            border border-[#d6cbbf] dark:border-blue-500/20
                            text-[#5e4636] dark:text-white
                            placeholder:text-[#8c715f] dark:placeholder:text-gray-400
                            focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
                            focus:border-transparent custom-scrollbar overflow-y-auto"
-                style={{ minHeight: '150px', height: 'auto' }}
+                style={{ height: '200px', padding: '8px', boxSizing: 'border-box' }}
               />
             ) : (
               <div className="text-sm text-[#5e4636] dark:text-white 
-                  min-h-[150px] overflow-y-auto custom-scrollbar
-                  whitespace-pre-wrap p-2 bg-[#f9f7f4] dark:bg-gray-700/50
+                  overflow-y-auto custom-scrollbar
+                  whitespace-pre-wrap bg-[#f9f7f4] dark:bg-gray-700/50
                   border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg"
-                   style={{ maxHeight: Math.min(300, Math.max(150, (noteContent || '').split('\n').length * 20 + 40)) + 'px' }}>
+                  style={{ height: '200px', padding: '8px', boxSizing: 'border-box' }}>
                 {noteContent || 'No content'}
               </div>
             )}
@@ -666,6 +612,8 @@ NotePad.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onToggle: PropTypes.func.isRequired,
   onOpenEditor: PropTypes.func,
+  onOpenViewer: PropTypes.func,
+  onShowConfirmation: PropTypes.func.isRequired, // Make this required
 };
 
 export default NotePad;
