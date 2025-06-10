@@ -136,6 +136,7 @@ const SummaryFormatter = ({ content, keyPoints, onTopicClick }) => {
       });
     };
   
+    // Render the component
     return (
       <div className="w-full max-w-4xl mx-auto space-y-6">
         {/* Move KeyTopics to the top */}
