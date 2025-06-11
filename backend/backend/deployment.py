@@ -16,7 +16,7 @@ ALLOWED_HOSTS = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    'https://blue-mushroom-065c30e0f.6.azurestaticapps.net' 
+    'https://wonderful-meadow-014556b0f.6.azurestaticapps.net' 
 ]
 
 CSRF_TRUSTED_ORIGINS = [
