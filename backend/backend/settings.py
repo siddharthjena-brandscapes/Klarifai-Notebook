@@ -52,7 +52,7 @@ INSTALLED_APPS = [
     'chat',
     'ideaGen',
     'core',
-    'notebook', 
+    'notebook',  # Ensure notebook app is included
    
 ]
 
@@ -111,7 +111,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'klarifai-nb',
+        'NAME': 'Klarifai-bbsr-database',
         'USER': 'postgres',
         'PASSWORD': 'root',
         'HOST': 'localhost',
