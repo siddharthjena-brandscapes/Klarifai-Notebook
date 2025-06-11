@@ -2454,7 +2454,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
               />
             </button>
 
-            {/* Ideas Button - Same function as expanded mode */}
+            {/* Ideas Button - Same function as expanded mode
             {isModuleAvailable("idea-generator") && (
               <button
                 onClick={handleGenerateIdeas}
@@ -2474,7 +2474,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
               >
                 <Lightbulb size={20} />
               </button>
-            )}
+            )} */}
 
             {/* Documents Button - Opens sidebar and shows documents */}
             <button

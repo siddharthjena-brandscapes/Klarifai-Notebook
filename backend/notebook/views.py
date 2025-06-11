@@ -85,24 +85,6 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-import requests
-from bs4 import BeautifulSoup
-import tempfile
-import os
-import re
-from urllib.parse import urlparse, urljoin
-from django.core.files import File
-from django.db import transaction
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.parsers import JSONParser
-from .models import Document, ProcessedIndex, UserModulePermissions
-from core.models import Project
-from core.utils import update_project_timestamp
-import logging
- 
-logger = logging.getLogger(__name__)
 
 
 
@@ -7948,23 +7930,6 @@ class ChatExportView(APIView):
 
 class YouTubeUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
-
-    def sanitize_filename(self, filename):
-        """Sanitize filename to make it safe for file system"""
-        import re
-        
-        # Remove or replace characters that are not allowed in filenames
-        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-        # Remove leading/trailing dots and spaces
-        filename = filename.strip('. ')
-        # Ensure the filename is not empty
-        if not filename:
-            filename = 'untitled'
-        # Limit length to avoid file system issues
-        if len(filename) > 200:
-            filename = filename[:200]
-        
-        return filename
    
     def is_valid_youtube_url(self, url):
         """Check if the provided URL is a valid YouTube URL."""
@@ -8924,14 +8889,32 @@ class NoteManagementView(YouTubeUploadView, APIView):
 
 
 
- 
+import requests
+from bs4 import BeautifulSoup
+import tempfile
+import os
+import re
+from urllib.parse import urlparse, urljoin
+from django.core.files import File
+from django.db import transaction
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.parsers import JSONParser
+from .models import Document, ProcessedIndex, UserModulePermissions
+from core.models import Project
+from core.utils import update_project_timestamp
+import logging
+
+logger = logging.getLogger(__name__)
+
 class WebsiteLinkUploadView(YouTubeUploadView):
     """
     Inherits from YouTubeUploadView to reuse document processing methods.
     Extracts text content from website URLs using BeautifulSoup.
     """
     parser_classes = (JSONParser,)
-   
+    
     def is_valid_url(self, url):
         """Check if the provided URL is valid"""
         try:
@@ -8939,7 +8922,7 @@ class WebsiteLinkUploadView(YouTubeUploadView):
             return bool(parsed.netloc) and bool(parsed.scheme)
         except:
             return False
-   
+    
     def extract_text_from_website(self, url, timeout=30):
         """
         Extract text content from a website URL using BeautifulSoup.
@@ -8949,13 +8932,13 @@ class WebsiteLinkUploadView(YouTubeUploadView):
             # Validate URL
             if not self.is_valid_url(url):
                 raise ValueError("Invalid URL provided")
-           
+            
             # Add protocol if missing
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
-           
+            
             logger.info(f"Fetching content from: {url}")
-           
+            
             # Set up headers to mimic a real browser
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -8965,76 +8948,76 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
-           
+            
             # Make request with timeout
             response = requests.get(url, headers=headers, timeout=timeout, verify=True)
             response.raise_for_status()
-           
+            
             # Check content type
             content_type = response.headers.get('content-type', '').lower()
             if 'text/html' not in content_type:
                 raise ValueError(f"URL does not contain HTML content. Content-Type: {content_type}")
-           
+            
             # Parse HTML content
             soup = BeautifulSoup(response.content, 'html.parser')
-           
+            
             # Extract title
             title_tag = soup.find('title')
             page_title = title_tag.get_text().strip() if title_tag else 'Untitled Page'
-           
+            
             # Remove script and style elements
             for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
                 script.decompose()
-           
+            
             # Try to find main content areas first
             main_content = None
             content_selectors = [
-                'main', 'article', '[role="main"]', '.main-content',
+                'main', 'article', '[role="main"]', '.main-content', 
                 '.content', '.post-content', '.entry-content', '#content',
                 '.article-body', '.story-body', '.post-body'
             ]
-           
+            
             for selector in content_selectors:
                 main_content = soup.select_one(selector)
                 if main_content:
                     logger.info(f"Found main content using selector: {selector}")
                     break
-           
+            
             # If no main content found, use body
             if not main_content:
                 main_content = soup.find('body')
                 logger.info("Using body tag as main content")
-           
+            
             if not main_content:
                 raise ValueError("Could not find any content in the webpage")
-           
+            
             # Extract text content
             text_content = main_content.get_text(separator='\n', strip=True)
-           
+            
             # Clean up the text
             lines = text_content.split('\n')
             cleaned_lines = []
-           
+            
             for line in lines:
                 line = line.strip()
                 # Skip empty lines and very short lines (likely navigation/UI elements)
                 if len(line) > 3 and not line.isdigit():
                     cleaned_lines.append(line)
-           
+            
             cleaned_text = '\n'.join(cleaned_lines)
-           
+            
             # Remove excessive whitespace
             cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
             cleaned_text = re.sub(r' {2,}', ' ', cleaned_text)
-           
+            
             if len(cleaned_text.strip()) < 50:
                 raise ValueError("Extracted content is too short (less than 50 characters)")
-           
+            
             logger.info(f"Successfully extracted {len(cleaned_text)} characters from {url}")
             logger.info(f"Page title: {page_title}")
-           
+            
             return cleaned_text, page_title
-           
+            
         except requests.exceptions.Timeout:
             raise Exception(f"Request timeout while fetching URL: {url}")
         except requests.exceptions.ConnectionError:
@@ -9044,24 +9027,24 @@ class WebsiteLinkUploadView(YouTubeUploadView):
         except Exception as e:
             logger.error(f"Error extracting text from website: {str(e)}")
             raise Exception(f"Failed to extract text from website: {str(e)}")
-   
+    
     def post(self, request):
         website_url = request.data.get('website_url')
         user = request.user
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
         custom_title = request.data.get('custom_title', '')  # Optional custom title
-       
+        
         if not website_url:
             return Response({
                 'error': 'Website URL is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         if not main_project_id:
             return Response({
                 'error': 'Main project ID is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         # Handle admin uploading for another user
         if target_user_id and request.user.username == 'admin':
             try:
@@ -9070,7 +9053,7 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                 return Response({
                     'error': 'Target user not found'
                 }, status=status.HTTP_404_NOT_FOUND)
-       
+        
         # Check user permissions
         try:
             permissions = UserModulePermissions.objects.get(user=user)
@@ -9080,50 +9063,50 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                 }, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
             pass
-       
+        
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
-           
+            
             # Extract text from website
             logger.info(f"Processing website URL: {website_url}")
             extracted_text, page_title = self.extract_text_from_website(website_url)
-           
+            
             if not extracted_text or len(extracted_text.strip()) < 10:
                 return Response({
                     'error': f'Failed to extract meaningful content from website: {website_url}'
                 }, status=status.HTTP_400_BAD_REQUEST)
-           
+            
             # Use custom title if provided, otherwise use page title
             final_title = custom_title.strip() if custom_title.strip() else page_title
-           
+            
             # Create filename based on title
             safe_title = self.sanitize_filename(final_title)
             filename = f"{safe_title}_website_content.txt"
-           
+            
             # Check for existing document with similar name
             existing_doc = Document.objects.filter(
                 user=user,
                 filename__icontains=safe_title,
                 main_project=main_project
             ).first()
-           
+            
             # Create temporary file with the extracted content
             temp_file_path = os.path.join(tempfile.gettempdir(), filename)
-           
+            
             try:
                 # Prepare content with metadata
                 full_content = f"Website URL: {website_url}\n"
                 full_content += f"Title: {final_title}\n"
                 full_content += "=" * (len(final_title) + 7) + "\n\n"
                 full_content += extracted_text
-               
+                
                 with open(temp_file_path, 'w', encoding='utf-8') as f:
                     f.write(full_content)
-               
+                
                 # Create Django File object
                 with open(temp_file_path, 'rb') as f:
                     django_file = File(f, name=filename)
-                   
+                    
                     # Use transaction to ensure data consistency
                     with transaction.atomic():
                         # Create or update document
@@ -9141,10 +9124,10 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                                 main_project=main_project
                             )
                             logger.info(f"Created new document: {document.id}")
-               
+                
                 # Process the document for RAG
                 processed_data = self.process_document_from_text(full_content, filename)
-               
+                
                 # Create or update ProcessedIndex
                 processed_index, created = ProcessedIndex.objects.get_or_create(
                     document=document,
@@ -9155,19 +9138,19 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                         'markdown_path': processed_data.get('markdown_path', '')
                     }
                 )
-               
+                
                 if not created:
                     processed_index.faiss_index = processed_data['index_path']
                     processed_index.metadata = processed_data['metadata_path']
                     processed_index.markdown_path = processed_data.get('markdown_path', '')
                     processed_index.save()
-               
+                
                 # Store the document ID in the session
                 request.session['active_document_id'] = document.id
-               
+                
                 # Update project timestamp
                 update_project_timestamp(main_project_id, user)
-               
+                
                 return Response({
                     'message': 'Website content processed successfully',
                     'document': {
@@ -9179,7 +9162,7 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                     },
                     'active_document_id': document.id
                 }, status=status.HTTP_201_CREATED)
-               
+                
             finally:
                 # Clean up temporary file
                 try:
@@ -9188,54 +9171,54 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                         logger.info(f"Cleaned up temporary file: {temp_file_path}")
                 except Exception as cleanup_error:
                     logger.warning(f"Cleanup error: {str(cleanup_error)}")
-       
+        
         except Exception as e:
             logger.error(f"Error processing website: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while processing the website content'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
- 
- 
+
+
 # ===========================================
 # 2. PLAIN TEXT UPLOAD CLASS
 # ===========================================
- 
+
 class PlainTextUploadView(YouTubeUploadView):
     """
     Inherits from YouTubeUploadView to reuse document processing methods.
     Processes plain text content directly from frontend.
     """
     parser_classes = (JSONParser,)
-   
+    
     def post(self, request):
         text_content = request.data.get('text_content')
         user = request.user
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
         custom_title = request.data.get('title', '')  # Optional title for the text
-       
+        
         if not text_content or not text_content.strip():
             return Response({
                 'error': 'Text content is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         if not main_project_id:
             return Response({
                 'error': 'Main project ID is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         # Validate text length
         if len(text_content.strip()) < 10:
             return Response({
                 'error': 'Text content must be at least 10 characters long'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         if len(text_content) > 1000000:  # 1MB text limit
             return Response({
                 'error': 'Text content is too large (maximum 1MB)'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         # Handle admin uploading for another user
         if target_user_id and request.user.username == 'admin':
             try:
@@ -9244,7 +9227,7 @@ class PlainTextUploadView(YouTubeUploadView):
                 return Response({
                     'error': 'Target user not found'
                 }, status=status.HTTP_404_NOT_FOUND)
-       
+        
         # Check user permissions
         try:
             permissions = UserModulePermissions.objects.get(user=user)
@@ -9254,10 +9237,10 @@ class PlainTextUploadView(YouTubeUploadView):
                 }, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
             pass
-       
+        
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
-           
+            
             # Generate title if not provided
             if not custom_title.strip():
                 # Generate title from first 50 characters of content
@@ -9267,34 +9250,34 @@ class PlainTextUploadView(YouTubeUploadView):
                     custom_title += "..."
                 if not custom_title:
                     custom_title = "Plain Text Document"
-           
+            
             # Create filename based on title
             safe_title = self.sanitize_filename(custom_title)
             filename = f"{safe_title}_plain_text.txt"
-           
+            
             # Check for existing document with similar name
             existing_doc = Document.objects.filter(
                 user=user,
                 filename__icontains=safe_title,
                 main_project=main_project
             ).first()
-           
+            
             # Create temporary file with the text content
             temp_file_path = os.path.join(tempfile.gettempdir(), filename)
-           
+            
             try:
                 # Prepare content with title header
                 full_content = f"Title: {custom_title}\n"
                 full_content += "=" * (len(custom_title) + 7) + "\n\n"
                 full_content += text_content.strip()
-               
+                
                 with open(temp_file_path, 'w', encoding='utf-8') as f:
                     f.write(full_content)
-               
+                
                 # Create Django File object
                 with open(temp_file_path, 'rb') as f:
                     django_file = File(f, name=filename)
-                   
+                    
                     # Use transaction to ensure data consistency
                     with transaction.atomic():
                         # Create or update document
@@ -9312,10 +9295,10 @@ class PlainTextUploadView(YouTubeUploadView):
                                 main_project=main_project
                             )
                             logger.info(f"Created new document: {document.id}")
-               
+                
                 # Process the document for RAG
                 processed_data = self.process_document_from_text(full_content, filename)
-               
+                
                 # Create or update ProcessedIndex
                 processed_index, created = ProcessedIndex.objects.get_or_create(
                     document=document,
@@ -9326,19 +9309,19 @@ class PlainTextUploadView(YouTubeUploadView):
                         'markdown_path': processed_data.get('markdown_path', '')
                     }
                 )
-               
+                
                 if not created:
                     processed_index.faiss_index = processed_data['index_path']
                     processed_index.metadata = processed_data['metadata_path']
                     processed_index.markdown_path = processed_data.get('markdown_path', '')
                     processed_index.save()
-               
+                
                 # Store the document ID in the session
                 request.session['active_document_id'] = document.id
-               
+                
                 # Update project timestamp
                 update_project_timestamp(main_project_id, user)
-               
+                
                 return Response({
                     'message': 'Plain text processed successfully',
                     'document': {
@@ -9350,7 +9333,7 @@ class PlainTextUploadView(YouTubeUploadView):
                     },
                     'active_document_id': document.id
                 }, status=status.HTTP_201_CREATED)
-               
+                
             finally:
                 # Clean up temporary file
                 try:
@@ -9359,7 +9342,7 @@ class PlainTextUploadView(YouTubeUploadView):
                         logger.info(f"Cleaned up temporary file: {temp_file_path}")
                 except Exception as cleanup_error:
                     logger.warning(f"Cleanup error: {str(cleanup_error)}")
-       
+        
         except Project.DoesNotExist:
             return Response({
                 'error': 'Project not found'
@@ -9370,3 +9353,631 @@ class PlainTextUploadView(YouTubeUploadView):
                 'error': str(e),
                 'detail': 'An error occurred while processing the plain text'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+# Add this to your existing views.py file
+
+import json
+import tempfile
+import os
+import re
+import time
+import pickle
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+import google.generativeai as genai
+from PyPDF2 import PdfReader
+import fitz
+from llama_parse import LlamaParse
+ 
+# Configuration for Mindmap
+GEMINI_API_KEY = "AIzaSyCv_41De6hVOtuQ3jYkfniGc_61bJ9bvS4"  # Move this to settings
+GEMINI_MODEL = "gemini-2.0-flash"
+CHUNK_SIZE = 2000
+CHUNK_OVERLAP = 200
+ 
+# Initialize Gemini for mindmap
+genai.configure(api_key=GEMINI_API_KEY)
+mindmap_model = genai.GenerativeModel(GEMINI_MODEL)
+ 
+class MindMapView(APIView):
+    permission_classes = [IsAuthenticated]
+   
+    def post(self, request):
+        """Generate mindmap for selected documents"""
+        try:
+            user = request.user
+            main_project_id = request.data.get('main_project_id')
+            selected_documents = request.data.get('selected_documents', [])
+           
+            if not main_project_id:
+                return Response({
+                    'error': 'Main project ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            if not selected_documents:
+                # Try to get active document from session
+                active_document_id = request.session.get('active_document_id')
+                if active_document_id:
+                    selected_documents = [active_document_id]
+                else:
+                    return Response({
+                        'error': 'Please select at least one document'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Get processed documents
+            try:
+                processed_docs = ProcessedIndex.objects.filter(
+                    document_id__in=selected_documents,
+                    document__user=user
+                )
+               
+                if not processed_docs.exists():
+                    return Response({
+                        'error': 'No valid processed documents found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+               
+                print(f"Found {processed_docs.count()} processed documents for mindmap generation")
+               
+            except Exception as e:
+                print(f"Error fetching documents: {str(e)}")
+                return Response({
+                    'error': f'Document retrieval error: {str(e)}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Extract text from processed documents
+            all_text_chunks = []
+            document_info = []
+           
+            for proc_doc in processed_docs:
+                try:
+                    # Check if we have LlamaParse markdown
+                    if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+                        with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+                            text_content = f.read()
+                        print(f"Using LlamaParse markdown for {proc_doc.document.filename}")
+                    else:
+                        # Load from metadata chunks
+                        if proc_doc.metadata and os.path.exists(proc_doc.metadata):
+                            with open(proc_doc.metadata, 'rb') as f:
+                                chunks = pickle.load(f)
+                           
+                            # Extract text from chunks
+                            if isinstance(chunks, list):
+                                text_content = "\n\n".join([
+                                    chunk.get('text', chunk.get('content', ''))
+                                    for chunk in chunks
+                                    if isinstance(chunk, dict)
+                                ])
+                            else:
+                                text_content = str(chunks)
+                        else:
+                            print(f"No processable content found for {proc_doc.document.filename}")
+                            continue
+                   
+                    if text_content and len(text_content.strip()) > 100:
+                        # Chunk the text for better analysis
+                        chunks = self.chunk_text_for_mindmap(text_content)
+                        all_text_chunks.extend(chunks)
+                       
+                        document_info.append({
+                            'filename': proc_doc.document.filename,
+                            'text_length': len(text_content),
+                            'chunks': len(chunks)
+                        })
+                       
+                        print(f"Added {len(chunks)} chunks from {proc_doc.document.filename}")
+                   
+                except Exception as e:
+                    print(f"Error processing {proc_doc.document.filename}: {str(e)}")
+                    continue
+           
+            if not all_text_chunks:
+                return Response({
+                    'error': 'No readable content found in selected documents'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            print(f"Total chunks for mindmap generation: {len(all_text_chunks)}")
+           
+            # Generate mindmap
+            mindmap_data = self.generate_comprehensive_mindmap(all_text_chunks)
+           
+            if not mindmap_data or 'name' not in mindmap_data:
+                return Response({
+                    'error': 'Failed to generate mindmap'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+           
+            # Count nodes for statistics
+            node_count = self.count_mindmap_nodes(mindmap_data)
+           
+            # Create MindMap record
+            try:
+                mindmap_record = MindMap.objects.create(
+                    user=user,
+                    main_project=Project.objects.get(id=main_project_id, user=user),
+                    data=mindmap_data,
+                    document_sources=json.dumps([doc['filename'] for doc in document_info]),
+                    total_nodes=node_count
+                )
+               
+                print(f"Created mindmap record with ID: {mindmap_record.id}")
+               
+            except Exception as e:
+                print(f"Error saving mindmap: {str(e)}")
+                # Continue without saving if there's an error
+                mindmap_record = None
+           
+            # Prepare response
+            response_data = {
+                'success': True,
+                'mindmap': mindmap_data,
+                'mindmap_id': mindmap_record.id if mindmap_record else None,
+                'stats': {
+                    'total_characters': sum(doc['text_length'] for doc in document_info),
+                    'number_of_chunks': len(all_text_chunks),
+                    'documents_processed': len(document_info),
+                    'mindmap_nodes': node_count,
+                    'model_used': GEMINI_MODEL,
+                    'document_sources': [doc['filename'] for doc in document_info]
+                }
+            }
+           
+            return Response(response_data, status=status.HTTP_200_OK)
+           
+        except Exception as e:
+            print(f"Error in MindMapView: {str(e)}")
+            return Response({
+                'error': f'Internal server error: {str(e)}',
+                'success': False
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+   
+    def chunk_text_for_mindmap(self, text):
+        """Split text into chunks for mindmap analysis."""
+        try:
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP
+            )
+            return splitter.split_text(text)
+        except Exception as e:
+            print(f"Error chunking text: {e}")
+            return [text]
+   
+    def count_mindmap_nodes(self, data):
+        """Count total nodes in mindmap structure"""
+        if not isinstance(data, dict):
+            return 0
+       
+        count = 1  # Current node
+        if 'children' in data and isinstance(data['children'], list):
+            for child in data['children']:
+                count += self.count_mindmap_nodes(child)
+       
+        return count
+   
+    def generate_comprehensive_mindmap(self, text_chunks):
+        """Generate comprehensive mind map using multiple chunks."""
+        try:
+            # Limit chunks for API efficiency
+            selected_chunks = text_chunks[:25] if len(text_chunks) > 25 else text_chunks
+            comprehensive_text = "\n\n".join(selected_chunks)
+           
+            prompt = f"""
+            You are an expert knowledge architect and document analyzer. Create a comprehensive, hierarchical mind map by systematically extracting and organizing ALL meaningful content from the document(s).
+ 
+            DOCUMENT TEXT:
+            {comprehensive_text[:15000]}  # Limit for API
+ 
+            Create a JSON mind map with this structure:
+            {{
+                "name": "[Document Title/Main Subject]",
+                "children": [
+                    {{
+                        "name": "[Major Topic 1]",
+                        "summary": "Brief description",
+                        "children": [
+                            {{
+                                "name": "[Subtopic A]",
+                                "summary": "Description",
+                                "children": [
+                                    {{
+                                        "name": "[Detail 1]",
+                                        "summary": "Specific information",
+                                        "children": []
+                                    }}
+                                ]
+                            }}
+                        ]
+                    }}
+                ]
+            }}
+ 
+            REQUIREMENTS:
+            1. Extract 5-8 major topics
+            2. Each major topic must have 3+ subtopics
+            3. Go 4-6 levels deep
+            4. Use exact terminology from the document
+            5. Include meaningful summaries
+            6. Ensure hierarchical organization
+ 
+            Return only valid JSON:
+            """
+           
+            try:
+                response = mindmap_model.generate_content(
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.1,
+                        max_output_tokens=12288,
+                        top_p=0.8
+                    )
+                )
+               
+                # Extract JSON from response
+                parsed_data = self.extract_json_from_response(response.text)
+               
+                if parsed_data:
+                    validated_data = self.validate_mindmap_structure(parsed_data)
+                    print(f"Successfully generated mindmap with {len(validated_data.get('children', []))} main branches")
+                    return validated_data
+                else:
+                    print("Failed to parse JSON, creating fallback")
+                    return self.create_enhanced_fallback_mindmap(comprehensive_text)
+                   
+            except Exception as api_error:
+                print(f"API Error: {api_error}")
+                return self.create_enhanced_fallback_mindmap(comprehensive_text)
+               
+        except Exception as e:
+            print(f"Error generating mindmap: {e}")
+            return self.create_enhanced_fallback_mindmap(text_chunks[0] if text_chunks else "No content")
+   
+    def extract_json_from_response(self, response_text):
+        """Extract JSON from Gemini response."""
+        try:
+            cleaned_text = response_text.strip()
+           
+            # Remove markdown formatting
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+           
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+           
+            cleaned_text = cleaned_text.strip()
+           
+            # Try direct parsing
+            try:
+                return json.loads(cleaned_text)
+            except json.JSONDecodeError:
+                pass
+           
+            # Extract with regex
+            json_pattern = r'\{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*\}'
+            matches = re.findall(json_pattern, cleaned_text, re.DOTALL)
+           
+            for match in matches:
+                try:
+                    parsed = json.loads(match)
+                    if isinstance(parsed, dict) and ('name' in parsed or 'children' in parsed):
+                        return parsed
+                except json.JSONDecodeError:
+                    continue
+           
+            return None
+           
+        except Exception as e:
+            print(f"Error extracting JSON: {e}")
+            return None
+   
+    def validate_mindmap_structure(self, data):
+        """Validate and fix mind map structure."""
+        if not isinstance(data, dict):
+            return {"name": "Document", "children": []}
+       
+        # Ensure required 'name' field
+        if 'name' not in data:
+            data['name'] = "Document Analysis"
+       
+        # Handle children
+        if 'children' in data:
+            if not isinstance(data['children'], list):
+                data['children'] = []
+            else:
+                validated_children = []
+                for child in data['children']:
+                    validated_child = self.validate_mindmap_structure(child)
+                    if validated_child['name'].strip():
+                        validated_children.append(validated_child)
+                data['children'] = validated_children
+        else:
+            data['children'] = []
+       
+        # Keep only allowed fields
+        allowed_fields = {'name', 'children', 'description', 'type', 'summary'}
+        cleaned_data = {k: v for k, v in data.items() if k in allowed_fields}
+       
+        return cleaned_data
+   
+    def create_enhanced_fallback_mindmap(self, text):
+        """Create fallback mindmap when AI generation fails."""
+        try:
+            # Extract basic information
+            sentences = [s.strip() for s in text.split('.') if 15 < len(s.strip()) < 200]
+            paragraphs = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 50]
+           
+            # Extract key terms
+            words = re.findall(r'\b[A-Za-z]{4,}\b', text.lower())
+            word_freq = {}
+            for word in words:
+                if word not in ['these', 'those', 'which', 'where', 'there', 'should', 'would']:
+                    word_freq[word] = word_freq.get(word, 0) + 1
+           
+            top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:15]
+           
+            # Create structure
+            children = [
+                {
+                    "name": "Document Overview",
+                    "summary": "General overview of the document content",
+                    "children": [
+                        {"name": "Main Topics", "children": [], "summary": "Primary subjects covered"},
+                        {"name": "Key Information", "children": [], "summary": "Important facts and data"},
+                        {"name": "Document Structure", "children": [], "summary": "Organization of content"}
+                    ]
+                },
+                {
+                    "name": "Content Analysis",
+                    "summary": "Detailed analysis of document content",
+                    "children": [
+                        {"name": "Core Concepts", "children": [], "summary": "Fundamental ideas presented"},
+                        {"name": "Supporting Details", "children": [], "summary": "Evidence and examples"},
+                        {"name": "Conclusions", "children": [], "summary": "Main findings and outcomes"}
+                    ]
+                }
+            ]
+           
+            # Add key terms section if available
+            if top_keywords:
+                term_children = []
+                for keyword, freq in top_keywords[:8]:
+                    term_children.append({
+                        "name": keyword.title(),
+                        "children": [],
+                        "summary": f"Mentioned {freq} times in document"
+                    })
+               
+                children.append({
+                    "name": "Key Terms and Concepts",
+                    "summary": "Important terminology from the document",
+                    "children": term_children
+                })
+           
+            # Determine root name
+            root_name = "Document Analysis"
+            if sentences:
+                first_sentence = sentences[0]
+                if len(first_sentence) < 100:
+                    root_name = first_sentence
+           
+            return {
+                "name": root_name,
+                "children": children
+            }
+           
+        except Exception as e:
+            print(f"Error in fallback mindmap: {e}")
+            return {
+                "name": "Document Analysis",
+                "children": [
+                    {
+                        "name": "Content Overview",
+                        "children": [
+                            {"name": "Main Information", "children": []},
+                            {"name": "Key Details", "children": []},
+                            {"name": "Supporting Context", "children": []}
+                        ]
+                    }
+                ]
+            }
+ 
+ 
+class MindMapQuestionView(APIView):
+    permission_classes = [IsAuthenticated]
+   
+    def post(self, request):
+        """Generate question for a specific mindmap node and answer it using existing chat system."""
+        try:
+            user = request.user
+            main_project_id = request.data.get('main_project_id')
+            mindmap_id = request.data.get('mindmap_id')
+            topic_name = request.data.get('topic_name', '')
+            topic_summary = request.data.get('topic_summary', '')
+            node_path = request.data.get('node_path', '')
+            selected_documents = request.data.get('selected_documents', [])
+           
+            if not all([main_project_id, topic_name]):
+                return Response({
+                    'error': 'Missing required parameters'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Generate specific question for the topic
+            question = self.generate_topic_question(topic_name, topic_summary, node_path)
+           
+            # Use existing ChatView logic to answer the question
+            chat_view = ChatView()
+           
+            # Prepare request data for chat system
+            chat_request_data = {
+                'message': question,
+                'main_project_id': main_project_id,
+                'selected_documents': selected_documents,
+                'use_web_knowledge': False,
+                'general_chat_mode': False,
+                'response_length': 'comprehensive',
+                'response_format': 'natural'
+            }
+           
+            # Create a mock request object
+            mock_request = type('MockRequest', (), {
+                'user': user,
+                'data': chat_request_data,
+                'session': request.session
+            })()
+           
+            # Get answer using existing chat system
+            chat_response = chat_view.post(mock_request)
+           
+            if chat_response.status_code == 200:
+                chat_data = chat_response.data
+               
+                response_data = {
+                    'success': True,
+                    'question': question,
+                    'answer': chat_data.get('response', ''),
+                    'topic': topic_name,
+                    'citations': chat_data.get('citations', []),
+                    'follow_up_questions': chat_data.get('follow_up_questions', [])
+                }
+               
+                return Response(response_data, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'error': 'Failed to generate answer',
+                    'question': question,
+                    'success': False
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+           
+        except Exception as e:
+            print(f"Error in MindMapQuestionView: {str(e)}")
+            return Response({
+                'error': f'Internal server error: {str(e)}',
+                'success': False
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+   
+    def generate_topic_question(self, topic_name, topic_summary, node_path):
+        """Generate a specific question for the mindmap topic."""
+        try:
+            time.sleep(1.0)  # Rate limiting
+           
+            prompt = f"""
+                Generate ONE simple and helpful question about "{topic_name}" that will make it easier for users to understand this topic.
+
+                Topic: {topic_name}  
+                Summary: {topic_summary}  
+                Context Path: {node_path}
+
+                Create a question that:
+                1. Uses simple language  
+                2. Helps someone understand the topic better  
+                3. Is 10–25 words long  
+                4. Focuses on practical use or basic understanding  
+
+                Examples of good questions:
+                - "How is [topic] used in real life?"  
+                - "What is the main idea behind [topic]?"  
+                - "Why is [topic] important or useful?"
+
+                Generate ONE question:
+            """
+           
+            response = mindmap_model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.2,
+                    max_output_tokens=512
+                )
+            )
+           
+            question = response.text.strip()
+           
+            # Clean the question
+            if question.startswith('"') and question.endswith('"'):
+                question = question[1:-1]
+           
+            return question
+           
+        except Exception as e:
+            print(f"Error generating topic question: {e}")
+            return f"What are the key aspects and details about '{topic_name}' in this document?"
+ 
+ 
+# Add these API endpoints
+@api_view(['GET'])
+def get_user_mindmaps(request):
+    """Get user's mindmaps for a project."""
+    try:
+        user = request.user
+        main_project_id = request.GET.get('main_project_id')
+       
+        if not main_project_id:
+            return Response({
+                'error': 'Main project ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        mindmaps = MindMap.objects.filter(
+            user=user,
+            main_project_id=main_project_id
+        ).order_by('-created_at')
+       
+        mindmap_list = []
+        for mindmap in mindmaps:
+            mindmap_list.append({
+                'id': mindmap.id,
+                'created_at': mindmap.created_at.isoformat(),
+                'total_nodes': mindmap.total_nodes,
+                'document_sources': json.loads(mindmap.document_sources) if mindmap.document_sources else [],
+                'title': f"Mindmap {mindmap.created_at.strftime('%Y-%m-%d %H:%M')}"
+            })
+       
+        return Response({
+            'success': True,
+            'mindmaps': mindmap_list
+        }, status=status.HTTP_200_OK)
+       
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'success': False
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+ 
+@api_view(['GET'])
+def get_mindmap_data(request, mindmap_id):
+    """Get specific mindmap data."""
+    try:
+        user = request.user
+       
+        mindmap = MindMap.objects.get(
+            id=mindmap_id,
+            user=user
+        )
+       
+        return Response({
+            'success': True,
+            'mindmap': mindmap.data,
+            'stats': {
+                'total_nodes': mindmap.total_nodes,
+                'created_at': mindmap.created_at.isoformat(),
+                'document_sources': json.loads(mindmap.document_sources) if mindmap.document_sources else []
+            }
+        }, status=status.HTTP_200_OK)
+       
+    except MindMap.DoesNotExist:
+        return Response({
+            'error': 'Mindmap not found',
+            'success': False
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'success': False
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -69,6 +69,9 @@ class ProcessedIndex(models.Model):
     # New field for enhanced summary with key points
     key_points = models.JSONField(default=list, blank=True, help_text="Key points/topics extracted from document")
     
+    mindmap_generated = models.BooleanField(default=False, help_text="Whether a mindmap has been generated from this document")
+    last_mindmap_generated = models.DateTimeField(null=True, blank=True, help_text="When was the last mindmap generated")
+    
     def get_key_points(self):
         """Helper method to get key points as a list"""
         if isinstance(self.key_points, list):
@@ -255,3 +258,31 @@ class Note(models.Model):
 
 
 
+class MindMap(models.Model):
+    """Model to store generated mindmaps linked to projects and users"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mindmaps_NB')
+    main_project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='mindmaps_NB', null=True)
+    data = models.JSONField(help_text="JSON data for the mindmap structure")
+    document_sources = models.JSONField(blank=True, null=True, help_text="List of document filenames used to generate this mindmap")
+    total_nodes = models.PositiveIntegerField(default=0, help_text="Total number of nodes in the mindmap")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"MindMap for {self.user.username} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+    
+    def get_document_sources_list(self):
+        """Helper method to get document sources as a list"""
+        if self.document_sources:
+            try:
+                return json.loads(self.document_sources) if isinstance(self.document_sources, str) else self.document_sources
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return []
+    
+    def set_document_sources_list(self, sources_list):
+        """Helper method to set document sources"""
+        self.document_sources = json.dumps(sources_list) if isinstance(sources_list, list) else sources_list

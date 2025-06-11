@@ -1,10 +1,9 @@
-
 //Document Q/A parent component
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
-import { Menu, ChevronRight, ChevronLeft, X } from 'lucide-react';
+import { Menu, ChevronRight, ChevronLeft, X, Brain } from 'lucide-react';
 import Header from '../dashboard/Header';
 
 import MainChat from './MainChat';
@@ -17,6 +16,7 @@ import NoteEditorModal from "../klarifai_notebook/NoteEditorModal";
 import NotePad from "../klarifai_notebook/Notepad";
 import NoteViewerModal from "../klarifai_notebook/NoteViewerModal";
 import ConfirmationModal from "../klarifai_notebook/ConfirmationModal";
+import MindMapViewer from "../klarifai_notebook/MindMapViewer";
 
 const MainDashboard = () => {
   const { mainProjectId } = useParams();
@@ -38,6 +38,14 @@ const [isNotePadOpen, setIsNotePadOpen] = useState(true);
 const [isNoteEditorModalOpen, setIsNoteEditorModalOpen] = useState(false);
 const [isNoteViewerModalOpen, setIsNoteViewerModalOpen] = useState(false);
 const [modalViewerNoteData, setModalViewerNoteData] = useState(null);
+
+// New state for mindmap functionality
+const [isMindmapGenerating, setIsMindmapGenerating] = useState(false);
+const [isMindmapViewerOpen, setIsMindmapViewerOpen] = useState(false);
+const [mindmapData, setMindmapData] = useState(null);
+const [currentMindmapId, setCurrentMindmapId] = useState(null);
+const mainChatRef = useRef(null);
+
 const handleToggleNotePad = () => {
   setIsNotePadOpen(!isNotePadOpen);
 };
@@ -49,14 +57,77 @@ const [confirmationModal, setConfirmationModal] = useState({
   isLoading: false
 });
 
-
-
 const [modalNoteData, setModalNoteData] = useState({
   id: null,
   title: '',
   content: ''
 });
 
+// Handle mindmap generation
+const handleGenerateMindmap = async () => {
+  if (selectedDocuments.length === 0) {
+    alert('Please select at least one document to generate a mindmap');
+    return;
+  }
+
+  setIsMindmapGenerating(true);
+  
+  try {
+    const { mindmapServiceNB } = await import('../../utils/axiosConfig');
+    
+    console.log('Generating mindmap for documents:', selectedDocuments);
+    console.log('Main project ID:', mainProjectId);
+    
+    const response = await mindmapServiceNB.generateMindmap(
+      mainProjectId,
+      selectedDocuments
+    );
+    
+    if (response.data && response.data.success) {
+      console.log('Mindmap generated successfully:', response.data);
+      
+      // Store mindmap data and open viewer
+      const mindmapData = response.data.mindmap;
+      const mindmapStats = response.data.stats;
+      const mindmapId = response.data.mindmap_id;
+      
+      setMindmapData(mindmapData);
+      setCurrentMindmapId(mindmapId);
+      setIsMindmapViewerOpen(true);
+      
+      console.log(`Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`);
+      
+    } else {
+      console.error('Failed to generate mindmap:', response.data);
+      alert('Failed to generate mindmap. Please try again.');
+    }
+    
+  } catch (error) {
+    console.error('Error generating mindmap:', error);
+    alert(`Error generating mindmap: ${error.response?.data?.error || error.message}`);
+  } finally {
+    setIsMindmapGenerating(false);
+  }
+};
+
+// Handle mindmap viewer close
+const handleCloseMindmapViewer = () => {
+  setIsMindmapViewerOpen(false);
+  setMindmapData(null);
+  setCurrentMindmapId(null);
+};
+
+// Handle sending question from mindmap to chat
+const handleSendQuestionToChat = (question) => {
+  console.log('Sending question from mindmap to chat:', question);
+  
+  // Use the ref to call the MainChat's handleSendMessage function
+  if (mainChatRef.current && mainChatRef.current.handleSendMessage) {
+    mainChatRef.current.handleSendMessage(question);
+  } else {
+    console.error('MainChat ref not available or handleSendMessage not exposed');
+  }
+};
 
 const handleOpenNoteViewer = (noteData) => {
   setModalViewerNoteData(noteData);
@@ -67,7 +138,6 @@ const handleCloseNoteViewer = () => {
   setIsNoteViewerModalOpen(false);
   setModalViewerNoteData(null);
 };
-
 
 const handleDeleteNote = async () => {
   if (!confirmationModal.data) return;
@@ -111,8 +181,6 @@ const handleConvertToDocument = async () => {
   }
 };
 
-
-
 const [isModalSaving, setIsModalSaving] = useState(false);
 const handleOpenNoteEditor = (noteData = null) => {
   setModalNoteData({
@@ -126,7 +194,6 @@ const handleCloseNoteEditor = () => {
   setIsNoteEditorModalOpen(false);
   setModalNoteData({ id: null, title: '', content: '' });
 };
-
 
 const handleSaveNoteFromModal = async (title, content) => {
   setIsModalSaving(true);
@@ -193,8 +260,6 @@ useEffect(() => {
   };
 }, []);
 
-
-
   useEffect(() => {
     console.log('Dashboard mounted with mainProjectId:', mainProjectId);
     
@@ -205,7 +270,6 @@ useEffect(() => {
       return;
     }
   }, [mainProjectId, navigate]);
-
 
   useEffect(() => {
     console.log('Main Project ID in Dashboard:', mainProjectId);
@@ -327,6 +391,87 @@ useEffect(() => {
           />
         )}
 
+        {/* Fixed Action Buttons Container - Top Right */}
+        <div className={`
+          fixed top-20 right-4 z-30 
+          flex flex-col gap-3
+          transition-all duration-300 ease-in-out
+          ${isNotePadOpen ? 'lg:right-80 md:right-80' : 'right-4'}
+        `}>
+          
+          {/* Mindmap Generation Button */}
+          <div className="relative">
+            <button
+              onClick={handleGenerateMindmap}
+              disabled={isMindmapGenerating || selectedDocuments.length === 0}
+              className={`
+                group relative
+                w-12 h-12 lg:w-14 lg:h-14
+                rounded-full 
+                shadow-lg hover:shadow-xl 
+                transition-all duration-300 
+                flex items-center justify-center
+                ${theme === 'dark' 
+                  ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700' 
+                  : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+                }
+                ${(isMindmapGenerating || selectedDocuments.length === 0) 
+                  ? 'opacity-50 cursor-not-allowed' 
+                  : 'hover:scale-110 cursor-pointer'
+                }
+                backdrop-blur-sm
+              `}
+              title={
+                selectedDocuments.length === 0 
+                  ? "Select documents to generate mindmap" 
+                  : isMindmapGenerating 
+                    ? "Generating mindmap..." 
+                    : "Generate Mindmap"
+              }
+            >
+              <Brain 
+                className={`w-5 h-5 lg:w-6 lg:h-6 text-white transition-transform duration-300 ${
+                  isMindmapGenerating ? 'animate-pulse' : 'group-hover:scale-110'
+                }`} 
+              />
+              
+              {/* Tooltip */}
+              <div className={`
+                absolute right-16 top-1/2 transform -translate-y-1/2
+                px-3 py-2 rounded-lg text-sm font-medium
+                ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-gray-900 text-white'}
+                opacity-0 group-hover:opacity-100
+                transition-opacity duration-300
+                pointer-events-none
+                whitespace-nowrap
+                shadow-lg
+                hidden lg:block
+              `}>
+                {selectedDocuments.length === 0 
+                  ? "Select documents first" 
+                  : isMindmapGenerating 
+                    ? "Generating mindmap..." 
+                    : `Generate Mindmap (${selectedDocuments.length} docs)`
+                }
+                <div className={`
+                  absolute left-full top-1/2 transform -translate-y-1/2
+                  border-4 border-transparent
+                  ${theme === 'dark' ? 'border-l-gray-800' : 'border-l-gray-900'}
+                `} />
+              </div>
+
+              {/* Loading spinner overlay */}
+              {isMindmapGenerating && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black bg-opacity-30">
+                  <div className="w-4 h-4 lg:w-5 lg:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+            </button>
+          </div>
+
+         
+        </div>
+
         {/* Responsive Layout Container */}
         <div className="flex flex-1 overflow-hidden w-full">
           <SideTab
@@ -359,7 +504,7 @@ useEffect(() => {
             ? 'px-0 max-w-[calc(100%-330px)]' 
             : 'pl-0 max-w-full'
           }
-          ${isNotePadOpen ? 'pr-80' : 'pr-0'} // Add this line for notepad spacing
+          ${isNotePadOpen ? 'lg:pr-80 md:pr-80 pr-0' : 'pr-0'}
         `}>
             <div className={`
             w-full 
@@ -375,6 +520,7 @@ useEffect(() => {
             }
           `}>
               <MainChat
+                ref={mainChatRef}
                 key={`chat-${forceResetKey}`} 
                 selectedChat={selectedChat}
                 mainProjectId={mainProjectId}
@@ -440,6 +586,16 @@ useEffect(() => {
   itemName={confirmationModal.data?.title || 'Untitled Note'}
   isLoading={confirmationModal.isLoading}
   loadingText={confirmationModal.type === 'convert' ? 'Converting...' : 'Deleting...'}
+/>
+
+<MindMapViewer
+  isOpen={isMindmapViewerOpen}
+  onClose={handleCloseMindmapViewer}
+  mindmapData={mindmapData}
+  mainProjectId={mainProjectId}
+  selectedDocuments={selectedDocuments}
+  mindmapId={currentMindmapId}
+  onSendToChat={handleSendQuestionToChat}
 />
 
     </div>

@@ -2,7 +2,7 @@
 
 // MainChat.jsx
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import BotIcon from "/src/assets/demo-image.png";
 import {
   Paperclip,
@@ -50,6 +50,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { ImprovedCitationManager } from "../dashboard/CitationManager";
 
+
 // Configure marked
 marked.setOptions({
   breaks: true,
@@ -57,7 +58,7 @@ marked.setOptions({
   smartypants: true,
 });
 
-const MainChat = ({
+const MainChat = forwardRef(({
   selectedChat,
   mainProjectId,
   summary: propSummary,
@@ -70,8 +71,8 @@ const MainChat = ({
   selectedDocuments: propSelectedDocuments,
   setSelectedDocuments,
   onChatInputFocus,
-  onOpenYouTubeModal, // 
-}) => {
+  onOpenYouTubeModal,
+}, ref) => {
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState("");
   const [conversation, setConversation] = useState([]);
@@ -178,6 +179,10 @@ const MainChat = ({
       setKeyPoints([]);
     }
   }, [activeDocumentForSummary, localSelectedDocuments, documents]);
+
+
+
+
 
 const handlePinMessage = async (message, messageIndex) => {
   try {
@@ -1670,6 +1675,13 @@ const handleSendMessage = async (message) => {
   }
 };
 
+useImperativeHandle(ref, () => ({
+    handleSendMessage: (message) => {
+      console.log('handleSendMessage called from ref with message:', message);
+      handleSendMessage(message);
+    }
+  }), [handleSendMessage]);
+
 const WebSourcesDisplay = ({ sources }) => {
   if (!sources || sources.length === 0) return null;
   
@@ -2699,6 +2711,7 @@ const WebSourcesDisplay = ({ sources }) => {
               >
                 <Paperclip className="h-4 w-4" />
               </button>
+              
             )}
            <button
   title="Upload YouTube video"
@@ -3070,7 +3083,7 @@ const WebSourcesDisplay = ({ sources }) => {
           `}</style>
     </div>
   );
-};
+});
 
 MainChat.propTypes = {
   mainProjectId: PropTypes.string.isRequired,
@@ -3085,7 +3098,6 @@ MainChat.propTypes = {
     ),
     summary: PropTypes.string,
     follow_up_questions: PropTypes.arrayOf(PropTypes.string),
-    // conversation_id: PropTypes.string,
     selected_documents: PropTypes.arrayOf(
       PropTypes.oneOfType([PropTypes.string, PropTypes.number])
     ),
@@ -3109,5 +3121,5 @@ MainChat.propTypes = {
   isDocumentProcessing: PropTypes.bool,
   processingProgress: PropTypes.number,
 };
-
+MainChat.displayName = 'MainChat';
 export default MainChat;

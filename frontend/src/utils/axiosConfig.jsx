@@ -1476,6 +1476,124 @@ export const noteServiceNB = {
 };
  
 
-
+export const mindmapServiceNB = {
+  // Generate mindmap from selected documents
+  generateMindmap: (mainProjectId, selectedDocuments = [], config = {}, targetUserId = null) => {
+    const data = {
+      main_project_id: mainProjectId,
+      selected_documents: selectedDocuments,
+    };
+   
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+ 
+    console.log('Generating mindmap with data:', data);
+   
+    return axiosInstance.post("notebook/generate-mindmap/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    }).then(response => {
+      console.log('Mindmap generation response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Mindmap generation error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+ 
+  // Ask question about a mindmap node
+  askMindmapQuestion: (mainProjectId, topicName, topicSummary = '', nodePath = '', selectedDocuments = [], mindmapId = null, config = {}, targetUserId = null) => {
+    const data = {
+      main_project_id: mainProjectId,
+      topic_name: topicName,
+      topic_summary: topicSummary,
+      node_path: nodePath,
+      selected_documents: selectedDocuments,
+    };
+ 
+    if (mindmapId) {
+      data.mindmap_id = mindmapId;
+    }
+   
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+ 
+    console.log('Asking mindmap question with data:', data);
+   
+    return axiosInstance.post("notebook/mindmap-question/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    }).then(response => {
+      console.log('Mindmap question response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Mindmap question error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+ 
+  // Get user's mindmaps for a project
+  getUserMindmaps: (mainProjectId, config = {}, targetUserId = null) => {
+    const params = {
+      main_project_id: mainProjectId,
+    };
+   
+    if (targetUserId) {
+      params.target_user_id = targetUserId;
+    }
+ 
+    console.log('Fetching user mindmaps with params:', params);
+   
+    return axiosInstance.get("notebook/user-mindmaps/", {
+      params,
+      ...config,
+    }).then(response => {
+      console.log('Get user mindmaps response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Get user mindmaps error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+ 
+  // Get specific mindmap data
+  getMindmapData: (mindmapId, config = {}) => {
+    console.log('Fetching mindmap data for ID:', mindmapId);
+   
+    return axiosInstance.get(`notebook/mindmap/${mindmapId}/`, {
+      ...config,
+    }).then(response => {
+      console.log('Get mindmap data response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Get mindmap data error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+ 
+  // Delete a mindmap (if you want to add this functionality)
+  deleteMindmap: (mindmapId, config = {}) => {
+    console.log('Deleting mindmap with ID:', mindmapId);
+   
+    return axiosInstance.delete(`notebook/mindmap/${mindmapId}/`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    }).then(response => {
+      console.log('Mindmap delete response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Mindmap delete error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+};
 
 export default axiosInstance;
