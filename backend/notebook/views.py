@@ -7930,7 +7930,25 @@ class ChatExportView(APIView):
 
 class YouTubeUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
-   
+    
+    def sanitize_filename(self, filename):
+        """Sanitize filename to make it safe for file system"""
+        import re
+       
+        # Remove or replace characters that are not allowed in filenames
+        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        # Remove leading/trailing dots and spaces
+        filename = filename.strip('. ')
+        # Ensure the filename is not empty
+        if not filename:
+            filename = 'untitled'
+        # Limit length to avoid file system issues
+        if len(filename) > 200:
+            filename = filename[:200]
+       
+        return filename
+
+
     def is_valid_youtube_url(self, url):
         """Check if the provided URL is a valid YouTube URL."""
         youtube_patterns = [
