@@ -13,7 +13,7 @@ import { ThemeContext } from '../../context/ThemeContext'; // Import ThemeContex
 import SideTab from './SideTab';
 import YouTubeUploadModal from "../klarifai_notebook/YouTubeUploadModal";
 import NoteEditorModal from "../klarifai_notebook/NoteEditorModal";
-import NotePad from "../klarifai_notebook/Notepad";
+import NotePad from "../klarifai_notebook/NotePad";
 import NoteViewerModal from "../klarifai_notebook/NoteViewerModal";
 import ConfirmationModal from "../klarifai_notebook/ConfirmationModal";
 import MindMapViewer from "../klarifai_notebook/MindMapViewer";

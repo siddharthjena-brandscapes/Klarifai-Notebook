@@ -136,10 +136,13 @@ const SummaryFormatter = ({ content, keyPoints, onTopicClick }) => {
       });
     };
   
+    // Render the component
     return (
       <div className="w-full max-w-4xl mx-auto space-y-6">
-        {formatSummary(content)}
+        {/* Move KeyTopics to the top */}
         <KeyTopics keyPoints={keyPoints} onTopicClick={onTopicClick} />
+        {/* Then display the formatted summary content */}
+        {formatSummary(content)}
       </div>
     );
   };
