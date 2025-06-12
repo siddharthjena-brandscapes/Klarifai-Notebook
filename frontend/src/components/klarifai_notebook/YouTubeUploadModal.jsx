@@ -352,65 +352,6 @@ const YouTubeUploadModal = ({ isOpen, onClose, mainProjectId, onUploadSuccess })
   };
 
   const handleTextSubmit = async () => {
-<<<<<<< HEAD
-  if (!textContent.trim()) return;
-
-  setIsUploading(true);
-  try {
-    // Enhanced validation
-    if (textContent.trim().length < 10) {
-      toast.error('Text content must be at least 10 characters long');
-      setIsUploading(false);
-      return;
-    }
-
-    // Check for maximum size (1MB = 1,048,576 bytes)
-    const textSize = new Blob([textContent]).size;
-    if (textSize > 1048576) {
-      toast.error('Text content exceeds maximum size of 1MB');
-      setIsUploading(false);
-      return;
-    }
-
-    // Log the data being sent (for debugging)
-    console.log('Sending data:', {
-      textContent: textContent.substring(0, 100) + '...', // Log first 100 chars
-      textTitle: textTitle.trim() || null,
-      mainProjectId,
-      textSize: `${(textSize / 1024).toFixed(2)} KB`
-    });
-
-    const response = await documentServiceNB.uploadPlainText(
-      textContent, 
-      textTitle.trim() || null, 
-      mainProjectId
-    );
-    
-    if (response.data) {
-      toast.success('Text content processed successfully!');
-      if (onUploadSuccess) {
-        onUploadSuccess(response.data);
-      }
-    }
-
-    setTextContent('');
-    setTextTitle('');
-    setCurrentView('main');
-    onClose();
-  } catch (error) {
-    console.error('Upload error:', error);
-    console.error('Error response:', error.response?.data);
-    
-    const errorMessage = error.response?.data?.message || 
-                        error.response?.data?.error || 
-                        'Failed to process text content';
-    
-    toast.error(errorMessage);
-  } finally {
-    setIsUploading(false);
-  }
-};
-=======
 
   if (!textContent.trim()) return;
  
@@ -510,7 +451,6 @@ const YouTubeUploadModal = ({ isOpen, onClose, mainProjectId, onUploadSuccess })
 
 };
  
->>>>>>> 3520a5c394597233df59aab90b10284b3264669d
 
   const handleKeyPress = (e, submitFunction) => {
     if (e.key === 'Enter' && !isUploading) {
