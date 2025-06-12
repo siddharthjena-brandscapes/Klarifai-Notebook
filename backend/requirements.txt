@@ -135,3 +135,5 @@ google-genai==1.13.0
 openpyxl==3.1.5
 yt_dlp
 whitenoise==6.6.0
+langchain_text_splitters
+PyPDF2

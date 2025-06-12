@@ -5359,8 +5359,8 @@ class ChatView(APIView):
 
     def generate_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
-        Generate a response using the provided context and sources with web search capability.
-        Enhanced to handle URL content in context. Also Enhanced with accurate citation
+        Generate a comprehensive response using the provided context and sources with web search capability.
+        Enhanced to handle URL content in context and generate detailed, long-form responses.
         
         Args:
             query (str): User's original query
@@ -5371,51 +5371,32 @@ class ChatView(APIView):
             conversation_context (str): Previous conversation history context
             
         Returns:
-            str: Generated response based on the context and/or web search
+            str: Generated comprehensive response based on the context and/or web search
         """
         # Check if the query is a simple greeting
         greeting_keywords = [
-            # Basic greetings
             "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
             "good afternoon", "good evening", "what's up", "sup", "hiya",
-            
-            # Variations with repeated letters
             "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
-            
-            # Short forms/abbreviations
             "hlw", "g'day", "yo", "heya", 
-            
-            # Informal greetings
             "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
             "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
-            
-            # Time-specific with variations
             "morning", "afternoon", "evening", "gm", "ga", "ge",
-            
-            # Other languages and cultural greetings
             "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
-            
-            # Casual text-style greetings
             "sup", "yo yo", "hiya", "hai", "hullo"
         ]
         
-        # Convert to lowercase and strip to properly detect greetings
         query_lower = query.lower().strip()
-        
-        # Check if the query is just a greeting or a greeting followed by a name/simple phrase
         is_greeting = False
         
-        # Exact matches
         if query_lower in greeting_keywords:
             is_greeting = True
         
-        # Starting with a greeting
         for greeting in greeting_keywords:
-            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
+            if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:
                 is_greeting = True
                 break
         
-        # If it's a greeting, respond directly without using more complex logic
         if is_greeting:
             greeting_responses = [
                 f"Hello! How can I assist you today?",
@@ -5424,21 +5405,18 @@ class ChatView(APIView):
                 f"Hello! I'm here to help. What do you need?",
                 f"Hey! What questions do you have for me today?"
             ]
-            # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
             return greeting_responses[response_index], {}
         
-        # If not a greeting, proceed with the regular flow
         if not context and not use_web_knowledge:
-            return "I cannot answer this question based on the provided documents.", {}
+            return "I cannot answer this question based on the provided documents."
         
-        # Check for URL content in the context
+        # Enhanced URL and context processing
         url_context = ""
         document_context = []
         document_sources = []
         url_sources = []
         
-        # Separate URL content from document content
         for i, content_item in enumerate(context):
             if i < len(sources) and sources[i] == "URL Content" and "CONTENT FROM URLS IN QUERY:" in content_item:
                 url_context = content_item
@@ -5448,23 +5426,21 @@ class ChatView(APIView):
                 if i < len(sources):
                     document_sources.append(sources[i])
         
-        # Updated context preparation with citation mapping
         citation_sources = {}
-        selected_context, selected_sources = self._prepare_context(document_context, document_sources)
+        # Use MORE context for comprehensive responses - increased limits
+        selected_context, selected_sources = self._prepare_context_comprehensive(document_context, document_sources)
         
-        # Create context with source information
         contextualized_content = []
         for i, (content, source) in enumerate(zip(selected_context, selected_sources), 1):
-            # Add citation number to each chunk
             citation_sources[i] = {
                 "source_file": source,
                 "text": content,
-                "document_id": "Unknown",  # You might need to add logic to get the document ID
-                "score": 1.0 - (i * 0.05),  # Simple scoring based on position (higher for earlier chunks)
+                "document_id": "Unknown",
+                "score": 1.0 - (i * 0.02),  # Reduced penalty for more sources
                 "display_num": i
             }
             contextualized_content.append(f"Source {i}:\n{content}")
-            
+
         if url_context:
             citation_count = len(contextualized_content) + 1
             contextualized_content.append(f"Source {citation_count}:\n{url_context}")
@@ -5473,13 +5449,13 @@ class ChatView(APIView):
                 "source_file": "URL Content",
                 "text": url_context,
                 "document_id": "url_content",
-                "score": 0.8,  # Fixed score for URL content
+                "score": 0.8,
                 "display_num": citation_count
             }
 
         full_context = "\n\n".join(contextualized_content)
 
-        # Get format-specific guidance
+        # Get format-specific guidance for COMPREHENSIVE responses
         format_guidance = self._get_format_guidance(response_format, 'comprehensive')
         
         # Include conversation context if available
@@ -5502,42 +5478,30 @@ class ChatView(APIView):
 
         # Get project description if available
         project_description = self._get_project_description(query)
-
+        
         project_guidance = ""
         if project_description and len(project_description.strip()) > 5:
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
-
+            
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
-
+            
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
-
+            
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
 
-        # Updated system message for JSON response
-        system_message = """You are a document analysis expert with conversation memory. 
-        You must respond in JSON format with the following structure:
-        {
-            "content": "Your detailed response content here with proper HTML formatting and citations",
-            "citations_used": [list of citation numbers used in the response],
-            "format_type": "response_format_used",
-            "sources_referenced": ["list", "of", "source", "names"]
-        }
-        
-        In the content field, use HTML tags for formatting (<b>, <p>, <ul>, <li>, <table>, etc.).
-        Use source citations [n] for all information from the documents.
-        Provide a comprehensive and detailed answer while maintaining conversation continuity."""
-
-        # Define the user prompt for JSON response
+        # Enhanced comprehensive response prompt
         user_prompt = f"""
-        Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+        You are an expert document analyst tasked with providing comprehensive, detailed responses based on provided context. 
+
+        Based ONLY on the following extensive context from multiple documents and URLs, provide a thorough, comprehensive answer to the question. Your response should be detailed, well-structured, and make full use of all relevant information available in the context.
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -5547,19 +5511,22 @@ class ChatView(APIView):
 
         {project_guidance}
 
-        RESPONSE GENERATION GUIDELINES:
-        - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
-        - Previous conversation context should only inform your response when directly relevant to the current query.
-        - Provide a DETAILED, COMPREHENSIVE, and THOROUGH answer.
-        - Include ALL relevant information from the context in your response.
-        - Prioritize completeness over brevity - make sure to include details.
-        - If multiple perspectives or data points exist, include all of them.
-        - When appropriate, organize information with clear sections and structure.
-        - Maintain a natural, conversational tone.
-        - Ensure the response is directly derived from the provided document context.
-        - If URL content is present, specifically address content from URLs that is relevant to the query.
-        - If the document does NOT contain relevant information, explicitly state that and summarize related available content instead.
-        - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
+        COMPREHENSIVE RESPONSE GENERATION GUIDELINES:
+        - PRIORITIZE the current user query but provide exhaustive coverage of the topic.
+        - Utilize ALL relevant information from the provided context - don't leave important details unused.
+        - Create a detailed, structured response with multiple sections and subsections as appropriate.
+        - Include specific examples, data points, quotes, and detailed explanations from the documents.
+        - Provide comprehensive analysis and synthesis of information from multiple sources.
+        - Use a scholarly, detailed writing style that thoroughly explores the topic.
+        - Include background information, context, implications, and related details.
+        - When appropriate, compare and contrast information from different sources.
+        - Provide quantitative details, statistics, and specific data points when available.
+        - Include relevant context and background information that helps understand the main topic.
+        - Structure your response logically with clear headings and transitions.
+        - Aim for a comprehensive, authoritative response that fully addresses the query.
+        - If URL content is present, thoroughly integrate and analyze content from URLs.
+        - Use proper HTML formatting for structure (headings, paragraphs, lists, etc.).
+        - Ensure the response demonstrates deep understanding and thorough analysis.
 
         DOCUMENT AND URL CONTEXT:
         {full_context}
@@ -5568,7 +5535,7 @@ class ChatView(APIView):
 
         CRITICAL: Your response MUST be a valid JSON object with this exact structure:
         {{
-            "content": "Your comprehensive response with HTML formatting and [n] citations",
+            "content": "Your comprehensive, detailed response with extensive HTML formatting, proper structure, and [n] citations. This should be a thorough, multi-paragraph response that fully utilizes the provided context.",
             "citations_used": [list of citation numbers used],
             "format_type": "{response_format}",
             "sources_referenced": ["list of source names referenced"]
@@ -5578,128 +5545,127 @@ class ChatView(APIView):
         - Use ONLY information from the provided document and URL context.
         - DO NOT generate speculative or external information.
         - Your response must be based EXCLUSIVELY on the document and URL context provided.
-        - Ensure clarity, accuracy, and comprehensive coverage of all relevant details.
-        - Avoid summarizing or condensing important information - include all relevant details.
-        - Use <b> tags for key section headings.
-        - If the context contains URL content, clearly attribute information from URLs in your response.
+        - Provide a comprehensive, detailed response that makes full use of available context.
+        - Structure your response with proper HTML formatting (h2, h3, p, ul, ol, strong, em tags).
+        - Include extensive analysis, details, examples, and explanations from the documents.
+        - Use source citations [n] for all information from the documents.
+        - Aim for a scholarly, comprehensive response that thoroughly covers the topic.
+        - Your content should be substantial - aim for detailed coverage rather than brief summaries.
+
+
+
+        RESPONSE FORMAT REQUIREMENTS:
+            1. Follow with detailed elaboration on each relevant point.
+            2. Include specific details, examples, and support from the source content.
+            3. Use clear, logical sections when needed.
+            4. Conclude with any other contextually relevant insights.
+            5. Use <b> for section headers.
+            6. Use <p> for body text.
+            7. Use <ul> / <li> for lists.
+            8. Use <table>, <tr>, <td> for tables, if applicable.
+            9. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
         """
         
         try:
-            # Call the OpenAI chat completion API with JSON format
-            completion = client.chat.completions.create(
-                model="o4-mini",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_prompt}
-                ],
-                response_format={"type": "json_object"},  # Force JSON response
-              
-               
+            # Get user's Gemini API key
+            gemini_api_key = None
+            try:
+                if hasattr(self, 'request') and hasattr(self.request, 'user'):
+                    user_api_tokens = UserAPITokens.objects.get(user=self.request.user)
+                    gemini_api_key = user_api_tokens.gemini_token
+                    
+                    if not gemini_api_key:
+                        logger.warning(f"No Gemini API token found for user {self.request.user.username}")
+                        # Fallback to environment variable
+                        gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                        if not gemini_api_key:
+                            raise ValueError("Gemini API token is required")
+                            
+            except (UserAPITokens.DoesNotExist, AttributeError):
+                logger.error("No API tokens record found or user not available")
+                # Fallback to environment variable
+                gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                if not gemini_api_key:
+                    raise ValueError("Gemini API token is required")
+            
+            # Configure Gemini client with Flash 2.0 (not exp)
+            from google import genai
+            client = genai.Client(api_key=gemini_api_key)
+            model = "gemini-2.0-flash"  # Changed from gemini-2.0-flash-exp
+            
+            # Call Gemini API for comprehensive response with increased limits
+            response = client.models.generate_content(
+                model=model,
+                contents=[user_prompt],
+                config={
+                    "temperature": 0.3,  # Slightly lower for more focused responses
+                    "max_output_tokens": 8000,  # Significantly increased token limit
+                    "response_mime_type": "application/json"
+                }
             )
-             # ===== LOG RAW LLM RESPONSE =====
-            raw_llm_response = completion.choices[0].message.content
+            
+            # ===== LOG RAW LLM RESPONSE =====
+            raw_llm_response = response.text
             print("\n" + "="*100)
-            print("🤖 RAW LLM RESPONSE FROM OPENAI (generate_short_response)")
+            print("🤖 RAW LLM RESPONSE FROM GEMINI (generate_comprehensive_response)")
             print("="*100)
-            print("Model used:", completion.model)
-            print("Response ID:", completion.id)
+            print("Model used:", model)
             print("Raw response content:")
             print(raw_llm_response)
             print("Response length:", len(raw_llm_response))
             print("Response type:", type(raw_llm_response))
             print("="*100)
             # ===== END LOG RAW LLM RESPONSE =====
-            # Parse the JSON response
-            json_response = self._parse_json_response(completion.choices[0].message.content)
             
-            if json_response.get("error"):
-                # If JSON parsing failed, return the fallback message
-                answer = json_response.get("content", "An error occurred while generating the response.")
-            else:
-                # Extract the content from JSON response
-                answer = json_response.get("content", "No response content found.")
-
-            # Clean and process citations in the answer
+            # Parse the JSON response
+            json_response = self._parse_json_response(response.text)
+            answer = json_response.get("content", "No response content found.")
             answer = self._clean_citations(answer, citation_sources)
             answer = self._ensure_separate_citation_brackets(answer)
             processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
-            
-            # If answer seems too short, try to generate a more detailed one
-            if len(answer.split()) < 100:  # If less than ~100 words
-                enhanced_system_message = """You are a document analysis expert with conversation memory. 
-                You must respond in JSON format with the following structure:
-                {
-                    "content": "Your EXTREMELY DETAILED and COMPREHENSIVE response with proper HTML formatting and citations",
-                    "citations_used": [list of citation numbers used],
-                    "format_type": "response_format_used",
-                    "sources_referenced": ["list", "of", "source", "names"]
-                }
-                
-                Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity. Use source citations [n] for all information from the documents."""
-                
-                completion = client.chat.completions.create(
-                    model="o4-mini",
-                    messages=[
-                        {"role": "system", "content": enhanced_system_message},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    response_format={"type": "json_object"},  # Force JSON response
-                   
-                   
-                )
-                
-                # Parse the enhanced JSON response
-                json_response = self._parse_json_response(completion.choices[0].message.content)
-                answer = json_response.get("content", answer)  # Use original if parsing fails
-                answer = self._clean_citations(answer, citation_sources)
-                answer = self._ensure_separate_citation_brackets(answer)
-                processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
                 
         except Exception as e:
-            # If there's an error (e.g., token limit), try with fewer context chunks
-            reduced_context = "\n\n".join(contextualized_content[:8])
-            # Create a shorter version of conversation context if needed
-            short_conv_context = ""
-            if conversation_context:
-                short_conv_context = f"Previous conversation context: {conversation_context[:300]}..."
-                
+            print(f"Error in main Gemini call: {str(e)}")
+            # Enhanced fallback with more context
+            reduced_context = "\n\n".join(contextualized_content[:10])  # More context in fallback
             fallback_prompt = f"""
-            Based ONLY on the following context, provide a comprehensive answer to the question: {query}
-            
-            {short_conv_context}
+            Based ONLY on the following context, provide a detailed answer to the question: {query}
             
             CONTEXT:
             {reduced_context}
             
-            CRITICAL: Respond in JSON format:
+            CRITICAL: Respond in JSON format with a comprehensive response:
             {{
-                "content": "Your detailed response with HTML formatting",
+                "content": "Your detailed response with extensive HTML formatting and analysis",
                 "citations_used": [],
                 "format_type": "fallback",
                 "sources_referenced": []
             }}
+            
+            Provide a thorough, detailed response. Use proper HTML structure and formatting.
             """
             
             try:
-                fallback_completion = client.chat.completions.create(
-                    model="o4-mini",
-                    messages=[
-                        {"role": "system", "content": "You are a document analysis expert. Respond in JSON format."},
-                        {"role": "user", "content": fallback_prompt}
-                    ],
-                    response_format={"type": "json_object"},  # Force JSON response
-                    
-                  
+                # Fallback Gemini call with increased limits
+                fallback_response = client.models.generate_content(
+                    model=model,
+                    contents=[fallback_prompt],
+                    config={
+                        "temperature": 0.3,
+                        "max_output_tokens": 6000,  # Increased fallback limit
+                        "response_mime_type": "application/json"
+                    }
                 )
                 
-                json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
+                json_response = self._parse_json_response(fallback_response.text)
                 answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
                 answer = self._ensure_separate_citation_brackets(answer)
                 processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
             except Exception as nested_e:
+                print(f"Error in fallback Gemini call: {str(nested_e)}")
                 # Last resort fallback
-                answer = f"An error occurred while generating the response: {str(e)}. Please try a more specific question or with fewer documents."
+                answer = f"An error occurred while generating the response. Please try a more specific question."
                 processed_answer = answer
                 processed_citations = {}
 
@@ -5780,7 +5746,7 @@ class ChatView(APIView):
                     document_sources.append(sources[i])
         
         citation_sources = {}
-        selected_context, selected_sources = self._prepare_context(document_context, document_sources)
+        selected_context, selected_sources = self._prepare_context_comprehensive(document_context, document_sources)
         
         contextualized_content = []
         for i, (content, source) in enumerate(zip(selected_context, selected_sources), 1):
@@ -5851,7 +5817,9 @@ class ChatView(APIView):
 
         # Define the user prompt for short response with conversation context
         user_prompt = f"""
-        Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
+        You are an expert document analyst tasked with providing focused, accurate, and complete answers based on the provided context. Your goal is to deliver precise responses that directly address the user's question while ensuring no important details are missed.
+
+        Based ONLY on the following context from multiple documents and URLs, provide a focused and comprehensive answer to the question. Your response should be directly relevant to the query, well-structured, and include all pertinent details without unnecessary elaboration.
 
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
 
@@ -5861,17 +5829,29 @@ class ChatView(APIView):
 
         {project_guidance}
 
-        RESPONSE GENERATION GUIDELINES:
-        - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
-        - Previous conversation context should only inform your response when directly relevant to the current query.
-        - Focus on the most relevant information from the context.
-        - Prioritize clarity and comprehensiveness.
-        - When appropriate, organize information with clear sections and structure.
-        - Maintain a natural, conversational tone.
-        - Ensure the response is directly derived from the provided document and URL context.
-        - If URL content is present, specifically address content from URLs that is relevant to the query.
-        - If the document does NOT contain relevant information, explicitly state that.
-        - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
+        FOCUSED RESPONSE GENERATION GUIDELINES:
+        - DIRECTLY address the user's specific question as the primary focus
+        - Include ALL relevant details and data points that relate to the query
+        - Structure information logically with clear organization and proper HTML formatting
+        - Provide complete answers - don't leave out important context or supporting details
+        - Include specific examples, data, quotes, and evidence from the documents when relevant
+        - Use a clear, professional tone that balances conciseness with completeness
+        - Ensure every piece of relevant information from the context is utilized appropriately
+        - Organize content with proper headings, lists, and formatting for clarity
+        - Include quantitative data, statistics, and specific metrics when available
+        - Provide sufficient context for understanding while avoiding unnecessary detail
+        - Previous conversation context should inform your response only when directly relevant
+        - Aim for concise, informative responses that can be quickly read and understood
+
+        CONTENT COMPLETENESS REQUIREMENTS:
+        - Cover all aspects of the question that are addressed in the provided context
+        - Include supporting details that enhance understanding of the main answer
+        - Provide specific examples and evidence from the documents
+        - Include relevant background information that directly supports the answer
+        - Mention related information that adds value to understanding the topic
+        - Ensure all important data points and findings are included
+        - Use proper citations to clearly attribute information to sources
+        - Prioritize clarity and brevity - eliminate redundant or overly detailed explanations
 
         DOCUMENT AND URL CONTEXT:
         {full_context}
@@ -5880,22 +5860,36 @@ class ChatView(APIView):
 
         CRITICAL: Your response MUST be a valid JSON object with this exact structure:
         {{
-            "content": "Your concise response with HTML formatting and [n] citations",
+            "content": "Your focused, complete response with proper HTML formatting, clear structure, and [n] citations. Include all relevant details while maintaining direct relevance to the query.",
             "citations_used": [list of citation numbers used],
             "format_type": "{response_format}",
             "sources_referenced": ["list of source names referenced"]
         }}
 
         CRITICAL CONSTRAINTS:
-        - Use ONLY information from the provided document and URL context.
-        - DO NOT generate speculative or external information.
-        - Your response must be based EXCLUSIVELY on the document and URL context provided.
-        - Ensure clarity, accuracy, and comprehensive coverage of key relevant details.
-        - If the context contains URL content, clearly attribute information from URLs in your response.
-        - You are a document analysis expert with conversation memory. 
-        - You must respond in JSON format with the structure specified above.
-        - Provide a concise yet informative response that maintains conversation continuity. 
-        - Use source citations [n] for information from the documents.
+        - Use ONLY information from the provided document and URL context
+        - DO NOT generate speculative or external information beyond the provided context
+        - Your response must be based EXCLUSIVELY on the document and URL context provided
+        - Provide a complete answer that includes all relevant details from the context
+        - Structure your response with proper HTML formatting (h3, h4, p, ul, ol, strong, em tags)
+        - Include comprehensive coverage of the topic while maintaining focus on the specific query
+        - Use source citations [n] for all information derived from the documents
+        - Ensure accuracy and completeness while maintaining conciseness - don't omit important details but avoid verbose explanations
+        - Balance thoroughness with relevance - include complete information without unnecessary tangents
+        - If the context contains URL content, integrate and properly attribute information from URLs
+        - If specific information is missing from the documents, clearly state what is not available
+        - Maintain professional clarity while ensuring no relevant detail is overlooked
+
+        RESPONSE FORMAT REQUIREMENTS:
+            1. Follow with detailed elaboration on each relevant point.
+            2. Include specific details, examples, and support from the source content.
+            3. Use clear, logical sections when needed.
+            4. Conclude with any other contextually relevant insights.
+            5. Use <b> for section headers.
+            6. Use <p> for body text.
+            7. Use <ul> / <li> for lists.
+            8. Use <table>, <tr>, <td> for tables, if applicable.
+            9. Avoid using Markdown formatting (**bold** and etc.). Use HTML only.
         """
         
         try:
@@ -6616,12 +6610,12 @@ class ChatView(APIView):
     #     max_results = min(len(filtered_results), 15)
     #     return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
     
-    def search_similar_content(self, query, processed_docs, metadata_store, k=40):
+    def search_similar_content(self, query, processed_docs, metadata_store, k=80):  # Increased k from 40 to 80
         """
-        Simplified search function that prioritizes FAISS similarity scores
-        with basic deduplication and citation mapping
+        Enhanced search function that prioritizes FAISS similarity scores
+        with comprehensive context retrieval for detailed responses
         """
-        print(f"\n🔍 SEARCH DEBUG: Starting search for query: '{query}'")
+        print(f"\n🔍 SEARCH DEBUG: Starting comprehensive search for query: '{query}'")
         print(f"🔍 SEARCH DEBUG: Number of processed docs: {len(processed_docs)}")
         
         # Get embeddings for the query
@@ -6701,25 +6695,27 @@ class ChatView(APIView):
                     index = faiss.read_index(proc_doc.faiss_index)
                     print(f"✅ SEARCH DEBUG: Loaded FAISS index with {index.ntotal} vectors")
                     
+                    # Increased search results per document
+                    search_k = min(k // len(processed_docs) + 10, index.ntotal)  # More results per doc
                     distances, indices = index.search(
                         np.array([query_embedding[0]]).astype('float32'), 
-                        min(k, index.ntotal)
+                        search_k
                     )
                     
                     print(f"✅ SEARCH DEBUG: FAISS search returned {len(indices[0])} results")
                     print(f"   Best distances: {distances[0][:5]}")
                     print(f"   Best indices: {indices[0][:5]}")
                     
-                    # Extract results for this document
+                    # Extract results for this document with relaxed distance threshold
                     doc_results_count = 0
                     for i, idx in enumerate(indices[0]):
-                        if idx < len(chunks) and distances[0][i] < 1.5:  # Distance threshold
+                        if idx < len(chunks) and distances[0][i] < 2.0:  # Relaxed threshold from 1.5 to 2.0
                             chunk = chunks[idx]
                             content = chunk.get('text', '') if isinstance(chunk, dict) else str(chunk)
                             
                             if content and content.strip():
-                                # Create content hash to check for duplicates
-                                content_hash = hash(content[:200])  # Use first 200 chars for hash
+                                # More lenient duplicate detection
+                                content_hash = hash(content[:150])  # Increased from 200 to 150 for less strict deduplication
                                 
                                 if content_hash not in seen_content_hashes:
                                     seen_content_hashes.add(content_hash)
@@ -6750,7 +6746,7 @@ class ChatView(APIView):
                 except Exception as e:
                     print(f"❌ SEARCH DEBUG: Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
                     
-                    # Fallback to basic text search if FAISS fails
+                    # Enhanced fallback to basic text search
                     if chunks:
                         print(f"🔄 SEARCH DEBUG: Falling back to text search for {proc_doc.document.filename}")
                         query_lower = query.lower()
@@ -6767,9 +6763,9 @@ class ChatView(APIView):
                         
                         print(f"   Found {len(matched_chunks)} text matches")
                         
-                        # Add top 5 text matches
-                        for chunk_idx, chunk_text in matched_chunks[:5]:
-                            content_hash = hash(chunk_text[:200])
+                        # Add more text matches for comprehensive responses
+                        for chunk_idx, chunk_text in matched_chunks[:10]:  # Increased from 5 to 10
+                            content_hash = hash(chunk_text[:150])
                             if content_hash not in seen_content_hashes:
                                 seen_content_hashes.add(content_hash)
                                 citation_count += 1
@@ -6777,7 +6773,7 @@ class ChatView(APIView):
                                 citation_mapping[citation_count] = {
                                     'source': proc_doc.document.filename,
                                     'text': chunk_text,
-                                    'relevance_score': 0.5,  # Medium relevance for text matches
+                                    'relevance_score': 0.5,
                                     'document_id': proc_doc.document.id,
                                     'chunk_idx': chunk_idx,
                                     'display_num': citation_count
@@ -6803,10 +6799,7 @@ class ChatView(APIView):
             return [], [], {}
         
         # Simple sorting by FAISS distance (lower is better)
-        # Combine results with their metadata for sorting
         combined_results = list(zip(all_results, all_sources, all_distances, range(1, len(all_results) + 1)))
-        
-        # Sort by distance (ascending - lower distance = more similar)
         sorted_results = sorted(combined_results, key=lambda x: x[2])
         
         print(f"🔍 SEARCH DEBUG: Sorted results by distance")
@@ -6826,7 +6819,7 @@ class ChatView(APIView):
         
         citation_mapping = reordered_citation_mapping
         
-        # Final deduplication while preserving order
+        # Less aggressive deduplication for comprehensive responses
         seen_content = set()
         filtered_results = []
         filtered_sources = []
@@ -6834,7 +6827,7 @@ class ChatView(APIView):
         new_citation_count = 0
         
         for i, (content, source) in enumerate(zip(results, sources)):
-            content_hash = content[:100] if content else ""
+            content_hash = content[:80] if content else ""  # Reduced from 100 to 80 for less strict deduplication
             if content_hash and content_hash not in seen_content:
                 seen_content.add(content_hash)
                 filtered_results.append(content)
@@ -6846,22 +6839,22 @@ class ChatView(APIView):
                     filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx].copy()
                     filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
         
-        # Return top matches (limit to 15 most relevant)
-        max_results = min(len(filtered_results), 15)
+        # Return more matches for comprehensive responses (increased from 15 to 30)
+        max_results = min(len(filtered_results), 30)
         final_results = filtered_results[:max_results]
         final_sources = filtered_sources[:max_results]
         final_citations = {k: v for k, v in filtered_citation_mapping.items() if k <= max_results}
         
         print(f"\n✅ SEARCH DEBUG: Final results: {len(final_results)} items")
-        for i, (content, source) in enumerate(zip(final_results[:3], final_sources[:3])):
+        for i, (content, source) in enumerate(zip(final_results[:5], final_sources[:5])):
             print(f"   Final {i+1}: source='{source}', content='{content[:100]}...'")
         
         return final_results, final_sources, final_citations
-    
-    # Helper method to prepare context for response generation
-    def _prepare_context(self, context, sources):
+
+
+    def _prepare_context_comprehensive(self, context, sources):
         """
-        Helper method to prepare context for response generation
+        Enhanced context preparation for comprehensive responses
         
         Args:
             context (list): List of context chunks
@@ -6870,31 +6863,29 @@ class ChatView(APIView):
         Returns:
             tuple: (selected_context, selected_sources)
         """
-        # Limit number of tokens by selecting most relevant chunks
         selected_context = []
         selected_sources = []
         seen_content_hashes = set()
         
-        # Take first 8 chunks (most relevant ones)
-        initial_count = min(8, len(context))
+        # Significantly increased context limits for comprehensive responses
+        initial_count = min(20, len(context))  # Increased from 8 to 20
         for i in range(initial_count):
             selected_context.append(context[i])
             selected_sources.append(sources[i])
-            # Add a content hash to avoid repetition
-            seen_content_hashes.add(context[i][:100])
+            seen_content_hashes.add(context[i][:80])  # Reduced hash length for less strict deduplication
         
         # Add more diverse chunks from the remaining context
         for i in range(initial_count, len(context)):
-            content_hash = context[i][:100]
-            # Check if content is sufficiently different from what we've seen
+            content_hash = context[i][:80]  # Reduced from 100 to 80
             if content_hash not in seen_content_hashes:
                 selected_context.append(context[i])
                 selected_sources.append(sources[i])
                 seen_content_hashes.add(content_hash)
-                # Limit to 15 total pieces of context for token limit reasons
-                if len(selected_context) >= 15:
+                # Significantly increased context limit from 15 to 40
+                if len(selected_context) >= 40:
                     break
         
+        print(f"🔍 CONTEXT DEBUG: Selected {len(selected_context)} context chunks for comprehensive response")
         return selected_context, selected_sources
             
     # Keep general follow-up question generation as is
@@ -7930,7 +7921,6 @@ class ChatExportView(APIView):
 
 class YouTubeUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
-
     def sanitize_filename(self, filename):
         """Sanitize filename to make it safe for file system"""
         import re

@@ -1,6 +1,7 @@
 # Virtual Environment
 my_venv/
 venv/
+myvenv/
 myVenv/
 *.dll
 .vscode/
