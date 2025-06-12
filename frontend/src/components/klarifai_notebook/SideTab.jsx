@@ -2454,28 +2454,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
               />
             </button>
 
-            {/* Ideas Button - Same function as expanded mode
-            {isModuleAvailable("idea-generator") && (
-              <button
-                onClick={handleGenerateIdeas}
-                disabled={!selectedDocuments || selectedDocuments.length === 0}
-                className={`p-2 rounded-full transition-colors
-            ${
-              selectedDocuments && selectedDocuments.length > 0
-                ? theme === "dark"
-                  ? "text-yellow-400 hover:bg-indigo-700/50"
-                  : "text-[#3d7647] hover:bg-[#556052]/20"
-                : theme === "dark"
-                ? "text-gray-400 cursor-not-allowed"
-                : "text-[#d6cbbf] cursor-not-allowed"
-            }
-          `}
-                title="Generate Ideas from Documents"
-              >
-                <Lightbulb size={20} />
-              </button>
-            )} */}
-
+            
             {/* Documents Button - Opens sidebar and shows documents */}
             <button
               onClick={() => {

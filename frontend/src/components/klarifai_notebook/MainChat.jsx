@@ -184,6 +184,8 @@ const MainChat = forwardRef(({
 
 
 
+// In MainChat.jsx - Update the handlePinMessage function
+
 const handlePinMessage = async (message, messageIndex) => {
   try {
     const { noteServiceNB } = await import('../../utils/axiosConfig');
@@ -214,15 +216,16 @@ const handlePinMessage = async (message, messageIndex) => {
       // Trigger NotePad refresh
       const refreshEvent = new CustomEvent('refreshNotePad');
       document.dispatchEvent(refreshEvent);
+      
+      // NEW: Trigger NotePad expansion if it's not already open
+      const expandNotePadEvent = new CustomEvent('expandNotePad');
+      document.dispatchEvent(expandNotePadEvent);
     }
   } catch (error) {
     console.error('Failed to save response to notes:', error);
     toast.error('Failed to save to notes');
   }
 };
-
-
-
 
   // Add this right after the imports and before the MainContent component definition
 const processWebSources = (sourcesInfo, extractedUrls) => {

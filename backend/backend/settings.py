@@ -111,7 +111,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'Klarifai-bbsr-database',
+        'NAME': 'klarifai-nb',
         'USER': 'postgres',
         'PASSWORD': 'root',
         'HOST': 'localhost',

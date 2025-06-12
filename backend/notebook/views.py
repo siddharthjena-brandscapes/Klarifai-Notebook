@@ -7930,6 +7930,23 @@ class ChatExportView(APIView):
 
 class YouTubeUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
+
+    def sanitize_filename(self, filename):
+        """Sanitize filename to make it safe for file system"""
+        import re
+       
+        # Remove or replace characters that are not allowed in filenames
+        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        # Remove leading/trailing dots and spaces
+        filename = filename.strip('. ')
+        # Ensure the filename is not empty
+        if not filename:
+            filename = 'untitled'
+        # Limit length to avoid file system issues
+        if len(filename) > 200:
+            filename = filename[:200]
+       
+        return filename
    
     def is_valid_youtube_url(self, url):
         """Check if the provided URL is a valid YouTube URL."""
@@ -9355,8 +9372,7 @@ class PlainTextUploadView(YouTubeUploadView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-# Add this to your existing views.py file
+# views.py - Updated to match your existing URL structure
 
 import json
 import tempfile
@@ -9372,21 +9388,25 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import google.generativeai as genai
-from PyPDF2 import PdfReader
-import fitz
-from llama_parse import LlamaParse
- 
+from .models import MindMap, Document, ProcessedIndex
+from core.models import Project
+from core.utils import update_project_timestamp
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Configuration for Mindmap
 GEMINI_API_KEY = "AIzaSyCv_41De6hVOtuQ3jYkfniGc_61bJ9bvS4"  # Move this to settings
 GEMINI_MODEL = "gemini-2.0-flash"
 CHUNK_SIZE = 2000
 CHUNK_OVERLAP = 200
- 
+
 # Initialize Gemini for mindmap
 genai.configure(api_key=GEMINI_API_KEY)
 mindmap_model = genai.GenerativeModel(GEMINI_MODEL)
- 
+
 class MindMapView(APIView):
+    """Generate mindmap for selected documents - matches your 'generate-mindmap/' endpoint"""
     permission_classes = [IsAuthenticated]
    
     def post(self, request):
@@ -9395,6 +9415,17 @@ class MindMapView(APIView):
             user = request.user
             main_project_id = request.data.get('main_project_id')
             selected_documents = request.data.get('selected_documents', [])
+            target_user_id = request.data.get('target_user_id')
+            force_regenerate = request.data.get('force_regenerate', False)
+           
+            # Handle admin uploading for another user
+            if target_user_id and request.user.username == 'admin':
+                try:
+                    user = User.objects.get(id=target_user_id)
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'Target user not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
            
             if not main_project_id:
                 return Response({
@@ -9410,6 +9441,35 @@ class MindMapView(APIView):
                     return Response({
                         'error': 'Please select at least one document'
                     }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Verify project access
+            try:
+                main_project = Project.objects.get(id=main_project_id, user=user)
+            except Project.DoesNotExist:
+                return Response({
+                    'error': 'Project not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Check if mindmap already exists for these documents (unless force regenerate)
+            if not force_regenerate:
+                existing_mindmap = self.find_existing_mindmap(user, main_project_id, selected_documents)
+                if existing_mindmap:
+                    logger.info(f"Found existing mindmap {existing_mindmap.id} for documents: {selected_documents}")
+                    return Response({
+                        'success': True,
+                        'mindmap': existing_mindmap.data,
+                        'mindmap_id': existing_mindmap.id,
+                        'from_cache': True,
+                        'stats': {
+                            'total_characters': 0,
+                            'number_of_chunks': 0,
+                            'documents_processed': len(existing_mindmap.get_document_sources_list()),
+                            'mindmap_nodes': existing_mindmap.total_nodes,
+                            'model_used': GEMINI_MODEL,
+                            'document_sources': existing_mindmap.get_document_sources_list(),
+                            'created_at': existing_mindmap.created_at.isoformat()
+                        }
+                    }, status=status.HTTP_200_OK)
            
             # Get processed documents
             try:
@@ -9423,10 +9483,10 @@ class MindMapView(APIView):
                         'error': 'No valid processed documents found'
                     }, status=status.HTTP_404_NOT_FOUND)
                
-                print(f"Found {processed_docs.count()} processed documents for mindmap generation")
+                logger.info(f"Found {processed_docs.count()} processed documents for mindmap generation")
                
             except Exception as e:
-                print(f"Error fetching documents: {str(e)}")
+                logger.error(f"Error fetching documents: {str(e)}")
                 return Response({
                     'error': f'Document retrieval error: {str(e)}'
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -9437,29 +9497,7 @@ class MindMapView(APIView):
            
             for proc_doc in processed_docs:
                 try:
-                    # Check if we have LlamaParse markdown
-                    if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
-                        with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
-                            text_content = f.read()
-                        print(f"Using LlamaParse markdown for {proc_doc.document.filename}")
-                    else:
-                        # Load from metadata chunks
-                        if proc_doc.metadata and os.path.exists(proc_doc.metadata):
-                            with open(proc_doc.metadata, 'rb') as f:
-                                chunks = pickle.load(f)
-                           
-                            # Extract text from chunks
-                            if isinstance(chunks, list):
-                                text_content = "\n\n".join([
-                                    chunk.get('text', chunk.get('content', ''))
-                                    for chunk in chunks
-                                    if isinstance(chunk, dict)
-                                ])
-                            else:
-                                text_content = str(chunks)
-                        else:
-                            print(f"No processable content found for {proc_doc.document.filename}")
-                            continue
+                    text_content = self.extract_document_content(proc_doc)
                    
                     if text_content and len(text_content.strip()) > 100:
                         # Chunk the text for better analysis
@@ -9469,13 +9507,14 @@ class MindMapView(APIView):
                         document_info.append({
                             'filename': proc_doc.document.filename,
                             'text_length': len(text_content),
-                            'chunks': len(chunks)
+                            'chunks': len(chunks),
+                            'document_id': proc_doc.document.id
                         })
                        
-                        print(f"Added {len(chunks)} chunks from {proc_doc.document.filename}")
+                        logger.info(f"Added {len(chunks)} chunks from {proc_doc.document.filename}")
                    
                 except Exception as e:
-                    print(f"Error processing {proc_doc.document.filename}: {str(e)}")
+                    logger.error(f"Error processing {proc_doc.document.filename}: {str(e)}")
                     continue
            
             if not all_text_chunks:
@@ -9483,7 +9522,7 @@ class MindMapView(APIView):
                     'error': 'No readable content found in selected documents'
                 }, status=status.HTTP_400_BAD_REQUEST)
            
-            print(f"Total chunks for mindmap generation: {len(all_text_chunks)}")
+            logger.info(f"Total chunks for mindmap generation: {len(all_text_chunks)}")
            
             # Generate mindmap
             mindmap_data = self.generate_comprehensive_mindmap(all_text_chunks)
@@ -9496,46 +9535,114 @@ class MindMapView(APIView):
             # Count nodes for statistics
             node_count = self.count_mindmap_nodes(mindmap_data)
            
-            # Create MindMap record
+            # Create MindMap record with proper error handling
             try:
                 mindmap_record = MindMap.objects.create(
                     user=user,
-                    main_project=Project.objects.get(id=main_project_id, user=user),
+                    main_project=main_project,
                     data=mindmap_data,
-                    document_sources=json.dumps([doc['filename'] for doc in document_info]),
+                    document_sources=[doc['filename'] for doc in document_info],  # Store as list directly
                     total_nodes=node_count
                 )
                
-                print(f"Created mindmap record with ID: {mindmap_record.id}")
+                logger.info(f"Successfully created mindmap record with ID: {mindmap_record.id}")
+                
+                # Update project timestamp
+                update_project_timestamp(main_project_id, user)
                
             except Exception as e:
-                print(f"Error saving mindmap: {str(e)}")
-                # Continue without saving if there's an error
-                mindmap_record = None
+                logger.error(f"Error saving mindmap: {str(e)}")
+                return Response({
+                    'error': f'Failed to save mindmap: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
            
             # Prepare response
             response_data = {
                 'success': True,
                 'mindmap': mindmap_data,
-                'mindmap_id': mindmap_record.id if mindmap_record else None,
+                'mindmap_id': mindmap_record.id,
+                'from_cache': False,
                 'stats': {
                     'total_characters': sum(doc['text_length'] for doc in document_info),
                     'number_of_chunks': len(all_text_chunks),
                     'documents_processed': len(document_info),
                     'mindmap_nodes': node_count,
                     'model_used': GEMINI_MODEL,
-                    'document_sources': [doc['filename'] for doc in document_info]
+                    'document_sources': [doc['filename'] for doc in document_info],
+                    'created_at': mindmap_record.created_at.isoformat()
                 }
             }
            
             return Response(response_data, status=status.HTTP_200_OK)
            
         except Exception as e:
-            print(f"Error in MindMapView: {str(e)}")
+            logger.error(f"Error in MindMapView: {str(e)}")
             return Response({
                 'error': f'Internal server error: {str(e)}',
                 'success': False
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def find_existing_mindmap(self, user, main_project_id, selected_documents):
+        """Find existing mindmap for the same set of documents"""
+        try:
+            # Get document filenames for comparison
+            document_filenames = set()
+            for doc_id in selected_documents:
+                try:
+                    doc = Document.objects.get(id=doc_id, user=user)
+                    document_filenames.add(doc.filename)
+                except Document.DoesNotExist:
+                    continue
+            
+            if not document_filenames:
+                return None
+            
+            # Find mindmaps for this project
+            existing_mindmaps = MindMap.objects.filter(
+                user=user,
+                main_project_id=main_project_id
+            ).order_by('-created_at')
+            
+            for mindmap in existing_mindmaps:
+                mindmap_sources = set(mindmap.get_document_sources_list())
+                if mindmap_sources == document_filenames:
+                    logger.info(f"Found matching mindmap {mindmap.id} for documents: {document_filenames}")
+                    return mindmap
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error finding existing mindmap: {str(e)}")
+            return None
+
+    def extract_document_content(self, proc_doc):
+        """Extract content from processed document"""
+        try:
+            # Check if we have LlamaParse markdown
+            if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+                with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            
+            # Load from metadata chunks
+            if proc_doc.metadata and os.path.exists(proc_doc.metadata):
+                with open(proc_doc.metadata, 'rb') as f:
+                    chunks = pickle.load(f)
+                
+                # Extract text from chunks
+                if isinstance(chunks, list):
+                    return "\n\n".join([
+                        chunk.get('text', chunk.get('content', ''))
+                        for chunk in chunks
+                        if isinstance(chunk, dict)
+                    ])
+                else:
+                    return str(chunks)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extracting content from {proc_doc.document.filename}: {str(e)}")
+            return None
    
     def chunk_text_for_mindmap(self, text):
         """Split text into chunks for mindmap analysis."""
@@ -9546,7 +9653,7 @@ class MindMapView(APIView):
             )
             return splitter.split_text(text)
         except Exception as e:
-            print(f"Error chunking text: {e}")
+            logger.error(f"Error chunking text: {e}")
             return [text]
    
     def count_mindmap_nodes(self, data):
@@ -9570,10 +9677,10 @@ class MindMapView(APIView):
            
             prompt = f"""
             You are an expert knowledge architect and document analyzer. Create a comprehensive, hierarchical mind map by systematically extracting and organizing ALL meaningful content from the document(s).
- 
+
             DOCUMENT TEXT:
             {comprehensive_text[:15000]}  # Limit for API
- 
+
             Create a JSON mind map with this structure:
             {{
                 "name": "[Document Title/Main Subject]",
@@ -9597,7 +9704,7 @@ class MindMapView(APIView):
                     }}
                 ]
             }}
- 
+
             REQUIREMENTS:
             1. Extract 5-8 major topics
             2. Each major topic must have 3+ subtopics
@@ -9605,7 +9712,7 @@ class MindMapView(APIView):
             4. Use exact terminology from the document
             5. Include meaningful summaries
             6. Ensure hierarchical organization
- 
+
             Return only valid JSON:
             """
            
@@ -9624,18 +9731,18 @@ class MindMapView(APIView):
                
                 if parsed_data:
                     validated_data = self.validate_mindmap_structure(parsed_data)
-                    print(f"Successfully generated mindmap with {len(validated_data.get('children', []))} main branches")
+                    logger.info(f"Successfully generated mindmap with {len(validated_data.get('children', []))} main branches")
                     return validated_data
                 else:
-                    print("Failed to parse JSON, creating fallback")
+                    logger.warning("Failed to parse JSON, creating fallback")
                     return self.create_enhanced_fallback_mindmap(comprehensive_text)
                    
             except Exception as api_error:
-                print(f"API Error: {api_error}")
+                logger.error(f"API Error: {api_error}")
                 return self.create_enhanced_fallback_mindmap(comprehensive_text)
                
         except Exception as e:
-            print(f"Error generating mindmap: {e}")
+            logger.error(f"Error generating mindmap: {e}")
             return self.create_enhanced_fallback_mindmap(text_chunks[0] if text_chunks else "No content")
    
     def extract_json_from_response(self, response_text):
@@ -9675,7 +9782,7 @@ class MindMapView(APIView):
             return None
            
         except Exception as e:
-            print(f"Error extracting JSON: {e}")
+            logger.error(f"Error extracting JSON: {e}")
             return None
    
     def validate_mindmap_structure(self, data):
@@ -9774,7 +9881,7 @@ class MindMapView(APIView):
             }
            
         except Exception as e:
-            print(f"Error in fallback mindmap: {e}")
+            logger.error(f"Error in fallback mindmap: {e}")
             return {
                 "name": "Document Analysis",
                 "children": [
@@ -9788,9 +9895,10 @@ class MindMapView(APIView):
                     }
                 ]
             }
- 
- 
+
+
 class MindMapQuestionView(APIView):
+    """Generate question for mindmap node - matches your 'mindmap-question/' endpoint"""
     permission_classes = [IsAuthenticated]
    
     def post(self, request):
@@ -9803,6 +9911,16 @@ class MindMapQuestionView(APIView):
             topic_summary = request.data.get('topic_summary', '')
             node_path = request.data.get('node_path', '')
             selected_documents = request.data.get('selected_documents', [])
+            target_user_id = request.data.get('target_user_id')
+           
+            # Handle admin operation for another user
+            if target_user_id and request.user.username == 'admin':
+                try:
+                    user = User.objects.get(id=target_user_id)
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'Target user not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
            
             if not all([main_project_id, topic_name]):
                 return Response({
@@ -9812,52 +9930,16 @@ class MindMapQuestionView(APIView):
             # Generate specific question for the topic
             question = self.generate_topic_question(topic_name, topic_summary, node_path)
            
-            # Use existing ChatView logic to answer the question
-            chat_view = ChatView()
-           
-            # Prepare request data for chat system
-            chat_request_data = {
-                'message': question,
-                'main_project_id': main_project_id,
-                'selected_documents': selected_documents,
-                'use_web_knowledge': False,
-                'general_chat_mode': False,
-                'response_length': 'comprehensive',
-                'response_format': 'natural'
-            }
-           
-            # Create a mock request object
-            mock_request = type('MockRequest', (), {
-                'user': user,
-                'data': chat_request_data,
-                'session': request.session
-            })()
-           
-            # Get answer using existing chat system
-            chat_response = chat_view.post(mock_request)
-           
-            if chat_response.status_code == 200:
-                chat_data = chat_response.data
-               
-                response_data = {
-                    'success': True,
-                    'question': question,
-                    'answer': chat_data.get('response', ''),
-                    'topic': topic_name,
-                    'citations': chat_data.get('citations', []),
-                    'follow_up_questions': chat_data.get('follow_up_questions', [])
-                }
-               
-                return Response(response_data, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'error': 'Failed to generate answer',
-                    'question': question,
-                    'success': False
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                'success': True,
+                'question': question,
+                'topic': topic_name,
+                'node_path': node_path,
+                'mindmap_id': mindmap_id
+            }, status=status.HTTP_200_OK)
            
         except Exception as e:
-            print(f"Error in MindMapQuestionView: {str(e)}")
+            logger.error(f"Error in MindMapQuestionView: {str(e)}")
             return Response({
                 'error': f'Internal server error: {str(e)}',
                 'success': False
@@ -9906,17 +9988,27 @@ class MindMapQuestionView(APIView):
             return question
            
         except Exception as e:
-            print(f"Error generating topic question: {e}")
+            logger.error(f"Error generating topic question: {e}")
             return f"What are the key aspects and details about '{topic_name}' in this document?"
- 
- 
-# Add these API endpoints
+
+
+# Function-based views to match your existing URL structure
 @api_view(['GET'])
 def get_user_mindmaps(request):
-    """Get user's mindmaps for a project."""
+    """Get user's mindmaps for a project - matches your 'user-mindmaps/' endpoint"""
     try:
         user = request.user
         main_project_id = request.GET.get('main_project_id')
+        target_user_id = request.GET.get('target_user_id')
+        
+        # Handle admin viewing mindmaps for another user
+        if target_user_id and request.user.username == 'admin':
+            try:
+                user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Target user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
        
         if not main_project_id:
             return Response({
@@ -9933,51 +10025,69 @@ def get_user_mindmaps(request):
             mindmap_list.append({
                 'id': mindmap.id,
                 'created_at': mindmap.created_at.isoformat(),
+                'updated_at': mindmap.updated_at.isoformat(),
                 'total_nodes': mindmap.total_nodes,
-                'document_sources': json.loads(mindmap.document_sources) if mindmap.document_sources else [],
-                'title': f"Mindmap {mindmap.created_at.strftime('%Y-%m-%d %H:%M')}"
+                'document_sources': mindmap.get_document_sources_list(),
+                'title': f"Mindmap - {mindmap.created_at.strftime('%b %d, %Y %H:%M')}",
+                'preview': mindmap.data.get('name', 'Untitled Mindmap') if mindmap.data else 'Untitled Mindmap'
             })
        
         return Response({
             'success': True,
-            'mindmaps': mindmap_list
+            'mindmaps': mindmap_list,
+            'count': len(mindmap_list)
         }, status=status.HTTP_200_OK)
        
     except Exception as e:
+        logger.error(f"Error fetching mindmaps: {str(e)}")
         return Response({
-            'error': str(e),
+            'error': f'Failed to fetch mindmaps: {str(e)}',
             'success': False
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
- 
- 
-@api_view(['GET'])
+
+
+@api_view(['GET', 'DELETE'])
 def get_mindmap_data(request, mindmap_id):
-    """Get specific mindmap data."""
+    """Get or delete specific mindmap data - matches your 'mindmap/<id>/' endpoint"""
     try:
         user = request.user
-       
-        mindmap = MindMap.objects.get(
-            id=mindmap_id,
-            user=user
-        )
-       
-        return Response({
-            'success': True,
-            'mindmap': mindmap.data,
-            'stats': {
-                'total_nodes': mindmap.total_nodes,
-                'created_at': mindmap.created_at.isoformat(),
-                'document_sources': json.loads(mindmap.document_sources) if mindmap.document_sources else []
+        
+        try:
+            mindmap = MindMap.objects.get(id=mindmap_id, user=user)
+        except MindMap.DoesNotExist:
+            return Response({
+                'error': 'Mindmap not found',
+                'success': False
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        if request.method == 'GET':
+            response_data = {
+                'success': True,
+                'mindmap': mindmap.data,
+                'mindmap_id': mindmap.id,
+                'stats': {
+                    'total_nodes': mindmap.total_nodes,
+                    'created_at': mindmap.created_at.isoformat(),
+                    'updated_at': mindmap.updated_at.isoformat(),
+                    'document_sources': mindmap.get_document_sources_list()
+                }
             }
-        }, status=status.HTTP_200_OK)
-       
-    except MindMap.DoesNotExist:
-        return Response({
-            'error': 'Mindmap not found',
-            'success': False
-        }, status=status.HTTP_404_NOT_FOUND)
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        elif request.method == 'DELETE':
+            mindmap.delete()
+            
+            logger.info(f"Deleted mindmap {mindmap_id} for user {user.username}")
+            
+            return Response({
+                'success': True,
+                'message': 'Mindmap deleted successfully'
+            }, status=status.HTTP_200_OK)
+            
     except Exception as e:
+        logger.error(f"Error with mindmap {mindmap_id}: {str(e)}")
         return Response({
-            'error': str(e),
+            'error': f'Failed to process mindmap: {str(e)}',
             'success': False
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const axiosInstance = axios.create({
-  baseURL: "https://klarifai-demo-2-appserver-dnd9avhfesa4h0de.centralindia-01.azurewebsites.net/api", // Your Django backend URL
+  baseURL: "http://localhost:8000/api", // Your Django backend URL
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -1476,20 +1476,23 @@ export const noteServiceNB = {
 };
  
 
+// Updated mindmap services to match your existing axios configuration
+// Add these functions to your existing mindmapServiceNB object
+
 export const mindmapServiceNB = {
-  // Generate mindmap from selected documents
+  // Your existing generateMindmap function (keeping as is)
   generateMindmap: (mainProjectId, selectedDocuments = [], config = {}, targetUserId = null) => {
     const data = {
       main_project_id: mainProjectId,
       selected_documents: selectedDocuments,
     };
-   
+        
     if (targetUserId) {
       data.target_user_id = targetUserId;
     }
- 
+      
     console.log('Generating mindmap with data:', data);
-   
+        
     return axiosInstance.post("notebook/generate-mindmap/", data, {
       headers: {
         "Content-Type": "application/json",
@@ -1503,8 +1506,8 @@ export const mindmapServiceNB = {
       throw error;
     });
   },
- 
-  // Ask question about a mindmap node
+    
+  // Your existing askMindmapQuestion function (keeping as is)
   askMindmapQuestion: (mainProjectId, topicName, topicSummary = '', nodePath = '', selectedDocuments = [], mindmapId = null, config = {}, targetUserId = null) => {
     const data = {
       main_project_id: mainProjectId,
@@ -1513,17 +1516,17 @@ export const mindmapServiceNB = {
       node_path: nodePath,
       selected_documents: selectedDocuments,
     };
- 
+      
     if (mindmapId) {
       data.mindmap_id = mindmapId;
     }
-   
+        
     if (targetUserId) {
       data.target_user_id = targetUserId;
     }
- 
+      
     console.log('Asking mindmap question with data:', data);
-   
+        
     return axiosInstance.post("notebook/mindmap-question/", data, {
       headers: {
         "Content-Type": "application/json",
@@ -1537,19 +1540,19 @@ export const mindmapServiceNB = {
       throw error;
     });
   },
- 
-  // Get user's mindmaps for a project
+    
+  // Your existing getUserMindmaps function (keeping as is)
   getUserMindmaps: (mainProjectId, config = {}, targetUserId = null) => {
     const params = {
       main_project_id: mainProjectId,
     };
-   
+        
     if (targetUserId) {
       params.target_user_id = targetUserId;
     }
- 
+      
     console.log('Fetching user mindmaps with params:', params);
-   
+        
     return axiosInstance.get("notebook/user-mindmaps/", {
       params,
       ...config,
@@ -1561,11 +1564,11 @@ export const mindmapServiceNB = {
       throw error;
     });
   },
- 
-  // Get specific mindmap data
+    
+  // Your existing getMindmapData function (keeping as is)
   getMindmapData: (mindmapId, config = {}) => {
     console.log('Fetching mindmap data for ID:', mindmapId);
-   
+        
     return axiosInstance.get(`notebook/mindmap/${mindmapId}/`, {
       ...config,
     }).then(response => {
@@ -1576,11 +1579,11 @@ export const mindmapServiceNB = {
       throw error;
     });
   },
- 
-  // Delete a mindmap (if you want to add this functionality)
+    
+  // Your existing deleteMindmap function (keeping as is)
   deleteMindmap: (mindmapId, config = {}) => {
     console.log('Deleting mindmap with ID:', mindmapId);
-   
+        
     return axiosInstance.delete(`notebook/mindmap/${mindmapId}/`, {
       headers: {
         "Content-Type": "application/json",
@@ -1594,6 +1597,76 @@ export const mindmapServiceNB = {
       throw error;
     });
   },
+
+  // Additional helper functions for enhanced functionality
+  
+  // Generate mindmap with force regenerate option
+  regenerateMindmap: (mainProjectId, selectedDocuments = [], targetUserId = null, config = {}) => {
+    const data = {
+      main_project_id: mainProjectId,
+      selected_documents: selectedDocuments,
+      force_regenerate: true, // Force regeneration even if cache exists
+    };
+        
+    if (targetUserId) {
+      data.target_user_id = targetUserId;
+    }
+      
+    console.log('Regenerating mindmap with data:', data);
+        
+    return axiosInstance.post("notebook/generate-mindmap/", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...config,
+    }).then(response => {
+      console.log('Mindmap regeneration response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Mindmap regeneration error:', error.response?.data || error.message);
+      throw error;
+    });
+  },
+
+  // Check if mindmap exists for documents (useful for UI state)
+  checkMindmapExists: async (mainProjectId, selectedDocuments = [], targetUserId = null) => {
+    try {
+      const response = await this.getUserMindmaps(mainProjectId, {}, targetUserId);
+      
+      if (response.data && response.data.success && response.data.mindmaps) {
+        // Simple check - in a real implementation, you'd compare document sources
+        return response.data.mindmaps.length > 0;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking mindmap existence:', error);
+      return false;
+    }
+  },
+
+  // Batch delete mindmaps (useful for cleanup)
+  deleteMindmaps: async (mindmapIds, config = {}) => {
+    const deletePromises = mindmapIds.map(id => this.deleteMindmap(id, config));
+    
+    try {
+      const results = await Promise.allSettled(deletePromises);
+      const successful = results.filter(result => result.status === 'fulfilled').length;
+      const failed = results.filter(result => result.status === 'rejected').length;
+      
+      console.log(`Batch delete completed: ${successful} successful, ${failed} failed`);
+      
+      return {
+        success: true,
+        successful,
+        failed,
+        total: mindmapIds.length
+      };
+    } catch (error) {
+      console.error('Batch delete error:', error);
+      throw error;
+    }
+  }
 };
 
 export default axiosInstance;
