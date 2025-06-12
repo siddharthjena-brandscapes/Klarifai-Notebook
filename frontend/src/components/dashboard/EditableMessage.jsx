@@ -598,7 +598,7 @@ const EditableMessage = ({
       {message.role === 'user' && !isEditing && (
         <>
           {/* Edit controls positioned at bottom right of message container */}
-          <div className="absolute -bottom-6 right-0 flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+         <div className="absolute -bottom-6 right-0 flex items-center space-x-2 opacity-100 transition-opacity duration-200">
             {/* Version controls */}
             {hasHistory && (
               <div className="flex items-center">

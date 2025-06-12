@@ -2231,6 +2231,7 @@ const WebSourcesDisplay = ({ sources }) => {
                   >
                     <div
   className={`
+    group
     p-4
     rounded-lg
     backdrop-blur-md
