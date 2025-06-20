@@ -1,23 +1,25 @@
-// MindMapHistory.jsx - Fixed version with proper mindmap viewing
+// MindMapHistory.jsx - Complete fixed version
+
 import React, { useState, useEffect, useContext } from 'react';
 import { Brain, Calendar, FileText, Trash2, Eye, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 import { ThemeContext } from '../../context/ThemeContext';
 
 const MindMapHistory = ({ 
   isOpen, 
-  onClose, 
+  onClose,
   mainProjectId, 
   onViewMindmap, 
   onRegenerateMindmap,
   selectedDocuments,
-  targetUserId = null // For admin functionality
+  onDocumentSelectionChange, // NEW: Add this prop
+  targetUserId = null
 }) => {
   const { theme } = useContext(ThemeContext);
   const [mindmaps, setMindmaps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const [loadingMindmapId, setLoadingMindmapId] = useState(null); // New state for tracking which mindmap is being loaded
+  const [loadingMindmapId, setLoadingMindmapId] = useState(null);
 
   useEffect(() => {
     if (isOpen && mainProjectId) {
@@ -30,7 +32,6 @@ const MindMapHistory = ({
       setLoading(true);
       setError(null);
       
-      // Use your existing service function
       const { mindmapServiceNB } = await import('../../utils/axiosConfig');
       const response = await mindmapServiceNB.getUserMindmaps(mainProjectId, {}, targetUserId);
       
@@ -52,31 +53,59 @@ const MindMapHistory = ({
       setLoadingMindmapId(mindmap.id);
       setError(null);
       
-      console.log('Loading mindmap:', mindmap.id); // Debug log
+      console.log('Loading mindmap:', mindmap.id);
       
-      // Use your existing service function
       const { mindmapServiceNB } = await import('../../utils/axiosConfig');
       const response = await mindmapServiceNB.getMindmapData(mindmap.id);
       
-      console.log('Mindmap data response:', response.data); // Debug log
+      console.log('Mindmap data response:', response.data);
       
       if (response.data && response.data.success && response.data.mindmap) {
-        // Prepare the stats object with all available information
         const stats = {
           created_at: mindmap.created_at,
           total_nodes: mindmap.total_nodes || response.data.stats?.total_nodes,
           mindmap_nodes: mindmap.total_nodes || response.data.stats?.mindmap_nodes,
           document_sources: mindmap.document_sources || response.data.stats?.document_sources || [],
-          documents_processed: mindmap.document_sources?.length || response.data.stats?.documents_processed || 0
+          documents_processed: mindmap.document_sources?.length || response.data.stats?.documents_processed || 0,
+          document_ids: response.data.stats?.document_ids || []
         };
         
-        console.log('Calling onViewMindmap with:', {
-          mindmap: response.data.mindmap,
-          id: mindmap.id,
-          stats: stats
-        }); // Debug log
+        // **CRITICAL FIX: Auto-select documents BEFORE opening the mindmap viewer**
+        let selectedDocumentIds = [];
         
-        // Pass the mindmap data and stats to the parent component
+        // Method 1: Use document IDs from backend if available
+        if (stats.document_ids && stats.document_ids.length > 0) {
+          selectedDocumentIds = stats.document_ids;
+          console.log(`Using document IDs from backend:`, selectedDocumentIds);
+        } 
+        // Method 2: Fallback to filename matching
+        else if (stats.document_sources && stats.document_sources.length > 0) {
+          try {
+            selectedDocumentIds = await getDocumentIdsByFilenames(stats.document_sources);
+            console.log(`Found document IDs by filename matching:`, selectedDocumentIds);
+          } catch (error) {
+            console.error('Error finding documents by filenames:', error);
+          }
+        }
+        
+        // Update selected documents FIRST
+        if (selectedDocumentIds.length > 0) {
+          console.log(`Auto-selecting ${selectedDocumentIds.length} documents:`, selectedDocumentIds);
+          
+          if (onDocumentSelectionChange) {
+            onDocumentSelectionChange(selectedDocumentIds);
+          }
+          
+          // Wait a moment for the state to update
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Update stats with the selected document IDs
+        stats.document_ids = selectedDocumentIds;
+        
+        console.log('Opening mindmap viewer with stats:', stats);
+        
+        // NOW open the mindmap viewer with the updated document selection
         onViewMindmap(response.data.mindmap, mindmap.id, stats);
         onClose();
       } else {
@@ -91,6 +120,32 @@ const MindMapHistory = ({
     }
   };
 
+  // NEW: Helper function to get document IDs by filenames
+  const getDocumentIdsByFilenames = async (documentFilenames) => {
+    try {
+      const { documentServiceNB } = await import('../../utils/axiosConfig');
+      const documentsResponse = await documentServiceNB.getUserDocuments(mainProjectId);
+      
+      if (documentsResponse?.data) {
+        const matchingDocumentIds = [];
+        
+        documentsResponse.data.forEach(doc => {
+          if (documentFilenames.includes(doc.filename)) {
+            matchingDocumentIds.push(doc.id.toString());
+          }
+        });
+        
+        console.log(`Found ${matchingDocumentIds.length} documents matching filenames:`, documentFilenames);
+        return matchingDocumentIds;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Error fetching documents for filename matching:', error);
+      return [];
+    }
+  };
+
   const handleDeleteMindmap = async (mindmapId) => {
     if (!confirm('Are you sure you want to delete this mindmap?')) {
       return;
@@ -99,7 +154,6 @@ const MindMapHistory = ({
     try {
       setDeletingId(mindmapId);
       
-      // Use your existing service function
       const { mindmapServiceNB } = await import('../../utils/axiosConfig');
       const response = await mindmapServiceNB.deleteMindmap(mindmapId);
       
@@ -118,22 +172,17 @@ const MindMapHistory = ({
 
   const handleRegenerateMindmap = async () => {
     try {
-      // Use your existing service function with force regenerate
       const { mindmapServiceNB } = await import('../../utils/axiosConfig');
       
-      // Call regenerate function (which sets force_regenerate: true)
       if (mindmapServiceNB.regenerateMindmap) {
-        // Use the regenerate function if available
         const response = await mindmapServiceNB.regenerateMindmap(mainProjectId, selectedDocuments, targetUserId);
         
         if (response.data && response.data.success) {
-          // View the newly generated mindmap
           onViewMindmap(response.data.mindmap, response.data.mindmap_id, response.data.stats);
           onClose();
         }
       } else {
-        // Fallback to regular generate with force parameter
-        onRegenerateMindmap(true); // force regenerate
+        onRegenerateMindmap(true);
         onClose();
       }
     } catch (err) {
@@ -182,26 +231,6 @@ const MindMapHistory = ({
             </div>
             
             <div className="flex items-center space-x-2">
-              {/* <button
-                onClick={handleRegenerateMindmap}
-                disabled={!selectedDocuments || selectedDocuments.length === 0}
-                className={`
-                  px-4 py-2 rounded-lg font-medium transition-all flex items-center space-x-2
-                  ${selectedDocuments && selectedDocuments.length > 0
-                    ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }
-                `}
-                title={
-                  selectedDocuments && selectedDocuments.length > 0 
-                    ? 'Generate new mindmap' 
-                    : 'Select documents to generate mindmap'
-                }
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>New MindMap</span>
-              </button> */}
-              
               <button
                 onClick={onClose}
                 className={`px-4 py-2 rounded-lg ${

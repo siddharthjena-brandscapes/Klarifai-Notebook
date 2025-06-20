@@ -29,12 +29,13 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Header from "./dashboard/Header";
-import { coreService } from "../utils/axiosConfig";
+import { coreService,  adminService } from "../utils/axiosConfig";
 import EditProject from "./EditProject";
 import DeleteProjectModal from "./DeleteProjectModal";
 import FaqButton from "./faq/FaqButton";
 import ArchiveProjectModal from "./LandingPage/ArchiveProjectModal";
 import ArchivedProjects from "./LandingPage/ArchivedProjects";
+import MultiSelectDropdown from "./LandingPage/MultiSelectDropdown";
 
 const allModules = [
   {
@@ -44,7 +45,7 @@ const allModules = [
       "Upload and chat with your documents to get instant summaries, accurate answers, and key insights, powered by AI.",
     path: "/dashboard",
     icon: FileSearch,
-    actionText: "Chat with Docs",
+    actionText: "Enter",
     active: true,
     features: [
       {
@@ -73,7 +74,7 @@ const allModules = [
     description:
       "Unleash creativity with AI-powered brainstorming! Generate innovative ideas, stunning visuals, and smart solutions effortlessly.",
     path: "/idea-generation",
-    actionText: "Generate Ideas",
+    actionText: "Enter",
     icon: Lightbulb,
     active: true,
     features: [
@@ -103,7 +104,7 @@ const allModules = [
     description:
       "Klarifai-Notebook is your smart, document-aware research assistant — analyze, query, and gain clarity from your notes and Files effortlessly.",
     path: "/klarifai-notebook",
-    actionText: "Analyze Topics",
+    actionText: "Enter",
     icon:  NotebookPen,
     active: true,
     features: [
@@ -133,7 +134,7 @@ const allModules = [
     description:
       "Transform natural language into precise SQL queries, enabling intuitive data exploration without complex database syntax.",
     path: "/ad-campaign-generator",
-    actionText: "Start Querying",
+    actionText: "Enter",
     icon: Lock,
     active: false,
     features: [
@@ -159,14 +160,7 @@ const allModules = [
   },
 ];
 
-const categories = [
-  "Business",
-  "Healthcare",
-  "Beauty & Wellness",
-  "Education",
-  "Technology",
-  "Other",
-];
+
 
 function App() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -210,6 +204,37 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState("recent");
   const [activeMenu, setActiveMenu] = useState(null);
+
+
+  const [userCategories, setUserCategories] = useState([]);
+ const [categoriesLoading, setCategoriesLoading] = useState(false);
+ const [expandedDescriptions, setExpandedDescriptions] = useState(new Set());
+
+  // Keep a fallback for when user has no categories
+  const defaultCategories = [
+    // "Business",
+    // "Healthcare", 
+    // "Beauty & Wellness",
+    // "Education",
+    // "Technology",
+    // "Other",
+  ];
+
+
+  const fetchUserCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      const response = await adminService.getUserCategories();
+      console.log("Raw API response:", response); // Add this
+      console.log("Setting userCategories to:", response || []); // Add this
+      setUserCategories(response || []);
+    } catch (err) {
+      console.error("Error fetching user categories:", err);
+      setUserCategories(defaultCategories);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
 
   // Add this function to handle menu toggle
   const toggleMenu = (projectId, e) => {
@@ -321,6 +346,9 @@ useEffect(() => {
         // Load projects
         const fetchedProjects = await coreService.getProjects();
         setProjects(fetchedProjects);
+
+        // Load user categories - ADD THIS LINE
+        await fetchUserCategories();
       } catch (err) {
         console.error("Error loading initial data:", err);
         setError("Failed to load data");
@@ -546,6 +574,19 @@ const handleDocumentChange = (e) => {
     }
   };
 
+  const toggleDescription = (projectId, e) => {
+  e.stopPropagation(); // Prevent card click
+  setExpandedDescriptions(prev => {
+    const newSet = new Set(prev);
+    if (newSet.has(projectId)) {
+      newSet.delete(projectId);
+    } else {
+      newSet.add(projectId);
+    }
+    return newSet;
+  });
+};
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -557,9 +598,9 @@ const handleDocumentChange = (e) => {
         ? projectData.customCategory
         : projectData.category;
 
-    // Validate required fields
-    if (!projectData.name || !finalCategory) {
-      setError("Please fill in all required fields");
+    // ✅ Update validation - category is now an array
+    if (!projectData.name || projectData.category.length === 0) {
+      setError("Please fill in all required fields and select at least one category");
       setLoading(false);
       return;
     }
@@ -1050,9 +1091,10 @@ const handleModuleSelect = (moduleId) => {
                     </div>
                   </div>
 
-                  <button className="px-4 py-2 bg-[#556052]/20 dark:bg-emerald-600/20 text-[#556052] dark:text-emerald-300 rounded-lg 
+                  <button title="Enter Module" className="px-4 py-2 bg-[#556052]/20 dark:bg-emerald-600/20 text-[#556052] dark:text-emerald-300 rounded-lg 
                            opacity-0 group-hover:opacity-100 transition-all duration-300 
                            hover:bg-[#556052]/30 dark:hover:bg-emerald-800/40 flex items-center space-x-2">
+                            
                     <span className="text-sm font-medium text-[#556052] dark:text-gray-300 hover:text-[#0a3b25] dark:hover:text-emerald-300">
                       {module.actionText}
                     </span>
@@ -1184,6 +1226,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
             modules={modules}
             onClose={handleEditClose}
             onUpdate={handleProjectUpdate}
+             userCategories={userCategories} 
           />
         )}
 
@@ -1280,9 +1323,11 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
                   <div className="p-6 flex flex-col h-full">
                     {/* Card header with title and menu */}
                     <div className="flex justify-between items-start mb-3">
-                      <span className="px-2 py-0.5 text-xs font-medium dark:text-gray-300 text-[#5e4636] border-l-2 dark:border-emerald-400 border-[#a55233] pl-2">
-                        {project.category}
-                      </span>
+                     <span className="px-2 py-0.5 text-xs font-medium dark:text-gray-300 text-[#5e4636] border-l-2 dark:border-emerald-400 border-[#a55233] pl-2">
+  {Array.isArray(project.category) 
+    ? project.category.join(', ') 
+    : project.category}
+</span>
 
                       <div className="relative">
                         <button
@@ -1340,16 +1385,38 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
                       {project.name}
                     </h3>
 
-                    {/* Project description - with better spacing */}
-                    <p className="dark:text-gray-400 text-gray-700 text-sm dark:font-normal font-medium tracking-wide leading-relaxed mb-5 flex-grow line-clamp-3">
-                      {project.description || "No description provided"}
-                    </p>
-
+                    {/* Project description - with scrollable functionality */}
+<div className="mb-5 flex-grow">
+  {(() => {
+    const description = project.description || "No description provided";
+    const isLongDescription = description.length > 150;
+    
+    return (
+      <div 
+  className={`${isLongDescription ? 'max-h-24 overflow-y-auto' : ''}`}
+  style={isLongDescription ? {
+    scrollbarWidth: 'thin',
+    scrollbarColor: 'rgba(156, 163, 175, 0.3) transparent'
+  } : {}}
+>
+        <p className="dark:text-gray-400 text-gray-700 text-sm dark:font-normal font-medium tracking-wide leading-relaxed">
+          {description}
+        </p>
+      </div>
+    );
+  })()}
+</div>
                     {/* Bottom section with modules and date/open button */}
                     <div className="mt-auto">
                       {/* Modules in horizontal scroll if many */}
                       {project.selected_modules?.length > 0 && (
-                        <div className="flex space-x-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+  <div 
+    className="flex space-x-2 overflow-x-auto pb-2 mb-4"
+    style={{
+      scrollbarWidth: 'thin',
+      scrollbarColor: 'rgba(156, 163, 175, 0.3) transparent'
+    }}
+  >
                           {project.selected_modules?.map((moduleId) => {
                             const module = modules.find(
                               (m) => m.id === moduleId
@@ -1378,9 +1445,10 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
 
                         <button
                           onClick={() => handleProjectSelect(project)}
+                          title="View Project"
                           className="px-3 py-1.5 dark:bg-emerald-600/20 bg-[#556052]/20 dark:hover:bg-emerald-600/30 hover:bg-[#556052]/30 dark:text-emerald-300  text-[#556052] rounded-md transition-colors text-xs font-medium"
                         >
-                          Open
+                        View
                         </button>
                       </div>
                     </div>
@@ -1435,6 +1503,12 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
       <style>
         {`
 
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
           @keyframes fade-in {
     0% { opacity: 0; }
     100% { opacity: 1; }
@@ -1463,27 +1537,49 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
     animation: pulse-slow 3s ease-in-out infinite;
   }
         /* Add this to your style tag */
+/* Enhanced scrollbar styling - replace your existing scrollbar-styled CSS */
 .scrollbar-styled::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 4px;
+  height: 4px;
 }
 
 .scrollbar-styled::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  background: transparent;
 }
 
 .scrollbar-styled::-webkit-scrollbar-thumb {
-  background: rgba(99, 179, 152, 0.3);
-  border-radius: 4px;
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 2px;
+  transition: background 0.2s ease;
 }
 
 .scrollbar-styled::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 179, 152, 0.5);
+  background: rgba(156, 163, 175, 0.6);
+}
+
+/* Dark theme overrides */
+:root.dark .scrollbar-styled::-webkit-scrollbar-thumb,
+.dark .scrollbar-styled::-webkit-scrollbar-thumb {
+  background: rgba(99, 179, 152, 0.2);
+}
+
+:root.dark .scrollbar-styled::-webkit-scrollbar-thumb:hover,
+.dark .scrollbar-styled::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 179, 152, 0.4);
 }
 
 .scrollbar-styled::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* Firefox fallback */
+.scrollbar-styled {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+.dark .scrollbar-styled {
+  scrollbar-color: rgba(99, 179, 152, 0.2) transparent;
 }
           .line-clamp-2 {
   display: -webkit-box;
@@ -1554,7 +1650,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
       id="description"
       rows={4}
       className="w-full px-4 py-2 bg-white/80 dark:bg-white/5 border border-gray-700 dark:border-gray-300/20 rounded-lg text-gray-800 dark:text-white focus:ring-2 focus:ring-[#a55233] dark:focus:ring-teal-500 focus:border-transparent"
-      placeholder="Describe your project's purpose and goals (optional)"
+      placeholder="Add a brief project summary, or upload a file to auto-generate it. Enhance anytime with AI."
       value={projectData.description}
       onChange={(e) => {
   setProjectData(prev => ({ ...prev, description: e.target.value }));
@@ -1621,7 +1717,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
         />
         <label
           htmlFor="documentUpload"
-          title="Upload a file to generate a description from its content"
+          title="Upload a project brief or proposal to auto-generate a description from its content."
           className="cursor-pointer px-3 py-2 bg-[#a68a70] dark:bg-emerald-600/20 hover:bg-[#8c715f] dark:hover:bg-emerald-600/30 text-white dark:text-emerald-300 rounded-lg transition-colors text-sm font-medium flex items-center"
         >
           <Paperclip className="w-4 h-4 mr-1.5" />
@@ -1648,70 +1744,31 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
   </div>
 </div>
       
-      {/* Category selector */}
-      <div className="space-y-4">
-        <label
-          htmlFor="category"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
-        >
-          Category
-        </label>
-        <select
-          id="category"
-          className="w-full px-4 py-2 bg-white/80 dark:bg-white/5 border border-[#d6cbbf] dark:border-gray-300/20 rounded-lg text-[#5e4636] dark:text-white focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
-          value={projectData.category}
-          onChange={(e) =>
-            setProjectData((prev) => ({
-              ...prev,
-              category: e.target.value,
-              customCategory:
-                e.target.value === "Other" ? prev.customCategory : "",
-            }))
-          }
-          required
-        >
-          <option value="">Select a category</option>
-          {categories.map((category) => (
-            <option
-              key={category}
-              value={category}
-              className="bg-white dark:bg-emerald-900"
-            >
-              {category}
-            </option>
-          ))}
-        </select>
-        {projectData.category === "Other" && (
-                <div className="mt-4">
-                  <label
-                    htmlFor="customCategory"
-                    className="block text-sm font-medium dark:text-gray-200 mb-2"
-                  >
-                    Custom Category Name
-                  </label>
-                  <input
-                    type="text"
-                    id="customCategory"
-                    className="w-full px-4 py-2 dark:bg-white/5 border dark:border-gray-300/20 rounded-lg dark:text-white text-[#5e4636]  focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
-                    placeholder="Enter your custom category"
-                    value={projectData.customCategory}
-                    onChange={(e) =>
-                      setProjectData((prev) => ({
-                        ...prev,
-                        customCategory: e.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                
-              )}
-              {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-300">
-              {error}
-            </div>
-          )}
-      </div>
+          {/* Category selector */}
+         {/* Category selector - REPLACE the entire category selection with this */}
+<div className="space-y-4">
+  <label className="block text-sm font-medium text-emerald-950 dark:text-gray-200 mb-2">
+    Categories {categoriesLoading && <span className="text-xs text-gray-500">(Loading...)</span>}
+  </label>
+  
+  <MultiSelectDropdown
+    options={userCategories.length > 0 ? userCategories : defaultCategories}
+    selected={projectData.category}
+    onChange={(newCategories) => setProjectData(prev => ({
+      ...prev,
+      category: newCategories
+    }))}
+    placeholder="Select categories..."
+    disabled={categoriesLoading}
+  />
+  
+  {/* Show message if user has custom categories */}
+  {userCategories.length > 0 && (
+    <p className="text-xs text-gray-600 dark:text-gray-400">
+      Categories assigned by admin
+    </p>
+  )}
+</div>
           
       {/* Module selection */}
       <div>

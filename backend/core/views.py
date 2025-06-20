@@ -2,8 +2,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
-from .models import Project, ProjectModule, DocumentQAModule, IdeaGeneratorModule
-from chat.models import UserAPITokens
+from .models import Project, ProjectModule, DocumentQAModule, IdeaGeneratorModule, Category, UserFeaturePermissions
+from chat.models import UserAPITokens, UserUploadPermissions, UserModulePermissions
 from django.db import transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.authentication import TokenAuthentication
@@ -15,6 +15,7 @@ import os
 import fitz  # PyMuPDF for PDF handling
 from pptx import Presentation
 import google.generativeai as genai
+from django.contrib.auth.models import User
  
  
 @api_view(['POST'])
@@ -282,14 +283,21 @@ def create_project(request):
             # Extract fields
             name = data.get('name')
             description = data.get('description')
-            category = data.get('category')
+            category = data.get('category', [])  # ✅ Change this - expect array, default to empty list
             selected_modules = data.get('selected_modules', [])
             
             # Validate required fields
-            if not all([name, category]):
+            if not name or not category:  # ✅ Change validation - check if category array is not empty
                 return JsonResponse({
                     'status': 'error',
                     'message': 'Missing required fields'
+                }, status=400)
+            
+            # ✅ Add validation for category array
+            if not isinstance(category, list) or len(category) == 0:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Please select at least one category'
                 }, status=400)
             
             # Check if project with same name already exists for this user
@@ -303,24 +311,22 @@ def create_project(request):
             project = Project.objects.create(
                 name=name,
                 description=description,
-                category=category,
+                category=category,  # ✅ This will now store array
                 user=request.user,
                 selected_modules=selected_modules
             )
             
-            # Create project modules
+            # Create project modules (unchanged)
             for module_type in selected_modules:
                 project_module = ProjectModule.objects.create(
                     project=project,
                     module_type=module_type
                 )
                 
-                # Create specific module instances based on type
                 if module_type == 'document-qa':
                     DocumentQAModule.objects.create(project_module=project_module)
                 elif module_type == 'idea-generator':
                     IdeaGeneratorModule.objects.create(project_module=project_module)
-            
             
             return JsonResponse({
                 'status': 'success',
@@ -328,14 +334,13 @@ def create_project(request):
                     'id': project.id,
                     'name': project.name,
                     'description': project.description,
-                    'category': project.category,
+                    'category': project.category,  # ✅ This will return array
                     'created_at': project.created_at.isoformat(),
                     'updated_at': project.updated_at.isoformat(),
                     'selected_modules': project.selected_modules
                 }
             })
     except Exception as e:
-        # Log the full error for debugging
         import traceback
         print(traceback.format_exc())
         return JsonResponse({
@@ -473,3 +478,411 @@ def update_project(request, project_id):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+
+
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def create_category_for_user(request):
+    """Admin creates a category for a specific user"""
+    try:
+        # Only admin can create categories for users
+        if not request.user.username == 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+            
+        data = request.data
+        user_id = data.get('user_id')
+        name = data.get('name')
+        
+        if not all([user_id, name]):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Missing required fields: user_id and name'
+            }, status=400)
+            
+        target_user = get_object_or_404(User, id=user_id)
+        
+        # Check if category already exists for this user
+        if Category.objects.filter(user=target_user, name=name).exists():
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Category "{name}" already exists for this user'
+            }, status=400)
+        
+        category = Category.objects.create(
+            name=name,
+            user=target_user
+        )
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Category "{name}" created successfully for {target_user.username}',
+            'category': {
+                'id': category.id,
+                'name': category.name,
+                'user_id': category.user.id,
+                'username': category.user.username,
+                'created_at': category.created_at.isoformat(),
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@api_view(['PUT'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def update_category(request, category_id):
+    """Admin updates a category"""
+    try:
+        # Only admin can update categories
+        if not request.user.username == 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+            
+        category = get_object_or_404(Category, id=category_id)
+        data = request.data
+        
+        # Update fields if provided
+        if 'name' in data:
+            # Check if new name already exists for this user
+            if Category.objects.filter(
+                user=category.user, 
+                name=data['name']
+            ).exclude(id=category_id).exists():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Category "{data["name"]}" already exists for this user'
+                }, status=400)
+            category.name = data['name']
+            
+
+            
+        category.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Category updated successfully',
+            'category': {
+                'id': category.id,
+                'name': category.name,
+
+                'user_id': category.user.id,
+                'username': category.user.username,
+                'updated_at': category.updated_at.isoformat(),
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@api_view(['DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def delete_category(request, category_id):
+    """Admin deletes a category"""
+    try:
+        # Only admin can delete categories
+        if not request.user.username == 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+            
+        category = get_object_or_404(Category, id=category_id)
+        category_name = category.name
+        username = category.user.username
+        
+        # Soft delete by setting is_active to False
+        category.is_active = False
+        category.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Category "{category_name}" deleted successfully for {username}'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_all_user_categories(request):
+    """Admin gets all categories for all users"""
+    try:
+        # Only admin can access this
+        if not request.user.username == 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+            
+        categories = Category.objects.filter(is_active=True).select_related('user')
+        
+        return JsonResponse({
+            'status': 'success',
+            'categories': [{
+                'id': category.id,
+                'name': category.name,
+                'user_id': category.user.id,
+                'username': category.user.username,
+                'user_email': category.user.email,
+                'created_at': category.created_at.isoformat(),
+                'updated_at': category.updated_at.isoformat(),
+            } for category in categories]
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+    
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_user_categories(request, user_id=None):
+    """Get categories for a specific user or current user"""
+    try:
+        if user_id:
+            # Admin accessing another user's categories
+            if not request.user.username == 'admin':
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Permission denied'
+                }, status=403)
+            target_user = get_object_or_404(User, id=user_id)
+        else:
+            # User accessing their own categories
+            target_user = request.user
+            
+        categories = Category.objects.filter(user=target_user, is_active=True)
+        
+        return JsonResponse({
+            'status': 'success',
+            'categories': [{
+                'id': category.id,
+                'name': category.name,
+                'created_at': category.created_at.isoformat(),
+                'updated_at': category.updated_at.isoformat(),
+            } for category in categories]
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+    
+
+@api_view(['PATCH'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def update_user_right_panel_permissions(request, user_id):
+    try:
+        if not request.user.username == 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+            
+        target_user = get_object_or_404(User, id=user_id)
+        feature_permissions = UserFeaturePermissions.get_or_create_for_user(target_user)
+        
+        data = request.data
+        print(f"=== UPDATING USER {target_user.username} ===")
+        print(f"Received data: {data}")
+        
+        if 'disabled_features' in data:
+            print(f"Before update: {feature_permissions.to_disabled_dict()}")
+            feature_permissions.update_from_disabled_dict(data['disabled_features'])
+            feature_permissions.created_by = request.user
+            feature_permissions.save()
+            print(f"After update: {feature_permissions.to_disabled_dict()}")
+            
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Right panel permissions updated successfully',
+            'data': {
+                'success': True,
+                'disabled_features': feature_permissions.to_disabled_dict()
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in update_user_right_panel_permissions: {traceback.format_exc()}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_current_user_right_panel_permissions(request):
+    """Get current user's RIGHT PANEL permissions only"""
+    try:
+        # Get only right panel feature permissions
+        feature_permissions = UserFeaturePermissions.get_or_create_for_user(request.user)
+        
+        return JsonResponse({
+            'status': 'success',
+            'data': {
+                'user_id': request.user.id,
+                'username': request.user.username,
+                'disabled_features': feature_permissions.to_disabled_dict(),
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_all_users_admin(request):
+    try:
+        if not request.user.username == 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+            
+        users = User.objects.all()
+        users_data = []
+        
+        for user in users:
+            api_tokens, _ = UserAPITokens.objects.get_or_create(user=user)
+
+            # Get module permissions from chat app
+            try:
+                module_permissions = UserModulePermissions.objects.get(user=user)
+                disabled_modules = module_permissions.disabled_modules
+            except UserModulePermissions.DoesNotExist:
+                disabled_modules = {}
+            
+            # Get upload permissions from chat app
+            try:
+                upload_permissions = UserUploadPermissions.objects.get(user=user)
+                can_upload = upload_permissions.can_upload
+            except UserUploadPermissions.DoesNotExist:
+                can_upload = True
+          
+            
+            # Get RIGHT PANEL feature permissions
+            feature_permissions = UserFeaturePermissions.get_or_create_for_user(user)
+            disabled_features_data = feature_permissions.to_disabled_dict()
+            
+            # 🔥 Make sure to include disabled_features in the response
+            users_data.append({
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'api_tokens': {
+                    'huggingface_token': api_tokens.huggingface_token or '',
+                    'gemini_token': api_tokens.gemini_token or '',
+                    'llama_token': api_tokens.llama_token or '',
+                },
+               'disabled_modules': disabled_modules,  # From chat app
+            'upload_permissions': {'can_upload': can_upload},
+
+                
+                # ✅ ADD THIS LINE - This is what's missing!
+                'disabled_features': disabled_features_data,
+            })
+            
+        return JsonResponse(users_data, safe=False)
+        
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+    
+
+@api_view(['PATCH'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def update_user_module_permissions(request, user_id):
+    try:
+        if not request.user.username == 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+            
+        target_user = get_object_or_404(User, id=user_id)
+        api_tokens, _ = UserAPITokens.objects.get_or_create(user=target_user)
+        
+        data = request.data
+        if 'disabled_modules' in data:
+            api_tokens.disabled_modules = data['disabled_modules']
+            api_tokens.save()
+            
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Module permissions updated successfully'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@api_view(['PATCH'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def update_user_upload_permissions(request, user_id):
+    try:
+        if not request.user.username == 'admin':
+            return JsonResponse({'status': 'error', 'message': 'Permission denied'}, status=403)
+            
+        target_user = get_object_or_404(User, id=user_id)
+        
+        # Get or create upload permissions from chat app
+        upload_permissions, created = UserUploadPermissions.objects.get_or_create(
+            user=target_user,
+            defaults={'can_upload': True}
+        )
+        
+        data = request.data
+        if 'can_upload' in data:
+            upload_permissions.can_upload = data['can_upload']
+            upload_permissions.save()
+            
+            print(f"Admin user {request.user.username} set upload permissions for user {target_user.username} to {data['can_upload']}")
+            
+        return JsonResponse({'status': 'success', 'data': {'success': True}})
+        
+    except Exception as e:
+        print(f"Error updating upload permissions: {str(e)}")
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)

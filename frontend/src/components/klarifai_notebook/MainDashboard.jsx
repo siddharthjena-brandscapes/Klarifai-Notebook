@@ -1,617 +1,4 @@
-// //Document Q/A parent component
-// /* eslint-disable no-unused-vars */
-// import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
-// import { useParams, useNavigate } from 'react-router-dom';
-// import PropTypes from 'prop-types';
-// import { Menu, ChevronRight, ChevronLeft, X, Brain } from 'lucide-react';
-// import Header from '../dashboard/Header';
 
-// import MainChat from './MainChat';
-// import backgroundImage from '../../assets/bg-main.jpg';
-// import FaqButton from '../../components/faq/FaqButton';
-// import { ThemeContext } from '../../context/ThemeContext'; // Import ThemeContext
-// import SideTab from './SideTab';
-// import YouTubeUploadModal from "../klarifai_notebook/YouTubeUploadModal";
-// import NoteEditorModal from "../klarifai_notebook/NoteEditorModal";
-// import NotePad from "../klarifai_notebook/NotePad";
-// import NoteViewerModal from "../klarifai_notebook/NoteViewerModal";
-// import ConfirmationModal from "../klarifai_notebook/ConfirmationModal";
-// import MindMapViewer from "../klarifai_notebook/MindMapViewer";
-
-// const MainDashboard = () => {
-//   const { mainProjectId } = useParams();
-//   const navigate = useNavigate();
-//   // Change default sidebar state to closed
-//   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-//   const [isMobile, setIsMobile] = useState(false);
-//   const [selectedChat, setSelectedChat] = useState(null);
-//   const [selectedDocument, setSelectedDocument] = useState(null);
-//   const [summary, setSummary] = useState('');
-//   const [followUpQuestions, setFollowUpQuestions] = useState([]);
-//   const [isSummaryPopupOpen, setIsSummaryPopupOpen] = useState(false);
-//   const [selectedDocuments, setSelectedDocuments] = useState([]);
-//   const [chatInputFocused, setChatInputFocused] = useState(false);
-//   const { theme } = useContext(ThemeContext); // Get current theme from context\
-//   const [forceResetKey, setForceResetKey] = useState(0);
-//   const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
-// const [isNotePadOpen, setIsNotePadOpen] = useState(true);
-// const [isNoteEditorModalOpen, setIsNoteEditorModalOpen] = useState(false);
-// const [isNoteViewerModalOpen, setIsNoteViewerModalOpen] = useState(false);
-// const [modalViewerNoteData, setModalViewerNoteData] = useState(null);
-
-// // New state for mindmap functionality
-// const [isMindmapGenerating, setIsMindmapGenerating] = useState(false);
-// const [isMindmapViewerOpen, setIsMindmapViewerOpen] = useState(false);
-// const [mindmapData, setMindmapData] = useState(null);
-// const [currentMindmapId, setCurrentMindmapId] = useState(null);
-// const mainChatRef = useRef(null);
-
-// const handleToggleNotePad = () => {
-//   setIsNotePadOpen(!isNotePadOpen);
-// };
-
-// const [confirmationModal, setConfirmationModal] = useState({
-//   isOpen: false,
-//   type: 'delete', // 'delete' | 'convert'
-//   data: null,
-//   isLoading: false
-// });
-
-// const [modalNoteData, setModalNoteData] = useState({
-//   id: null,
-//   title: '',
-//   content: ''
-// });
-
-// // Handle mindmap generation
-// const handleGenerateMindmap = async () => {
-//   if (selectedDocuments.length === 0) {
-//     alert('Please select at least one document to generate a mindmap');
-//     return;
-//   }
-
-//   setIsMindmapGenerating(true);
-  
-//   try {
-//     const { mindmapServiceNB } = await import('../../utils/axiosConfig');
-    
-//     console.log('Generating mindmap for documents:', selectedDocuments);
-//     console.log('Main project ID:', mainProjectId);
-    
-//     const response = await mindmapServiceNB.generateMindmap(
-//       mainProjectId,
-//       selectedDocuments
-//     );
-    
-//     if (response.data && response.data.success) {
-//       console.log('Mindmap generated successfully:', response.data);
-      
-//       // Store mindmap data and open viewer
-//       const mindmapData = response.data.mindmap;
-//       const mindmapStats = response.data.stats;
-//       const mindmapId = response.data.mindmap_id;
-      
-//       setMindmapData(mindmapData);
-//       setCurrentMindmapId(mindmapId);
-//       setIsMindmapViewerOpen(true);
-      
-//       console.log(`Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`);
-      
-//     } else {
-//       console.error('Failed to generate mindmap:', response.data);
-//       alert('Failed to generate mindmap. Please try again.');
-//     }
-    
-//   } catch (error) {
-//     console.error('Error generating mindmap:', error);
-//     alert(`Error generating mindmap: ${error.response?.data?.error || error.message}`);
-//   } finally {
-//     setIsMindmapGenerating(false);
-//   }
-// };
-
-// // Handle mindmap viewer close
-// const handleCloseMindmapViewer = () => {
-//   setIsMindmapViewerOpen(false);
-//   setMindmapData(null);
-//   setCurrentMindmapId(null);
-// };
-
-// // Handle sending question from mindmap to chat
-// const handleSendQuestionToChat = (question) => {
-//   console.log('Sending question from mindmap to chat:', question);
-  
-//   // Use the ref to call the MainChat's handleSendMessage function
-//   if (mainChatRef.current && mainChatRef.current.handleSendMessage) {
-//     mainChatRef.current.handleSendMessage(question);
-//   } else {
-//     console.error('MainChat ref not available or handleSendMessage not exposed');
-//   }
-// };
-
-// const handleOpenNoteViewer = (noteData) => {
-//   setModalViewerNoteData(noteData);
-//   setIsNoteViewerModalOpen(true);
-// };
-
-// const handleCloseNoteViewer = () => {
-//   setIsNoteViewerModalOpen(false);
-//   setModalViewerNoteData(null);
-// };
-
-// const handleDeleteNote = async () => {
-//   if (!confirmationModal.data) return;
-  
-//   try {
-//     const { noteServiceNB } = await import('../../utils/axiosConfig');
-//     await noteServiceNB.deleteNote(confirmationModal.data.id);
-    
-//     // Trigger NotePad refresh
-//     const refreshEvent = new CustomEvent('refreshNotePad');
-//     document.dispatchEvent(refreshEvent);
-    
-//     setConfirmationModal({ isOpen: false, type: 'delete', data: null, isLoading: false });
-//   } catch (error) {
-//     console.error('Failed to delete note:', error);
-//     setConfirmationModal(prev => ({ ...prev, isLoading: false }));
-//   }
-// };
-
-// const handleConvertToDocument = async () => {
-//   if (!confirmationModal.data) return;
-  
-//   setConfirmationModal(prev => ({ ...prev, isLoading: true }));
-  
-//   try {
-//     const { noteServiceNB } = await import('../../utils/axiosConfig');
-//     await noteServiceNB.convertNoteToDocument(confirmationModal.data.id);
-    
-//     // Trigger NotePad refresh
-//     const refreshEvent = new CustomEvent('refreshNotePad');
-//     document.dispatchEvent(refreshEvent);
-    
-//     // Trigger documents refresh
-//     const refreshDocsEvent = new CustomEvent('refreshDocuments');
-//     document.dispatchEvent(refreshDocsEvent);
-    
-//     setConfirmationModal({ isOpen: false, type: 'convert', data: null, isLoading: false });
-//   } catch (error) {
-//     console.error('Failed to convert note:', error);
-//     setConfirmationModal(prev => ({ ...prev, isLoading: false }));
-//   }
-// };
-
-// const [isModalSaving, setIsModalSaving] = useState(false);
-// const handleOpenNoteEditor = (noteData = null) => {
-//   setModalNoteData({
-//     id: noteData?.id || null,
-//     title: noteData?.title || '',
-//     content: noteData?.content || ''
-//   });
-//   setIsNoteEditorModalOpen(true);
-// };
-// const handleCloseNoteEditor = () => {
-//   setIsNoteEditorModalOpen(false);
-//   setModalNoteData({ id: null, title: '', content: '' });
-// };
-
-// const handleSaveNoteFromModal = async (title, content) => {
-//   setIsModalSaving(true);
-//   try {
-//     const { noteServiceNB } = await import('../../utils/axiosConfig');
-    
-//     const response = await noteServiceNB.saveNote(
-//       title.trim() || 'Untitled Note',
-//       content.trim(),
-//       mainProjectId,
-//       {},
-//       null,
-//       modalNoteData.id || null
-//     );
-
-//     if (response.data) {
-//       console.log('Note saved successfully from modal');
-      
-//       // ADD THIS: Trigger NotePad refresh by dispatching custom event
-//       const refreshEvent = new CustomEvent('refreshNotePad');
-//       document.dispatchEvent(refreshEvent);
-      
-//       handleCloseNoteEditor();
-//     }
-//   } catch (error) {
-//     console.error('Failed to save note from modal:', error);
-//   } finally {
-//     setIsModalSaving(false);
-//   }
-// };
-
-//   // Pass this event handler to MainContent
-//   const handleChatInputFocus = () => {
-//     setChatInputFocused(true);
-//     // Reset after a short delay
-//     setTimeout(() => setChatInputFocused(false), 100);
-//   };
-
-//   // Stable callback for setting follow-up questions
-//   const stableSetFollowUpQuestions = useCallback((questions) => {
-//     setFollowUpQuestions(questions);
-//   }, []); 
-
-//   // Stable callback for setting summary
-//   const stableSsetSummary = useCallback((summaryText) => {
-//     setSummary(summaryText);
-//   }, []);
-
-//   // Callback to close summary popup
-//   const handleCloseSummary = useCallback(() => {
-//     setIsSummaryPopupOpen(false);
-//   }, []);
-
-// // This should already exist in your MainDashboard.jsx
-// useEffect(() => {
-//   const handleRefresh = () => {
-//     // NotePad will handle its own refresh through the event listener
-//   };
-
-//   document.addEventListener('refreshNotePad', handleRefresh);
-  
-//   return () => {
-//     document.removeEventListener('refreshNotePad', handleRefresh);
-//   };
-// }, []);
-
-//   useEffect(() => {
-//     console.log('Dashboard mounted with mainProjectId:', mainProjectId);
-    
-//     // If no mainProjectId, redirect to landing
-//     if (!mainProjectId) {
-//       console.warn('No mainProjectId found, redirecting...');
-//       navigate('/landing');
-//       return;
-//     }
-//   }, [mainProjectId, navigate]);
-
-//   useEffect(() => {
-//     console.log('Main Project ID in Dashboard:', mainProjectId);
-//     if (!mainProjectId) {
-//       console.warn('No mainProjectId in URL parameters');
-//     }
-//   }, [mainProjectId]);
-
-//   // Responsive breakpoint management
-//   useEffect(() => {
-//     const checkMobile = () => {
-//       const mobile = window.innerWidth <= 768;
-//       setIsMobile(mobile);
-//       // Only close sidebar on mobile, keep it open on desktop
-//       if (mobile) {
-//         setIsSidebarOpen(false);
-//       } 
-//     };
-
-//     // Check initial screen size
-//     checkMobile();
-
-//     // Add resize listener
-//     window.addEventListener('resize', checkMobile);
-
-//     // Cleanup listener
-//     return () => window.removeEventListener('resize', checkMobile);
-//   }, []);
-
-//   const handleDocumentSelect = (doc) => {
-//     if (doc) {
-//       setSelectedDocument(doc);
-//       setSummary(doc.summary || 'No summary available');
-//       setFollowUpQuestions(doc.follow_up_questions || []);
-//       setIsSummaryPopupOpen(true);
-
-//       // On mobile, close sidebar after selection
-//       if (isMobile) {
-//         setIsSidebarOpen(false);
-//       }
-//     } else {
-//       console.error('No document selected');
-//     }
-//   };
-
-//   const handleNewChat = (e) => {
-//     // Prevent default behavior if called from a link or form
-//     if (e && e.preventDefault) {
-//       e.preventDefault();
-//     }
-    
-//     console.log("Dashboard: Starting new chat, preserving documents:", selectedDocuments);
-    
-//     // CRITICAL: Reset the selectedChat state to null
-//     setSelectedChat(null);
-    
-//     // Reset other chat-related states
-//     setSelectedDocument(null);
-//     setSummary('');
-//     setFollowUpQuestions([]);
-
-//      // Force a reset by incrementing the key
-//   setForceResetKey(prev => prev + 1);
-//   console.log("Incremented reset key to force MainContent reset");
-    
-   
-//   }
-
-//   const handleSendMessage = async (message, documents) => {
-//     console.log('Sending message:', message);
-//     console.log('With documents:', documents);
-//   };
-
-//   const toggleSidebar = () => {
-//     setIsSidebarOpen(!isSidebarOpen);
-//   };
-
-//   useEffect(() => {
-//     // Listen for custom sidebar toggle events
-//     const handleSidebarToggle = () => {
-//       setIsSidebarOpen(!isSidebarOpen);
-//     };
-    
-//     document.addEventListener('toggle-sidebar', handleSidebarToggle);
-    
-//     return () => {
-//       document.removeEventListener('toggle-sidebar', handleSidebarToggle);
-//     };
-//   }, [isSidebarOpen]);
-
-//   return (
-//     <div className={`flex flex-col min-h-screen ${theme === 'dark' ? 'dark:bg-black' : 'bg-[#f0efea]/50'} overflow-hidden`}>
-//       {/* Apply background only in dark theme */}
-//       {theme === 'dark' && (
-//         <>
-//           <div 
-//             className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
-//             style={{
-//               backgroundImage: `url(${backgroundImage})`,
-//               backgroundSize: 'cover',
-//               backgroundPosition: 'center',
-//             }}
-//             role="img"
-//             aria-label="Background"
-//           />
-//           <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"></div>
-//         </>
-//       )}
-      
-//       <Header />
-      
-//       <div className="flex flex-1 relative">
-//         {/* Mobile Overlay for Sidebar */}
-//         {isMobile && isSidebarOpen && (
-//           <div 
-//             className={`fixed inset-0 ${theme === 'dark' ? 'bg-black' : 'bg-[#5e4636]'} bg-opacity-50 z-40`} 
-//             onClick={() => setIsSidebarOpen(false)}
-//             aria-hidden="true"
-//           />
-//         )}
-
-//         {/* Fixed Action Buttons Container - Top Right */}
-//         <div className={`
-//           fixed top-20 right-4 z-30 
-//           flex flex-col gap-3
-//           transition-all duration-300 ease-in-out
-//           ${isNotePadOpen ? 'lg:right-80 md:right-80' : 'right-4'}
-//         `}>
-          
-//           {/* Mindmap Generation Button */}
-//           <div className="relative">
-//             <button
-//               onClick={handleGenerateMindmap}
-//               disabled={isMindmapGenerating || selectedDocuments.length === 0}
-//               className={`
-//                 group relative
-//                 w-12 h-12 lg:w-14 lg:h-14
-//                 rounded-full 
-//                 shadow-lg hover:shadow-xl 
-//                 transition-all duration-300 
-//                 flex items-center justify-center
-//                 ${theme === 'dark' 
-//                   ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700' 
-//                   : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
-//                 }
-//                 ${(isMindmapGenerating || selectedDocuments.length === 0) 
-//                   ? 'opacity-50 cursor-not-allowed' 
-//                   : 'hover:scale-110 cursor-pointer'
-//                 }
-//                 backdrop-blur-sm
-//               `}
-//               title={
-//                 selectedDocuments.length === 0 
-//                   ? "Select documents to generate mindmap" 
-//                   : isMindmapGenerating 
-//                     ? "Generating mindmap..." 
-//                     : "Generate Mindmap"
-//               }
-//             >
-//               <Brain 
-//                 className={`w-5 h-5 lg:w-6 lg:h-6 text-white transition-transform duration-300 ${
-//                   isMindmapGenerating ? 'animate-pulse' : 'group-hover:scale-110'
-//                 }`} 
-//               />
-              
-//               {/* Tooltip */}
-//               <div className={`
-//                 absolute right-16 top-1/2 transform -translate-y-1/2
-//                 px-3 py-2 rounded-lg text-sm font-medium
-//                 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-gray-900 text-white'}
-//                 opacity-0 group-hover:opacity-100
-//                 transition-opacity duration-300
-//                 pointer-events-none
-//                 whitespace-nowrap
-//                 shadow-lg
-//                 hidden lg:block
-//               `}>
-//                 {selectedDocuments.length === 0 
-//                   ? "Select documents first" 
-//                   : isMindmapGenerating 
-//                     ? "Generating mindmap..." 
-//                     : `Generate Mindmap (${selectedDocuments.length} docs)`
-//                 }
-//                 <div className={`
-//                   absolute left-full top-1/2 transform -translate-y-1/2
-//                   border-4 border-transparent
-//                   ${theme === 'dark' ? 'border-l-gray-800' : 'border-l-gray-900'}
-//                 `} />
-//               </div>
-
-//               {/* Loading spinner overlay */}
-//               {isMindmapGenerating && (
-//                 <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black bg-opacity-30">
-//                   <div className="w-4 h-4 lg:w-5 lg:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-//                 </div>
-//               )}
-//             </button>
-//           </div>
-
-         
-//         </div>
-
-//         {/* Responsive Layout Container */}
-//         <div className="flex flex-1 overflow-hidden w-full">
-//           <SideTab
-//             isOpen={isSidebarOpen}
-//             isMobile={isMobile}
-//             mainProjectId={mainProjectId}
-//             onSelectChat={setSelectedChat}
-//             onDocumentSelect={handleDocumentSelect}
-//             onClose={() => setIsSidebarOpen(false)}
-//             onSendMessage={handleSendMessage}
-//             setSelectedDocuments={setSelectedDocuments}
-//             selectedDocuments={selectedDocuments}
-//             onToggle={toggleSidebar}
-//             onNewChat={handleNewChat}
-//             chatInputFocused={chatInputFocused}
-            
-//           />
-          
-//           {/* Centered Main Content Container */}
-//           <div className={`
-//           flex-1 
-//           flex 
-//           justify-center 
-//           w-full 
-//           overflow-hidden
-//           transition-all 
-//           duration-300 
-//           ease-in-out 
-//           ${!isMobile && isSidebarOpen 
-//             ? 'px-0 max-w-[calc(100%-330px)]' 
-//             : 'pl-0 max-w-full'
-//           }
-//           ${isNotePadOpen ? 'lg:pr-80 md:pr-80 pr-0' : 'pr-0'}
-//         `}>
-//             <div className={`
-//             w-full 
-//             max-w-full 
-//             transition-all 
-//             duration-300 
-//             ease-in-out 
-//             pl-16
-//             mx-16
-//             ${!isMobile && isSidebarOpen 
-//               ? 'ml-0 w-[100%]' 
-//               : 'ml-0 w-full'
-//             }
-//           `}>
-//               <MainChat
-//                 ref={mainChatRef}
-//                 key={`chat-${forceResetKey}`} 
-//                 selectedChat={selectedChat}
-//                 mainProjectId={mainProjectId}
-//                 selectedDocument={selectedDocument}
-//                 summary={summary}
-//                 followUpQuestions={followUpQuestions}
-//                 isSummaryPopupOpen={isSummaryPopupOpen}
-//                 onCloseSummary={handleCloseSummary}
-//                 setSummary={stableSsetSummary}
-//                 setFollowUpQuestions={stableSetFollowUpQuestions}
-//                 setIsSummaryPopupOpen={setIsSummaryPopupOpen}
-//                 isMobile={isMobile}
-//                 setSelectedDocuments={setSelectedDocuments}
-//                 selectedDocuments={selectedDocuments}
-//                 className="w-full"
-//                 onChatInputFocus={handleChatInputFocus}
-//                 onOpenYouTubeModal={() => setIsYouTubeModalOpen(true)}
-//               />
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-//      <YouTubeUploadModal
-//   isOpen={isYouTubeModalOpen}
-//   onClose={() => setIsYouTubeModalOpen(false)}
-//   mainProjectId={mainProjectId}
-//   onUploadSuccess={(data) => {
-//     console.log('Upload successful:', data);
-//     // Add any additional success handling here
-//   }}
-// />
-// <NotePad
-//   mainProjectId={mainProjectId}
-//   isOpen={isNotePadOpen}
-//   onToggle={handleToggleNotePad}
-//   onOpenEditor={handleOpenNoteEditor}
-//   onOpenViewer={handleOpenNoteViewer}
-//   onShowConfirmation={setConfirmationModal}   
-// />
-
-// <NoteEditorModal
-//   isOpen={isNoteEditorModalOpen}
-//   onClose={handleCloseNoteEditor}
-//   noteTitle={modalNoteData.title}
-//   noteContent={modalNoteData.content}
-//   onSave={handleSaveNoteFromModal}
-//   isSaving={isModalSaving}
-// />
-// <NoteViewerModal
-//   isOpen={isNoteViewerModalOpen}
-//   onClose={handleCloseNoteViewer}
-//   note={modalViewerNoteData}
-//   onEdit={() => {
-//     handleOpenNoteEditor(modalViewerNoteData);
-//     handleCloseNoteViewer();
-//   }}
-// />
-// <ConfirmationModal
-//   isOpen={confirmationModal.isOpen}
-//   type={confirmationModal.type}
-//   onClose={() => setConfirmationModal({ isOpen: false, type: 'delete', data: null, isLoading: false })}
-//   onConfirm={confirmationModal.type === 'delete' ? handleDeleteNote : handleConvertToDocument}
-//   itemName={confirmationModal.data?.title || 'Untitled Note'}
-//   isLoading={confirmationModal.isLoading}
-//   loadingText={confirmationModal.type === 'convert' ? 'Converting...' : 'Deleting...'}
-// />
-
-// <MindMapViewer
-//   isOpen={isMindmapViewerOpen}
-//   onClose={handleCloseMindmapViewer}
-//   mindmapData={mindmapData}
-//   mainProjectId={mainProjectId}
-//   selectedDocuments={selectedDocuments}
-//   mindmapId={currentMindmapId}
-//   onSendToChat={handleSendQuestionToChat}
-// />
-
-//     </div>
-//   );
-// };
-
-// MainDashboard.propTypes = {
-//   isSidebarOpen: PropTypes.bool,
-//   selectedDocuments: PropTypes.arrayOf(PropTypes.string),
-// };
-
-// export default MainDashboard;
-
-// MainDashboard.jsx - Key changes for RightPanel integration
-
-// MainDashboard.jsx - Updated with auto-expand NotePad functionality
 
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -632,6 +19,7 @@ import MindMapViewer from "../klarifai_notebook/MindMapViewer";
 import RightPanel from "./RightPanel";
 import MindMapHistory from "../klarifai_notebook/MindMapHistory";
 import BrainLoadingAnimation from '../klarifai_notebook/BrainLoadingAnimation';
+import DocumentSelectionModal from "../klarifai_notebook/DocumentSelectionModal";
 
 const MainDashboard = () => {
   const { mainProjectId } = useParams();
@@ -667,24 +55,241 @@ const MainDashboard = () => {
   const [mindmapStats, setMindmapStats] = useState(null);
   const [showMindmapHistory, setShowMindmapHistory] = useState(false);
 
-  const handleViewMindmap = (mindmapData, mindmapId, stats = null) => {
-    console.log('MainDashboard: Viewing mindmap', {
-      mindmapData,
+  // NEW: Document session tracking states
+  const [documentSessions, setDocumentSessions] = useState(new Map());
+  const [currentDocumentSet, setCurrentDocumentSet] = useState([]);
+  const [lastDocumentSignature, setLastDocumentSignature] = useState('');
+
+  const [isDocumentSelectionModalOpen, setIsDocumentSelectionModalOpen] = useState(false);
+  const [documents, setDocuments] = useState([]);
+
+  // NEW: Helper function to create document signature
+  const createDocumentSignature = useCallback((documentIds) => {
+    if (!documentIds || documentIds.length === 0) return 'web_mode';
+    return documentIds.sort().join(',');
+  }, []);
+
+  // NEW: Function to check if we need a new chat session
+  const shouldCreateNewChatSession = useCallback((newDocuments) => {
+    const newSignature = createDocumentSignature(newDocuments);
+    const currentSignature = createDocumentSignature(currentDocumentSet);
+    
+    console.log('🔍 Session Check:', {
+      newSignature,
+      currentSignature,
+      needsNewSession: newSignature !== currentSignature
+    });
+    
+    return newSignature !== currentSignature;
+  }, [createDocumentSignature, currentDocumentSet]);
+
+  // NEW: Function to handle document context changes
+  // const handleDocumentContextChange = useCallback((newDocuments, source = 'unknown') => {
+  //   console.log(`📋 Document context change from ${source}:`, {
+  //     previous: currentDocumentSet,
+  //     new: newDocuments,
+  //     source
+  //   });
+
+  //   const newSignature = createDocumentSignature(newDocuments);
+    
+  //   if (shouldCreateNewChatSession(newDocuments)) {
+  //     console.log('🔄 Creating new chat session for document set:', newSignature);
+      
+  //     // Save current session if it exists
+  //     if (selectedChat && currentDocumentSet.length > 0) {
+  //       const currentSignature = createDocumentSignature(currentDocumentSet);
+  //       setDocumentSessions(prev => new Map(prev).set(currentSignature, {
+  //         chat: selectedChat,
+  //         documents: [...currentDocumentSet],
+  //         lastUsed: Date.now()
+  //       }));
+  //       console.log('💾 Saved session for:', currentSignature);
+  //     }
+      
+  //     // Check if we have an existing session for the new document set
+  //     const existingSession = documentSessions.get(newSignature);
+      
+  //     if (existingSession) {
+  //       console.log('🔍 Found existing session for:', newSignature);
+  //       setSelectedChat(existingSession.chat);
+  //       setCurrentDocumentSet(newDocuments);
+  //       setLastDocumentSignature(newSignature);
+        
+  //       // Update last used timestamp
+  //       setDocumentSessions(prev => {
+  //         const updated = new Map(prev);
+  //         updated.set(newSignature, {
+  //           ...existingSession,
+  //           lastUsed: Date.now()
+  //         });
+  //         return updated;
+  //       });
+  //     } else {
+  //       console.log('✨ Starting fresh session for:', newSignature);
+  //       // Start a new chat session
+  //       setSelectedChat(null);
+  //       setCurrentDocumentSet(newDocuments);
+  //       setLastDocumentSignature(newSignature);
+  //       setForceResetKey(prev => prev + 1);
+  //     }
+  //   } else {
+  //     console.log('📄 Same document context, keeping current session');
+  //     setCurrentDocumentSet(newDocuments);
+  //   }
+    
+  //   // Always update selectedDocuments
+  //   setSelectedDocuments(newDocuments);
+  // }, [selectedChat, currentDocumentSet, documentSessions, createDocumentSignature, shouldCreateNewChatSession]);
+
+
+// NEW: Function to handle document context changes
+const handleDocumentContextChange = useCallback((newDocuments, source = 'unknown') => {
+  console.log(`📋 Document context change from ${source}:`, {
+    previous: currentDocumentSet,
+    new: newDocuments,
+    source
+  });
+
+  const newSignature = createDocumentSignature(newDocuments);
+  
+  // FIXED: Don't reset chat session for chat selections
+  if (source === 'chat_selection') {
+    console.log('📄 Chat selection context change - updating documents without session reset');
+    setCurrentDocumentSet(newDocuments);
+    setSelectedDocuments(newDocuments);
+    setLastDocumentSignature(newSignature);
+    return;
+  }
+  
+  if (shouldCreateNewChatSession(newDocuments)) {
+    console.log('🔄 Creating new chat session for document set:', newSignature);
+    
+    // Save current session if it exists
+    if (selectedChat && currentDocumentSet.length > 0) {
+      const currentSignature = createDocumentSignature(currentDocumentSet);
+      setDocumentSessions(prev => new Map(prev).set(currentSignature, {
+        chat: selectedChat,
+        documents: [...currentDocumentSet],
+        lastUsed: Date.now()
+      }));
+      console.log('💾 Saved session for:', currentSignature);
+    }
+    
+    // Check if we have an existing session for the new document set
+    const existingSession = documentSessions.get(newSignature);
+    
+    if (existingSession) {
+      console.log('🔍 Found existing session for:', newSignature);
+      setSelectedChat(existingSession.chat);
+      setCurrentDocumentSet(newDocuments);
+      setLastDocumentSignature(newSignature);
+      
+      // Update last used timestamp
+      setDocumentSessions(prev => {
+        const updated = new Map(prev);
+        updated.set(newSignature, {
+          ...existingSession,
+          lastUsed: Date.now()
+        });
+        return updated;
+      });
+    } else {
+      console.log('✨ Starting fresh session for:', newSignature);
+      // Start a new chat session
+      setSelectedChat(null);
+      setCurrentDocumentSet(newDocuments);
+      setLastDocumentSignature(newSignature);
+      setForceResetKey(prev => prev + 1);
+    }
+  } else {
+    console.log('📄 Same document context, keeping current session');
+    setCurrentDocumentSet(newDocuments);
+  }
+  
+  // Always update selectedDocuments
+  setSelectedDocuments(newDocuments);
+}, [selectedChat, currentDocumentSet, documentSessions, createDocumentSignature, shouldCreateNewChatSession]);
+
+
+  const handleSendQuestionToChat = useCallback((question, questionSource = 'mindmap') => {
+  console.log(`💬 Sending question from ${questionSource}:`, question);
+  console.log('📋 Current document context:', currentDocumentSet);
+  
+  // Ensure we're in the right document context before sending
+  const questionDocuments = currentDocumentSet.length > 0 ? currentDocumentSet : selectedDocuments;
+  
+  if (mainChatRef.current && mainChatRef.current.handleSendMessage) {
+    // Send the question as-is without adding any prefix
+    // The backend can handle mindmap context through other means
+    mainChatRef.current.handleSendMessage(question);
+    console.log('✅ Question sent to chat with document context:', questionDocuments);
+  } else {
+    console.error('❌ MainChat ref not available');
+  }
+}, [currentDocumentSet, selectedDocuments]);
+
+  // NEW: Enhanced handleViewMindmap with document session management
+  const handleViewMindmap = useCallback(async (mindmapData, mindmapId, stats = null) => {
+    console.log('🧠 MainDashboard: handleViewMindmap called', {
       mindmapId,
-      stats
+      currentMindmapId,
+      stats,
+      currentSelectedDocuments: selectedDocuments
     });
     
     if (!mindmapData) {
-      console.error('No mindmap data provided to handleViewMindmap');
+      console.error('❌ No mindmap data provided');
       return;
     }
     
+    // ✅ CRITICAL: Close any existing mindmap first to clear state
+    if (showMindmapViewer && currentMindmapId !== mindmapId) {
+      console.log('🔄 MainDashboard: Closing previous mindmap to clear state');
+      setShowMindmapViewer(false);
+      setCurrentMindmapData(null);
+      setCurrentMindmapId(null);
+      setMindmapStats(null);
+      
+      // Wait for state to clear
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Determine the document context for this mindmap
+    let mindmapDocuments = [];
+    
+    if (stats?.document_ids && stats.document_ids.length > 0) {
+      mindmapDocuments = stats.document_ids;
+      console.log('📋 Using document IDs from mindmap stats:', mindmapDocuments);
+    } else if (selectedDocuments && selectedDocuments.length > 0) {
+      mindmapDocuments = selectedDocuments;
+      console.log('📋 Using current selected documents:', mindmapDocuments);
+    }
+    
+    // Handle document context change BEFORE opening mindmap
+    if (mindmapDocuments.length > 0) {
+      handleDocumentContextChange(mindmapDocuments, 'mindmap_view');
+      
+      // Wait for state to settle
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Set new mindmap data
     setCurrentMindmapData(mindmapData);
     setCurrentMindmapId(mindmapId);
     setMindmapStats(stats);
+    
+    // Log the final state
+    console.log('🧠 MainDashboard: Set mindmap data', {
+      mindmapId,
+      statsDocumentIds: stats?.document_ids,
+      currentSelectedDocuments: selectedDocuments
+    });
+    
+    // Open the mindmap viewer
     setShowMindmapViewer(true);
     setShowMindmapHistory(false);
-  };
+  }, [showMindmapViewer, currentMindmapId, selectedDocuments, handleDocumentContextChange]);
 
   const handleOpenMindmapHistory = () => {
     setShowMindmapHistory(true);
@@ -760,71 +365,69 @@ const MainDashboard = () => {
     content: ''
   });
 
-  const handleGenerateMindmap = async () => {
-    if (selectedDocuments.length === 0) {
-      alert('Please select at least one document to generate a mindmap');
-      return;
-    }
+  const handleGenerateMindmap = async (forceDocuments = null) => {
+  const documentsToUse = forceDocuments || selectedDocuments;
+  
+  // If multiple documents selected, show selection modal
+  if (documentsToUse.length > 1) {
+    setIsDocumentSelectionModalOpen(true);
+    return;
+  }
+  
+  if (documentsToUse.length === 0) {
+    alert('Please select at least one document to generate a mindmap');
+    return;
+  }
 
-    setIsMindmapGenerating(true);
+  setIsMindmapGenerating(true);
+  
+  try {
+    const { mindmapServiceNB } = await import('../../utils/axiosConfig');
     
-    try {
-      const { mindmapServiceNB } = await import('../../utils/axiosConfig');
+    console.log('Generating mindmap for documents:', documentsToUse);
+    console.log('Main project ID:', mainProjectId);
+    
+    const response = await mindmapServiceNB.generateMindmap(
+      mainProjectId,
+      documentsToUse
+    );
+    
+    if (response.data && response.data.success) {
+      console.log('Mindmap generated successfully:', response.data);
       
-      console.log('Generating mindmap for documents:', selectedDocuments);
-      console.log('Main project ID:', mainProjectId);
+      const mindmapData = response.data.mindmap;
+      const mindmapStats = response.data.stats;
+      const mindmapId = response.data.mindmap_id;
       
-      const response = await mindmapServiceNB.generateMindmap(
-        mainProjectId,
-        selectedDocuments
+      setMindmapData(mindmapData);
+      setCurrentMindmapId(mindmapId);
+      setIsMindmapViewerOpen(true);
+
+      handleViewMindmap(
+        response.data.mindmap, 
+        response.data.mindmap_id, 
+        response.data.stats
       );
       
-      if (response.data && response.data.success) {
-        console.log('Mindmap generated successfully:', response.data);
-        
-        const mindmapData = response.data.mindmap;
-        const mindmapStats = response.data.stats;
-        const mindmapId = response.data.mindmap_id;
-        
-        setMindmapData(mindmapData);
-        setCurrentMindmapId(mindmapId);
-        setIsMindmapViewerOpen(true);
-
-        handleViewMindmap(
-          response.data.mindmap, 
-          response.data.mindmap_id, 
-          response.data.stats
-        );
-        
-        console.log(`Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`);
-        
-      } else {
-        console.error('Failed to generate mindmap:', response.data);
-        alert('Failed to generate mindmap. Please try again.');
-      }
+      console.log(`Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`);
       
-    } catch (error) {
-      console.error('Error generating mindmap:', error);
-      alert(`Error generating mindmap: ${error.response?.data?.error || error.message}`);
-    } finally {
-      setIsMindmapGenerating(false);
+    } else {
+      console.error('Failed to generate mindmap:', response.data);
+      alert('Failed to generate mindmap. Please try again.');
     }
-  };
+    
+  } catch (error) {
+    console.error('Error generating mindmap:', error);
+    alert(`Error generating mindmap: ${error.response?.data?.error || error.message}`);
+  } finally {
+    setIsMindmapGenerating(false);
+  }
+};
 
   const handleCloseMindmapViewer = () => {
     setIsMindmapViewerOpen(false);
     setMindmapData(null);
     setCurrentMindmapId(null);
-  };
-
-  const handleSendQuestionToChat = (question) => {
-    console.log('Sending question from mindmap to chat:', question);
-    
-    if (mainChatRef.current && mainChatRef.current.handleSendMessage) {
-      mainChatRef.current.handleSendMessage(question);
-    } else {
-      console.error('MainChat ref not available or handleSendMessage not exposed');
-    }
   };
 
   const handleOpenNoteViewer = (noteData) => {
@@ -938,6 +541,25 @@ const MainDashboard = () => {
     setIsSummaryPopupOpen(false);
   }, []);
 
+  // NEW: Enhanced handleDocumentSelectionFromMindmap
+  const handleDocumentSelectionFromMindmap = useCallback(async (documentIds) => {
+    console.log('🔄 MainDashboard: Document selection from mindmap:', documentIds);
+    console.log('🔄 MainDashboard: Current selectedDocuments before update:', selectedDocuments);
+    
+    // Clear any existing mindmap state to prevent stale context
+    setCurrentMindmapData(null);
+    setCurrentMindmapId(null);
+    setMindmapStats(null);
+    
+    // Use the document context change handler
+    handleDocumentContextChange(documentIds, 'mindmap_selection');
+    
+    // Force a small delay to ensure state propagation
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('✅ MainDashboard: Document context updated from mindmap');
+  }, [selectedDocuments, handleDocumentContextChange]);
+
   // NEW: Add event listener for auto-expand functionality
   useEffect(() => {
     const handleRefresh = () => {
@@ -990,6 +612,57 @@ const MainDashboard = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // ✅ UPDATE: Enhanced state sync effect
+  useEffect(() => {
+    console.log('🔍 MainDashboard: State sync check', {
+      selectedDocuments,
+      selectedDocumentsLength: selectedDocuments?.length || 0,
+      currentMindmapId,
+      showMindmapViewer,
+      timestamp: new Date().toISOString()
+    });
+  }, [selectedDocuments, currentMindmapId, showMindmapViewer]);
+
+  // NEW: Update selectedDocuments effect to use document context handler
+  useEffect(() => {
+    if (selectedDocuments.length > 0) {
+      const signature = createDocumentSignature(selectedDocuments);
+      if (signature !== lastDocumentSignature) {
+        console.log('📋 selectedDocuments changed, updating context via effect');
+        handleDocumentContextChange(selectedDocuments, 'documents_effect');
+      }
+    }
+  }, [selectedDocuments, lastDocumentSignature, handleDocumentContextChange, createDocumentSignature]);
+
+  // NEW: Cleanup old sessions periodically
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      setDocumentSessions(prev => {
+        const cleaned = new Map();
+        for (const [key, session] of prev) {
+          if (session.lastUsed > oneHourAgo) {
+            cleaned.set(key, session);
+          }
+        }
+        console.log(`🧹 Cleaned up ${prev.size - cleaned.size} old sessions`);
+        return cleaned;
+      });
+    }, 10 * 60 * 1000); // Every 10 minutes
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
+  // NEW: Debug logging for session state
+  useEffect(() => {
+    console.log('📊 Session State Update:', {
+      currentDocumentSet,
+      documentSignature: createDocumentSignature(currentDocumentSet),
+      activeSessionsCount: documentSessions.size,
+      selectedChatExists: !!selectedChat
+    });
+  }, [currentDocumentSet, documentSessions, selectedChat, createDocumentSignature]);
+
   const handleDocumentSelect = (doc) => {
     if (doc) {
       setSelectedDocument(doc);
@@ -1005,20 +678,35 @@ const MainDashboard = () => {
     }
   };
 
-  const handleNewChat = (e) => {
-    if (e && e.preventDefault) {
-      e.preventDefault();
-    }
-    
-    console.log("Dashboard: Starting new chat, preserving documents:", selectedDocuments);
-    
-    setSelectedChat(null);
-    setSelectedDocument(null);
-    setSummary('');
-    setFollowUpQuestions([]);
-    setForceResetKey(prev => prev + 1);
-    console.log("Incremented reset key to force MainContent reset");
+  // UPDATE: Enhanced handleNewChat to preserve document context
+// REPLACE the existing handleNewChat function with this corrected version:
+
+const handleNewChat = (e) => {
+  if (e && e.preventDefault) {
+    e.preventDefault();
   }
+  
+  // Use the CURRENT selectedDocuments state instead of currentDocumentSet
+  // This ensures we respect any manual document deselections made during the session
+  console.log("🆕 Starting new chat with currently selected documents:", selectedDocuments);
+  console.log("🔄 Previous document set was:", currentDocumentSet);
+  
+  // Update document context to match current selection
+  if (JSON.stringify(selectedDocuments.sort()) !== JSON.stringify(currentDocumentSet.sort())) {
+    console.log("📋 Document selection changed during session, updating context");
+    handleDocumentContextChange(selectedDocuments, 'new_chat_sync');
+  }
+  
+  // Reset chat for current document selection
+  setSelectedChat(null);
+  setSelectedDocument(null);
+  setSummary('');
+  setFollowUpQuestions([]);
+  setForceResetKey(prev => prev + 1);
+  
+  console.log("✅ New chat started with current document selection:", selectedDocuments);
+};
+
 
   const handleSendMessage = async (message, documents) => {
     console.log('Sending message:', message);
@@ -1040,6 +728,21 @@ const MainDashboard = () => {
       document.removeEventListener('toggle-sidebar', handleSidebarToggle);
     };
   }, [isSidebarOpen]);
+
+
+const handleDocumentSelectionChange = (newSelection) => {
+  console.log('📡 Dashboard: Document selection changed:', newSelection);
+  
+  // Update MainChat directly via ref
+  if (mainChatRef.current) {
+    mainChatRef.current.updateDocumentSelection(newSelection);
+  }
+};
+
+
+
+
+
 
   return (
     <div className={`flex flex-col min-h-screen ${theme === 'dark' ? 'dark:bg-black' : 'bg-[#f0efea]/50'} overflow-hidden`}>
@@ -1087,6 +790,9 @@ const MainDashboard = () => {
             onToggle={toggleSidebar}
             onNewChat={handleNewChat}
             chatInputFocused={chatInputFocused}
+            onDocumentSelectionChange={handleDocumentSelectionChange}
+            onDocumentContextChange={handleDocumentContextChange}
+             onDocumentsUpdate={setDocuments}
           />
           
           {/* Centered Main Content Container */}
@@ -1120,7 +826,7 @@ const MainDashboard = () => {
             `}>
               <MainChat
                 ref={mainChatRef}
-                key={`chat-${forceResetKey}`} 
+                key={`chat-${forceResetKey}-${createDocumentSignature(currentDocumentSet)}`} // NEW: Include document signature in key
                 selectedChat={selectedChat}
                 mainProjectId={mainProjectId}
                 selectedDocument={selectedDocument}
@@ -1133,7 +839,7 @@ const MainDashboard = () => {
                 setIsSummaryPopupOpen={setIsSummaryPopupOpen}
                 isMobile={isMobile}
                 setSelectedDocuments={setSelectedDocuments}
-                selectedDocuments={selectedDocuments}
+                selectedDocuments={currentDocumentSet} // NEW: Use currentDocumentSet instead of selectedDocuments
                 className="w-full"
                 onChatInputFocus={handleChatInputFocus}
                 onOpenYouTubeModal={() => setIsYouTubeModalOpen(true)}
@@ -1151,6 +857,7 @@ const MainDashboard = () => {
             theme={theme}
             mainProjectId={mainProjectId}
             onViewMindmap={handleViewMindmap}
+            onDocumentSelectionChange={handleDocumentSelectionFromMindmap}
           />
         </div>
       </div>
@@ -1167,6 +874,7 @@ const MainDashboard = () => {
           onGenerateMindmap={handleGenerateMindmap}
           isMindmapGenerating={isMindmapGenerating}
           selectedDocuments={selectedDocuments}
+          onViewMindmapHistory={handleOpenMindmapHistory}
         />
       )}
 
@@ -1216,9 +924,12 @@ const MainDashboard = () => {
         onViewMindmap={handleViewMindmap}
         onRegenerateMindmap={handleRegenerateMindmapFromHistory}
         selectedDocuments={selectedDocuments}
+        setSelectedDocuments={setSelectedDocuments}
+        onDocumentSelectionChange={handleDocumentSelectionFromMindmap}
       />
 
       <MindMapViewer
+        key={`mindmap-${currentMindmapId}-${createDocumentSignature(currentDocumentSet)}`} // NEW: Enhanced key with document session
         isOpen={showMindmapViewer}
         onClose={() => {
           setShowMindmapViewer(false);
@@ -1228,12 +939,23 @@ const MainDashboard = () => {
         }}
         mindmapData={currentMindmapData}
         mainProjectId={mainProjectId}
-        selectedDocuments={selectedDocuments}
+        selectedDocuments={currentDocumentSet} // NEW: Use currentDocumentSet for consistency
         mindmapId={currentMindmapId}
         onSendToChat={handleSendQuestionToChat}
         mindmapStats={mindmapStats}
         isFromHistory={!!currentMindmapId}
       />
+
+<DocumentSelectionModal
+  isOpen={isDocumentSelectionModalOpen}
+  onClose={() => setIsDocumentSelectionModalOpen(false)}
+  selectedDocuments={selectedDocuments}
+  documents={documents || []} // You'll need to pass documents from SideTab or fetch them
+  onSelectDocument={() => {}} // Not used in this flow
+  onGenerateMindmap={handleGenerateMindmap}
+  theme={theme}
+  mainProjectId={mainProjectId}
+/>
 
       {/* Brain Loading Modal */}
       {isMindmapGenerating && (
@@ -1248,6 +970,8 @@ const MainDashboard = () => {
           </div>
         </div>
       )}
+
+      
     </div>
   );
 };

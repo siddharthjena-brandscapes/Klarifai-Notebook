@@ -5652,7 +5652,7 @@ class ChatView(APIView):
                     contents=[fallback_prompt],
                     config={
                         "temperature": 0.3,
-                        "max_output_tokens": 6000,  # Increased fallback limit
+                        "max_output_tokens": 8000,  # Increased fallback limit
                         "response_mime_type": "application/json"
                     }
                 )
@@ -5925,7 +5925,7 @@ class ChatView(APIView):
                 contents=[user_prompt],
                 config={
                     "temperature" : 0.4,
-                    "max_output_tokens":2000,
+                    "max_output_tokens":4000,
                     "response_mime_type" : "application/json"  # Force JSON response
                 }
             )
@@ -5978,7 +5978,7 @@ class ChatView(APIView):
                     contents=[fallback_prompt],
                     config={
                         "temperature" : 0.4,
-                        "max_output_tokens":2000,
+                        "max_output_tokens":4000,
                         "response_mime_type" : "application/json"  # Force JSON response
                     }
                 )
@@ -9887,6 +9887,31 @@ class MindMapView(APIView):
             }
 
 
+    def get_document_ids_for_mindmap(self, user, main_project_id, document_sources):
+        """Get document IDs for mindmap document sources"""
+        try:
+            if not document_sources:
+                return []
+            
+            # Query documents by filename and user
+            documents = Document.objects.filter(
+                user=user,
+                filename__in=document_sources
+            ).values('id', 'filename')
+            
+            document_ids = [str(doc['id']) for doc in documents]
+            
+            logger.info(f"Found {len(document_ids)} document IDs for mindmap sources: {document_ids}")
+            
+            return document_ids
+            
+        except Exception as e:
+            logger.error(f"Error getting document IDs for mindmap: {str(e)}")
+            return []
+
+
+# In your backend views.py, update the MindMapQuestionView:
+
 class MindMapQuestionView(APIView):
     """Generate question for mindmap node - matches your 'mindmap-question/' endpoint"""
     permission_classes = [IsAuthenticated]
@@ -9902,6 +9927,11 @@ class MindMapQuestionView(APIView):
             node_path = request.data.get('node_path', '')
             selected_documents = request.data.get('selected_documents', [])
             target_user_id = request.data.get('target_user_id')
+            
+            # ✅ NEW: Check for context clearing flags
+            force_new_context = request.data.get('force_new_context', False)
+            current_timestamp = request.data.get('current_timestamp')
+            mindmap_document_sources = request.data.get('mindmap_document_sources', [])
            
             # Handle admin operation for another user
             if target_user_id and request.user.username == 'admin':
@@ -9916,16 +9946,48 @@ class MindMapQuestionView(APIView):
                 return Response({
                     'error': 'Missing required parameters'
                 }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # ✅ NEW: Log the context for debugging
+            logger.info(f"Processing mindmap question for mindmap {mindmap_id}")
+            logger.info(f"Selected documents: {selected_documents}")
+            logger.info(f"Document sources from mindmap: {mindmap_document_sources}")
+            logger.info(f"Force new context: {force_new_context}")
+            
+            # ✅ NEW: Validate document context consistency
+            if selected_documents:
+                # Verify the selected documents are valid for this user
+                valid_docs = Document.objects.filter(
+                    id__in=selected_documents,
+                    user=user
+                ).count()
+                
+                if valid_docs != len(selected_documents):
+                    logger.warning(f"Some selected documents are invalid for user {user.username}")
+                    # Filter to only valid documents
+                    valid_doc_ids = list(Document.objects.filter(
+                        id__in=selected_documents,
+                        user=user
+                    ).values_list('id', flat=True))
+                    selected_documents = [str(doc_id) for doc_id in valid_doc_ids]
+                    logger.info(f"Filtered to valid documents: {selected_documents}")
            
             # Generate specific question for the topic
-            question = self.generate_topic_question(topic_name, topic_summary, node_path)
+            question = self.generate_topic_question(
+                topic_name, 
+                topic_summary, 
+                node_path,
+                mindmap_id=mindmap_id,  # ✅ NEW: Pass mindmap ID for context
+                document_context=selected_documents  # ✅ NEW: Pass document context
+            )
            
             return Response({
                 'success': True,
                 'question': question,
                 'topic': topic_name,
                 'node_path': node_path,
-                'mindmap_id': mindmap_id
+                'mindmap_id': mindmap_id,
+                'selected_documents': selected_documents,  # ✅ NEW: Return used documents
+                'timestamp': current_timestamp or int(time.time() * 1000)  # ✅ NEW: Return timestamp
             }, status=status.HTTP_200_OK)
            
         except Exception as e:
@@ -9935,23 +9997,31 @@ class MindMapQuestionView(APIView):
                 'success': False
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
    
-    def generate_topic_question(self, topic_name, topic_summary, node_path):
-        """Generate a specific question for the mindmap topic."""
+    def generate_topic_question(self, topic_name, topic_summary, node_path, mindmap_id=None, document_context=None):
+        """Generate a specific question for the mindmap topic with enhanced context."""
         try:
             time.sleep(1.0)  # Rate limiting
-           
+            
+            # ✅ NEW: Enhanced prompt with document context awareness
+            context_info = ""
+            if document_context and len(document_context) > 0:
+                context_info = f"The user has selected {len(document_context)} specific document(s) for this question context. "
+            
             prompt = f"""
                 Generate ONE simple and helpful question about "{topic_name}" that will make it easier for users to understand this topic.
 
                 Topic: {topic_name}  
                 Summary: {topic_summary}  
                 Context Path: {node_path}
+                Mindmap ID: {mindmap_id}
+                {context_info}
 
                 Create a question that:
                 1. Uses simple language  
                 2. Helps someone understand the topic better  
                 3. Is 10–25 words long  
-                4. Focuses on practical use or basic understanding  
+                4. Focuses on practical use or basic understanding
+                5. {"Should be answerable from the selected documents" if document_context else "Can be answered from general knowledge"}
 
                 Examples of good questions:
                 - "How is [topic] used in real life?"  
@@ -9974,6 +10044,10 @@ class MindMapQuestionView(APIView):
             # Clean the question
             if question.startswith('"') and question.endswith('"'):
                 question = question[1:-1]
+                
+            # ✅ NEW: Log the generated question with context
+            logger.info(f"Generated question for mindmap {mindmap_id}: {question}")
+            logger.info(f"Question context: {len(document_context or [])} documents")
            
             return question
            
@@ -9981,6 +10055,7 @@ class MindMapQuestionView(APIView):
             logger.error(f"Error generating topic question: {e}")
             return f"What are the key aspects and details about '{topic_name}' in this document?"
 
+# Add this to the END of your views.py file, AFTER all class definitions
 
 # Function-based views to match your existing URL structure
 @api_view(['GET'])
@@ -10036,6 +10111,8 @@ def get_user_mindmaps(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# In your views.py, ensure this function is correctly implemented:
+
 @api_view(['GET', 'DELETE'])
 def get_mindmap_data(request, mindmap_id):
     """Get or delete specific mindmap data - matches your 'mindmap/<id>/' endpoint"""
@@ -10051,6 +10128,33 @@ def get_mindmap_data(request, mindmap_id):
             }, status=status.HTTP_404_NOT_FOUND)
         
         if request.method == 'GET':
+            # CRITICAL: Get document IDs for the mindmap's source documents
+            document_ids = []
+            document_sources = mindmap.get_document_sources_list()
+            
+            print(f"🔍 Backend: Processing mindmap {mindmap_id} with sources: {document_sources}")
+            
+            if document_sources:
+                try:
+                    # Import Document model at the top of your file if not already imported
+                    # from your_app.models import Document
+                    
+                    documents = Document.objects.filter(
+                        user=user,
+                        filename__in=document_sources
+                    ).values('id', 'filename')
+                    
+                    document_ids = [str(doc['id']) for doc in documents]
+                    
+                    print(f"✅ Backend: Found {len(document_ids)} matching documents for mindmap {mindmap_id}")
+                    print(f"📄 Backend: Document IDs: {document_ids}")
+                    
+                except Exception as e:
+                    print(f"❌ Backend: Error getting document IDs for mindmap {mindmap_id}: {str(e)}")
+                    logger.error(f"Error getting document IDs for mindmap {mindmap_id}: {str(e)}")
+            else:
+                print(f"⚠️ Backend: No document sources found for mindmap {mindmap_id}")
+            
             response_data = {
                 'success': True,
                 'mindmap': mindmap.data,
@@ -10059,15 +10163,19 @@ def get_mindmap_data(request, mindmap_id):
                     'total_nodes': mindmap.total_nodes,
                     'created_at': mindmap.created_at.isoformat(),
                     'updated_at': mindmap.updated_at.isoformat(),
-                    'document_sources': mindmap.get_document_sources_list()
+                    'document_sources': document_sources,
+                    'document_ids': document_ids,  # CRITICAL: Include document IDs
+                    'documents_processed': len(document_sources),
+                    'mindmap_nodes': mindmap.total_nodes
                 }
             }
+            
+            print(f"📤 Backend: Sending response with {len(document_ids)} document IDs")
             
             return Response(response_data, status=status.HTTP_200_OK)
             
         elif request.method == 'DELETE':
             mindmap.delete()
-            
             logger.info(f"Deleted mindmap {mindmap_id} for user {user.username}")
             
             return Response({
@@ -10076,6 +10184,7 @@ def get_mindmap_data(request, mindmap_id):
             }, status=status.HTTP_200_OK)
             
     except Exception as e:
+        print(f"❌ Backend: Error with mindmap {mindmap_id}: {str(e)}")
         logger.error(f"Error with mindmap {mindmap_id}: {str(e)}")
         return Response({
             'error': f'Failed to process mindmap: {str(e)}',

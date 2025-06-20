@@ -149,11 +149,10 @@ const lastSavedDataRef = useRef(null);
           negative_prompt: "",
         }
       );
+      
       // Load dynamic fields
       const loadedDynamicFields = currentProject.dynamicFields || {};
       setDynamicFields(loadedDynamicFields);
-
-  
 
       // Load custom field types - Ensure proper array conversion
       if (currentProject.customFieldTypes) {
@@ -192,11 +191,10 @@ const lastSavedDataRef = useRef(null);
 
         setCustomFieldTypes([...new Set(customTypes)]);
       }
+      
       // Preserve field activation state
-      // If fieldActivation is not set in the project, default to active
       const preservedActivation = Object.keys(loadedDynamicFields).reduce(
         (acc, fieldId) => {
-          // Only use stored activation if it explicitly exists, otherwise default to true
           acc[fieldId] = currentProject.fieldActivation?.[fieldId] ?? true;
           return acc;
         },
@@ -204,6 +202,7 @@ const lastSavedDataRef = useRef(null);
       );
 
       setFieldActivation(preservedActivation);
+      
       // Load existing ideas
       const existingIdeas = currentProject.ideas || [];
       const maxSetNumber = currentProject.max_set_number || 0;
@@ -214,7 +213,7 @@ const lastSavedDataRef = useRef(null);
         existingIdeas.some((idea) => idea.idea_id === accepted.idea_id)
       ).map(idea => ({
         ...idea,
-        visualization_prompt: idea.visualization_prompt, // Preserve visualization_prompt
+        visualization_prompt: idea.visualization_prompt,
       }));
 
       // Map metadata to ideas if not already present
@@ -225,15 +224,18 @@ const lastSavedDataRef = useRef(null);
         visualization_prompt: idea.visualization_prompt,
         metadata: idea.metadata || currentProject.ideaMetadata?.[idea.idea_id],
       }));
+      
       setIdeas(ideasWithMetadata);
       setAcceptedIdeas(validAcceptedIdeas);
 
       // Combine existing and generated metadata
       setIdeaMetadata(currentProject.ideaMetadata || {});
+      
       // Preserve existing generated images
       if (currentProject.generatedImages) {
         setGeneratedImages(currentProject.generatedImages);
       }
+      
       setIdeaSetCounter(maxSetNumber + 1);
       setNegativePrompt(currentProject.formData?.negative_prompt || "");
 
@@ -244,6 +246,7 @@ const lastSavedDataRef = useRef(null);
     }
   }, [currentProject]);
 
+
   // Complete solution combining all fixes for IdeaForm.jsx
 
 // 1. Fix the useEffect hook that performs auto-save
@@ -253,6 +256,9 @@ useEffect(() => {
   
   // Skip if no project to save
   if (!currentProject && ideas.length === 0) return;
+  
+  // Skip if form hasn't changed (this prevents unnecessary saves)
+  if (!hasFormChanged && ideas.length === 0) return;
   
   // Prepare data to save
   const dataToSave = {
@@ -282,7 +288,6 @@ useEffect(() => {
   
   // Create a version without lastModified for comparison
   const dataForComparison = { ...dataToSave };
-  // Delete lastModified from the comparison data
   delete dataForComparison.lastModified;
   
   // Convert to JSON string for comparison
@@ -290,7 +295,6 @@ useEffect(() => {
   
   // Check if data has actually changed since last save
   if (dataString === lastSavedDataRef.current) {
-    // Data hasn't changed, don't save
     return;
   }
   
@@ -301,16 +305,12 @@ useEffect(() => {
   
   // Set a new timeout for debounced save
   saveTimeoutRef.current = setTimeout(() => {
-    // Mark as saving
     setIsSaving(true);
     
-    // Log that we're saving
     console.log("Auto-saving project changes...");
     
-    // Execute the save
     saveProject(dataToSave)
       .then(() => {
-        // Save successful, update the last saved data
         lastSavedDataRef.current = dataString;
         console.log("Project saved successfully");
       })
@@ -318,15 +318,12 @@ useEffect(() => {
         console.error("Error saving project:", error);
       })
       .finally(() => {
-        // Mark save as complete
         setIsSaving(false);
       });
       
-    // Clear the timeout reference
     saveTimeoutRef.current = null;
-  }, 3000); // Increase to 3 seconds to reduce chances of overlapping saves
+  }, 3000);
   
-  // Cleanup on unmount or when dependencies change
   return () => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -346,10 +343,15 @@ useEffect(() => {
   ideaSetCounter, 
   negativePrompt, 
   customFieldTypes,
+  hasFormChanged, // Add this dependency
   isSaving,
   currentProject,
   saveProject
-]);  // Add this function to fetch version history for all ideas
+]);
+
+
+
+// Add this function to fetch version history for all ideas
   const fetchAllVersionHistories = async () => {
     try {
       if (!currentProject?.ideas) {
@@ -798,12 +800,6 @@ const handleUpdateIdea = async (ideaId) => {
     }
   };
 
-  // Modify useEffect to reset hasFormChanged when ideas are generated
-  useEffect(() => {
-    if (ideas.length > 0) {
-      setHasFormChanged(false);
-    }
-  }, [ideas]);
 
   // Update the handleSubmit function to properly store metadata for new ideas
   const handleSubmit = async (e) => {
@@ -824,7 +820,7 @@ const handleUpdateIdea = async (ideaId) => {
 
     const submissionData = {
       ...formData,
-      description_length: formData.description_length || 70,  // Added description_length field with default
+      description_length: formData.description_length || 70,
       project_id: currentProject.id,
       dynamicFields: activeFields,
       negative_prompt: negativePrompt,
@@ -846,7 +842,7 @@ const handleUpdateIdea = async (ideaId) => {
               category: stored_data.category,
               brand: stored_data.brand,
               number_of_ideas: formData.number_of_ideas,
-              description_length: formData.description_length || 70,  // Add to metadata
+              description_length: formData.description_length || 70,
               idea_set: currentSetNumber,
               idea_set_label: idea.idea_set_label,
               negative_prompt: negativePrompt,
@@ -896,6 +892,9 @@ const handleUpdateIdea = async (ideaId) => {
         if (showForm) {
           setShowForm(false);
         }
+        
+        // ONLY reset hasFormChanged after successful idea generation
+        setHasFormChanged(false);
       } else {
         setError(response.data.error || "Failed to generate ideas");
       }
