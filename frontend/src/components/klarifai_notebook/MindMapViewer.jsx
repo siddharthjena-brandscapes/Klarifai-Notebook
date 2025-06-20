@@ -436,7 +436,8 @@ import {
   ZoomOut, 
   RotateCcw,
   Clock,
-  FileText
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 import { ThemeContext } from '../../context/ThemeContext';
 
@@ -459,6 +460,33 @@ const MindMapViewer = ({
   const [zoomLevel, setZoomLevel] = useState(1);
   const mindmapRef = useRef(null);
 
+   const [currentDocumentContext, setCurrentDocumentContext] = useState([]);
+  const [lastMindmapId, setLastMindmapId] = useState(null);
+
+  useEffect(() => {
+    if (isOpen && mindmapId !== lastMindmapId) {
+      console.log('🔄 MindMapViewer: Mindmap changed, updating document context', {
+        newMindmapId: mindmapId,
+        oldMindmapId: lastMindmapId,
+        selectedDocuments,
+        mindmapStatsDocIds: mindmapStats?.document_ids
+      });
+      
+      // Determine the correct document context for this mindmap
+      const documentContext = selectedDocuments && selectedDocuments.length > 0 
+        ? selectedDocuments 
+        : (mindmapStats?.document_ids || []);
+      
+      setCurrentDocumentContext(documentContext);
+      setLastMindmapId(mindmapId);
+      
+      // Clear any previous question response when switching mindmaps
+      setQuestionResponse(null);
+      
+      console.log('✅ MindMapViewer: Updated document context to:', documentContext);
+    }
+  }, [isOpen, mindmapId, selectedDocuments, mindmapStats?.document_ids, lastMindmapId]);
+
   // Initialize expanded nodes (expand first level by default)
   useEffect(() => {
     if (mindmapData && mindmapData.children) {
@@ -469,6 +497,32 @@ const MindMapViewer = ({
       setExpandedNodes(firstLevelNodes);
     }
   }, [mindmapData]);
+
+   // ✅ ADD: Effect to clear state when viewer closes
+  useEffect(() => {
+    if (!isOpen) {
+      console.log('🧹 MindMapViewer: Cleaning up state on close');
+      setCurrentDocumentContext([]);
+      setLastMindmapId(null);
+      setQuestionResponse(null);
+      setSelectedNode(null);
+    }
+  }, [isOpen]);
+
+ useEffect(() => {
+    if (isOpen) {
+      console.log('🧠 MindMapViewer: Context update', {
+        mindmapId,
+        selectedDocuments,
+        selectedDocumentsLength: selectedDocuments?.length || 0,
+        currentDocumentContext,
+        contextLength: currentDocumentContext?.length || 0,
+        isFromHistory,
+        mindmapStats: mindmapStats?.document_sources,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [isOpen, selectedDocuments, currentDocumentContext, mindmapId, isFromHistory, mindmapStats]);
 
   const toggleNodeExpansion = (nodeId) => {
     const newExpanded = new Set(expandedNodes);
@@ -485,10 +539,44 @@ const MindMapViewer = ({
     setQuestionResponse(null);
   };
 
+  // Add this useEffect to log document context when viewer opens
+useEffect(() => {
+  if (isOpen) {
+    console.log('🧠 MindMapViewer opened with context:', {
+      selectedDocuments,
+      selectedDocumentsLength: selectedDocuments?.length || 0,
+      isFromHistory,
+      mindmapStats,
+      mindmapId
+    });
+    
+    if (selectedDocuments && selectedDocuments.length > 0) {
+      console.log(`✅ MindMapViewer has ${selectedDocuments.length} selected documents:`, selectedDocuments);
+    } else {
+      console.warn('⚠️ MindMapViewer opened without selected documents - questions may use web sources');
+    }
+  }
+}, [isOpen, selectedDocuments, isFromHistory, mindmapStats, mindmapId]);
+
+
   const askQuestionAboutNode = async () => {
     if (!selectedNode) return;
 
     setIsQuestionLoading(true);
+    
+    // Use the documents associated with this mindmap
+    const documentsToUse = currentDocumentContext.length > 0 
+      ? currentDocumentContext 
+      : selectedDocuments || [];
+    
+    console.log('🤔 MindMapViewer: Asking question with document context:', {
+      mindmapId,
+      selectedNode: selectedNode.name,
+      documentsToUse,
+      documentCount: documentsToUse.length,
+      timestamp: new Date().toISOString()
+    });
+    
     try {
       const { mindmapServiceNB } = await import('../../utils/axiosConfig');
       
@@ -497,31 +585,45 @@ const MindMapViewer = ({
         selectedNode.name,
         selectedNode.summary || selectedNode.description || '',
         selectedNode.path || '',
-        selectedDocuments,
-        mindmapId
+        documentsToUse,
+        mindmapId,
+        {
+          force_new_context: true,
+          mindmap_document_sources: mindmapStats?.document_sources || [],
+          current_timestamp: Date.now()
+        }
       );
 
       if (response.data && response.data.success) {
-        // Send the question to the main chat interface
         const generatedQuestion = response.data.question;
         
+        console.log('📤 MindMapViewer: Sending question to chat with document context:', {
+          question: generatedQuestion,
+          documentsUsed: documentsToUse,
+          mindmapId
+        });
+        
+        // Send to chat with document context awareness
         if (onSendToChat && generatedQuestion) {
-          onSendToChat(generatedQuestion);
-          // Close the mindmap viewer after sending question
+          // Close mindmap viewer first to return to chat
           onClose();
+          
+          // Small delay to ensure mindmap viewer closes
+          setTimeout(() => {
+            onSendToChat(generatedQuestion, 'mindmap');
+          }, 100);
         } else {
-          // Fallback: store the response if onSendToChat is not available
           setQuestionResponse(response.data);
         }
       } else {
-        console.error('Failed to get question response:', response.data);
+        console.error('❌ Failed to get question response:', response.data);
         setQuestionResponse({
           success: false,
           error: response.data?.error || 'Failed to generate question'
         });
       }
     } catch (error) {
-      console.error('Error asking question:', error);
+      console.error('❌ Error asking question:', error);
       setQuestionResponse({
         success: false,
         error: error.response?.data?.error || error.message
@@ -530,6 +632,7 @@ const MindMapViewer = ({
       setIsQuestionLoading(false);
     }
   };
+
 
   const exportMindmap = () => {
     const exportData = {
@@ -670,7 +773,53 @@ const MindMapViewer = ({
     );
   };
 
+
+
   if (!isOpen || !mindmapData) return null;
+
+
+  const renderDocumentContextIndicator = () => {
+    const documentsToUse = currentDocumentContext.length > 0 
+      ? currentDocumentContext 
+      : selectedDocuments || [];
+    
+    return (
+      <div className={`mb-4 p-3 rounded-lg border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-blue-50 border-blue-200'}`}>
+        <h4 className="font-medium mb-2 text-sm flex items-center">
+          <FileText className="w-4 h-4 mr-1" />
+          Question Context:
+          <span className="ml-2 text-xs opacity-60">
+            (Mindmap: {mindmapId})
+          </span>
+        </h4>
+        
+        {documentsToUse.length > 0 ? (
+          <div className="space-y-2">
+            <div className="flex items-center text-xs text-green-600 dark:text-green-400">
+              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+              <span className="font-medium">
+                {documentsToUse.length} document(s) selected for this mindmap
+              </span>
+            </div>
+
+            <div className="text-xs opacity-70">
+              Questions will be answered using the selected documents
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center text-xs text-red-600 dark:text-red-400">
+              <AlertCircle className="w-3 h-3 mr-2" />
+              <span>No documents selected for this mindmap</span>
+            </div>
+            <div className="text-xs opacity-70">
+              Answers may come from web sources instead of documents
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -807,6 +956,9 @@ const MindMapViewer = ({
                     )}
                   </div>
                 </div>
+
+               {/* ✅ USE: New context indicator */}
+        {renderDocumentContextIndicator()}
 
                 <button
                   onClick={askQuestionAboutNode}

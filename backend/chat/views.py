@@ -5525,7 +5525,7 @@ class ChatView(APIView):
         try:
             # Call the OpenAI chat completion API with JSON format
             completion = client.chat.completions.create(
-                model="o4-mini",
+                model="o3-mini",
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_prompt}
@@ -5576,7 +5576,7 @@ class ChatView(APIView):
                 Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity. Use source citations [n] for all information from the documents."""
                 
                 completion = client.chat.completions.create(
-                    model="o4-mini",
+                    model="o3-mini",
                     messages=[
                         {"role": "system", "content": enhanced_system_message},
                         {"role": "user", "content": user_prompt}
@@ -5620,7 +5620,7 @@ class ChatView(APIView):
             
             try:
                 fallback_completion = client.chat.completions.create(
-                    model="o4-mini",
+                    model="o3-mini",
                     messages=[
                         {"role": "system", "content": "You are a document analysis expert. Respond in JSON format."},
                         {"role": "user", "content": fallback_prompt}
@@ -6734,7 +6734,7 @@ class ChatView(APIView):
                     filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
         
         # Return top matches (limit to 15 most relevant)
-        max_results = min(len(filtered_results), 15)
+        max_results = min(len(filtered_results), 40)
         return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
     
     # Helper method to prepare context for response generation

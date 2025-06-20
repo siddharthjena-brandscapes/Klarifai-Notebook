@@ -19,6 +19,7 @@ import MindMapViewer from "../klarifai_notebook/MindMapViewer";
 import RightPanel from "./RightPanel";
 import MindMapHistory from "../klarifai_notebook/MindMapHistory";
 import BrainLoadingAnimation from '../klarifai_notebook/BrainLoadingAnimation';
+import DocumentSelectionModal from "../klarifai_notebook/DocumentSelectionModal";
 
 const MainDashboard = () => {
   const { mainProjectId } = useParams();
@@ -54,24 +55,241 @@ const MainDashboard = () => {
   const [mindmapStats, setMindmapStats] = useState(null);
   const [showMindmapHistory, setShowMindmapHistory] = useState(false);
 
-  const handleViewMindmap = (mindmapData, mindmapId, stats = null) => {
-    console.log('MainDashboard: Viewing mindmap', {
-      mindmapData,
+  // NEW: Document session tracking states
+  const [documentSessions, setDocumentSessions] = useState(new Map());
+  const [currentDocumentSet, setCurrentDocumentSet] = useState([]);
+  const [lastDocumentSignature, setLastDocumentSignature] = useState('');
+
+  const [isDocumentSelectionModalOpen, setIsDocumentSelectionModalOpen] = useState(false);
+  const [documents, setDocuments] = useState([]);
+
+  // NEW: Helper function to create document signature
+  const createDocumentSignature = useCallback((documentIds) => {
+    if (!documentIds || documentIds.length === 0) return 'web_mode';
+    return documentIds.sort().join(',');
+  }, []);
+
+  // NEW: Function to check if we need a new chat session
+  const shouldCreateNewChatSession = useCallback((newDocuments) => {
+    const newSignature = createDocumentSignature(newDocuments);
+    const currentSignature = createDocumentSignature(currentDocumentSet);
+    
+    console.log('🔍 Session Check:', {
+      newSignature,
+      currentSignature,
+      needsNewSession: newSignature !== currentSignature
+    });
+    
+    return newSignature !== currentSignature;
+  }, [createDocumentSignature, currentDocumentSet]);
+
+  // NEW: Function to handle document context changes
+  // const handleDocumentContextChange = useCallback((newDocuments, source = 'unknown') => {
+  //   console.log(`📋 Document context change from ${source}:`, {
+  //     previous: currentDocumentSet,
+  //     new: newDocuments,
+  //     source
+  //   });
+
+  //   const newSignature = createDocumentSignature(newDocuments);
+    
+  //   if (shouldCreateNewChatSession(newDocuments)) {
+  //     console.log('🔄 Creating new chat session for document set:', newSignature);
+      
+  //     // Save current session if it exists
+  //     if (selectedChat && currentDocumentSet.length > 0) {
+  //       const currentSignature = createDocumentSignature(currentDocumentSet);
+  //       setDocumentSessions(prev => new Map(prev).set(currentSignature, {
+  //         chat: selectedChat,
+  //         documents: [...currentDocumentSet],
+  //         lastUsed: Date.now()
+  //       }));
+  //       console.log('💾 Saved session for:', currentSignature);
+  //     }
+      
+  //     // Check if we have an existing session for the new document set
+  //     const existingSession = documentSessions.get(newSignature);
+      
+  //     if (existingSession) {
+  //       console.log('🔍 Found existing session for:', newSignature);
+  //       setSelectedChat(existingSession.chat);
+  //       setCurrentDocumentSet(newDocuments);
+  //       setLastDocumentSignature(newSignature);
+        
+  //       // Update last used timestamp
+  //       setDocumentSessions(prev => {
+  //         const updated = new Map(prev);
+  //         updated.set(newSignature, {
+  //           ...existingSession,
+  //           lastUsed: Date.now()
+  //         });
+  //         return updated;
+  //       });
+  //     } else {
+  //       console.log('✨ Starting fresh session for:', newSignature);
+  //       // Start a new chat session
+  //       setSelectedChat(null);
+  //       setCurrentDocumentSet(newDocuments);
+  //       setLastDocumentSignature(newSignature);
+  //       setForceResetKey(prev => prev + 1);
+  //     }
+  //   } else {
+  //     console.log('📄 Same document context, keeping current session');
+  //     setCurrentDocumentSet(newDocuments);
+  //   }
+    
+  //   // Always update selectedDocuments
+  //   setSelectedDocuments(newDocuments);
+  // }, [selectedChat, currentDocumentSet, documentSessions, createDocumentSignature, shouldCreateNewChatSession]);
+
+
+// NEW: Function to handle document context changes
+const handleDocumentContextChange = useCallback((newDocuments, source = 'unknown') => {
+  console.log(`📋 Document context change from ${source}:`, {
+    previous: currentDocumentSet,
+    new: newDocuments,
+    source
+  });
+
+  const newSignature = createDocumentSignature(newDocuments);
+  
+  // FIXED: Don't reset chat session for chat selections
+  if (source === 'chat_selection') {
+    console.log('📄 Chat selection context change - updating documents without session reset');
+    setCurrentDocumentSet(newDocuments);
+    setSelectedDocuments(newDocuments);
+    setLastDocumentSignature(newSignature);
+    return;
+  }
+  
+  if (shouldCreateNewChatSession(newDocuments)) {
+    console.log('🔄 Creating new chat session for document set:', newSignature);
+    
+    // Save current session if it exists
+    if (selectedChat && currentDocumentSet.length > 0) {
+      const currentSignature = createDocumentSignature(currentDocumentSet);
+      setDocumentSessions(prev => new Map(prev).set(currentSignature, {
+        chat: selectedChat,
+        documents: [...currentDocumentSet],
+        lastUsed: Date.now()
+      }));
+      console.log('💾 Saved session for:', currentSignature);
+    }
+    
+    // Check if we have an existing session for the new document set
+    const existingSession = documentSessions.get(newSignature);
+    
+    if (existingSession) {
+      console.log('🔍 Found existing session for:', newSignature);
+      setSelectedChat(existingSession.chat);
+      setCurrentDocumentSet(newDocuments);
+      setLastDocumentSignature(newSignature);
+      
+      // Update last used timestamp
+      setDocumentSessions(prev => {
+        const updated = new Map(prev);
+        updated.set(newSignature, {
+          ...existingSession,
+          lastUsed: Date.now()
+        });
+        return updated;
+      });
+    } else {
+      console.log('✨ Starting fresh session for:', newSignature);
+      // Start a new chat session
+      setSelectedChat(null);
+      setCurrentDocumentSet(newDocuments);
+      setLastDocumentSignature(newSignature);
+      setForceResetKey(prev => prev + 1);
+    }
+  } else {
+    console.log('📄 Same document context, keeping current session');
+    setCurrentDocumentSet(newDocuments);
+  }
+  
+  // Always update selectedDocuments
+  setSelectedDocuments(newDocuments);
+}, [selectedChat, currentDocumentSet, documentSessions, createDocumentSignature, shouldCreateNewChatSession]);
+
+
+  const handleSendQuestionToChat = useCallback((question, questionSource = 'mindmap') => {
+  console.log(`💬 Sending question from ${questionSource}:`, question);
+  console.log('📋 Current document context:', currentDocumentSet);
+  
+  // Ensure we're in the right document context before sending
+  const questionDocuments = currentDocumentSet.length > 0 ? currentDocumentSet : selectedDocuments;
+  
+  if (mainChatRef.current && mainChatRef.current.handleSendMessage) {
+    // Send the question as-is without adding any prefix
+    // The backend can handle mindmap context through other means
+    mainChatRef.current.handleSendMessage(question);
+    console.log('✅ Question sent to chat with document context:', questionDocuments);
+  } else {
+    console.error('❌ MainChat ref not available');
+  }
+}, [currentDocumentSet, selectedDocuments]);
+
+  // NEW: Enhanced handleViewMindmap with document session management
+  const handleViewMindmap = useCallback(async (mindmapData, mindmapId, stats = null) => {
+    console.log('🧠 MainDashboard: handleViewMindmap called', {
       mindmapId,
-      stats
+      currentMindmapId,
+      stats,
+      currentSelectedDocuments: selectedDocuments
     });
     
     if (!mindmapData) {
-      console.error('No mindmap data provided to handleViewMindmap');
+      console.error('❌ No mindmap data provided');
       return;
     }
     
+    // ✅ CRITICAL: Close any existing mindmap first to clear state
+    if (showMindmapViewer && currentMindmapId !== mindmapId) {
+      console.log('🔄 MainDashboard: Closing previous mindmap to clear state');
+      setShowMindmapViewer(false);
+      setCurrentMindmapData(null);
+      setCurrentMindmapId(null);
+      setMindmapStats(null);
+      
+      // Wait for state to clear
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Determine the document context for this mindmap
+    let mindmapDocuments = [];
+    
+    if (stats?.document_ids && stats.document_ids.length > 0) {
+      mindmapDocuments = stats.document_ids;
+      console.log('📋 Using document IDs from mindmap stats:', mindmapDocuments);
+    } else if (selectedDocuments && selectedDocuments.length > 0) {
+      mindmapDocuments = selectedDocuments;
+      console.log('📋 Using current selected documents:', mindmapDocuments);
+    }
+    
+    // Handle document context change BEFORE opening mindmap
+    if (mindmapDocuments.length > 0) {
+      handleDocumentContextChange(mindmapDocuments, 'mindmap_view');
+      
+      // Wait for state to settle
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Set new mindmap data
     setCurrentMindmapData(mindmapData);
     setCurrentMindmapId(mindmapId);
     setMindmapStats(stats);
+    
+    // Log the final state
+    console.log('🧠 MainDashboard: Set mindmap data', {
+      mindmapId,
+      statsDocumentIds: stats?.document_ids,
+      currentSelectedDocuments: selectedDocuments
+    });
+    
+    // Open the mindmap viewer
     setShowMindmapViewer(true);
     setShowMindmapHistory(false);
-  };
+  }, [showMindmapViewer, currentMindmapId, selectedDocuments, handleDocumentContextChange]);
 
   const handleOpenMindmapHistory = () => {
     setShowMindmapHistory(true);
@@ -147,71 +365,69 @@ const MainDashboard = () => {
     content: ''
   });
 
-  const handleGenerateMindmap = async () => {
-    if (selectedDocuments.length === 0) {
-      alert('Please select at least one document to generate a mindmap');
-      return;
-    }
+  const handleGenerateMindmap = async (forceDocuments = null) => {
+  const documentsToUse = forceDocuments || selectedDocuments;
+  
+  // If multiple documents selected, show selection modal
+  if (documentsToUse.length > 1) {
+    setIsDocumentSelectionModalOpen(true);
+    return;
+  }
+  
+  if (documentsToUse.length === 0) {
+    alert('Please select at least one document to generate a mindmap');
+    return;
+  }
 
-    setIsMindmapGenerating(true);
+  setIsMindmapGenerating(true);
+  
+  try {
+    const { mindmapServiceNB } = await import('../../utils/axiosConfig');
     
-    try {
-      const { mindmapServiceNB } = await import('../../utils/axiosConfig');
+    console.log('Generating mindmap for documents:', documentsToUse);
+    console.log('Main project ID:', mainProjectId);
+    
+    const response = await mindmapServiceNB.generateMindmap(
+      mainProjectId,
+      documentsToUse
+    );
+    
+    if (response.data && response.data.success) {
+      console.log('Mindmap generated successfully:', response.data);
       
-      console.log('Generating mindmap for documents:', selectedDocuments);
-      console.log('Main project ID:', mainProjectId);
+      const mindmapData = response.data.mindmap;
+      const mindmapStats = response.data.stats;
+      const mindmapId = response.data.mindmap_id;
       
-      const response = await mindmapServiceNB.generateMindmap(
-        mainProjectId,
-        selectedDocuments
+      setMindmapData(mindmapData);
+      setCurrentMindmapId(mindmapId);
+      setIsMindmapViewerOpen(true);
+
+      handleViewMindmap(
+        response.data.mindmap, 
+        response.data.mindmap_id, 
+        response.data.stats
       );
       
-      if (response.data && response.data.success) {
-        console.log('Mindmap generated successfully:', response.data);
-        
-        const mindmapData = response.data.mindmap;
-        const mindmapStats = response.data.stats;
-        const mindmapId = response.data.mindmap_id;
-        
-        setMindmapData(mindmapData);
-        setCurrentMindmapId(mindmapId);
-        setIsMindmapViewerOpen(true);
-
-        handleViewMindmap(
-          response.data.mindmap, 
-          response.data.mindmap_id, 
-          response.data.stats
-        );
-        
-        console.log(`Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`);
-        
-      } else {
-        console.error('Failed to generate mindmap:', response.data);
-        alert('Failed to generate mindmap. Please try again.');
-      }
+      console.log(`Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`);
       
-    } catch (error) {
-      console.error('Error generating mindmap:', error);
-      alert(`Error generating mindmap: ${error.response?.data?.error || error.message}`);
-    } finally {
-      setIsMindmapGenerating(false);
+    } else {
+      console.error('Failed to generate mindmap:', response.data);
+      alert('Failed to generate mindmap. Please try again.');
     }
-  };
+    
+  } catch (error) {
+    console.error('Error generating mindmap:', error);
+    alert(`Error generating mindmap: ${error.response?.data?.error || error.message}`);
+  } finally {
+    setIsMindmapGenerating(false);
+  }
+};
 
   const handleCloseMindmapViewer = () => {
     setIsMindmapViewerOpen(false);
     setMindmapData(null);
     setCurrentMindmapId(null);
-  };
-
-  const handleSendQuestionToChat = (question) => {
-    console.log('Sending question from mindmap to chat:', question);
-    
-    if (mainChatRef.current && mainChatRef.current.handleSendMessage) {
-      mainChatRef.current.handleSendMessage(question);
-    } else {
-      console.error('MainChat ref not available or handleSendMessage not exposed');
-    }
   };
 
   const handleOpenNoteViewer = (noteData) => {
@@ -325,6 +541,25 @@ const MainDashboard = () => {
     setIsSummaryPopupOpen(false);
   }, []);
 
+  // NEW: Enhanced handleDocumentSelectionFromMindmap
+  const handleDocumentSelectionFromMindmap = useCallback(async (documentIds) => {
+    console.log('🔄 MainDashboard: Document selection from mindmap:', documentIds);
+    console.log('🔄 MainDashboard: Current selectedDocuments before update:', selectedDocuments);
+    
+    // Clear any existing mindmap state to prevent stale context
+    setCurrentMindmapData(null);
+    setCurrentMindmapId(null);
+    setMindmapStats(null);
+    
+    // Use the document context change handler
+    handleDocumentContextChange(documentIds, 'mindmap_selection');
+    
+    // Force a small delay to ensure state propagation
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('✅ MainDashboard: Document context updated from mindmap');
+  }, [selectedDocuments, handleDocumentContextChange]);
+
   // NEW: Add event listener for auto-expand functionality
   useEffect(() => {
     const handleRefresh = () => {
@@ -377,6 +612,57 @@ const MainDashboard = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // ✅ UPDATE: Enhanced state sync effect
+  useEffect(() => {
+    console.log('🔍 MainDashboard: State sync check', {
+      selectedDocuments,
+      selectedDocumentsLength: selectedDocuments?.length || 0,
+      currentMindmapId,
+      showMindmapViewer,
+      timestamp: new Date().toISOString()
+    });
+  }, [selectedDocuments, currentMindmapId, showMindmapViewer]);
+
+  // NEW: Update selectedDocuments effect to use document context handler
+  useEffect(() => {
+    if (selectedDocuments.length > 0) {
+      const signature = createDocumentSignature(selectedDocuments);
+      if (signature !== lastDocumentSignature) {
+        console.log('📋 selectedDocuments changed, updating context via effect');
+        handleDocumentContextChange(selectedDocuments, 'documents_effect');
+      }
+    }
+  }, [selectedDocuments, lastDocumentSignature, handleDocumentContextChange, createDocumentSignature]);
+
+  // NEW: Cleanup old sessions periodically
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      setDocumentSessions(prev => {
+        const cleaned = new Map();
+        for (const [key, session] of prev) {
+          if (session.lastUsed > oneHourAgo) {
+            cleaned.set(key, session);
+          }
+        }
+        console.log(`🧹 Cleaned up ${prev.size - cleaned.size} old sessions`);
+        return cleaned;
+      });
+    }, 10 * 60 * 1000); // Every 10 minutes
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
+  // NEW: Debug logging for session state
+  useEffect(() => {
+    console.log('📊 Session State Update:', {
+      currentDocumentSet,
+      documentSignature: createDocumentSignature(currentDocumentSet),
+      activeSessionsCount: documentSessions.size,
+      selectedChatExists: !!selectedChat
+    });
+  }, [currentDocumentSet, documentSessions, selectedChat, createDocumentSignature]);
+
   const handleDocumentSelect = (doc) => {
     if (doc) {
       setSelectedDocument(doc);
@@ -392,20 +678,35 @@ const MainDashboard = () => {
     }
   };
 
-  const handleNewChat = (e) => {
-    if (e && e.preventDefault) {
-      e.preventDefault();
-    }
-    
-    console.log("Dashboard: Starting new chat, preserving documents:", selectedDocuments);
-    
-    setSelectedChat(null);
-    setSelectedDocument(null);
-    setSummary('');
-    setFollowUpQuestions([]);
-    setForceResetKey(prev => prev + 1);
-    console.log("Incremented reset key to force MainContent reset");
+  // UPDATE: Enhanced handleNewChat to preserve document context
+// REPLACE the existing handleNewChat function with this corrected version:
+
+const handleNewChat = (e) => {
+  if (e && e.preventDefault) {
+    e.preventDefault();
   }
+  
+  // Use the CURRENT selectedDocuments state instead of currentDocumentSet
+  // This ensures we respect any manual document deselections made during the session
+  console.log("🆕 Starting new chat with currently selected documents:", selectedDocuments);
+  console.log("🔄 Previous document set was:", currentDocumentSet);
+  
+  // Update document context to match current selection
+  if (JSON.stringify(selectedDocuments.sort()) !== JSON.stringify(currentDocumentSet.sort())) {
+    console.log("📋 Document selection changed during session, updating context");
+    handleDocumentContextChange(selectedDocuments, 'new_chat_sync');
+  }
+  
+  // Reset chat for current document selection
+  setSelectedChat(null);
+  setSelectedDocument(null);
+  setSummary('');
+  setFollowUpQuestions([]);
+  setForceResetKey(prev => prev + 1);
+  
+  console.log("✅ New chat started with current document selection:", selectedDocuments);
+};
+
 
   const handleSendMessage = async (message, documents) => {
     console.log('Sending message:', message);
@@ -427,6 +728,21 @@ const MainDashboard = () => {
       document.removeEventListener('toggle-sidebar', handleSidebarToggle);
     };
   }, [isSidebarOpen]);
+
+
+const handleDocumentSelectionChange = (newSelection) => {
+  console.log('📡 Dashboard: Document selection changed:', newSelection);
+  
+  // Update MainChat directly via ref
+  if (mainChatRef.current) {
+    mainChatRef.current.updateDocumentSelection(newSelection);
+  }
+};
+
+
+
+
+
 
   return (
     <div className={`flex flex-col min-h-screen ${theme === 'dark' ? 'dark:bg-black' : 'bg-[#f0efea]/50'} overflow-hidden`}>
@@ -474,6 +790,9 @@ const MainDashboard = () => {
             onToggle={toggleSidebar}
             onNewChat={handleNewChat}
             chatInputFocused={chatInputFocused}
+            onDocumentSelectionChange={handleDocumentSelectionChange}
+            onDocumentContextChange={handleDocumentContextChange}
+             onDocumentsUpdate={setDocuments}
           />
           
           {/* Centered Main Content Container */}
@@ -507,7 +826,7 @@ const MainDashboard = () => {
             `}>
               <MainChat
                 ref={mainChatRef}
-                key={`chat-${forceResetKey}`} 
+                key={`chat-${forceResetKey}-${createDocumentSignature(currentDocumentSet)}`} // NEW: Include document signature in key
                 selectedChat={selectedChat}
                 mainProjectId={mainProjectId}
                 selectedDocument={selectedDocument}
@@ -520,7 +839,7 @@ const MainDashboard = () => {
                 setIsSummaryPopupOpen={setIsSummaryPopupOpen}
                 isMobile={isMobile}
                 setSelectedDocuments={setSelectedDocuments}
-                selectedDocuments={selectedDocuments}
+                selectedDocuments={currentDocumentSet} // NEW: Use currentDocumentSet instead of selectedDocuments
                 className="w-full"
                 onChatInputFocus={handleChatInputFocus}
                 onOpenYouTubeModal={() => setIsYouTubeModalOpen(true)}
@@ -538,6 +857,7 @@ const MainDashboard = () => {
             theme={theme}
             mainProjectId={mainProjectId}
             onViewMindmap={handleViewMindmap}
+            onDocumentSelectionChange={handleDocumentSelectionFromMindmap}
           />
         </div>
       </div>
@@ -554,6 +874,7 @@ const MainDashboard = () => {
           onGenerateMindmap={handleGenerateMindmap}
           isMindmapGenerating={isMindmapGenerating}
           selectedDocuments={selectedDocuments}
+          onViewMindmapHistory={handleOpenMindmapHistory}
         />
       )}
 
@@ -603,9 +924,12 @@ const MainDashboard = () => {
         onViewMindmap={handleViewMindmap}
         onRegenerateMindmap={handleRegenerateMindmapFromHistory}
         selectedDocuments={selectedDocuments}
+        setSelectedDocuments={setSelectedDocuments}
+        onDocumentSelectionChange={handleDocumentSelectionFromMindmap}
       />
 
       <MindMapViewer
+        key={`mindmap-${currentMindmapId}-${createDocumentSignature(currentDocumentSet)}`} // NEW: Enhanced key with document session
         isOpen={showMindmapViewer}
         onClose={() => {
           setShowMindmapViewer(false);
@@ -615,12 +939,23 @@ const MainDashboard = () => {
         }}
         mindmapData={currentMindmapData}
         mainProjectId={mainProjectId}
-        selectedDocuments={selectedDocuments}
+        selectedDocuments={currentDocumentSet} // NEW: Use currentDocumentSet for consistency
         mindmapId={currentMindmapId}
         onSendToChat={handleSendQuestionToChat}
         mindmapStats={mindmapStats}
         isFromHistory={!!currentMindmapId}
       />
+
+<DocumentSelectionModal
+  isOpen={isDocumentSelectionModalOpen}
+  onClose={() => setIsDocumentSelectionModalOpen(false)}
+  selectedDocuments={selectedDocuments}
+  documents={documents || []} // You'll need to pass documents from SideTab or fetch them
+  onSelectDocument={() => {}} // Not used in this flow
+  onGenerateMindmap={handleGenerateMindmap}
+  theme={theme}
+  mainProjectId={mainProjectId}
+/>
 
       {/* Brain Loading Modal */}
       {isMindmapGenerating && (
@@ -635,6 +970,8 @@ const MainDashboard = () => {
           </div>
         </div>
       )}
+
+      
     </div>
   );
 };

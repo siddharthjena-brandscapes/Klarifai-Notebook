@@ -47,6 +47,7 @@ import TextSizeControls from "./TextSizeControls";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { ImprovedCitationManager } from "./CitationManager";
+import DocumentModeWelcome from "./DocumentModeWelcome";
 
 // Configure marked
 marked.setOptions({
@@ -1666,7 +1667,7 @@ const WebSourcesDisplay = ({ sources }) => {
     // If selectedChat becomes null (e.g., when a chat is deleted),
     // reset the conversation state
     if (selectedChat === null) {
-      console.log("MainContent: selectedChat is null, resetting conversation state");
+        console.log("🔄 MainChat: selectedChat is NULL - CLEARING EVERYTHING");
       setConversation([]);
       setConversationId(null);
       setMessage("");
@@ -2034,11 +2035,18 @@ const WebSourcesDisplay = ({ sources }) => {
               pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
               ${!isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"}`}
             >
-              {/* Add the WebModeWelcome component here */}
-              {localSelectedDocuments.length === 0 &&
-                conversation.length === 0 && (
-                  <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
-                )}
+              {/* Add welcome components based on document selection */}
+{conversation.length === 0 && (
+  localSelectedDocuments.length === 0 ? (
+    <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
+  ) : (
+    <DocumentModeWelcome 
+      className="mt-4 mx-auto max-w-3xl" 
+      selectedDocuments={localSelectedDocuments}
+      documents={documents}
+    />
+  )
+)}
 
               {/* Rest of the chat messages rendering code */}
               {conversation.map((msg, index) => (
@@ -2134,7 +2142,7 @@ const WebSourcesDisplay = ({ sources }) => {
                             )}
 
                             {/* Format Badge - Show ALL formats including "natural" */}
-                            <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  dark:text-[#e67e5e] text-[#9c6644]">
+                            {/* <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  dark:text-[#e67e5e] text-[#9c6644]">
                               <ScrollText className="h-3 w-3 mr-0.5" />
                               <span>
                                 {(() => {
@@ -2157,7 +2165,7 @@ const WebSourcesDisplay = ({ sources }) => {
                                   );
                                 })()}
                               </span>
-                            </div>
+                            </div> */}
                           </div>
                         )}
                         {msg.role === "assistant" && (
@@ -2639,12 +2647,12 @@ const WebSourcesDisplay = ({ sources }) => {
             />
 
             {/* Response Format Toggle */}
-            <ResponseFormatToggle
+            {/* <ResponseFormatToggle
               responseFormat={responseFormat}
               setResponseFormat={setResponseFormat}
               className="bg-white/80 dark:bg-gray-900/10 text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-800/90 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
               activeClassName="bg-[#556052] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70 text-white dark:text-white border-transparent shadow-sm"
-            />
+            /> */}
           </div>
 
           {/* Send button */}

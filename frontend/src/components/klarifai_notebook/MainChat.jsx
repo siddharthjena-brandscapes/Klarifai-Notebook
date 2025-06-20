@@ -22,7 +22,13 @@ import {
   Check,
   Loader,
   Youtube,
-  Pin
+  Pin,
+  UploadCloud,
+  Library,
+  ListPlus,
+  BrainCog,
+  CircleEllipsis,
+  FilePlus
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
@@ -49,6 +55,8 @@ import TextSizeControls from "../dashboard/TextSizeControls";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { ImprovedCitationManager } from "../dashboard/CitationManager";
+import DocumentModeWelcome from "../dashboard/DocumentModeWelcome";
+import { useUser } from "../../context/UserContext";
 
 
 // Configure marked
@@ -141,6 +149,17 @@ const MainChat = forwardRef(({
   const [currentResponseIndex, setCurrentResponseIndex] = useState({});
   const [textSize, setTextSize] = useState("medium");
   const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
+
+  // Add these state variables near the top of your MainChat component
+const [webWelcomeDismissed, setWebWelcomeDismissed] = useState(false);
+const [docWelcomeDismissed, setDocWelcomeDismissed] = useState(false);
+const { rightPanelPermissions } = useUser();
+
+// Reset dismissal when document selection changes
+useEffect(() => {
+  setWebWelcomeDismissed(false);
+  setDocWelcomeDismissed(false);
+}, [localSelectedDocuments.length]);
   // Add this inside your MainContent component
   useEffect(() => {
     // Configure DOMPurify to allow standard HTML tags but sanitize potentially dangerous content
@@ -187,6 +206,11 @@ const MainChat = forwardRef(({
 // In MainChat.jsx - Update the handlePinMessage function
 
 const handlePinMessage = async (message, messageIndex) => {
+   // Check if notes panel is disabled
+  if (rightPanelPermissions?.['notes-panel']) {
+    toast.error('Notes access is disabled by administrator');
+    return;
+  }
   try {
     const { noteServiceNB } = await import('../../utils/axiosConfig');
     
@@ -1679,11 +1703,20 @@ const handleSendMessage = async (message) => {
 };
 
 useImperativeHandle(ref, () => ({
-    handleSendMessage: (message) => {
-      console.log('handleSendMessage called from ref with message:', message);
-      handleSendMessage(message);
+  handleSendMessage: (message) => {
+    console.log('handleSendMessage called from ref with message:', message);
+    handleSendMessage(message);
+  },
+  updateDocumentSelection: (newSelection) => {
+    console.log('🔄 MainChat: Updating selection via ref:', newSelection);
+    setLocalSelectedDocuments([...newSelection]);
+    
+    // Also update parent state to keep everything in sync
+    if (setSelectedDocuments) {
+      setSelectedDocuments([...newSelection]);
     }
-  }), [handleSendMessage]);
+  }
+}), [handleSendMessage, setSelectedDocuments]);
 
 const WebSourcesDisplay = ({ sources }) => {
   if (!sources || sources.length === 0) return null;
@@ -2213,11 +2246,20 @@ const WebSourcesDisplay = ({ sources }) => {
               pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
               ${!isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"}`}
             >
-              {/* Add the WebModeWelcome component here */}
-              {localSelectedDocuments.length === 0 &&
-                conversation.length === 0 && (
-                  <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
-                )}
+           
+{conversation.length === 0 && (
+  <div key={`welcome-${localSelectedDocuments.length}`}>
+    {localSelectedDocuments.length === 0 ? (
+      <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
+    ) : (
+      <DocumentModeWelcome 
+        className="mt-4 mx-auto max-w-3xl" 
+        selectedDocuments={localSelectedDocuments}
+        documents={documents}
+      />
+    )}
+  </div>
+)}
 
               {/* Rest of the chat messages rendering code */}
               {conversation.map((msg, index) => (
@@ -2314,7 +2356,7 @@ const WebSourcesDisplay = ({ sources }) => {
                             )}
 
                             {/* Format Badge - Show ALL formats including "natural" */}
-                            <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  dark:text-[#e67e5e] text-[#9c6644]">
+                            {/* <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  dark:text-[#e67e5e] text-[#9c6644]">
                               <ScrollText className="h-3 w-3 mr-0.5" />
                               <span>
                                 {(() => {
@@ -2337,7 +2379,7 @@ const WebSourcesDisplay = ({ sources }) => {
                                   );
                                 })()}
                               </span>
-                            </div>
+                            </div> */}
                           </div>
                         )}
                         {msg.role === "assistant" && (
@@ -2489,13 +2531,24 @@ const WebSourcesDisplay = ({ sources }) => {
                               isLoading={isLoading}
                             />
 <button
-    onClick={() => handlePinMessage(msg, index)}
-    className="flex items-center px-3 py-1 rounded-md dark:text-gray-400 text-[#602f1a] dark:hover:text-yellow-400 dark:hover:bg-yellow-900/20 hover:text-[#a55233] hover:bg-[#f5e6d8] active:scale-95 transition-all duration-150"
-    title="Save to Notes"
-  >
-    <Pin className="h-3 w-3 ml-1.5" />
-    <span className="text-xs pl-2">Pin</span>
-  </button>
+  onClick={rightPanelPermissions?.['notes-panel'] 
+    ? undefined 
+    : () => handlePinMessage(msg, index)
+  }
+  disabled={rightPanelPermissions?.['notes-panel']}
+  className={`flex items-center px-3 py-1 rounded-md transition-all duration-150 ${
+    rightPanelPermissions?.['notes-panel']
+      ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50'
+      : 'dark:text-gray-400 text-[#602f1a] dark:hover:text-yellow-400 dark:hover:bg-yellow-900/20 hover:text-[#a55233] hover:bg-[#f5e6d8] active:scale-95'
+  }`}
+  title={rightPanelPermissions?.['notes-panel'] 
+    ? "Notes access disabled by administrator" 
+    : "Save to Notes"
+  }
+>
+  <Pin className="h-3 w-3 ml-1.5" />
+  <span className="text-xs pl-2">Pin</span>
+</button>
                             {/* Copy button */}
                             <button
                               onClick={() =>
@@ -2718,11 +2771,11 @@ const WebSourcesDisplay = ({ sources }) => {
               
             )}
            <button
-  title="Upload YouTube video"
+  title="Add sources from URL, YouTube, or Text"
   onClick={() => onOpenYouTubeModal && onOpenYouTubeModal()}
   className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
 >
-  <Youtube className="h-4 w-4" />
+  <FilePlus className="h-4 w-4" />
 </button>
 
             {/* Mic button with recording indicator */}
@@ -2834,12 +2887,12 @@ const WebSourcesDisplay = ({ sources }) => {
             />
 
             {/* Response Format Toggle */}
-            <ResponseFormatToggle
+            {/* <ResponseFormatToggle
               responseFormat={responseFormat}
               setResponseFormat={setResponseFormat}
               className="bg-white/80 dark:bg-gray-900/10 text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-800/90 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
               activeClassName="bg-[#556052] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70 text-white dark:text-white border-transparent shadow-sm"
-            />
+            /> */}
           </div>
 
           {/* Send button */}

@@ -31,6 +31,7 @@ import {
   ChevronRight,
   PanelLeft,
   HelpCircle,
+  Brain
 } from "lucide-react";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
 import { toast } from "react-toastify";
@@ -56,6 +57,9 @@ const SideTab = ({
   onNewChat,
   chatInputFocused,
   onToggle,
+   onDocumentSelectionChange,
+   onDocumentContextChange,
+    onDocumentsUpdate
 }) => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [chatHistory, setChatHistory] = useState([]);
@@ -127,6 +131,9 @@ const SideTab = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isFilterDropdownOpen]);
+
+
+ 
 
   useEffect(() => {
     // Use setTimeout to ensure the DOM is fully loaded
@@ -391,6 +398,24 @@ const SideTab = ({
     );
   }, [documents, documentSearchTerm]);
 
+   useEffect(() => {
+  // Handle external changes to selectedDocuments (like from mindmap history)
+  if (selectedDocuments.length > 0) {
+    // Update "Select All" checkbox state if needed
+    const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
+    setIsSelectAllChecked(
+      selectedDocuments.length === allDocumentIds.length && allDocumentIds.length > 0
+    );
+    
+    // Auto-scroll to first selected document for visual feedback
+    if (selectedDocuments.length > 0 && isDocumentsVisible) {
+      setTimeout(() => {
+        scrollToSelectedDocument(selectedDocuments[0]);
+      }, 300);
+    }
+  }
+}, [selectedDocuments, filteredDocuments, isDocumentsVisible]);
+
   const generateChatTitle = (chat) => {
     // If there's a custom title already set, use it
     if (chat.title && !chat.title.startsWith("Chat 20")) {
@@ -493,8 +518,80 @@ const SideTab = ({
     };
   }, [mainProjectId]);
 
+  const handleMindmapDocumentSelection = (documentIds) => {
+  console.log('Documents auto-selected from mindmap:', documentIds);
+  
+  // Update selected documents
+  setSelectedDocuments(documentIds);
+  
+  // Switch to documents view to show the selection
+  setSidebarView("documents");
+  setIsDocumentsVisible(true);
+  
+  // Show user feedback
+  if (documentIds.length > 0) {
+    toast.success(`Auto-selected ${documentIds.length} document(s) from mindmap`, {
+      autoClose: 3000,
+      icon: () => <Brain className="text-purple-500" />
+    });
+  }
+};
+
   // Enhanced chat selection handler
-  const handleChatSelection = async (selectedChat) => {
+//   const handleChatSelection = async (selectedChat) => {
+//   try {
+//     setActiveConversationId(selectedChat.conversation_id);
+//     console.log("Fetching conversation details for:", selectedChat.conversation_id);
+
+//     const response = await chatServiceNB.getConversationDetails(
+//       selectedChat.conversation_id,
+//       mainProjectId
+//     );
+
+//     if (response && response.data) {
+//       console.log("Fetched conversation details:", response.data);
+
+//       // Process messages to include webSources
+//       const processedMessages = (response.data.messages || []).map(msg => {
+//         if (msg.sources_info || msg.extracted_urls || msg.webSources) {
+//           return {
+//             ...msg,
+//             webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
+//           };
+//         }
+//         return msg;
+//       });
+
+//       // Prepare the full chat data with processed messages
+//       const fullChatData = {
+//         ...response.data,
+//         conversation_id: selectedChat.conversation_id,
+//         messages: processedMessages, // ← Use processed messages instead
+//         selected_documents: response.data.selected_documents || [],
+//         title: response.data.title,
+//         follow_up_questions: response.data.follow_up_questions || [],
+//       };
+
+//       const chatDocIds = fullChatData.selected_documents.map((doc) =>
+//         doc.toString ? doc.toString() : String(doc)
+//       );
+
+//       if (chatDocIds.length > 0) {
+//         scrollToSelectedDocument(chatDocIds[0]);
+//       }
+
+//       if (onSelectChat) {
+//         onSelectChat(fullChatData);
+//       }
+//     }
+//   } catch (error) {
+//     console.error("Error fetching conversation details:", error);
+//     toast.error("Failed to load conversation history");
+//   }
+//   setSidebarView("chats");
+// };
+// Enhanced chat selection handler
+const handleChatSelection = async (selectedChat) => {
   try {
     setActiveConversationId(selectedChat.conversation_id);
     console.log("Fetching conversation details for:", selectedChat.conversation_id);
@@ -522,22 +619,36 @@ const SideTab = ({
       const fullChatData = {
         ...response.data,
         conversation_id: selectedChat.conversation_id,
-        messages: processedMessages, // ← Use processed messages instead
+        messages: processedMessages,
         selected_documents: response.data.selected_documents || [],
         title: response.data.title,
         follow_up_questions: response.data.follow_up_questions || [],
       };
 
+      // FIXED: Update document context BEFORE setting the chat
       const chatDocIds = fullChatData.selected_documents.map((doc) =>
         doc.toString ? doc.toString() : String(doc)
       );
 
+      // Use a small delay to ensure proper state sequencing
       if (chatDocIds.length > 0) {
-        scrollToSelectedDocument(chatDocIds[0]);
-      }
-
-      if (onSelectChat) {
-        onSelectChat(fullChatData);
+        // Update document context with chat_selection source
+        if (onDocumentSelectionChange) {
+          onDocumentSelectionChange(chatDocIds);
+        }
+        
+        // Small delay to ensure document context is set before chat
+        setTimeout(() => {
+          if (onSelectChat) {
+            onSelectChat(fullChatData);
+          }
+          scrollToSelectedDocument(chatDocIds[0]);
+        }, 100);
+      } else {
+        // No documents, set chat immediately
+        if (onSelectChat) {
+          onSelectChat(fullChatData);
+        }
       }
     }
   } catch (error) {
@@ -546,7 +657,6 @@ const SideTab = ({
   }
   setSidebarView("chats");
 };
-
   // New function to scroll to a selected document with visual feedback
   const scrollToSelectedDocument = (documentId) => {
     if (!documentId) return;
@@ -738,40 +848,89 @@ const SideTab = ({
       );
     }
   };
+
   const handleDocumentToggle = async (documentId) => {
-    const stringDocumentId = documentId.toString();
+  const stringDocumentId = documentId.toString();
 
-    // Create a new array based on the current selected documents
-    const newSelectedDocuments = selectedDocuments.includes(stringDocumentId)
-      ? selectedDocuments.filter((id) => id !== stringDocumentId)
-      : [...selectedDocuments, stringDocumentId];
+  console.log('🔄 handleDocumentToggle called:', {
+    documentId: stringDocumentId,
+    currentSelected: selectedDocuments,
+    isCurrentlySelected: selectedDocuments.includes(stringDocumentId)
+  });
 
-    // Update the parent component's state
-    setSelectedDocuments(newSelectedDocuments);
+  // Create a new array based on the current selected documents
+  let newSelectedDocuments;
+  if (selectedDocuments.includes(stringDocumentId)) {
+    // Remove document
+    newSelectedDocuments = selectedDocuments.filter((id) => id !== stringDocumentId);
+    console.log('🗑️ Removing document, new array:', newSelectedDocuments);
+  } else {
+    // Add document
+    newSelectedDocuments = [...selectedDocuments, stringDocumentId];
+    console.log('✅ Adding document, new array:', newSelectedDocuments);
+  }
 
-    // Update "Select All" checkbox state
-    const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
-    setIsSelectAllChecked(
-      newSelectedDocuments.length === allDocumentIds.length
-    );
+  // FORCE the state update
+  console.log('🔄 Calling setSelectedDocuments with:', newSelectedDocuments);
+  setSelectedDocuments([...newSelectedDocuments]); // Force new array reference
 
-    // Set the active document if it's being selected
-    if (!selectedDocuments.includes(stringDocumentId)) {
-      try {
-        await documentServiceNB.setActiveDocument(documentId); // Set the active document
-      } catch (error) {
-        console.error("Failed to set active document:", error);
-        toast.error("Failed to set active document");
-      }
+  // Update "Select All" checkbox state
+  const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
+  setIsSelectAllChecked(
+    newSelectedDocuments.length === allDocumentIds.length && allDocumentIds.length > 0
+  );
+
+  // Set the active document if it's being selected
+  if (!selectedDocuments.includes(stringDocumentId)) {
+    try {
+      await documentServiceNB.setActiveDocument(documentId);
+    } catch (error) {
+      console.error("Failed to set active document:", error);
+      toast.error("Failed to set active document");
     }
-  };
+  }
+};
+  // const handleDocumentToggle = async (documentId) => {
+  //   const stringDocumentId = documentId.toString();
+
+  //   // Create a new array based on the current selected documents
+  //   const newSelectedDocuments = selectedDocuments.includes(stringDocumentId)
+  //     ? selectedDocuments.filter((id) => id !== stringDocumentId)
+  //     : [...selectedDocuments, stringDocumentId];
+
+  //   // Update the parent component's state
+  //   setSelectedDocuments(newSelectedDocuments);
+
+  //   // Update "Select All" checkbox state
+  //   const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
+  //   setIsSelectAllChecked(
+  //     newSelectedDocuments.length === allDocumentIds.length
+  //   );
+
+  //   // Set the active document if it's being selected
+  //   if (!selectedDocuments.includes(stringDocumentId)) {
+  //     try {
+  //       await documentServiceNB.setActiveDocument(documentId); // Set the active document
+  //     } catch (error) {
+  //       console.error("Failed to set active document:", error);
+  //       toast.error("Failed to set active document");
+  //     }
+  //   }
+  // };
 
   // New method to handle "Select All" and "Deselect All"
   const handleSelectAllDocuments = () => {
     if (isSelectAllChecked) {
       // Deselect all documents
+      console.log('🗑️ SideTab: Deselecting all documents');
       setSelectedDocuments([]);
       setIsSelectAllChecked(false);
+
+       // Notify MainChat
+      if (onDocumentSelectionChange) {
+        onDocumentSelectionChange([]);
+      }
+      
       toast.success("All documents deselected", {
         autoClose: 2000,
         hideProgressBar: false,
@@ -787,6 +946,10 @@ const SideTab = ({
       const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
       setSelectedDocuments(allDocumentIds);
       setIsSelectAllChecked(true);
+      // Notify MainChat
+      if (onDocumentSelectionChange) {
+        onDocumentSelectionChange(allDocumentIds);
+      }
       toast.success(`${allDocumentIds.length} documents selected`, {
         autoClose: 2000,
         hideProgressBar: false,
@@ -881,42 +1044,88 @@ const SideTab = ({
     }
   };
 
-  // Replace the existing handleDeleteConversation function with this updated version
-  const handleDeleteConversation = async (conversationId) => {
-    try {
-      await chatServiceNB.deleteConversation(conversationId);
+const handleDeleteConversation = async (conversationId) => {
+  console.log("🗑️ DELETING CONVERSATION:", conversationId);
+  console.log("🗑️ Current activeConversationId:", activeConversationId);
+  
+  try {
+    await chatServiceNB.deleteConversation(conversationId);
 
-      // Remove from chat history state
-      setChatHistory((prevHistory) =>
-        prevHistory.filter((chat) => chat.conversation_id !== conversationId)
-      );
+    // Remove from chat history state
+    setChatHistory((prevHistory) =>
+      prevHistory.filter((chat) => chat.conversation_id !== conversationId)
+    );
 
-      // If the deleted chat was active, reset the view
-      if (activeConversationId === conversationId) {
-        // Clear the active conversation ID
-        setActiveConversationId(null);
+    // If the deleted chat was active, reset the view
+    if (activeConversationId === conversationId) {
+      console.log("🗑️ DELETED CHAT WAS ACTIVE - RESETTING");
+      
+      // Clear the active conversation ID
+      setActiveConversationId(null);
 
-        // Call the onNewChat callback properly
-        if (onNewChat) {
-          // Call with no parameter to avoid preventDefault errors
-          onNewChat();
-
-          // Add a toast notification for better UX
-          toast.success("Started new conversation");
-        }
+      // Clear the selected chat in MainDashboard
+      console.log("🗑️ CALLING onSelectChat(null)");
+      if (onSelectChat) {
+        onSelectChat(null);
       }
 
-      // Close the modal
-      setIsDeleteChatModalOpen(false);
-      setChatToDelete(null);
-
-      // Show success message
-      toast.success("Conversation deleted");
-    } catch (error) {
-      console.error("Failed to delete conversation", error);
-      toast.error("Failed to delete conversation");
+      // Call the onNewChat callback
+      console.log("🗑️ CALLING onNewChat()");
+      if (onNewChat) {
+        onNewChat();
+        toast.success("Started new conversation");
+      }
     }
-  };
+
+    // Close the modal
+    setIsDeleteChatModalOpen(false);
+    setChatToDelete(null);
+
+    toast.success("Conversation deleted");
+  } catch (error) {
+    console.error("Failed to delete conversation", error);
+    toast.error("Failed to delete conversation");
+  }
+};
+
+  // // Replace the existing handleDeleteConversation function with this updated version
+  // const handleDeleteConversation = async (conversationId) => {
+  //   try {
+  //     await chatServiceNB.deleteConversation(conversationId);
+
+  //     // Remove from chat history state
+  //     setChatHistory((prevHistory) =>
+  //       prevHistory.filter((chat) => chat.conversation_id !== conversationId)
+  //     );
+
+  //     // If the deleted chat was active, reset the view
+  //     if (activeConversationId === conversationId) {
+  //       // Clear the active conversation ID
+  //       setActiveConversationId(null);
+
+        
+
+  //       // Call the onNewChat callback properly
+  //       if (onNewChat) {
+  //         // Call with no parameter to avoid preventDefault errors
+  //         onNewChat();
+
+  //         // Add a toast notification for better UX
+  //         toast.success("Started new conversation");
+  //       }
+  //     }
+
+  //     // Close the modal
+  //     setIsDeleteChatModalOpen(false);
+  //     setChatToDelete(null);
+
+  //     // Show success message
+  //     toast.success("Conversation deleted");
+  //   } catch (error) {
+  //     console.error("Failed to delete conversation", error);
+  //     toast.error("Failed to delete conversation");
+  //   }
+  // };
 
   const handleDeleteChatConfirmation = (chat) => {
     setChatToDelete(chat);
@@ -1125,6 +1334,11 @@ const SideTab = ({
     </div>
   );
 
+  useEffect(() => {
+  if (onDocumentsUpdate) {
+    onDocumentsUpdate(documents);
+  }
+}, [documents, onDocumentsUpdate]);
   // Modified documents list rendering with bulk delete option
   const renderDocumentsList = () => (
     <>
@@ -1247,11 +1461,29 @@ const SideTab = ({
           }
           group relative
         `}
-              onClick={() =>
-                bulkDeleteMode
-                  ? handleDocumentToggle(doc.id)
-                  : handleDocumentClick(doc.id)
-              }
+              onClick={() => {
+  const isCurrentlySelected = selectedDocuments.includes(doc.id.toString());
+  
+  if (isCurrentlySelected) {
+    // Deselecting
+    const newSelection = selectedDocuments.filter(id => id !== doc.id.toString());
+    console.log('🗑️ SideTab: Deselecting, new selection:', newSelection);
+    
+    // Update local state
+    setSelectedDocuments(newSelection);
+    setIsSelectAllChecked(false);
+    
+    // Notify MainChat directly
+    if (onDocumentSelectionChange) {
+      onDocumentSelectionChange(newSelection);
+    }
+    
+    toast.success(`Document "${doc.filename}" deselected`);
+  } else {
+    // Selecting
+    handleDocumentClick(doc.id);
+  }
+}}
             >
               <input
                 type="checkbox"
@@ -1382,6 +1614,8 @@ const SideTab = ({
       )}
     </>
   );
+
+  
 
   // Add this before the return statement in your Sidebar component
   const formattedActiveConversation = activeConversation
@@ -2609,6 +2843,9 @@ SideTab.propTypes = {
   onSendMessage: PropTypes.func.isRequired,
   setSelectedDocuments: PropTypes.func.isRequired,
   selectedDocuments: PropTypes.arrayOf(PropTypes.string).isRequired,
+  onDocumentSelectionChange: PropTypes.func,
+  onDocumentContextChange: PropTypes.func,
+  onDocumentsUpdate: PropTypes.func,
 };
 
 export default SideTab;

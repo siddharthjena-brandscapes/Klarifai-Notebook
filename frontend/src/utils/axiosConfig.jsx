@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const axiosInstance = axios.create({
-  baseURL: "https://klarifai-demo-2-appserver-dnd9avhfesa4h0de.centralindia-01.azurewebsites.net/api", // Your Django backend URL
+ baseURL: "http://localhost:8000/api",
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -638,6 +638,20 @@ export const userService = {
   updateProfile: (data) => {
     return axiosInstance.put("/user/profile/", data);
   },
+
+  
+   getCurrentUserRightPanelPermissions: () => {
+    return axiosInstance
+      .get("core/user/right-panel-permissions/")  // Added 'core/'
+      .then((response) => {
+        console.log("User service - get right panel permissions response:", response.data);
+        return response.data.data;
+      })
+      .catch((error) => {
+        console.error("User service - get right panel permissions error:", error);
+        throw error;
+      });
+  },
 };
 
 export const coreService = {
@@ -835,9 +849,9 @@ getArchivedProjects: async () => {
 
 export const adminService = {
   // Get all users (admin only)
-  getAllUsers: () => {
+   getAllUsers: () => {
     return axiosInstance
-      .get("/api/admin/users/")
+      .get("/core/admin/users/")  // ✅ Changed from "/api/admin/users/" to "/core/admin/users/"
       .then((response) => {
         console.log("Admin service - get users response:", response.data);
         return response.data;
@@ -915,10 +929,8 @@ export const adminService = {
 
   updateUserUploadPermissions: (userId, permissionData) => {
     console.log(`Sending API request to update user ${userId} upload permissions:`, permissionData);
-    
-    // Fix the URL path to not duplicate "api/"
     return axiosInstance.patch(`/admin/users/${userId}/upload-permissions/`, permissionData);
-  },
+},
   
   
 
@@ -935,6 +947,88 @@ export const adminService = {
       });
   },
 
+// Get all categories for all users (admin only)
+  getAllCategories: () => {
+    return axiosInstance
+      .get("core/all_categories/")
+      .then((response) => {
+        console.log("Admin service - get all categories response:", response.data);
+        return response.data.categories;
+      })
+      .catch((error) => {
+        console.error("Admin service - get all categories error:", error);
+        throw error;
+      });
+  },
+
+  // Get categories for a specific user// Add this method to your coreService
+  getUserCategories: () => {
+    return axiosInstance
+      .get("core/categories/")  // This calls the endpoint without user_id for current user
+      .then((response) => {
+        console.log("Core service - get user categories response:", response.data);
+        return response.data.categories;
+      })
+      .catch((error) => {
+        console.error("Core service - get user categories error:", error);
+        throw error;
+      });
+  },
+
+  // Create a new category for a user (admin only)
+  createCategory: (categoryData) => {
+    return axiosInstance
+      .post("core/categories/create/", categoryData)
+      .then((response) => {
+        console.log("Admin service - create category response:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Admin service - create category error:", error);
+        throw error;
+      });
+  },
+
+  // Update a category (admin only)
+  updateCategory: (categoryId, categoryData) => {
+    return axiosInstance
+      .put(`core/categories/${categoryId}/update/`, categoryData)
+      .then((response) => {
+        console.log("Admin service - update category response:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Admin service - update category error:", error);
+        throw error;
+      });
+  },
+
+  // Delete a category (admin only)
+  deleteCategory: (categoryId) => {
+    return axiosInstance
+      .delete(`core/categories/${categoryId}/delete/`)
+      .then((response) => {
+        console.log("Admin service - delete category response:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Admin service - delete category error:", error);
+        throw error;
+      });
+  },
+
+updateUserRightPanelPermissions: (userId, permissions) => {
+    return axiosInstance
+      .patch(`core/admin/users/${userId}/right-panel-permissions/`, permissions)  // Added 'core/'
+      .then((response) => {
+        console.log("Admin service - update right panel permissions response:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Admin service - update right panel permissions error:", error);
+        throw error;
+      });
+  },
   
 };
 
