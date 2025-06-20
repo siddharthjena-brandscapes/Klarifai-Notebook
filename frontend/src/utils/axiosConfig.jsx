@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const axiosInstance = axios.create({
-  baseURL: "https://klarifai-demo-2-appserver-dnd9avhfesa4h0de.centralindia-01.azurewebsites.net/api", // Your Django backend URL
+ baseURL: "http://localhost:8000/api",
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",

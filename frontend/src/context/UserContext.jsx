@@ -1,7 +1,5 @@
-// src/contexts/UserContext.jsx
-
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { userService } from '../utils/axiosConfig'; // Adjust import path to your axiosConfig
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { userService } from '../utils/axiosConfig';
 
 const UserContext = createContext();
 
@@ -15,17 +13,7 @@ export const UserProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Only fetch permissions if user is authenticated
-    const token = localStorage.getItem('token');
-    if (token) {
-      fetchCurrentUserRightPanelPermissions();
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchCurrentUserRightPanelPermissions = async () => {
+  const fetchCurrentUserRightPanelPermissions = useCallback(async () => {
     try {
       const permissions = await userService.getCurrentUserRightPanelPermissions();
       console.log('Fetched user permissions:', permissions);
@@ -43,7 +31,6 @@ export const UserProvider = ({ children }) => {
       });
     } catch (error) {
       console.error('Error fetching right panel permissions:', error);
-      // Set default permissions (all enabled) on error
       setRightPanelPermissions({
         'right-panel-access': false,
         'mindmap-generation': false,
@@ -53,7 +40,37 @@ export const UserProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchCurrentUserRightPanelPermissions();
+
+      // ✅ ADD: Periodic refresh every 30 seconds
+      const intervalId = setInterval(() => {
+        fetchCurrentUserRightPanelPermissions();
+      }, 30000); // 30 seconds
+
+      // ✅ ADD: Cleanup interval on unmount
+      return () => clearInterval(intervalId);
+    } else {
+      setLoading(false);
+    }
+  }, [fetchCurrentUserRightPanelPermissions]);
+
+  // ✅ ADD: Refresh on window focus (when user returns to tab)
+  useEffect(() => {
+    const handleFocus = () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        fetchCurrentUserRightPanelPermissions();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchCurrentUserRightPanelPermissions]);
 
   const refreshPermissions = () => {
     const token = localStorage.getItem('token');
