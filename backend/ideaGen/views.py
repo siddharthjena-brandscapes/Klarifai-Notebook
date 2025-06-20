@@ -1132,7 +1132,7 @@ def generate_product_image(request):
             HF_API_TOKEN = user_tokens.huggingface_token
             
             hf_client = InferenceClient(
-                model="black-forest-labs/FLUX.1-schnell",
+                model="black-forest-labs/FLUX.1-dev",
                 token=HF_API_TOKEN
             )
             
@@ -1267,7 +1267,7 @@ def regenerate_product_image(request):
             HF_API_TOKEN = user_tokens.huggingface_token
             
             hf_client = InferenceClient(
-                model="black-forest-labs/FLUX.1-schnell",
+                model="black-forest-labs/FLUX.1-dev",
                 token=HF_API_TOKEN
             )
             
@@ -1350,7 +1350,7 @@ def regenerate_product_image(request):
                     "success": False,
                     "error": f"Failed to save regenerated image: {str(e)}"
                 }, status=500)
-            
+        
         except Exception as e:
             print(f"Unexpected error in regenerate_product_image: {str(e)}")
             return JsonResponse({
