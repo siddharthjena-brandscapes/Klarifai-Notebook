@@ -5205,33 +5205,35 @@ class ChatView(APIView):
         return num in citation_sources and 1 <= num <= len(citation_sources)
 
     def _format_citations_for_response(self, response_text, citation_sources):
-        """Format the citations for response and remove duplicates."""
-        # Extract all citations from the text
-        response_text = self._ensure_separate_citation_brackets(response_text)
+        """Format the citations for response and ensure sequential numbering"""
+        # First extract ALL citations from the text
         citation_pattern = r'\[(\d+)\]'
-        citations = re.findall(citation_pattern, response_text)
+        all_citations = re.findall(citation_pattern, response_text)
         
-        # Use set to get unique citations, then convert back to sorted list
-        unique_citations = sorted(set([int(c) for c in citations if c.isdigit()]))
+        # Get unique citations while preserving order of first appearance
+        unique_citations = []
+        seen = set()
+        for cite in all_citations:
+            if cite.isdigit() and int(cite) in citation_sources and cite not in seen:
+                seen.add(cite)
+                unique_citations.append(cite)
         
-        # Create mapping from original citation numbers to sequential display numbers
-        citation_mapping = {original_num: display_num for display_num, original_num in enumerate(unique_citations, 1)}
+        # Create mapping from original to sequential numbers (1,2,3...)
+        citation_mapping = {int(old): new for new, old in enumerate(unique_citations, 1)}
         
-        # Replace original citation numbers with sequential display numbers
-        # Process in reverse order to avoid issues with overlapping replacements
-        processed_text = response_text
-        for original_num in sorted(citation_mapping.keys(), reverse=True):
-            # Use word boundaries to avoid partial matches
-            pattern = r'\[' + str(original_num) + r'\]'
-            replacement = f'[{citation_mapping[original_num]}]'
-            processed_text = re.sub(pattern, replacement, processed_text)
+        # Replace ALL citations in the text with sequential numbers
+        def replace_citation(match):
+            old_num = match.group(1)
+            if old_num.isdigit() and int(old_num) in citation_mapping:
+                return f'[{citation_mapping[int(old_num)]}]'
+            return match.group(0)
         
-        # Remove duplicate citations that appear consecutively
-        processed_text = self._remove_consecutive_duplicate_citations(processed_text)
+        processed_text = re.sub(citation_pattern, replace_citation, response_text)
         
-        # Create new citation sources dictionary with display numbers
+        # Create new citation sources with sequential numbers
         display_citation_sources = {}
         for display_num, original_num in enumerate(unique_citations, 1):
+            original_num = int(original_num)
             if original_num in citation_sources:
                 source_info = citation_sources[original_num]
                 snippet = source_info.get('text', '')

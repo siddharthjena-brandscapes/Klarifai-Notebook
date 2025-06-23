@@ -99,225 +99,7 @@ if not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# # Configure Google Generative AI
-# GOOGLE_API_KEY = "AIzaSyDOKm5KYY6LjLa20IbZg027fQauwyMOKWQ"
-# genai.configure(api_key=GOOGLE_API_KEY)
-# # model = genai.GenerativeModel('gemini-1.5-flash')
-# GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash', 
-#     generation_config={
-#         'temperature': 0.7,
-#         'max_output_tokens': 1024
-#     },
-#     safety_settings={
-#         genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_NONE,
-#         genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-#         genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-#         genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE
-#     }
-# )
 
-# class SignupView(APIView):
-#     # Explicitly set permission to allow any user (including unauthenticated)
-#     permission_classes = [AllowAny]
-#     authentication_classes = []  # Disable authentication checks
-
-#     def post(self, request):
-#         # Extract data from request
-#         username = request.data.get('username')
-#         email = request.data.get('email')
-#         password = request.data.get('password')
-#         huggingface_token = request.data.get('huggingface_token', '')
-#         gemini_token = request.data.get('gemini_token', '')
-#         llama_token = request.data.get('llama_token', '')  # New field for Llama API token
-
-#         # Validate input
-#         if not username or not email or not password:
-#             return Response({
-#                 'error': 'Please provide username, email, and password'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Check if user already exists
-#         if User.objects.filter(username=username).exists():
-#             return Response({
-#                 'error': 'Username already exists'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Create new user
-#         try:
-#             user = User.objects.create_user(
-#                 username=username, 
-#                 email=email, 
-#                 password=password
-#             )
-            
-#             # Create API tokens record
-#             UserAPITokens.objects.create(
-#                 user=user,
-#                 huggingface_token=huggingface_token,
-#                 gemini_token=gemini_token,
-#                 llama_token=llama_token  # Save the Llama API token
-#             )
-            
-#             # Generate token for the new user
-#             token, _ = Token.objects.get_or_create(user=user)
-            
-#             return Response({
-#                 'message': 'User created successfully',
-#                 'token': token.key,
-#                 'username': user.username
-#             }, status=status.HTTP_201_CREATED)
-
-#         except Exception as e:
-#             return Response({
-#                 'error': str(e)
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-# class LoginView(APIView):
-#     # Explicitly set permission to allow any user (including unauthenticated)
-#     permission_classes = [AllowAny]
-#     authentication_classes = []  # Disable authentication checks
-
-#     def post(self, request):
-#         username = request.data.get('username')
-#         password = request.data.get('password')
-
-#         # Validate input
-#         if not username or not password:
-#             return Response({
-#                 'error': 'Please provide username and password'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Authenticate user
-#         user = authenticate(username=username, password=password)
-
-#         if user:
-#             # Generate or get existing token
-#             token, _ = Token.objects.get_or_create(user=user)
-            
-#             return Response({
-#                 'token': token.key,
-#                 'username': user.username
-#             }, status=status.HTTP_200_OK)
-        
-#         return Response({
-#             'error': 'Invalid credentials'
-#         }, status=status.HTTP_401_UNAUTHORIZED)
-
-
-# class ChangePasswordView(APIView):
-#     permission_classes = [IsAuthenticated]
- 
-#     def post(self, request):
-#         user = request.user
-#         current_password = request.data.get('current_password')
-#         new_password = request.data.get('new_password')
- 
-#         if not current_password or not new_password:
-#             return Response({'message': 'Both current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
- 
-#         if not user.check_password(current_password):  # Use user.check_password()
-#             return Response({'message': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
- 
-#         user.set_password(new_password)
-#         user.save()
-#         update_session_auth_hash(request, user)  # Important: Keep user logged in
- 
-#         return Response({'message': 'Password updated successfully'}, status=status.HTTP_200_OK)
-
-#new
-# class UserProfileView(APIView):
-#     permission_classes = [IsAuthenticated]
-#     parser_classes = (MultiPartParser, FormParser)
-
-#     def get(self, request):
-#         user = request.user
-#         try:
-#             profile = UserProfile.objects.get(user=user)
-#             if profile.profile_picture:
-#                 profile_picture = request.build_absolute_uri(profile.profile_picture.url)
-#             else:
-#                 profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
-#         except UserProfile.DoesNotExist:
-#             profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
-
-
-#          # Get module permissions data
-#         try:
-#             module_permissions = user.module_permissions.disabled_modules
-#         except (AttributeError, UserModulePermissions.DoesNotExist):
-#             # Create module permissions if they don't exist
-#             module_permissions = {}
-#             UserModulePermissions.objects.create(user=user, disabled_modules={})
-
-        
-#         return Response({
-#             'username': user.username,
-#             'email': user.email,
-#             'first_name': user.first_name,
-#             'last_name': user.last_name,
-#             'profile_picture': profile_picture,
-#             'date_joined': user.date_joined,
-#              'disabled_modules': module_permissions
-#         }, status=status.HTTP_200_OK)
-
-#     def post(self, request):
-#         try:
-#             user = request.user
-#             profile_picture = request.FILES.get('profile_picture')
-            
-#             if not profile_picture:
-#                 return Response({
-#                     'error': 'No profile picture provided'
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-            
-#             # Validate file type
-#             allowed_types = ['image/jpeg', 'image/png', 'image/gif']
-#             if profile_picture.content_type not in allowed_types:
-#                 return Response({
-#                     'error': 'Invalid file type. Only JPG, PNG, and GIF are allowed.'
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-            
-#             # Validate file size (2MB limit)
-#             if profile_picture.size > 2 * 1024 * 1024:
-#                 return Response({
-#                     'error': 'File size too large. Maximum size is 2MB.'
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-            
-#             # Get or create profile
-#             profile, created = UserProfile.objects.get_or_create(user=user)
-            
-#             # Delete old profile picture if it exists
-#             if profile.profile_picture:
-#                 try:
-#                     old_file_path = profile.profile_picture.path
-#                     if os.path.exists(old_file_path):
-#                         os.remove(old_file_path)
-#                 except Exception as e:
-#                     print(f"Error deleting old profile picture: {e}")
-            
-#             # Generate unique filename
-#             file_extension = os.path.splitext(profile_picture.name)[1]
-#             unique_filename = f"{user.username}_{uuid.uuid4().hex[:8]}{file_extension}"
-            
-#             # Save the new profile picture
-#             profile.profile_picture.save(
-#                 unique_filename,
-#                 profile_picture,
-#                 save=True
-#             )
-            
-#             # Build the full URL
-#             profile_picture_url = request.build_absolute_uri(profile.profile_picture.url)
-            
-#             return Response({
-#                 'message': 'Profile picture updated successfully',
-#                 'profile_picture': profile_picture_url
-#             }, status=status.HTTP_200_OK)
-            
-#         except Exception as e:
-#             return Response({
-#                 'error': str(e)
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class GetUserDocumentsView(APIView):
     def get(self, request):
@@ -5265,35 +5047,37 @@ class ChatView(APIView):
     def _is_likely_citation(self, num, citation_sources):
         """Check if a number is likely to be a citation based on available sources."""
         return num in citation_sources and 1 <= num <= len(citation_sources)
-
+    
     def _format_citations_for_response(self, response_text, citation_sources):
-        """Format the citations for response and remove duplicates."""
-        # Extract all citations from the text
-        response_text = self._ensure_separate_citation_brackets(response_text)
+        """Format the citations for response and ensure sequential numbering"""
+        # First extract ALL citations from the text
         citation_pattern = r'\[(\d+)\]'
-        citations = re.findall(citation_pattern, response_text)
+        all_citations = re.findall(citation_pattern, response_text)
         
-        # Use set to get unique citations, then convert back to sorted list
-        unique_citations = sorted(set([int(c) for c in citations if c.isdigit()]))
+        # Get unique citations while preserving order of first appearance
+        unique_citations = []
+        seen = set()
+        for cite in all_citations:
+            if cite.isdigit() and int(cite) in citation_sources and cite not in seen:
+                seen.add(cite)
+                unique_citations.append(cite)
         
-        # Create mapping from original citation numbers to sequential display numbers
-        citation_mapping = {original_num: display_num for display_num, original_num in enumerate(unique_citations, 1)}
+        # Create mapping from original to sequential numbers (1,2,3...)
+        citation_mapping = {int(old): new for new, old in enumerate(unique_citations, 1)}
         
-        # Replace original citation numbers with sequential display numbers
-        # Process in reverse order to avoid issues with overlapping replacements
-        processed_text = response_text
-        for original_num in sorted(citation_mapping.keys(), reverse=True):
-            # Use word boundaries to avoid partial matches
-            pattern = r'\[' + str(original_num) + r'\]'
-            replacement = f'[{citation_mapping[original_num]}]'
-            processed_text = re.sub(pattern, replacement, processed_text)
+        # Replace ALL citations in the text with sequential numbers
+        def replace_citation(match):
+            old_num = match.group(1)
+            if old_num.isdigit() and int(old_num) in citation_mapping:
+                return f'[{citation_mapping[int(old_num)]}]'
+            return match.group(0)
         
-        # Remove duplicate citations that appear consecutively
-        processed_text = self._remove_consecutive_duplicate_citations(processed_text)
+        processed_text = re.sub(citation_pattern, replace_citation, response_text)
         
-        # Create new citation sources dictionary with display numbers
+        # Create new citation sources with sequential numbers
         display_citation_sources = {}
         for display_num, original_num in enumerate(unique_citations, 1):
+            original_num = int(original_num)
             if original_num in citation_sources:
                 source_info = citation_sources[original_num]
                 snippet = source_info.get('text', '')
@@ -5307,6 +5091,48 @@ class ChatView(APIView):
                 }
         
         return processed_text, display_citation_sources
+
+    # def _format_citations_for_response(self, response_text, citation_sources):
+    #     """Format the citations for response and remove duplicates."""
+    #     # Extract all citations from the text
+    #     response_text = self._ensure_separate_citation_brackets(response_text)
+    #     citation_pattern = r'\[(\d+)\]'
+    #     citations = re.findall(citation_pattern, response_text)
+        
+    #     # Use set to get unique citations, then convert back to sorted list
+    #     unique_citations = sorted(set([int(c) for c in citations if c.isdigit()]))
+        
+    #     # Create mapping from original citation numbers to sequential display numbers
+    #     citation_mapping = {original_num: display_num for display_num, original_num in enumerate(unique_citations, 1)}
+        
+    #     # Replace original citation numbers with sequential display numbers
+    #     # Process in reverse order to avoid issues with overlapping replacements
+    #     processed_text = response_text
+    #     for original_num in sorted(citation_mapping.keys(), reverse=True):
+    #         # Use word boundaries to avoid partial matches
+    #         pattern = r'\[' + str(original_num) + r'\]'
+    #         replacement = f'[{citation_mapping[original_num]}]'
+    #         processed_text = re.sub(pattern, replacement, processed_text)
+        
+    #     # Remove duplicate citations that appear consecutively
+    #     processed_text = self._remove_consecutive_duplicate_citations(processed_text)
+        
+    #     # Create new citation sources dictionary with display numbers
+    #     display_citation_sources = {}
+    #     for display_num, original_num in enumerate(unique_citations, 1):
+    #         if original_num in citation_sources:
+    #             source_info = citation_sources[original_num]
+    #             snippet = source_info.get('text', '')
+    #             snippet_length = 1500 
+    #             display_citation_sources[display_num] = {
+    #                 'source_file': source_info.get('source_file', 'Unknown'),
+    #                 'page_number': 'Unknown',
+    #                 'section_title': 'Unknown',
+    #                 'snippet': snippet[:snippet_length] + "..." if len(snippet) > snippet_length else snippet,
+    #                 'document_id': source_info.get('document_id', 'Unknown')
+    #             }
+        
+    #     return processed_text, display_citation_sources
 
     def _remove_consecutive_duplicate_citations(self, text):
         """Remove consecutive duplicate citations and ensure proper bracket separation."""
@@ -6383,232 +6209,6 @@ class ChatView(APIView):
             logger.error(f"Error getting embeddings: {str(e)}")
             return []
     
-    # # Improved search_similar_content with TF-IDF ranking from Streamlit
-    # def search_similar_content(self, query, processed_docs, metadata_store, k=40):
-    #     """
-    #     Enhanced search function that handles both LlamaParse and local document parsing
-    #     """
-    #     # Get embeddings for the query
-    #     query_embedding = self.get_embeddings([query])
-    #     if not query_embedding:
-    #         return [], [], {}  # Return empty citation mapping to
-        
-    #     # Search each document's FAISS index separately
-    #     all_results = []
-    #     all_distances = []
-    #     all_sources = []
-    #     citation_mapping = {}  # Add citation mapping
-    #     citation_count = 0
-        
-    #     # Track content to avoid duplicates
-    #     seen_content_hashes = set()
-        
-    #     # Check if we have any valid documents to search
-    #     valid_docs_found = False
-        
-    #     for proc_doc in processed_docs:
-    #         # Skip documents without FAISS indices
-    #         if not proc_doc.faiss_index or not proc_doc.metadata:
-    #             continue
-            
-    #         # Skip if files don't exist
-    #         if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
-    #             continue
-            
-    #         # First check if this is a LlamaParse document with markdown
-    #         markdown_content = None
-    #         if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
-    #             try:
-    #                 with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
-    #                     markdown_content = f.read()
-    #                 # If we have markdown content, we'll use it later in our results
-    #                 valid_docs_found = True
-    #             except Exception as e:
-    #                 logger.error(f"Error reading markdown file for {proc_doc.document.filename}: {str(e)}")
-            
-    #         # Load metadata for both document types
-    #         try:
-    #             with open(proc_doc.metadata, 'rb') as f:
-    #                 chunks = pickle.load(f)
-                
-    #             # Make sure chunks is a list - sometimes it might be empty or None
-    #             if not chunks:
-    #                 logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
-    #                 chunks = []
-    #             elif not isinstance(chunks, list):
-    #                 logger.warning(f"Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
-    #                 chunks = []
-                
-    #             # Add document source information to each chunk if missing
-    #             for chunk in chunks:
-    #                 if isinstance(chunk, dict) and 'source_file' not in chunk:
-    #                     chunk['source_file'] = proc_doc.document.filename
-    #                 # Ensure 'text' field exists in chunk
-    #                 if isinstance(chunk, dict) and not chunk.get('text'):
-    #                     # Try alternate field names
-    #                     for field in ['content', 'document_content', 'chunk_text']:
-    #                         if field in chunk:
-    #                             chunk['text'] = chunk[field]
-    #                             break
-                
-    #             # Try vector search with FAISS index
-    #             valid_docs_found = True
-    #             try:
-    #                 index = faiss.read_index(proc_doc.faiss_index)
-    #                 # Search this index with increased k for better diversity
-    #                 distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
-                    
-    #                 # Extract results for this document
-    #                 for i, idx in enumerate(indices[0]):
-    #                     if idx < len(chunks):
-    #                         content = chunks[idx].get('text', '')
-    #                         # Only add non-empty content
-    #                         if content and content.strip():
-    #                             # Add numbered citation
-    #                             citation_count += 1
-    #                             citation_key = citation_count
-
-    #                             # Store citation mapping with metadata
-    #                             citation_mapping[citation_key] = {
-    #                                 'source': proc_doc.document.filename,
-    #                                 'text': content,
-    #                                 'relevance_score': float(distances[0][i]),
-    #                                 'document_id': proc_doc.document.id,
-    #                                 'chunk_idx': idx
-    #                             }
-    #                             all_results.append(content)
-    #                             all_distances.append(distances[0][i])
-    #                             all_sources.append(proc_doc.document.filename)
-    #             except Exception as e:
-    #                 logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
-                    
-    #                 # Fallback to basic text search for simple documents if vector search fails
-    #                 if chunks:
-    #                     # Use TF-IDF for matching if FAISS fails
-    #                     query_lower = query.lower()
-    #                     matched_chunks = []
-                        
-    #                     for chunk in chunks:
-    #                         if isinstance(chunk, dict):
-    #                             chunk_text = chunk.get('text', '')
-    #                             if chunk_text and query_lower in chunk_text.lower():
-    #                                 matched_chunks.append(chunk)
-                        
-    #                     # Sort by simple text similarity
-    #                     if matched_chunks:
-    #                         logger.info(f"Found {len(matched_chunks)} text matches for {proc_doc.document.filename}")
-    #                         for chunk in matched_chunks[:5]:  # Limit to top 5 matches
-    #                             all_results.append(chunk.get('text', ''))
-    #                             all_distances.append(0.5)  # Middle value since we don't have real distances
-    #                             all_sources.append(proc_doc.document.filename)
-                
-    #             # If we have markdown content but no vector results, do fallback text search on whole content
-    #             if markdown_content and not all_results:
-    #                 query_lower = query.lower()
-    #                 if query_lower in markdown_content.lower():
-    #                     # Split into paragraphs and find matching ones
-    #                     paragraphs = markdown_content.split('\n\n')
-    #                     for para in paragraphs:
-    #                         if query_lower in para.lower():
-    #                             all_results.append(para)
-    #                             all_distances.append(0.5)  # Middle value since we don't have real distances
-    #                             all_sources.append(proc_doc.document.filename)
-                    
-    #         except Exception as e:
-    #             logger.error(f"Error processing metadata for {proc_doc.document.filename}: {str(e)}")
-    #             continue
-        
-    #     # Combine and sort results by similarity score
-    #     if not all_results:
-    #         if valid_docs_found:
-    #             logger.warning(f"No matching content found in documents for query: {query}")
-    #         else:
-    #             logger.warning(f"No valid documents found to search")
-    #         return [], []
-            
-    #     # Apply TF-IDF ranking using the Streamlit approach
-    #     try:
-    #         from sklearn.feature_extraction.text import TfidfVectorizer
-            
-    #         # Create a TF-IDF vectorizer with increased max_features
-    #         vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-    #         try:
-    #             tfidf_matrix = vectorizer.fit_transform([query] + all_results)
-                
-    #             # Calculate similarity scores
-    #             tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
-                
-    #             # Convert embedding distances to similarity scores
-    #             similarity_scores = [1 / (1 + dist) for dist in all_distances]
-                
-    #             # Combine scores with same weighting (70% TF-IDF, 30% embedding)
-    #             combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
-                
-    #             # Re-sort results by combined score
-    #             combined_results = list(zip(all_results, all_sources, combined_scores))
-    #             sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
-                
-    #             # Extract sorted content and sources
-    #             results = [res[0] for res in sorted_results]
-    #             sources = [res[1] for res in sorted_results]
-
-    #              # Update citation mapping with new ranking
-    #             reordered_citation_mapping = {}
-    #             for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
-    #                 if old_key in citation_mapping:
-    #                     reordered_citation_mapping[new_idx] = citation_mapping[old_key]
-    #                     reordered_citation_mapping[new_idx]['display_num'] = new_idx
-                
-    #             citation_mapping = reordered_citation_mapping
-    #         except Exception as e:
-    #             logger.error(f"Error in TF-IDF processing: {str(e)}")
-    #             # Fallback to original results if TF-IDF fails
-    #             results = all_results
-    #             sources = all_sources
-    #     except Exception as e:
-    #         logger.error(f"Error applying TF-IDF ranking: {str(e)}")
-    #         # Fall back to basic distance-based ranking
-    #         combined_results = list(zip(all_results, all_sources, all_distances))
-    #         # Note: In the fallback, we sort by distance (smaller is better) so no reverse=True
-    #         sorted_results = sorted(combined_results, key=lambda x: x[2])
-            
-    #         results = [res[0] for res in sorted_results]
-    #         sources = [res[1] for res in sorted_results]
-
-    #         # Update citation mapping with new ranking
-    #         reordered_citation_mapping = {}
-    #         for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
-    #             if old_key in citation_mapping:
-    #                 reordered_citation_mapping[new_idx] = citation_mapping[old_key]
-    #                 reordered_citation_mapping[new_idx]['display_num'] = new_idx
-            
-    #         citation_mapping = reordered_citation_mapping
-        
-    #     # Remove duplicates while preserving order
-    #     seen_content = set()
-    #     filtered_results = []
-    #     filtered_sources = []
-    #     filtered_citation_mapping = {}
-    #     new_citation_count = 0
-        
-    #     for content, source in zip(results, sources):
-    #         # Use first 100 chars as a content signature
-    #         content_hash = content[:100] if content else ""
-    #         if content_hash and content_hash not in seen_content:
-    #             seen_content.add(content_hash)
-    #             filtered_results.append(content)
-    #             filtered_sources.append(source)
-
-    #             # Update citation mapping
-    #             new_citation_count += 1
-    #             old_idx = i + 1
-    #             if old_idx in citation_mapping:
-    #                 filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx]
-    #                 filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
-        
-    #     # Return top matches (limit to 15 most relevant)
-    #     max_results = min(len(filtered_results), 15)
-    #     return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
     
     def search_similar_content(self, query, processed_docs, metadata_store, k=80):  # Increased k from 40 to 80
         """
