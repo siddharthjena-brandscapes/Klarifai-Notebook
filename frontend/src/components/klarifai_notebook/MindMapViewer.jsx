@@ -944,7 +944,7 @@ useEffect(() => {
               <div className="space-y-4">
                 <div>
                   <h3 className="text-lg font-semibold mb-2">Selected Node</h3>
-                  <div className={`p-3 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-white'}`}>
+                  {/* <div className={`p-3 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-white'}`}>
                     <h4 className="font-medium">{selectedNode.name}</h4>
                     {selectedNode.path && (
                       <p className="text-xs opacity-70 mt-1">Path: {selectedNode.path}</p>
@@ -954,7 +954,7 @@ useEffect(() => {
                         {selectedNode.summary || selectedNode.description}
                       </p>
                     )}
-                  </div>
+                  </div> */}
                 </div>
 
                {/* ✅ USE: New context indicator */}

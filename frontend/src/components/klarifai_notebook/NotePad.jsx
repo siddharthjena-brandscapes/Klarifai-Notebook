@@ -334,7 +334,7 @@ if (!isOpen) {
             {/* Mindmap Button */}
             {onGenerateMindmap && (
               <button
-                onClick={onGenerateMindmap}
+                onClick={() => onGenerateMindmap()}
                 disabled={isMindmapGenerating || (selectedDocuments && selectedDocuments.length === 0)}
                 className={`p-2 rounded-lg transition-colors flex items-center space-x-1
                            ${(isMindmapGenerating || (selectedDocuments && selectedDocuments.length === 0))
