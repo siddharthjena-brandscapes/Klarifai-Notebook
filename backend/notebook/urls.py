@@ -21,7 +21,8 @@ from .views import ( DocumentUploadView,
     YouTubeUploadView,
     NoteManagementView,
     WebsiteLinkUploadView,
-    PlainTextUploadView
+    PlainTextUploadView,
+    AdminNotebookUserStatsView
 
 
 
@@ -69,6 +70,7 @@ urlpatterns = [
     path('mindmap-question/', MindMapQuestionView.as_view(), name='mindmap_question'),
     path('user-mindmaps/', get_user_mindmaps, name='get_user_mindmaps'),
     path('mindmap/<int:mindmap_id>/', get_mindmap_data, name='get_mindmap_data'),
+    path('admin-notebook-user-stats/', AdminNotebookUserStatsView.as_view(), name='admin_notebook_user_stats'),
 
 
     # Add these to your existing urls.py file

@@ -849,6 +849,19 @@ getArchivedProjects: async () => {
 
 export const adminService = {
   // Get all users (admin only)
+
+   getUserStats: () => {
+    return axiosInstance
+      .get("/api/admin/user-stats/")
+      .then((response) => {
+        console.log("Admin service - get user stats response:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Admin service - get user stats error:", error);
+        throw error;
+      });
+  },
    getAllUsers: () => {
     return axiosInstance
       .get("/core/admin/users/")  // ✅ Changed from "/api/admin/users/" to "/core/admin/users/"
@@ -1760,7 +1773,24 @@ export const mindmapServiceNB = {
       console.error('Batch delete error:', error);
       throw error;
     }
-  }
+  },
+
+};
+
+export const adminNotebookServiceNB = {
+  // Fetch notebook user stats for admin panel (per user: doc uploads & questions asked)
+  getNotebookUserStats: () => {
+    return axiosInstance
+      .get("notebook/admin-notebook-user-stats/")
+      .then((response) => {
+        console.log("Admin NB service - get notebook user stats:", response.data);
+        return response.data;
+      })
+      .catch((error) => {
+        console.error("Admin NB service - get notebook user stats error:", error);
+        throw error;
+      });
+  },
 };
 
 export default axiosInstance;

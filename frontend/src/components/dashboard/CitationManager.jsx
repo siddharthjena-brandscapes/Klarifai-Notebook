@@ -1564,6 +1564,8 @@
 
 
 
+
+
 import React, { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
 import { marked } from "marked";
@@ -2856,22 +2858,37 @@ const calculateTooltipWidth = (content) => {
   return (
     <span style={{ position: "relative", display: "inline" }}>
       <span
-        ref={triggerRef}
-        onClick={() => setIsOpen(!isOpen)}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        style={{
-          cursor: "pointer",
-          color: "#61dafb",
-          fontWeight: "bold",
-          borderBottom: "1px dotted #61dafb",
-          backgroundColor: "rgba(97, 218, 251, 0.1)",
-          padding: "0 2px",
-          borderRadius: "2px",
-        }}
-      >
-        [{index + 1}]
-      </span>
+  ref={triggerRef}
+  onClick={() => setIsOpen(!isOpen)}
+  onMouseEnter={handleMouseEnter}
+  onMouseLeave={handleMouseLeave}
+   className="inline-flex items-center justify-center w-4 h-4 text-xs font-medium cursor-pointer transition-all duration-200 ease-in-out hover:scale-110 hover:shadow-md bg-[#9CA3AF] dark:bg-blue-800 text-gray-800 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-full mx-0.5"
+  style={{
+    cursor: "pointer",
+    
+    fontSize: "10px",
+    fontWeight: "600",
+    color: "white",
+    borderRadius: "50%",
+    marginLeft: "2px",
+    marginRight: "1px",
+    verticalAlign: "middle",
+    lineHeight: "1",
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+    transition: "all 0.2s ease",
+    transform: "scale(1)",
+  }}
+  onMouseOver={(e) => {
+    e.target.style.transform = "scale(1.1)";
+    e.target.style.boxShadow = "0 2px 6px rgba(0, 0, 0, 0.3)";
+  }}
+  onMouseOut={(e) => {
+    e.target.style.transform = "scale(1)";
+    e.target.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.2)";
+  }}
+>
+  {index + 1}
+</span>
       {renderTooltip()}
     </span>
   );
