@@ -242,19 +242,136 @@ export const authService = {
 };
 
 // Export services
+// export const documentService = {
+ 
+//   uploadDocument: (formData, mainProjectId, config = {}, targetUserId = null) => {
+//     // Ensure mainProjectId is added to formData
+//     formData.append("main_project_id", mainProjectId);
+    
+//     // Add target_user_id if provided (for admin uploads)
+//     if (targetUserId) {
+//       formData.append("target_user_id", targetUserId);
+//     }
+  
+//     return axiosInstance.post("/upload-documents/", formData, {
+//       headers: {
+//         "Content-Type": "multipart/form-data",
+//       },
+//       ...config,
+//     });
+//   },
+
+//   checkUploadPermissions: () => {
+//     return axiosInstance.get('/api/check-upload-permissions/');
+//   },
+
+//   // Add this new method for custom upload handling
+//   getCustomInstance: () => {
+//     // Create a fresh instance with the same base config
+//     const customInstance = axios.create({
+//       baseURL: axiosInstance.defaults.baseURL,
+//       headers: {
+//         ...axiosInstance.defaults.headers,
+//         "Content-Type": "multipart/form-data",
+//       },
+//       timeout: 120000, // Longer timeout for large uploads (2 minutes)
+//     });
+
+//     // Add the auth token
+//     const token = localStorage.getItem("token");
+//     if (token) {
+//       customInstance.defaults.headers.common[
+//         "Authorization"
+//       ] = `Token ${token}`;
+//     }
+
+//     return customInstance;
+//   },
+
+//   setActiveDocument: (documentId, mainProjectId) =>
+//     axiosInstance.post("/set-active-document/", {
+//       document_id: documentId,
+//       main_project_id: mainProjectId,
+//     }),
+
+//   getUserDocuments: async (mainProjectId) => {
+//     if (!mainProjectId) {
+//       console.warn("No mainProjectId provided to getUserDocuments");
+//       return { data: [] };
+//     }
+
+//     try {
+//       console.log("Fetching documents for project:", mainProjectId);
+//       const response = await axiosInstance.get("/user-documents/", {
+//         params: { main_project_id: mainProjectId },
+//       });
+//       console.log("Documents response:", response.data);
+//       return response;
+//     } catch (error) {
+//       console.error("Error in getUserDocuments:", error);
+//       return { data: [] };
+//     }
+//   },
+
+//   getOriginalDocument: (documentId) => {
+//     return axiosInstance.get(`/documents/${documentId}/original/`, {
+//       responseType: "blob", // Important for handling binary files
+//     });
+//   },
+
+//   trackDocumentView: (documentId, mainProjectId) => {
+//     return axiosInstance.post(`/documents/${documentId}/view-log/`, {
+//       main_project_id: mainProjectId,
+//     });
+//   },
+
+//   getChatHistory: () => {
+//     return axiosInstance.get("/chat-history/", {
+//       params: {
+//         limit: 50, // Optional: limit number of chats
+//         include_messages: true,
+//         include_documents: true,
+//       },
+//     });
+//   },
+//   generateSummary: (documentIds, mainProjectId) => {
+//     return axiosInstance.post("/generate-document-summary/", {
+//       document_ids: documentIds,
+//       main_project_id: mainProjectId,
+//     });
+//   },
+
+//   generateConsolidatedSummary: (documentIds, projectId) => {
+//     return axiosInstance.post("/consolidated_summary/", {
+//       document_ids: documentIds,
+//       main_project_id: projectId,
+//     });
+//   },
+
+//   generateIdeaContext: (data) =>
+//     axiosInstance.post("/generate-idea-context/", {
+//       document_id: data.document_id,
+//       main_project_id: data.main_project_id,
+//     }),
+
+//   deleteDocument: (documentId, mainProjectId) =>
+//     axiosInstance.delete(`/documents/${documentId}/delete/`, {
+//       params: { main_project_id: mainProjectId },
+//     }),
+
+//   searchDocumentContent: (data) => {
+//     return axiosInstance.post("/search-document-content/", {
+//       query: data.query,
+//       main_project_id: data.main_project_id,
+//     });
+//   },
+
+  
+// };
+
+// Updated documentService - only change the uploadDocument method
 export const documentService = {
-  // uploadDocument: (formData, mainProjectId, config = {}) => {
-  //   // Ensure mainProjectId is added to formData
-  //   formData.append("main_project_id", mainProjectId);
-
-  //   return axiosInstance.post("/upload-documents/", formData, {
-  //     headers: {
-  //       "Content-Type": "multipart/form-data",
-  //     },
-  //     ...config,
-  //   });
-  // },
-
+ 
   uploadDocument: (formData, mainProjectId, config = {}, targetUserId = null) => {
     // Ensure mainProjectId is added to formData
     formData.append("main_project_id", mainProjectId);
@@ -263,32 +380,39 @@ export const documentService = {
     if (targetUserId) {
       formData.append("target_user_id", targetUserId);
     }
-  
-    return axiosInstance.post("/upload-documents/", formData, {
+
+    // Enhanced config for long uploads
+    const enhancedConfig = {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      // Remove timeout - let server decide when to timeout
+      timeout: 0,
+      // Don't fail on server errors (5xx) - let them complete
+      validateStatus: function (status) {
+        return status < 500;
+      },
       ...config,
-    });
+    };
+  
+    return axiosInstance.post("/upload-documents/", formData, enhancedConfig);
   },
 
+  // ... rest of your existing methods stay exactly the same
   checkUploadPermissions: () => {
     return axiosInstance.get('/api/check-upload-permissions/');
   },
 
-  // Add this new method for custom upload handling
   getCustomInstance: () => {
-    // Create a fresh instance with the same base config
     const customInstance = axios.create({
       baseURL: axiosInstance.defaults.baseURL,
       headers: {
         ...axiosInstance.defaults.headers,
         "Content-Type": "multipart/form-data",
       },
-      timeout: 120000, // Longer timeout for large uploads (2 minutes)
+      timeout: 0, // Remove timeout here too
     });
 
-    // Add the auth token
     const token = localStorage.getItem("token");
     if (token) {
       customInstance.defaults.headers.common[
@@ -326,7 +450,7 @@ export const documentService = {
 
   getOriginalDocument: (documentId) => {
     return axiosInstance.get(`/documents/${documentId}/original/`, {
-      responseType: "blob", // Important for handling binary files
+      responseType: "blob",
     });
   },
 
@@ -339,12 +463,13 @@ export const documentService = {
   getChatHistory: () => {
     return axiosInstance.get("/chat-history/", {
       params: {
-        limit: 50, // Optional: limit number of chats
+        limit: 50,
         include_messages: true,
         include_documents: true,
       },
     });
   },
+
   generateSummary: (documentIds, mainProjectId) => {
     return axiosInstance.post("/generate-document-summary/", {
       document_ids: documentIds,
@@ -376,8 +501,6 @@ export const documentService = {
       main_project_id: data.main_project_id,
     });
   },
-
-  
 };
 
 export const chatService = {
