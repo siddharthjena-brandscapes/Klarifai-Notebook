@@ -29,7 +29,8 @@ from .models import (
     UserAPITokens,
     ConversationMemoryBuffer,
     UserModulePermissions,
-    UserUploadPermissions
+    UserUploadPermissions,
+    SSOAllowedUser
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -286,6 +287,11 @@ class MicrosoftSSOCallbackView(APIView):
             logger.error("No email found in user info")
             return None
        
+        #  Check against whitelist
+        if not SSOAllowedUser.objects.filter(email=email).exists():
+            logger.warning(f"Unauthorized SSO attempt by {email}")
+            return None
+       
         try:
             # Get existing user
             user = User.objects.get(email=email)
@@ -314,13 +320,13 @@ class MicrosoftSSOCallbackView(APIView):
             user.set_unusable_password()
             user.save()
            
-            # Create empty API tokens record for SSO users
-            UserAPITokens.objects.create(
-                user=user,
-                huggingface_token='',
-                gemini_token='',
-                llama_token=''
-            )
+            # REMOVE THIS - Let the signal handle it automatically
+            # UserAPITokens.objects.create(
+            #     user=user,
+            #     huggingface_token='',
+            #     gemini_token='',
+            #     llama_token=''
+            # )
            
             logger.info(f"Created new user: {email}")
            

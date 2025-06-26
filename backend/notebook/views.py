@@ -9833,3 +9833,356 @@ class AdminNotebookUserStatsView(APIView):
             })
  
         return Response({'user_stats': stats}, status=200)        
+
+
+
+class GenerateIdeaContextView(APIView):
+    """
+    API endpoint to extract structured idea generation parameters
+    from documents or query results.
+    """
+   
+    def post(self, request):
+        user = request.user
+        document_id = request.data.get('document_id')
+        query = request.data.get('query')
+        main_project_id = request.data.get('main_project_id')
+       
+        # Validate input - need either document_id or query
+        if not document_id and not query:
+            return Response({
+                'error': 'Either document_id or query parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+           
+        try:
+            # Case 1: Using Document ID - fetch existing parameters or extract new ones
+            if document_id:
+                document = get_object_or_404(Document, id=document_id, user=user)
+                
+                # Get document name without extension
+                document_name_no_ext = self.remove_file_extension(document.filename)
+                
+                # Generate a unique project name - handle the case when main_project_id is None
+                suggested_project_name = f"Ideas from {document_name_no_ext}"
+                if main_project_id:
+                    try:
+                        suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
+                    except Exception as e:
+                        # Log the error but continue with the default name
+                        print(f"Error generating unique project name: {str(e)}")
+               
+                try:
+                    # Check if we already have parameters stored
+                    processed_index = ProcessedIndex.objects.get(document=document)
+                   
+                    # If parameters exist, return them
+                    if processed_index.idea_parameters:
+                        return Response({
+                            'document_id': document_id,
+                            'document_name': document.filename,
+                            'document_name_no_ext': document_name_no_ext,
+                            'idea_parameters': processed_index.idea_parameters,
+                            'suggested_project_name': suggested_project_name
+                        })
+                   
+                    # If no parameters yet, extract them from the document
+                    index_file = processed_index.faiss_index
+                    metadata_file = processed_index.metadata
+                    
+                    # First check if the document has a markdown path (LlamaParse document)
+                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                        # This is a LlamaParse document, read the markdown content directly
+                        try:
+                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                                full_text = f.read()
+                                
+                            # Extract parameters from markdown content
+                            idea_params = self.extract_idea_parameters(full_text)
+                            
+                            # Save the parameters for future use
+                            processed_index.idea_parameters = idea_params
+                            processed_index.save()
+                            
+                            return Response({
+                                'document_id': document_id,
+                                'document_name': document.filename,
+                                'document_name_no_ext': document_name_no_ext,
+                                'idea_parameters': idea_params,
+                                'suggested_project_name': suggested_project_name
+                            })
+                        except Exception as e:
+                            print(f"Error reading markdown file: {str(e)}")
+                            # Continue with FAISS approach as fallback
+                   
+                    # Load index and metadata
+                    index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
+                    
+                    if not chunks:
+                        return Response({
+                            'error': 'No content found in the document'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                   
+                    # Extract parameters from document content
+                    full_text = " ".join([chunk.get('text', '') for chunk in chunks])
+                    idea_params = self.extract_idea_parameters(full_text, chunks)
+                   
+                    # Save the parameters for future use
+                    processed_index.idea_parameters = idea_params
+                    processed_index.save()
+
+                    if main_project_id:
+                        update_project_timestamp(main_project_id, user)
+            
+                   
+                    return Response({
+                        'document_id': document_id,
+                        'document_name': document.filename,
+                        'document_name_no_ext': document_name_no_ext,
+                        'idea_parameters': idea_params,
+                        'suggested_project_name': suggested_project_name
+                    })
+                   
+                except ProcessedIndex.DoesNotExist:
+                    return Response({
+                        'error': 'Document has not been processed yet'
+                    }, status=status.HTTP_404_NOT_FOUND)
+           
+            # Case 2: Using Query - search across documents and extract from relevant chunks
+            else:
+                # Get active/selected document
+                active_doc_id = request.session.get('active_document_id')
+                if not active_doc_id:
+                    return Response({
+                        'error': 'No active document selected'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+               
+                document = get_object_or_404(Document, id=active_doc_id, user=user)
+                processed_index = get_object_or_404(ProcessedIndex, document=document)
+                
+                # Get document name without extension
+                document_name_no_ext = self.remove_file_extension(document.filename)
+                
+                # Generate a unique project name - handle the case when main_project_id is None
+                suggested_project_name = f"Ideas from {document_name_no_ext}"
+                if main_project_id:
+                    try:
+                        suggested_project_name = self.generate_unique_project_name(document_name_no_ext, main_project_id)
+                    except Exception as e:
+                        # Log the error but continue with the default name
+                        print(f"Error generating unique project name: {str(e)}")
+                
+                # First check if the document has a markdown path (LlamaParse document)
+                if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                    # This is a LlamaParse document, read the markdown content directly
+                    try:
+                        with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                            full_text = f.read()
+                            
+                        # Extract parameters from markdown content
+                        idea_params = self.extract_idea_parameters(query, None, full_text)
+                        
+                        return Response({
+                            'document_id': active_doc_id,
+                            'document_name': document.filename,
+                            'document_name_no_ext': document_name_no_ext,
+                            'query': query,
+                            'idea_parameters': idea_params,
+                            'suggested_project_name': suggested_project_name
+                        })
+                    except Exception as e:
+                        print(f"Error reading markdown file: {str(e)}")
+                        # Continue with FAISS approach as fallback
+               
+                # Load index and metadata for FAISS approach
+                index_file = processed_index.faiss_index
+                metadata_file = processed_index.metadata
+                index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
+               
+                # Get embedding for query
+                query_embedding = self.get_query_embedding(query)
+               
+                # Search for relevant chunks
+                relevant_chunks = self.search_faiss_index(index, chunks, query_embedding, k=5)
+               
+                # Extract parameters from relevant chunks
+                idea_params = self.extract_idea_parameters(query, relevant_chunks)
+
+                if main_project_id:
+                    update_project_timestamp(main_project_id, user)
+            
+               
+                return Response({
+                    'document_id': active_doc_id,
+                    'document_name': document.filename,
+                    'document_name_no_ext': document_name_no_ext,
+                    'query': query,
+                    'idea_parameters': idea_params,
+                    'suggested_project_name': suggested_project_name
+                })
+               
+        except Exception as e:
+            print(f"Error generating idea context: {str(e)}")
+            return Response({
+                'error': str(e),
+                'detail': 'An error occurred while generating idea context'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def remove_file_extension(self, filename):
+        """
+        Remove file extension from filename
+        """
+        import os
+        return os.path.splitext(filename)[0]
+    
+    def generate_unique_project_name(self, document_name, main_project_id):
+        """
+        Generate a unique project name based on document name,
+        adding (1), (2), etc. if needed to avoid duplicates
+        """
+        from ideaGen.models import Project
+        
+        base_name = f"Ideas from {document_name}"
+        project_name = base_name
+        counter = 1
+        
+        # Check for existing projects with this name in the main project
+        while Project.objects.filter(
+            name=project_name,
+            main_project_id=main_project_id
+        ).exists():
+            # Increment counter and update name
+            project_name = f"{base_name} ({counter})"
+            counter += 1
+            
+        return project_name
+   
+    def load_faiss_index_from_paths(self, index_file, metadata_file):
+        """Load FAISS index and metadata from file paths"""
+        import faiss
+        import pickle
+       
+        try:
+            index = faiss.read_index(index_file)
+            with open(metadata_file, "rb") as f:
+                chunks = pickle.load(f)
+            return index, chunks
+        except Exception as e:
+            print(f"Error loading FAISS index: {str(e)}")
+            return None, []
+   
+    def get_query_embedding(self, query):
+        """Get embedding for the query"""
+        from openai import OpenAI
+        client = OpenAI()  # Initialize the client
+       
+        try:
+            response = client.embeddings.create(
+                input=[query],
+                model="text-embedding-3-small"
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            print(f"Error getting embedding for query: {str(e)}")
+            raise
+   
+    def search_faiss_index(self, index, chunks, query_embedding, k=5):
+        """Search FAISS index for relevant chunks"""
+        import numpy as np
+       
+        # Check if index is None
+        if index is None:
+            return []
+            
+        # Convert embedding to numpy array
+        query_vector = np.array([query_embedding]).astype('float32')
+       
+        # Search index
+        distances, indices = index.search(query_vector, k=k)
+       
+        # Get relevant chunks
+        results = []
+        for i in indices[0]:
+            if i < len(chunks):
+                results.append(chunks[i])
+       
+        return results
+   
+    def extract_idea_parameters(self, context, relevant_chunks=None, full_text=None):
+        """
+        Extract structured parameters for the Idea Generator
+       
+        Args:
+            context (str): Either full document content or query
+            relevant_chunks (list, optional): List of relevant chunks from search
+            full_text (str, optional): For LlamaParse documents, the full markdown text
+           
+        Returns:
+            dict: Structured parameters for idea generation
+        """
+        from openai import OpenAI
+        client = OpenAI()  # Initialize the client
+        import json
+       
+        try:
+            # Determine extraction context source
+            if full_text:
+                # If we have full text (e.g., from markdown), use that
+                extraction_context = full_text
+            elif relevant_chunks and len(relevant_chunks) > 0:
+                # If relevant chunks are provided, use them for extraction context
+                extraction_context = "\n\n".join([chunk.get('text', '') for chunk in relevant_chunks])
+            else:
+                # If no chunks available, use the context directly
+                extraction_context = context
+               
+            # Create extraction prompt
+            extraction_prompt = f"""
+            Extract the following key parameters from the provided context.
+            If a parameter isn't explicitly mentioned, infer it from context or leave it blank.
+           
+            Context:
+            {extraction_context}
+           
+            Extract these parameters:
+            - Brand_Name: The company or product brand mentioned
+            - Category: The product category or market area
+            - Concept: The main idea, campaign, or product concept
+            - Benefits: Key benefits or value propositions (list up to 3)
+            - RTB: Reason to Believe - evidence supporting the benefits (list up to 3)
+            - Ingredients: Key ingredients or components (if applicable)
+            - Features: Notable product/service features (list up to 3)
+            - Theme: Overall theme or tone
+            - Demographics: Target audience demographics
+           
+            Format the response as a valid JSON object with these fields.
+            """
+           
+            # Call LLM to extract parameters
+            response = client.chat.completions.create(
+                model="gpt-4o",  
+                messages=[
+                    {"role": "system", "content": "You are a specialist in extracting structured information from documents."},
+                    {"role": "user", "content": extraction_prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+           
+            # Parse JSON response
+            extracted_params = json.loads(response.choices[0].message.content)
+           
+            return extracted_params
+       
+        except Exception as e:
+            print(f"Error extracting idea parameters: {str(e)}")
+            # Return empty structure if extraction fails
+            return {
+                "Brand_Name": "",
+                "Category": "",
+                "Concept": "",
+                "Benefits": "",
+                "RTB": "",
+                "Ingredients": "",
+                "Features": "",
+                "Theme": "",
+                "Demographics": ""
+            }

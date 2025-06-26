@@ -210,6 +210,9 @@ function App() {
  const [categoriesLoading, setCategoriesLoading] = useState(false);
  const [expandedDescriptions, setExpandedDescriptions] = useState(new Set());
 
+ const [newCategoryName, setNewCategoryName] = useState("");
+const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+
   // Keep a fallback for when user has no categories
   const defaultCategories = [
     // "Business",
@@ -220,6 +223,31 @@ function App() {
     // "Other",
   ];
 
+  const handleCreateCategory = async () => {
+  if (!newCategoryName.trim()) {
+    setError("Please enter a category name");
+    return;
+  }
+
+  try {
+    const response = await adminService.createUserCategory({ name: newCategoryName });
+    if (response.status === 'success') {
+      // Refresh categories
+      await fetchUserCategories();
+      setNewCategoryName("");
+      setShowNewCategoryInput(false);
+      // Optionally auto-select the new category
+      setProjectData(prev => ({
+        ...prev,
+        category: [...prev.category, newCategoryName]
+      }));
+    } else {
+      setError(response.message || "Failed to create category");
+    }
+  } catch (err) {
+    setError(err.message || "Failed to create category");
+  }
+};
 
   const fetchUserCategories = async () => {
     setCategoriesLoading(true);
@@ -425,6 +453,10 @@ useEffect(() => {
     }
   };
 
+
+
+
+  
   const handleModuleToggle = (moduleId) => {
     const selectedModule = modules.find((m) => m.id === moduleId);
 
@@ -1747,29 +1779,71 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
           {/* Category selector */}
          {/* Category selector - REPLACE the entire category selection with this */}
 <div className="space-y-4">
-  <label className="block text-sm font-medium text-emerald-950 dark:text-gray-200 mb-2">
-    Categories {categoriesLoading && <span className="text-xs text-gray-500">(Loading...)</span>}
-  </label>
+  <div className="flex items-center justify-between">
+    <label className="block text-sm font-medium text-emerald-950 dark:text-gray-200">
+      Categories {categoriesLoading && <span className="text-xs text-gray-500">(Loading...)</span>}
+    </label>
+    
+    {!showNewCategoryInput && (
+      <button
+        type="button"
+        onClick={() => setShowNewCategoryInput(true)}
+        className="px-3 py-1.5 text-sm bg-[#a68a70]/20 hover:bg-[#a68a70]/30 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 text-[#5e4636] dark:text-emerald-300 rounded-lg transition-colors flex items-center"
+      >
+        <Plus className="w-4 h-4 mr-1" />
+        Add New
+      </button>
+    )}
+  </div>
   
-  <MultiSelectDropdown
-    options={userCategories.length > 0 ? userCategories : defaultCategories}
-    selected={projectData.category}
-    onChange={(newCategories) => setProjectData(prev => ({
-      ...prev,
-      category: newCategories
-    }))}
-    placeholder="Select categories..."
-    disabled={categoriesLoading}
-  />
-  
-  {/* Show message if user has custom categories */}
-  {userCategories.length > 0 && (
-    <p className="text-xs text-gray-600 dark:text-gray-400">
-      Categories assigned by admin
-    </p>
-  )}
-</div>
-          
+  <div className="space-y-3">
+    <MultiSelectDropdown
+      options={userCategories.length > 0 ? userCategories : defaultCategories}
+      selected={projectData.category}
+      onChange={(newCategories) => setProjectData(prev => ({
+        ...prev,
+        category: newCategories
+      }))}
+      placeholder="Select categories..."
+      disabled={categoriesLoading}
+    />
+    
+    {showNewCategoryInput && (
+      <div className="p-4 bg-gray-50/50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Create New Category
+          </h4>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="Enter category name"
+              className="flex-1 px-3 py-2 text-sm bg-white dark:bg-white/5 border border-[#d6cbbf] dark:border-gray-700/30 rounded-lg focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:outline-none"
+              autoFocus
+            />
+            <button
+              onClick={handleCreateCategory}
+              className="px-4 py-2 text-sm bg-[#556052] hover:bg-[#556052]/80 dark:bg-emerald-600 dark:hover:bg-emerald-600/80 text-white rounded-lg transition-colors font-medium"
+            >
+              Create
+            </button>
+            <button
+              onClick={() => {
+                setShowNewCategoryInput(false);
+                setNewCategoryName("");
+              }}
+              className="px-4 py-2 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+</div>  
       {/* Module selection */}
       <div>
         <h3 className="text-xl font-semibold text-[#0a3b25] dark:text-white mb-4">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { adminService, documentService,adminNotebookServiceNB } from "../utils/axiosConfig";
 import {
   FaUserPlus,
@@ -25,6 +25,9 @@ import {
   FaEye,
   FaChevronDown,
   FaChevronUp,
+  FaUser,
+  FaSearch,
+  FaGlobe,
 } from "react-icons/fa";
 import Header from "../components/dashboard/Header";
 import { toast } from "react-toastify";
@@ -1113,7 +1116,56 @@ const fetchNotebookUserStats = async () => {
     </div>
   );
 
-  const CategoryManagementSection = () => (
+const CategoryManagementSection = () => {
+  const [expandedUsers, setExpandedUsers] = useState(new Set());
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Group categories by username and separate global categories
+  const { globalCategories, userCategories } = useMemo(() => {
+    const global = categories.filter(cat => cat.is_global);
+    const user = categories.filter(cat => !cat.is_global);
+    
+    const grouped = user.reduce((acc, category) => {
+      const username = category.username;
+      if (!acc[username]) {
+        acc[username] = [];
+      }
+      acc[username].push(category);
+      return acc;
+    }, {});
+
+    return { globalCategories: global, userCategories: grouped };
+  }, [categories]);
+
+  // Filter users based on search term
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return Object.entries(userCategories);
+    
+    return Object.entries(userCategories).filter(([username, cats]) => 
+      username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cats.some(cat => cat.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [userCategories, searchTerm]);
+
+  const toggleUserExpansion = (username) => {
+    const newExpanded = new Set(expandedUsers);
+    if (newExpanded.has(username)) {
+      newExpanded.delete(username);
+    } else {
+      newExpanded.add(username);
+    }
+    setExpandedUsers(newExpanded);
+  };
+
+  const expandAll = () => {
+    setExpandedUsers(new Set(Object.keys(userCategories)));
+  };
+
+  const collapseAll = () => {
+    setExpandedUsers(new Set());
+  };
+
+  return (
     <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
       <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
         <div className="flex items-center justify-between">
@@ -1138,10 +1190,40 @@ const fetchNotebookUserStats = async () => {
       </div>
 
       <div className="p-6">
-        <div className="space-y-4">
-          <p className="text-[#5e4636] dark:text-gray-300">
-            Organize and manage content categories
-          </p>
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <p className="text-[#5e4636] dark:text-gray-300">
+              Organize and manage content categories
+            </p>
+            
+            {/* Search and Controls */}
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <div className="relative">
+                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#5e4636] dark:text-gray-400" size={14} />
+                <input
+                  type="text"
+                  placeholder="Search users or categories..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-[#e3d5c8] dark:border-gray-700 rounded-lg bg-white/60 dark:bg-gray-800/60 text-[#0a3b25] dark:text-gray-200 placeholder-[#5e4636] dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={expandAll}
+                  className="px-3 py-2 text-xs bg-[#a55233]/10 hover:bg-[#a55233]/20 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 text-[#a55233] dark:text-emerald-400 rounded-lg transition-all"
+                >
+                  Expand All
+                </button>
+                <button
+                  onClick={collapseAll}
+                  className="px-3 py-2 text-xs bg-gray-200/60 hover:bg-gray-300/60 dark:bg-gray-700/60 dark:hover:bg-gray-600/60 text-[#5e4636] dark:text-gray-300 rounded-lg transition-all"
+                >
+                  Collapse All
+                </button>
+              </div>
+            </div>
+          </div>
 
           {loading ? (
             <div className="flex justify-center items-center py-8">
@@ -1151,58 +1233,180 @@ const fetchNotebookUserStats = async () => {
               </span>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {categories.map((category) => (
-                <div
-                  key={category.id}
-                  className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-4 border border-[#e3d5c8] dark:border-gray-700/50 hover:shadow-md transition-all"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <div className="w-10 h-10 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-purple-500 dark:to-pink-500 rounded-lg flex items-center justify-center">
-                          <FaTags className="text-white" size={16} />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400">
-                            {category.name}
-                          </h4>
-                          <p className="text-sm text-[#5a544a] dark:text-gray-400">
-                            Created by {category.username} •{" "}
-                            {new Date(category.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
+            <div className="space-y-4">
+              {/* Global Categories Section */}
+              {globalCategories.length > 0 && (
+                <div className="bg-gradient-to-r from-[#f9f4ef] to-[#f5e6d8] dark:from-gray-800/70 dark:to-gray-700/50 rounded-xl p-5 border-2 border-[#a55233]/30 dark:border-emerald-500/30 shadow-md">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                      <FaGlobe className="text-white" size={18} />
                     </div>
-
-                    <div className="flex space-x-2">
-                      <button
-                        className="p-2 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-lg transition-all"
-                        onClick={() => handleOpenEditCategoryModal(category)}
-                        title="Edit Category"
-                      >
-                        <FaEdit size={16} />
-                      </button>
-                      <button
-                        className="p-2 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                        onClick={() =>
-                          handleDeleteCategory(category.id, category.name)
-                        }
-                        title="Delete Category"
-                      >
-                        <FaTrash size={16} />
-                      </button>
+                    <div>
+                      <h4 className="font-bold text-[#0a3b25] dark:text-emerald-400 text-lg flex items-center">
+                        Global Categories
+                        <span className="ml-2 px-2 py-1 bg-[#a55233]/20 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
+                          {globalCategories.length}
+                        </span>
+                      </h4>
+                      <p className="text-sm text-[#5a544a] dark:text-gray-400">
+                        Available to all users
+                      </p>
                     </div>
                   </div>
+
+                  <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {globalCategories.map((category) => (
+                      <div
+                        key={category.id}
+                        className="bg-white/80 dark:bg-gray-900/60 rounded-lg p-4 border border-[#e8ddcc] dark:border-gray-600/40 hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <div className="w-8 h-8 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-lg flex items-center justify-center">
+                                <FaTags className="text-white" size={12} />
+                              </div>
+                              <div>
+                                <h5 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-sm">
+                                  {category.name}
+                                </h5>
+                                <p className="text-xs text-[#5a544a] dark:text-gray-500">
+                                  {new Date(category.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex space-x-1">
+                            <button
+                              className="p-1.5 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-md transition-all"
+                              onClick={() => handleOpenEditCategoryModal(category)}
+                              title="Edit Category"
+                            >
+                              <FaEdit size={12} />
+                            </button>
+                            <button
+                              className="p-1.5 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
+                              onClick={() => handleDeleteCategory(category.id, category.name)}
+                              title="Delete Category"
+                            >
+                              <FaTrash size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* User Categories Section */}
+              <div className="space-y-3">
+                {filteredUsers.length === 0 && searchTerm ? (
+                  <div className="text-center py-8 text-[#5e4636] dark:text-gray-400">
+                    <FaSearch className="mx-auto mb-3 text-3xl opacity-50" />
+                    <p>No categories found matching "{searchTerm}"</p>
+                  </div>
+                ) : (
+                  filteredUsers.map(([username, userCats]) => {
+                    const isExpanded = expandedUsers.has(username);
+                    
+                    return (
+                      <div
+                        key={username}
+                        className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg border border-[#e3d5c8] dark:border-gray-700/50 overflow-hidden transition-all duration-200 hover:shadow-md"
+                      >
+                        {/* Collapsible User Header */}
+                        <button
+                          onClick={() => toggleUserExpansion(username)}
+                          className="w-full flex items-center justify-between p-4 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50 transition-all"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-purple-500 dark:to-pink-500 rounded-full flex items-center justify-center">
+                              <FaUser className="text-white" size={16} />
+                            </div>
+                            <div className="text-left">
+                              <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400">
+                                {username}
+                              </h4>
+                              <p className="text-sm text-[#5a544a] dark:text-gray-400">
+                                {userCats.length} {userCats.length === 1 ? 'category' : 'categories'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2 py-1 bg-[#a55233]/10 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
+                              {userCats.length}
+                            </span>
+                            {isExpanded ? (
+                              <FaChevronUp className="text-[#5e4636] dark:text-gray-400" size={14} />
+                            ) : (
+                              <FaChevronDown className="text-[#5e4636] dark:text-gray-400" size={14} />
+                            )}
+                          </div>
+                        </button>
+
+                        {/* Expandable Categories */}
+                        {isExpanded && (
+                          <div className="px-4 pb-4 border-t border-[#e3d5c8] dark:border-gray-700/50">
+                            <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-4">
+                              {userCats.map((category) => (
+                                <div
+                                  key={category.id}
+                                  className="bg-white/60 dark:bg-gray-900/40 rounded-lg p-3 border border-[#e8ddcc] dark:border-gray-600/30 hover:shadow-md hover:scale-[1.02] transition-all duration-200"
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2 mb-2">
+                                        <div className="w-7 h-7 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-md flex items-center justify-center">
+                                          <FaTags className="text-white" size={10} />
+                                        </div>
+                                        <div>
+                                          <h5 className="font-medium text-[#0a3b25] dark:text-emerald-400 text-sm">
+                                            {category.name}
+                                          </h5>
+                                          <p className="text-xs text-[#5a544a] dark:text-gray-500">
+                                            {new Date(category.created_at).toLocaleDateString()}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex space-x-1">
+                                      <button
+                                        className="p-1 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded transition-all"
+                                        onClick={() => handleOpenEditCategoryModal(category)}
+                                        title="Edit Category"
+                                      >
+                                        <FaEdit size={11} />
+                                      </button>
+                                      <button
+                                        className="p-1 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded transition-all"
+                                        onClick={() => handleDeleteCategory(category.id, category.name)}
+                                        title="Delete Category"
+                                      >
+                                        <FaTrash size={11} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
     </div>
   );
-
+};
   return (
     <div className="bg-[#faf4ee] dark:bg-black min-h-screen text-[#5e4636] dark:text-white">
       <Header />
@@ -1906,7 +2110,7 @@ const fetchNotebookUserStats = async () => {
                     value={categoryFormData.user_id}
                     onChange={handleCategoryInputChange}
                     className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
-                    required
+                    
                   >
                     <option value="">Select a user</option>
                     {users.map((user) => (
@@ -1930,7 +2134,7 @@ const fetchNotebookUserStats = async () => {
                     placeholder="Enter category name"
                   />
                 </div>
-                <div className="mb-4">
+                {/* <div className="mb-4">
                   <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
                     Description
                   </label>
@@ -1941,7 +2145,7 @@ const fetchNotebookUserStats = async () => {
                     rows={3}
                     className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                   />
-                </div>
+                </div> */}
                 <div className="flex justify-end">
                   <button
                     type="button"

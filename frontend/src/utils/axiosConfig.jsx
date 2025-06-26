@@ -1165,6 +1165,19 @@ updateUserRightPanelPermissions: (userId, permissions) => {
         throw error;
       });
   },
+
+  createUserCategory: (categoryData) => {
+  return axiosInstance
+    .post("core/categories/create-user/", categoryData)
+    .then((response) => {
+      console.log("User service - create category response:", response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      console.error("User service - create category error:", error);
+      throw error;
+    });
+},
   
 };
 
@@ -1191,13 +1204,22 @@ export const documentServiceNB = {
     if (targetUserId) {
       formData.append("target_user_id", targetUserId);
     }
-  
-    return axiosInstance.post("notebook/upload-documents-NB/", formData, {
+    
+    // Enhanced config for long uploads
+    const enhancedConfig = {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      // Remove timeout - let server decide when to timeout
+      timeout: 0,
+      // Don't fail on server errors (5xx) - let them complete
+      validateStatus: function (status) {
+        return status < 500;
+      },
       ...config,
-    });
+    };
+    return axiosInstance.post("notebook/upload-documents-NB/", formData, enhancedConfig);
+     
   },
 
   //added new instance for youtube links
@@ -1229,7 +1251,7 @@ export const documentServiceNB = {
         ...axiosInstance.defaults.headers,
         "Content-Type": "multipart/form-data",
       },
-      timeout: 120000, // Longer timeout for large uploads (2 minutes)
+      timeout: 0, // Longer timeout for large uploads (2 minutes)
     });
 
     // Add the auth token
@@ -1291,6 +1313,12 @@ export const documentServiceNB = {
       main_project_id: projectId,
     });
   },
+
+   generateIdeaContext: (data) =>
+    axiosInstance.post("notebook/generate-idea-context-NB/", {
+      document_id: data.document_id,
+      main_project_id: data.main_project_id,
+    }),
 
   getOriginalDocument: (documentId) => {
     return axiosInstance.get(`notebook/documents-NB/${documentId}/original/`, {

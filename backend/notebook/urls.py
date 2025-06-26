@@ -22,7 +22,9 @@ from .views import ( DocumentUploadView,
     NoteManagementView,
     WebsiteLinkUploadView,
     PlainTextUploadView,
-    AdminNotebookUserStatsView
+    AdminNotebookUserStatsView,
+    GenerateIdeaContextView
+
 
 
 
@@ -36,6 +38,7 @@ urlpatterns = [
 
     # Document handling
     path('upload-documents-NB/', DocumentUploadView.as_view(), name='upload-documents'),
+     path('generate-idea-context-NB/', GenerateIdeaContextView.as_view(), name='generate-idea-context'),
  
     
     # Chat functionality

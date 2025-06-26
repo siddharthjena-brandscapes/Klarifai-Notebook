@@ -133,10 +133,10 @@ const DocumentProcessingLoader = ({
         </div>
         
         {/* Overall status text */}
-        <div className="flex justify-between text-sm mb-6">
+        {/* <div className="flex justify-between text-sm mb-6">
           <span className="text-[#5a544a] dark:text-gray-300">{getCompletionStatus()}</span>
           {/* <span className="text-gray-300 font-bold">{Math.round(safeProgress)}%</span> */}
-        </div>
+        {/* </div> */} 
 
         {/* Status message */}
         <div className="text-center mb-6">

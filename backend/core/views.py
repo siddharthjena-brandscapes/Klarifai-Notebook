@@ -16,6 +16,8 @@ import fitz  # PyMuPDF for PDF handling
 from pptx import Presentation
 import google.generativeai as genai
 from django.contrib.auth.models import User
+from django.db.models import Q
+
  
  
 @api_view(['POST'])
@@ -481,48 +483,37 @@ def update_project(request, project_id):
 
 
 
-
-
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
-def create_category_for_user(request):
-    """Admin creates a category for a specific user"""
+def create_category_by_user(request):
+    """Authenticated user creates their own personal category"""
     try:
-        # Only admin can create categories for users
-        if not request.user.username == 'admin':
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Permission denied'
-            }, status=403)
-            
         data = request.data
-        user_id = data.get('user_id')
         name = data.get('name')
-        
-        if not all([user_id, name]):
+ 
+        if not name:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Missing required fields: user_id and name'
+                'message': 'Missing required field: name'
             }, status=400)
-            
-        target_user = get_object_or_404(User, id=user_id)
-        
-        # Check if category already exists for this user
-        if Category.objects.filter(user=target_user, name=name).exists():
+ 
+        # Ensure this category name doesn't already exist for the user
+        if Category.objects.filter(user=request.user, name=name).exists():
             return JsonResponse({
                 'status': 'error',
-                'message': f'Category "{name}" already exists for this user'
+                'message': f'Category "{name}" already exists for your account'
             }, status=400)
-        
+ 
+        # Create category for current user
         category = Category.objects.create(
             name=name,
-            user=target_user
+            user=request.user
         )
-        
+ 
         return JsonResponse({
             'status': 'success',
-            'message': f'Category "{name}" created successfully for {target_user.username}',
+            'message': f'Category "{name}" created successfully',
             'category': {
                 'id': category.id,
                 'name': category.name,
@@ -531,7 +522,7 @@ def create_category_for_user(request):
                 'created_at': category.created_at.isoformat(),
             }
         })
-        
+ 
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -540,133 +531,188 @@ def create_category_for_user(request):
             'message': str(e)
         }, status=500)
 
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def create_category_for_user(request):
+    """Admin creates a category for a specific user or as a global category"""
+    try:
+        if request.user.username != 'admin':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Permission denied'
+            }, status=403)
+ 
+        data = request.data
+        name = data.get('name')
+        user_id = data.get('user_id')  # Optional
+ 
+        if not name:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Missing required field: name'
+            }, status=400)
+ 
+        target_user = None
+        if user_id:
+            target_user = get_object_or_404(User, id=user_id)
+ 
+        # Check if category already exists for this user or globally
+        if Category.objects.filter(user=target_user, name=name).exists():
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Category \"{name}\" already exists for this user'
+            }, status=400)
+ 
+        category = Category.objects.create(name=name, user=target_user)
+ 
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Category \"{name}\" created successfully for {target_user.username if target_user else "Global"}',
+            'category': {
+                'id': category.id,
+                'name': category.name,
+                'user_id': category.user.id if category.user else None,
+                'username': category.user.username if category.user else None,
+                'created_at': category.created_at.isoformat(),
+            }
+        })
+ 
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+ 
+ 
 @api_view(['PUT'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def update_category(request, category_id):
     """Admin updates a category"""
     try:
-        # Only admin can update categories
-        if not request.user.username == 'admin':
+        if request.user.username != 'admin':
             return JsonResponse({
                 'status': 'error',
                 'message': 'Permission denied'
             }, status=403)
-            
+ 
         category = get_object_or_404(Category, id=category_id)
         data = request.data
-        
-        # Update fields if provided
+ 
         if 'name' in data:
-            # Check if new name already exists for this user
+            # Check if a category with the same name already exists for the same user (or global)
             if Category.objects.filter(
-                user=category.user, 
+                user=category.user,
                 name=data['name']
             ).exclude(id=category_id).exists():
                 return JsonResponse({
                     'status': 'error',
-                    'message': f'Category "{data["name"]}" already exists for this user'
+                    'message': f"Category \"{data['name']}\" already exists for this user"
                 }, status=400)
+ 
             category.name = data['name']
-            
-
-            
+ 
         category.save()
-        
+ 
         return JsonResponse({
             'status': 'success',
             'message': 'Category updated successfully',
             'category': {
                 'id': category.id,
                 'name': category.name,
-
-                'user_id': category.user.id,
-                'username': category.user.username,
+                'user_id': category.user.id if category.user else None,
+                'username': category.user.username if category.user else 'Global',
                 'updated_at': category.updated_at.isoformat(),
+                'is_global': category.user is None,
             }
         })
-        
+ 
     except Exception as e:
         return JsonResponse({
             'status': 'error',
             'message': str(e)
         }, status=500)
-
+ 
+ 
 @api_view(['DELETE'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def delete_category(request, category_id):
     """Admin deletes a category"""
     try:
-        # Only admin can delete categories
-        if not request.user.username == 'admin':
+        if request.user.username != 'admin':
             return JsonResponse({
                 'status': 'error',
                 'message': 'Permission denied'
             }, status=403)
-            
+ 
         category = get_object_or_404(Category, id=category_id)
         category_name = category.name
-        username = category.user.username
-        
-        # Soft delete by setting is_active to False
+        username = category.user.username if category.user else 'Global'
+ 
+        # Soft delete
         category.is_active = False
         category.save()
-        
+ 
         return JsonResponse({
             'status': 'success',
-            'message': f'Category "{category_name}" deleted successfully for {username}'
+            'message': f'Category \"{category_name}\" deleted successfully for {username}'
         })
-        
+ 
     except Exception as e:
         return JsonResponse({
             'status': 'error',
             'message': str(e)
         }, status=500)
-
+ 
+ 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_all_user_categories(request):
-    """Admin gets all categories for all users"""
+    """Admin gets all categories, including global and user-specific"""
     try:
         # Only admin can access this
-        if not request.user.username == 'admin':
+        if request.user.username != 'admin':
             return JsonResponse({
                 'status': 'error',
                 'message': 'Permission denied'
             }, status=403)
-            
-        categories = Category.objects.filter(is_active=True).select_related('user')
-        
+ 
+        categories = Category.objects.filter(is_active=True).select_related('user').order_by('name')
+ 
         return JsonResponse({
             'status': 'success',
             'categories': [{
                 'id': category.id,
                 'name': category.name,
-                'user_id': category.user.id,
-                'username': category.user.username,
-                'user_email': category.user.email,
+                'user_id': category.user.id if category.user else None,
+                'username': category.user.username if category.user else 'Global',
+                'user_email': category.user.email if category.user else 'N/A',
                 'created_at': category.created_at.isoformat(),
                 'updated_at': category.updated_at.isoformat(),
+                'is_global': category.user is None,
             } for category in categories]
         })
-        
+ 
     except Exception as e:
         return JsonResponse({
             'status': 'error',
             'message': str(e)
         }, status=500)
-    
-
+ 
+   
+ 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_user_categories(request, user_id=None):
-    """Get categories for a specific user or current user"""
+    """Get categories for a specific user or current user, including global ones"""
     try:
         if user_id:
-            # Admin accessing another user's categories
             if not request.user.username == 'admin':
                 return JsonResponse({
                     'status': 'error',
@@ -674,26 +720,29 @@ def get_user_categories(request, user_id=None):
                 }, status=403)
             target_user = get_object_or_404(User, id=user_id)
         else:
-            # User accessing their own categories
             target_user = request.user
-            
-        categories = Category.objects.filter(user=target_user, is_active=True)
-        
+ 
+        categories = Category.objects.filter(
+            Q(user=target_user) | Q(user__isnull=True),
+            is_active=True
+        ).order_by('name')
+ 
         return JsonResponse({
             'status': 'success',
             'categories': [{
                 'id': category.id,
                 'name': category.name,
+                'is_global': category.user is None,
                 'created_at': category.created_at.isoformat(),
                 'updated_at': category.updated_at.isoformat(),
             } for category in categories]
         })
+ 
     except Exception as e:
         return JsonResponse({
             'status': 'error',
             'message': str(e)
         }, status=500)
-    
 
 @api_view(['PATCH'])
 @authentication_classes([TokenAuthentication])

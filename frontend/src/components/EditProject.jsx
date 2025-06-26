@@ -484,6 +484,7 @@ const handleSubmit = async (e) => {
                   )}
                 </div>
               </div>
+              
 {/* Category selector - REPLACE the entire category selection with this */}
 <div className="space-y-4">
   <label className="block text-sm font-medium text-[#5e4636] dark:text-gray-200 mb-2">
@@ -501,7 +502,54 @@ const handleSubmit = async (e) => {
     disabled={categories.length === 0}
   />
 </div>
-            </div>
+
+ {/* Module selection */}
+                <div>
+                  <h3 className="text-xl font-medium text-[#0a3b25] dark:text-white mb-4">
+                    Available Modules
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {modules.map((module) => (
+                      <div
+                        key={module.id}
+                        className={`p-4 rounded-lg border transition-all duration-300 ${
+                          module.active
+                            ? "cursor-pointer " +
+                              (projectData.selected_modules.includes(module.id)
+                                ? "bg-[#556052]/10 border-[#556052] dark:bg-emerald-600/20 dark:border-emerald-500"
+                                : "bg-white/80 border-[#d6cbbf] dark:bg-white/5 dark:border-gray-300/20 hover:bg-[#f5e6d8] dark:hover:bg-white/10")
+                            : "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
+                        }`}
+                        onClick={() => {
+                          handleModuleToggle(module.id);
+                          if (error && error.includes("module")) {
+                            setError(null);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          {module.active ? (
+                            <module.icon className="w-6 h-6 text-[#a55233] dark:text-emerald-400" />
+                          ) : (
+                            <Lock className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+                          )}
+                          <div>
+                            <h4 className="font-medium text-[#0a3b25] dark:text-white">
+                              {module.name}
+                            </h4>
+                            <p className="text-sm text-[#5e4636] dark:text-gray-300">
+                              {module.active
+                                ? module.description
+                                : "This module is currently locked. Coming soon!"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+           
 
             {/* Submit buttons */}
             <div className="flex justify-end space-x-4">

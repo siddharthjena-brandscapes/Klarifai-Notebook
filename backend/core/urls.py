@@ -21,6 +21,8 @@ urlpatterns = [
     path('categories/create/', views.create_category_for_user, name='create_category'),
     path('categories/<int:category_id>/update/', views.update_category, name='update_category'),
     path('categories/<int:category_id>/delete/', views.delete_category, name='delete_category'),
+    path('categories/create-user/', views.create_category_by_user, name='create_category_by_user'),
+
 
      path('admin/users/', views.get_all_users_admin, name='get_all_users_admin'),
    
