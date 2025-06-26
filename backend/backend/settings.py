@@ -241,6 +241,23 @@ LOGGING = {
         },
     },
 }
+
+AZURE_AD = {
+    'CLIENT_ID': 'ea731533-1633-4bef-9cce-214cebf756ec',
+    'CLIENT_SECRET': 'iv.8Q~bWSRQ34SSCW75liVGOY5V-nJX1aHwoldna',
+    'AUTHORITY': 'https://login.microsoftonline.com/289e3141-3166-4730-9a0c-b9ba490d78cd',
+    'REDIRECT_URI': 'http://localhost:8000/api/get_token/', # Updated redirect URI
+    'SCOPE': ['User.Read'],
+}
+ 
+FRONTEND_URL = 'http://localhost:5173'
+ 
+# Session configuration for OAuth state management
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 1800  # 30 minutes
+SESSION_SAVE_EVERY_REQUEST = True
+
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 MEDIA_ROOT_PATH = os.path.join(BASE_DIR, 'media')
 PROFILE_PICTURES_PATH = os.path.join(MEDIA_ROOT_PATH, 'profile_pictures')

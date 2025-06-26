@@ -7,7 +7,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [huggingfaceToken, setHuggingfaceToken] = useState('');
+    const [nebiusToken, setNebiusToken] = useState('');
     const [geminiToken, setGeminiToken] = useState('');
     const [llamaToken, setLlamaToken] = useState('');
     const [error, setError] = useState('');
@@ -22,7 +22,7 @@ const SignupForm = ({ onSuccess = () => {} }) => {
                 username,
                 email,
                 password,
-                huggingface_token: huggingfaceToken,
+                nebius_token: nebiusToken,
                 gemini_token: geminiToken,
                 llama_token: llamaToken
             });
@@ -103,12 +103,12 @@ const SignupForm = ({ onSuccess = () => {} }) => {
             </div>
 
             <div>
-                <label className="block text-sm font-medium dark:text-gray-600">Hugging Face API Token</label>
+                <label className="block text-sm font-medium dark:text-gray-600">Nebius API Token</label>
                 <input
                     type="text" 
-                    placeholder="Hugging Face API Token" 
-                    value={huggingfaceToken} 
-                    onChange={(e) => setHuggingfaceToken(e.target.value)}
+                    placeholder="Nebius API Token" 
+                    value={nebiusToken} 
+                    onChange={(e) => setNebiusToken(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300"
                 />
             </div>

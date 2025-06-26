@@ -22,6 +22,7 @@ import ComparisonModeToggle from "./IdeaGenerator/ComparisonModeToggle";
 import IdeaTitle from "./IdeaGenerator/IdeaTitle";
 import { useLocation } from 'react-router-dom';
 import { ThemeContext } from "../context/ThemeContext";
+import CircularProgressButton from "../components/CircularProgressButton";
 
 
 
@@ -112,7 +113,7 @@ const IdeaForm = () => {
   
   // Add a state to track if the form has been initialized from document
   const [initializedFromDoc, setInitializedFromDoc] = useState(false);
-
+  const [generationProgress, setGenerationProgress] = useState(0);
   // Add additional state to track project loading source
   const [projectSource, setProjectSource] = useState(null);
   const { theme } = useContext(ThemeContext);
@@ -807,6 +808,7 @@ const handleUpdateIdea = async (ideaId) => {
     setIsLoading(true);
     setIsGenerating(true);
     setError(null);
+    setGenerationProgress(0); // Reset progress
 
     const activeFields = Object.entries(dynamicFields)
       .filter(([fieldId]) => fieldActivation[fieldId] !== false)
@@ -827,15 +829,25 @@ const handleUpdateIdea = async (ideaId) => {
     };
 
     try {
+      // Create a progress interval to simulate progress
+      const progressInterval = setInterval(() => {
+        setGenerationProgress(prev => {
+          // Don't go beyond 90% until we're done
+          return prev < 90 ? prev + 10 : prev;
+        });
+      }, 500);
+
       const response = await ideaService.generateIdeas(submissionData);
 
       if (response.data.success) {
         const { ideas: newIdeas, stored_data } = response.data;
-
-        // Use the set number from the server response
         const currentSetNumber = stored_data.current_set;
 
         const ideasWithMetadata = (newIdeas || []).map((idea, index) => {
+          // Calculate progress per idea (for better UX)
+          const ideaProgress = Math.min(90 + Math.round(((index + 1) / newIdeas.length) * 10), 99);
+          setGenerationProgress(ideaProgress);
+
           const metadata = {
             baseData: {
               product: stored_data.product,
@@ -864,6 +876,10 @@ const handleUpdateIdea = async (ideaId) => {
           };
         });
 
+        // Complete the progress
+        setGenerationProgress(100);
+        clearInterval(progressInterval);
+
         // Update metadata state
         const newMetadata = ideasWithMetadata.reduce((acc, idea) => {
           acc[idea.idea_id] = idea.metadata;
@@ -883,7 +899,7 @@ const handleUpdateIdea = async (ideaId) => {
                 (existingIdea) => existingIdea.idea_id === newIdea.idea_id
               )
           );
-          const combinedIDeas = [...uniqueNewIdeas, ...prevIdeas]
+          const combinedIDeas = [...uniqueNewIdeas, ...prevIdeas];
           return combinedIDeas;
         });
 
@@ -897,13 +913,16 @@ const handleUpdateIdea = async (ideaId) => {
         setHasFormChanged(false);
       } else {
         setError(response.data.error || "Failed to generate ideas");
+        clearInterval(progressInterval);
       }
     } catch (err) {
       setError(err.response?.data?.error || "Failed to connect to the server");
       console.error("Generation error:", err);
+      clearInterval(progressInterval);
     } finally {
       setIsLoading(false);
       setIsGenerating(false);
+      setTimeout(() => setGenerationProgress(0), 1000); // Reset after a delay
     }
   };
 
@@ -1865,24 +1884,19 @@ const fillFormWithDocParams = () => {
   
                   {/* Generate Button */}
                   <div className="flex justify-center pt-6 space-x-4">
-                    <button
-                      type="submit"
-                      disabled={!hasFormChanged}
-                      className={`px-12 py-3 text-lg rounded-lg transition-all ${
-                        !hasFormChanged
-                          ? "bg-[#d6cbbf] text-[#5e4636] dark:opacity-50 dark:cursor-not-allowed dark:bg-gray-600 dark:text-gray-400"
-                          : "bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-gradient-to-r dark:from-blue-500 dark:to-emerald-500 dark:hover:from-blue-600 dark:hover:to-emerald-600 dark:text-white"
-                      }`}
-                    >
-                      {isLoading ? (
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner mr-2"></div>
-                          Generating...
-                        </div>
-                      ) : (
-                        "Generate Ideas"
-                      )}
-                    </button>
+                    <CircularProgressButton
+                        type="submit"
+                        disabled={!hasFormChanged || isLoading}
+                        isLoading={isLoading}
+                        progress={generationProgress}
+                        className={`px-12 py-3 text-lg rounded-lg transition-all ${
+                          !hasFormChanged
+                            ? "bg-[#d6cbbf] text-[#5e4636] dark:opacity-50 dark:cursor-not-allowed dark:bg-gray-600 dark:text-gray-400"
+                            : "bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-gradient-to-r dark:from-blue-500 dark:to-emerald-500 dark:hover:from-blue-600 dark:hover:to-emerald-600 dark:text-white"
+                        }`}
+                      >
+                        Generate Ideas
+                      </CircularProgressButton>
                     {ideas.length > 0 && (
                       <button
                         type="button"

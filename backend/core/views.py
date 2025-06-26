@@ -805,7 +805,7 @@ def get_all_users_admin(request):
                 'username': user.username,
                 'email': user.email,
                 'api_tokens': {
-                    'huggingface_token': api_tokens.huggingface_token or '',
+                    'nebius_token': api_tokens.nebius_token or '',
                     'gemini_token': api_tokens.gemini_token or '',
                     'llama_token': api_tokens.llama_token or '',
                 },

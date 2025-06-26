@@ -9790,3 +9790,46 @@ def get_mindmap_data(request, mindmap_id):
             'error': f'Failed to process mindmap: {str(e)}',
             'success': False
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class AdminNotebookUserStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+ 
+    def get(self, request):
+        # Only allow admin user
+        if not request.user.username == 'admin':
+            return Response({'error': 'Unauthorized'}, status=403)
+ 
+        users = User.objects.all()
+        stats = []
+ 
+        for user in users:
+            # Get all active documents for this user
+            docs = Document.objects.filter(user=user)
+            doc_stats = []
+            for doc in docs:
+                # Count user questions for this document
+                # Find all conversations (ChatHistory) that reference this doc
+                # (Assuming you have a ManyToMany from ChatHistory to Document as 'documents')
+                from .models import ChatHistory
+                conversations = ChatHistory.objects.filter(user=user, documents=doc)
+                question_count = ChatMessage.objects.filter(
+                    chat_history__in=conversations,
+                    role='user'
+                ).count()
+                doc_stats.append({
+                    'document_id': doc.id,
+                    'filename': doc.filename,
+                    'questions_asked': question_count,
+                })
+ 
+            # Count total document uploads
+            doc_upload_count = docs.count()
+ 
+            stats.append({
+                'user_id': user.id,
+                'username': user.username,
+                'document_upload_count': doc_upload_count,
+                'documents': doc_stats,
+            })
+ 
+        return Response({'user_stats': stats}, status=200)        

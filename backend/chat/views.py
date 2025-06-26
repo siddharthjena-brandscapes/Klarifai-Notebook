@@ -77,11 +77,12 @@ from bs4 import BeautifulSoup, NavigableString
 from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from rest_framework.response import Response
 import logging
 from django.db.models import F
 import json
+from django.shortcuts import redirect
+from rest_framework.permissions import AllowAny
+from msal import ConfidentialClientApplication
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ class SignupView(APIView):
         username = request.data.get('username')
         email = request.data.get('email')
         password = request.data.get('password')
-        huggingface_token = request.data.get('huggingface_token', '')
+        nebius_token = request.data.get('nebius_token', '')
         gemini_token = request.data.get('gemini_token', '')
         llama_token = request.data.get('llama_token', '')  # New field for Llama API token
 
@@ -152,7 +153,7 @@ class SignupView(APIView):
             # Create API tokens record
             UserAPITokens.objects.create(
                 user=user,
-                huggingface_token=huggingface_token,
+                nebius_token=nebius_token,
                 gemini_token=gemini_token,
                 llama_token=llama_token  # Save the Llama API token
             )
@@ -201,6 +202,203 @@ class LoginView(APIView):
         return Response({
             'error': 'Invalid credentials'
         }, status=status.HTTP_401_UNAUTHORIZED)
+    
+
+
+class MicrosoftSSOView(APIView):
+    """Single view to handle Microsoft SSO - direct redirect approach"""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+   
+    def get_msal_app(self):
+        return ConfidentialClientApplication(
+            client_id=settings.AZURE_AD['CLIENT_ID'],
+            authority=settings.AZURE_AD['AUTHORITY'],
+            client_credential=settings.AZURE_AD['CLIENT_SECRET']
+        )
+   
+    def get(self, request):
+        """Initiate Microsoft SSO - redirect to Microsoft login"""
+        try:
+            msal_app = self.get_msal_app()
+           
+            # Generate state for security
+            state = str(uuid.uuid4())
+            request.session['oauth_state'] = state
+           
+            # Use the correct redirect URI
+            auth_url = msal_app.get_authorization_request_url(
+                scopes=settings.AZURE_AD['SCOPE'],
+                state=state,
+                redirect_uri=settings.AZURE_AD['REDIRECT_URI']
+            )
+           
+            logger.info(f"Redirecting to Microsoft auth URL: {auth_url}")
+            return redirect(auth_url)
+           
+        except Exception as e:
+            logger.error(f"Microsoft SSO initiation error: {str(e)}")
+            return redirect(f"{settings.FRONTEND_URL}/login?error=sso_failed")
+ 
+ 
+class MicrosoftSSOCallbackView(APIView):
+    """Handle Microsoft SSO callback after authentication"""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+   
+    def get_msal_app(self):
+        return ConfidentialClientApplication(
+            client_id=settings.AZURE_AD['CLIENT_ID'],
+            authority=settings.AZURE_AD['AUTHORITY'],
+            client_credential=settings.AZURE_AD['CLIENT_SECRET']
+        )
+   
+    def get_user_info(self, access_token):
+        """Get user information from Microsoft Graph API"""
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+       
+        try:
+            response = requests.get(
+                'https://graph.microsoft.com/v1.0/me',
+                headers=headers,
+                timeout=10
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Failed to get user info: {response.status_code} - {response.text}")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting user info: {str(e)}")
+            return None
+   
+    def create_or_update_user(self, user_info):
+        """Create or update user - they're already validated by Microsoft"""
+        email = user_info.get('mail') or user_info.get('userPrincipalName')
+        display_name = user_info.get('displayName', '')
+        given_name = user_info.get('givenName', '')
+        surname = user_info.get('surname', '')
+       
+        if not email:
+            logger.error("No email found in user info")
+            return None
+       
+        try:
+            # Get existing user
+            user = User.objects.get(email=email)
+            # Update user info in case it changed
+            user.first_name = given_name
+            user.last_name = surname
+            user.save()
+            logger.info(f"Updated existing user: {email}")
+        except User.DoesNotExist:
+            # Create new user - Microsoft already validated them
+            username = email.split('@')[0]
+           
+            # Ensure unique username
+            counter = 1
+            original_username = username
+            while User.objects.filter(username=username).exists():
+                username = f"{original_username}_{counter}"
+                counter += 1
+           
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                first_name=given_name,
+                last_name=surname
+            )
+            user.set_unusable_password()
+            user.save()
+           
+            # Create empty API tokens record for SSO users
+            UserAPITokens.objects.create(
+                user=user,
+                huggingface_token='',
+                gemini_token='',
+                llama_token=''
+            )
+           
+            logger.info(f"Created new user: {email}")
+           
+        return user
+   
+    def get(self, request):
+        """Handle callback from Microsoft with authorization code"""
+        code = request.GET.get('code')
+        state = request.GET.get('state')
+        error = request.GET.get('error')
+        error_description = request.GET.get('error_description', '')
+       
+        logger.info(f"SSO Callback received - Code: {'Yes' if code else 'No'}, State: {state}, Error: {error}")
+       
+        # Check for errors from Microsoft
+        if error:
+            logger.error(f"Microsoft SSO error: {error} - {error_description}")
+            return redirect(f"{settings.FRONTEND_URL}/login?error=microsoft_{error}")
+       
+        if not code:
+            logger.error("No authorization code received")
+            return redirect(f"{settings.FRONTEND_URL}/login?error=no_code")
+       
+        # Validate state for security
+        stored_state = request.session.get('oauth_state')
+        if stored_state and stored_state != state:
+            logger.error(f"State mismatch - Stored: {stored_state}, Received: {state}")
+            return redirect(f"{settings.FRONTEND_URL}/login?error=invalid_state")
+       
+        try:
+            msal_app = self.get_msal_app()
+           
+            # Exchange authorization code for tokens
+            result = msal_app.acquire_token_by_authorization_code(
+                code,
+                scopes=settings.AZURE_AD['SCOPE'],
+                redirect_uri=settings.AZURE_AD['REDIRECT_URI']
+            )
+           
+            if 'error' in result:
+                logger.error(f"Token acquisition error: {result.get('error')} - {result.get('error_description')}")
+                return redirect(f"{settings.FRONTEND_URL}/login?error=token_failed")
+           
+            # Get user info from Microsoft
+            access_token = result.get('access_token')
+            if not access_token:
+                logger.error("No access token received")
+                return redirect(f"{settings.FRONTEND_URL}/login?error=no_access_token")
+               
+            user_info = self.get_user_info(access_token)
+           
+            if not user_info:
+                logger.error("Failed to get user info from Microsoft")
+                return redirect(f"{settings.FRONTEND_URL}/login?error=user_info_failed")
+           
+            # Create/update user in our system
+            user = self.create_or_update_user(user_info)
+           
+            if not user:
+                logger.error("Failed to create or update user")
+                return redirect(f"{settings.FRONTEND_URL}/login?error=user_creation_failed")
+           
+            # Generate auth token
+            token, created = Token.objects.get_or_create(user=user)
+            logger.info(f"Generated token for user: {user.username}")
+           
+            # Clean up session
+            if 'oauth_state' in request.session:
+                del request.session['oauth_state']
+           
+            # REDIRECT TO FRONTEND WITH TOKEN - This is the key change!
+            # Instead of returning JSON, redirect to frontend with token and username
+            redirect_url = f"{settings.FRONTEND_URL}/sso-callback?token={token.key}&username={user.username}"
+            return redirect(redirect_url)
+       
+        except Exception as e:
+            logger.error(f"SSO callback exception: {str(e)}")
+            return redirect(f"{settings.FRONTEND_URL}/login?error=sso_exception")
 
 
 class ChangePasswordView(APIView):
@@ -7440,7 +7638,7 @@ class AdminUserManagementView(APIView):
                     'can_upload': can_upload
                 },
                     'api_tokens': {
-                        'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
+                        'nebius_token': api_tokens.nebius_token if api_tokens else None,
                         'gemini_token': api_tokens.gemini_token if api_tokens else None,
                         'llama_token': api_tokens.llama_token if api_tokens else None  # Include Llama token
                     }
@@ -7469,7 +7667,7 @@ class AdminUserManagementView(APIView):
             username = request.data.get('username')
             email = request.data.get('email')
             password = request.data.get('password')
-            huggingface_token = request.data.get('huggingface_token')
+            nebius_token = request.data.get('nebius_token')
             gemini_token = request.data.get('gemini_token')
             llama_token = request.data.get('llama_token')  # Get Llama token
            
@@ -7495,7 +7693,7 @@ class AdminUserManagementView(APIView):
             # Create API tokens for the user
             UserAPITokens.objects.create(
                 user=user,
-                huggingface_token=huggingface_token,
+                nebius_token=nebius_token,
                 gemini_token=gemini_token,
                 llama_token=llama_token  # Save Llama token
             )
@@ -7524,7 +7722,7 @@ class AdminUserManagementView(APIView):
            
             # Extract data from request
             user_id = request.data.get('user_id')
-            huggingface_token = request.data.get('huggingface_token')
+            nebius_token = request.data.get('nebius_token')
             gemini_token = request.data.get('gemini_token')
             llama_token = request.data.get('llama_token')  # Get Llama token
            
@@ -7544,8 +7742,8 @@ class AdminUserManagementView(APIView):
             # Update API tokens
             api_tokens, created = UserAPITokens.objects.get_or_create(user=user)
            
-            if huggingface_token is not None:
-                api_tokens.huggingface_token = huggingface_token
+            if nebius_token is not None:
+                api_tokens.nebius_token = nebius_token
            
             if gemini_token is not None:
                 api_tokens.gemini_token = gemini_token
@@ -7652,7 +7850,7 @@ class AdminUserModuleView(APIView):
                 'email': user.email,
                 'disabled_modules': module_permissions.disabled_modules,
                 'api_tokens': {
-                    'huggingface_token': getattr(api_tokens, 'huggingface_token', None) if api_tokens else None,
+                    'nebius_token': getattr(api_tokens, 'nebius_token', None) if api_tokens else None,
                     'gemini_token': getattr(api_tokens, 'gemini_token', None) if api_tokens else None,
 		            'llama_token': getattr(api_tokens, 'llama_token', None) if api_tokens else None
                 }
@@ -8599,3 +8797,45 @@ class ChatExportView(APIView):
                 self.process_inline_elements(paragraph, child)
 
 
+class AdminUserStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+ 
+    def get(self, request):
+        # Only allow admin user
+        if not request.user.username == 'admin':
+            return Response({'error': 'Unauthorized'}, status=403)
+ 
+        users = User.objects.all()
+        stats = []
+ 
+        for user in users:
+            # Get all active documents for this user
+            docs = Document.objects.filter(user=user)
+            doc_stats = []
+            for doc in docs:
+                # Count user questions for this document
+                # Find all conversations (ChatHistory) that reference this doc
+                # (Assuming you have a ManyToMany from ChatHistory to Document as 'documents')
+                from .models import ChatHistory
+                conversations = ChatHistory.objects.filter(user=user, documents=doc)
+                question_count = ChatMessage.objects.filter(
+                    chat_history__in=conversations,
+                    role='user'
+                ).count()
+                doc_stats.append({
+                    'document_id': doc.id,
+                    'filename': doc.filename,
+                    'questions_asked': question_count,
+                })
+ 
+            # Count total document uploads
+            doc_upload_count = docs.count()
+ 
+            stats.append({
+                'user_id': user.id,
+                'username': user.username,
+                'document_upload_count': doc_upload_count,
+                'documents': doc_stats,
+            })
+ 
+        return Response({'user_stats': stats}, status=200)
