@@ -18,7 +18,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
         setIsLoading(true);
 
         try {
-            const response = await axiosInstance.post('http://localhost:8000/api/login/', {
+            const response = await axiosInstance.post('https://klarifai-demo-2-appserver-dnd9avhfesa4h0de.centralindia-01.azurewebsites.net/api/login/', {
                 username,
                 password,
             });
