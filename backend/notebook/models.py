@@ -22,7 +22,7 @@ GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash',
 
 class UserAPITokens(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='api_tokens_NB')
-    huggingface_token = models.CharField(max_length=255, blank=True, null=True)
+    nebius_token = models.CharField(max_length=1024, blank=True, null=True)
     gemini_token = models.CharField(max_length=255, blank=True, null=True)
     llama_token = models.CharField(max_length=255, blank=True, null=True)
     

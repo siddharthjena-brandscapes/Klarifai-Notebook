@@ -70,18 +70,24 @@ class IdeaGeneratorModule(models.Model):
 # New Category model for user-specific categories
 class Category(models.Model):
     name = models.CharField(max_length=100)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='categories',
+        null=True,  # ✅ Allow global categories
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
-    
+ 
     class Meta:
         ordering = ['name']
-        unique_together = ['name', 'user']  # Ensure unique category names per user
+        unique_together = ['name', 'user']  # ✅ Ensures user can't create duplicate names
         verbose_name_plural = "Categories"
-    
+ 
     def __str__(self):
-        return f"{self.name} - {self.user.username}"
+        return f"{self.name} - {self.user.username if self.user else 'Global'}"
 
 
 class UserFeaturePermissions(models.Model):

@@ -6,7 +6,8 @@ from django.views.decorators.http import require_http_methods
 import json
 from .models import ProductIdea2, GeneratedImage2, Idea
 import google.generativeai as genai
-from huggingface_hub import InferenceClient
+# from huggingface_hub import InferenceClient
+from openai import OpenAI
 from PIL import Image
 from collections import defaultdict
 import time
@@ -1009,12 +1010,18 @@ def enhance_prompt(enhanced_description, model):
     except Exception as e:
         print(f"Error in enhance_prompt: {str(e)}")
         return base_prompt
+    
+
+    
+# updated code for image genetration using NEBIUS & Openai
+
 def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50, guidance_scale=7.5, max_retries=3, initial_delay=1):
     """
     Enhanced image generation with sophisticated retry and fallback mechanism
+    Modified to work with Nebius API
     
     Args:
-        client: HuggingFace inference client
+        client: OpenAI client configured for Nebius
         prompt (str): Fully enhanced image generation prompt from enhance_prompt
         initial_size (int): Initial image size (default: 768)
         initial_steps (int): Initial inference steps (default: 50)
@@ -1027,11 +1034,11 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
     """
     # Fallback configurations ordered by priority
     fallback_configs = [
-        {"size": 768, "steps": 50},    # First attempt - highest quality
-        {"size": 768, "steps": 40},    # First fallback - reduce steps
-        {"size": 768, "steps": 45},    # Second fallback - reduce size
-        {"size": 768, "steps": 40},    # Third fallback - reduce both
-        {"size": 512, "steps": 30}     # Last resort - minimum viable config
+        {"size": 1024, "steps": 4},    # First attempt - Nebius recommended
+        {"size": 768, "steps": 4},     # First fallback - reduce size
+        {"size": 512, "steps": 4},     # Second fallback - smaller size
+        {"size": 1024, "steps": 2},    # Third fallback - reduce steps
+        {"size": 512, "steps": 2}      # Last resort - minimum viable config
     ]
     
     last_error = None
@@ -1041,14 +1048,6 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
         config = fallback_configs[current_config_index]
         current_size = config["size"]
         current_steps = config["steps"]
-        
-        # Prepare parameters for image generation
-        parameters = {
-            "width": current_size,
-            "height": current_size,
-            "num_inference_steps": current_steps,
-            "guidance_scale": guidance_scale
-        }
         
         for attempt in range(max_retries):
             try:
@@ -1060,12 +1059,25 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
                 if len(cleaned_prompt) > max_prompt_length:
                     cleaned_prompt = cleaned_prompt[:max_prompt_length] + "..."
                 
-                # Image generation attempt
-                response = client.post(
-                    json={"inputs": cleaned_prompt, "parameters": parameters}
+                # Image generation attempt using Nebius API
+                response = client.images.generate(
+                    model="black-forest-labs/flux-schnell",
+                    response_format="b64_json",
+                    extra_body={
+                        "response_extension": "png",
+                        "width": current_size,
+                        "height": current_size,
+                        "num_inference_steps": current_steps,
+                        "negative_prompt": "",
+                        "seed": -1
+                    },
+                    prompt=cleaned_prompt
                 )
                 
-                image = Image.open(io.BytesIO(response))
+                # Extract base64 image data and convert to PIL Image
+                image_data = response.data[0].b64_json
+                image_bytes = base64.b64decode(image_data)
+                image = Image.open(io.BytesIO(image_bytes))
                 
                 # Log successful generation parameters
                 print(f"Successfully generated image with size={current_size}, steps={current_steps} on attempt {attempt + 1}")
@@ -1092,7 +1104,7 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
     
     return None, f"Image generation failed after all fallback attempts. Last error: {last_error}"
 
-# In views.py - Update generate_product_image function to use stored visualization_prompt
+# In views.py - Update generate_product_image function to use Nebius client
 
 @api_view(['POST', 'GET', 'DELETE'])
 @authentication_classes([TokenAuthentication])
@@ -1122,24 +1134,24 @@ def generate_product_image(request):
             print("Using stored visualization prompt for image generation:", idea.visualization_prompt)
             
             # Get generation parameters
-            initial_size = min(max(data.get('size', 768), 512), 1024)
-            initial_steps = min(max(data.get('steps', 50), 20), 100)
+            initial_size = min(max(data.get('size', 1024), 512), 1024)  # Default to 1024 for Nebius
+            initial_steps = min(max(data.get('steps', 4), 2), 10)       # Default to 4 for Flux Schnell
             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
 
-
+            # Get user's Nebius API token
             user_tokens = UserAPITokens.objects.get(user=request.user)
-
-            HF_API_TOKEN = user_tokens.huggingface_token
+            NEBIUS_API_KEY = user_tokens.nebius_token  # Assuming you add this field to UserAPITokens
             
-            hf_client = InferenceClient(
-                model="black-forest-labs/FLUX.1-dev",
-                token=HF_API_TOKEN
+            # Create Nebius client
+            nebius_client = OpenAI(
+                base_url="https://api.studio.nebius.com/v1/",
+                api_key=NEBIUS_API_KEY
             )
             
             # Generate image using stored visualization_prompt
             try:
                 image, error = generate_image_with_retry(
-                    hf_client,
+                    nebius_client,
                     idea.visualization_prompt,  # Use stored prompt directly
                     initial_size=initial_size,
                     initial_steps=initial_steps,
@@ -1188,7 +1200,6 @@ def generate_product_image(request):
                 # Get project_id for updating timestamp
                 project_id = idea.product_idea.project_id
                 
-                
                 update_project_timestamp(project_id, request.user)
                 
                 # Convert to base64 for response
@@ -1224,7 +1235,7 @@ def generate_product_image(request):
                 "error": str(e)
             }, status=500)
 
-# In views.py
+# In views.py - Update regenerate_product_image function
 
 @api_view(['POST', 'GET', 'DELETE'])
 @authentication_classes([TokenAuthentication])
@@ -1256,25 +1267,24 @@ def regenerate_product_image(request):
             print("Using prompt for regeneration:", prompt_to_use)
             
             # Get generation parameters
-            size = min(max(data.get('size', 768), 512), 1024)
-            steps = min(max(data.get('steps', 30), 20), 100)
+            size = min(max(data.get('size', 1024), 512), 1024)  # Default to 1024 for Nebius
+            steps = min(max(data.get('steps', 4), 2), 10)       # Default to 4 for Flux Schnell
             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
             negative_prompt = data.get('negative_prompt', '')
 
-
+            # Get user's Nebius API token
             user_tokens = UserAPITokens.objects.get(user=request.user)
-
-            HF_API_TOKEN = user_tokens.huggingface_token
+            NEBIUS_API_KEY = user_tokens.nebius_token  # Assuming you add this field to UserAPITokens
             
             hf_client = InferenceClient(
-                model="black-forest-labs/FLUX.1-dev",
+                model="black-forest-labs/FLUX.1-schnell",
                 token=HF_API_TOKEN
             )
             
             # Generate image using the selected prompt
             try:
                 image, error = generate_image_with_retry(
-                    hf_client,
+                    nebius_client,
                     prompt_to_use,  # Use either custom or stored prompt
                     initial_size=size,
                     initial_steps=steps,
@@ -1357,6 +1367,362 @@ def regenerate_product_image(request):
                 "success": False,
                 "error": str(e)
             }, status=500)
+        
+
+
+#####################################################################################################################
+
+# Old code for image generation using huggingface
+
+
+# def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50, guidance_scale=7.5, max_retries=3, initial_delay=1):
+#     """
+#     Enhanced image generation with sophisticated retry and fallback mechanism
+    
+#     Args:
+#         client: HuggingFace inference client
+#         prompt (str): Fully enhanced image generation prompt from enhance_prompt
+#         initial_size (int): Initial image size (default: 768)
+#         initial_steps (int): Initial inference steps (default: 50)
+#         guidance_scale (float): Guidance scale for generation (default: 7.5)
+#         max_retries (int): Maximum number of retry attempts (default: 3)
+#         initial_delay (int): Initial delay between retries in seconds (default: 1)
+    
+#     Returns:
+#         tuple: (PIL.Image or None, error message or None)
+#     """
+#     # Fallback configurations ordered by priority
+#     fallback_configs = [
+#         {"size": 768, "steps": 50},    # First attempt - highest quality
+#         {"size": 768, "steps": 40},    # First fallback - reduce steps
+#         {"size": 768, "steps": 45},    # Second fallback - reduce size
+#         {"size": 768, "steps": 40},    # Third fallback - reduce both
+#         {"size": 512, "steps": 30}     # Last resort - minimum viable config
+#     ]
+    
+#     last_error = None
+#     current_config_index = 0
+    
+#     while current_config_index < len(fallback_configs):
+#         config = fallback_configs[current_config_index]
+#         current_size = config["size"]
+#         current_steps = config["steps"]
+        
+#         # Prepare parameters for image generation
+#         parameters = {
+#             "width": current_size,
+#             "height": current_size,
+#             "num_inference_steps": current_steps,
+#             "guidance_scale": guidance_scale
+#         }
+        
+#         for attempt in range(max_retries):
+#             try:
+#                 # Validate and clean the prompt
+#                 cleaned_prompt = re.sub(r'\s+', ' ', prompt).strip()
+                
+#                 # Truncate extremely long prompts
+#                 max_prompt_length = 1000
+#                 if len(cleaned_prompt) > max_prompt_length:
+#                     cleaned_prompt = cleaned_prompt[:max_prompt_length] + "..."
+                
+#                 # Image generation attempt
+#                 response = client.post(
+#                     json={"inputs": cleaned_prompt, "parameters": parameters}
+#                 )
+                
+#                 image = Image.open(io.BytesIO(response))
+                
+#                 # Log successful generation parameters
+#                 print(f"Successfully generated image with size={current_size}, steps={current_steps} on attempt {attempt + 1}")
+                
+#                 return image, None
+                
+#             except Exception as e:
+#                 last_error = str(e)
+                
+#                 # Calculate exponential backoff with jitter
+#                 delay = initial_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                
+#                 # If not the last retry of current config, wait and try again
+#                 if attempt < max_retries - 1:
+#                     time.sleep(delay)
+#                     print(f"Retrying with same parameters after {delay:.2f}s delay...")
+#                     continue
+                
+#                 # If all retries failed with current config, try next fallback
+#                 print(f"Failed with size={current_size}, steps={current_steps}. Trying next fallback configuration...")
+#                 break
+        
+#         current_config_index += 1
+    
+#     return None, f"Image generation failed after all fallback attempts. Last error: {last_error}"
+
+# # In views.py - Update generate_product_image function to use stored visualization_prompt
+
+# @api_view(['POST', 'GET', 'DELETE'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
+# def generate_product_image(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             idea_id = data.get('idea_id')
+            
+#             # Get the idea instance
+#             try:
+#                 idea = get_object_or_404(Idea, id=idea_id)
+#             except Idea.DoesNotExist:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "Invalid idea ID"
+#                 }, status=404)
+            
+#             # Ensure visualization prompt exists
+#             if not idea.visualization_prompt:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "No visualization prompt found for this idea"
+#                 }, status=400)
+
+#             print("Using stored visualization prompt for image generation:", idea.visualization_prompt)
+            
+#             # Get generation parameters
+#             initial_size = min(max(data.get('size', 768), 512), 1024)
+#             initial_steps = min(max(data.get('steps', 50), 20), 100)
+#             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
+
+
+#             user_tokens = UserAPITokens.objects.get(user=request.user)
+
+#             HF_API_TOKEN = user_tokens.huggingface_token
+            
+#             hf_client = InferenceClient(
+#                 model="black-forest-labs/FLUX.1-schnell",
+#                 token=HF_API_TOKEN
+#             )
+            
+#             # Generate image using stored visualization_prompt
+#             try:
+#                 image, error = generate_image_with_retry(
+#                     hf_client,
+#                     idea.visualization_prompt,  # Use stored prompt directly
+#                     initial_size=initial_size,
+#                     initial_steps=initial_steps,
+#                     guidance_scale=guidance_scale
+#                 )
+                
+#                 if error or not image:
+#                     raise Exception(error or "Failed to generate image")
+                
+#             except Exception as e:
+#                 print(f"Image generation error: {str(e)}")
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Image generation failed: {str(e)}"
+#                 }, status=500)
+            
+#             # Process and save the generated image
+#             try:
+#                 img_buffer = io.BytesIO()
+#                 image.save(img_buffer, format="PNG")
+#                 img_buffer.seek(0)
+                
+#                 # Create directory if it doesn't exist
+#                 os.makedirs(os.path.join(settings.MEDIA_ROOT, 'generated_images'), exist_ok=True)
+                
+#                 # Generate unique filename
+#                 filename = f"product_image_{idea_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                
+#                 # Create GeneratedImage2 instance
+#                 generated_image = GeneratedImage2.objects.create(
+#                     idea=idea,
+#                     prompt=idea.visualization_prompt,  # Store the visualization prompt
+#                     generation_status='pending',
+#                     parameters=json.dumps({
+#                         'size': initial_size,
+#                         'steps': initial_steps,
+#                         'guidance_scale': guidance_scale
+#                     })
+#                 )
+                
+#                 # Save image file
+#                 generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
+#                 generated_image.generation_status = 'success'
+#                 generated_image.save()
+
+#                 # Get project_id for updating timestamp
+#                 project_id = idea.product_idea.project_id
+                
+                
+#                 update_project_timestamp(project_id, request.user)
+                
+#                 # Convert to base64 for response
+#                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
+                
+#                 return JsonResponse({
+#                     "success": True,
+#                     "image": img_str,
+#                     "idea_id": idea_id,
+#                     "generated_image_id": generated_image.id,
+#                     "prompt_used": idea.visualization_prompt,  # Include the prompt used
+#                     "parameters": {
+#                         'size': initial_size,
+#                         'steps': initial_steps,
+#                         'guidance_scale': guidance_scale
+#                     }
+#                 })
+                
+#             except Exception as e:
+#                 print(f"Error saving generated image: {str(e)}")
+#                 if 'generated_image' in locals():
+#                     generated_image.generation_status = 'failed'
+#                     generated_image.save()
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Failed to save generated image: {str(e)}"
+#                 }, status=500)
+            
+#         except Exception as e:
+#             print(f"Unexpected error in generate_product_image: {str(e)}")
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": str(e)
+#             }, status=500)
+
+# # In views.py
+
+# @api_view(['POST', 'GET', 'DELETE'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
+# def regenerate_product_image(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             idea_id = data.get('idea_id')
+#             custom_prompt = data.get('description')  # Get custom prompt if provided
+            
+#             try:
+#                 idea = get_object_or_404(Idea, id=idea_id)
+#             except Idea.DoesNotExist:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "Invalid idea ID"
+#                 }, status=404)
+            
+#             # Use custom prompt if provided, otherwise fallback to stored prompt
+#             prompt_to_use = custom_prompt if custom_prompt else idea.visualization_prompt
+            
+#             if not prompt_to_use:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "No visualization prompt found for this idea"
+#                 }, status=400)
+
+#             print("Using prompt for regeneration:", prompt_to_use)
+            
+#             # Get generation parameters
+#             size = min(max(data.get('size', 768), 512), 1024)
+#             steps = min(max(data.get('steps', 30), 20), 100)
+#             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
+#             negative_prompt = data.get('negative_prompt', '')
+
+
+#             user_tokens = UserAPITokens.objects.get(user=request.user)
+
+#             HF_API_TOKEN = user_tokens.huggingface_token
+            
+#             hf_client = InferenceClient(
+#                 model="black-forest-labs/FLUX.1-schnell",
+#                 token=HF_API_TOKEN
+#             )
+            
+#             # Generate image using the selected prompt
+#             try:
+#                 image, error = generate_image_with_retry(
+#                     hf_client,
+#                     prompt_to_use,  # Use either custom or stored prompt
+#                     initial_size=size,
+#                     initial_steps=steps,
+#                     guidance_scale=guidance_scale
+#                 )
+                
+#                 if error or not image:
+#                     raise Exception(error or "Failed to generate image")
+                
+#             except Exception as e:
+#                 print(f"Image regeneration error: {str(e)}")
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Image regeneration failed: {str(e)}"
+#                 }, status=500)
+            
+#             # Process and save the generated image
+#             try:
+#                 img_buffer = io.BytesIO()
+#                 image.save(img_buffer, format="PNG")
+#                 img_buffer.seek(0)
+                
+#                 filename = f"product_image_regen_{idea_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                
+#                 # Create GeneratedImage2 instance
+#                 generated_image = GeneratedImage2.objects.create(
+#                     idea=idea,
+#                     prompt=prompt_to_use,  # Store the actual prompt used
+#                     generation_status='pending',
+#                     parameters=json.dumps({
+#                         'size': size,
+#                         'steps': steps,
+#                         'guidance_scale': guidance_scale,
+#                         'negative_prompt': negative_prompt,
+#                         'is_regenerated': True,
+#                         'used_custom_prompt': bool(custom_prompt)
+#                     })
+#                 )
+                
+#                 generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
+#                 generated_image.generation_status = 'success'
+#                 generated_image.save()
+
+#                 # Get project_id for updating timestamp
+#                 project_id = idea.product_idea.project_id
+                
+#                 update_project_timestamp(project_id, request.user)
+                
+#                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
+                
+#                 return JsonResponse({
+#                     "success": True,
+#                     "image": img_str,
+#                     "idea_id": idea_id,
+#                     "generated_image_id": generated_image.id,
+#                     "prompt_used": prompt_to_use,
+#                     "parameters": {
+#                         'size': size,
+#                         'steps': steps,
+#                         'guidance_scale': guidance_scale,
+#                         'negative_prompt': negative_prompt,
+#                         'is_regenerated': True,
+#                         'used_custom_prompt': bool(custom_prompt)
+#                     }
+#                 })
+                
+#             except Exception as e:
+#                 print(f"Error saving regenerated image: {str(e)}")
+#                 if 'generated_image' in locals():
+#                     generated_image.generation_status = 'failed'
+#                     generated_image.save()
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Failed to save regenerated image: {str(e)}"
+#                 }, status=500)
+            
+#         except Exception as e:
+#             print(f"Unexpected error in regenerate_product_image: {str(e)}")
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": str(e)
+#             }, status=500)
         
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])

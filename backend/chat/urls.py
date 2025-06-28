@@ -22,7 +22,10 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
     AdminUserUploadPermissionsView,
     CheckUploadPermissionsView,
     ProcessCitationsView,
-     ChatExportView
+     ChatExportView,
+     AdminUserStatsView,
+     MicrosoftSSOCallbackView,
+     MicrosoftSSOView
     
 )
 
@@ -72,6 +75,9 @@ urlpatterns = [
     path('admin/users/<int:user_id>/upload-permissions/', AdminUserUploadPermissionsView.as_view(), name='admin_user_upload_permissions'),
     path('api/check-upload-permissions/', CheckUploadPermissionsView.as_view(), name='check_upload_permissions'),
     path('export-chat/', ChatExportView.as_view(), name='export-chat'), # for pdf chat export
+    path('api/admin/user-stats/', AdminUserStatsView.as_view(), name='admin-user-stats'),
+    path('microsoft-sso/', MicrosoftSSOView.as_view(), name='microsoft_sso'),
+    path('get_token/', MicrosoftSSOCallbackView.as_view(), name='microsoft_sso_callback'),
     
    
     

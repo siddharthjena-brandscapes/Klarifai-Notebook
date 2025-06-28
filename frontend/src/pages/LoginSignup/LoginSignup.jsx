@@ -12,6 +12,7 @@ const LoginSignup = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const [error, setError] = useState(location.state?.error || '');
 
   const toggleForm = () => {
     setIsAnimating(true);
@@ -83,7 +84,7 @@ const LoginSignup = () => {
               </h2>
               
               {isLogin ? (
-                <LoginForm onSuccess={handleAuthSuccess} />
+                <LoginForm onSuccess={handleAuthSuccess} initialError={error}  />
               ) : (
                 <SignupForm onSuccess={handleAuthSuccess} />
               )}

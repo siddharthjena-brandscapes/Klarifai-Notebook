@@ -1406,181 +1406,182 @@ const renderSummaryView = () => {
   }, [fetchUserDocuments]);
 
   const handleFileChange = async (event) => {
-    if (!hasUploadPermissions) {
-      toast.error(
-        "You do not have permission to upload documents. Please contact your administrator."
-      );
-      event.target.value = ""; // Clear the file input
-      return;
-    }
-    const selectedFiles = Array.from(event.target.files);
-    if (!selectedFiles.length) return;
+  if (!hasUploadPermissions) {
+    toast.error(
+      "You do not have permission to upload documents. Please contact your administrator."
+    );
+    event.target.value = "";
+    return;
+  }
+  const selectedFiles = Array.from(event.target.files);
+  if (!selectedFiles.length) return;
 
-    setIsDocumentProcessing(true);
-    setProcessingProgress(0);
+  setIsDocumentProcessing(true);
+  setProcessingProgress(0);
 
-    // Track document names and statuses for display
-    const processingDocuments = selectedFiles.map((file) => ({
-      filename: file.name,
-      status: "waiting",
-      progress: 0,
-      message: "Waiting to upload",
-    }));
-    setProcessingDocuments(processingDocuments);
+  const processingDocuments = selectedFiles.map((file) => ({
+    filename: file.name,
+    status: "waiting",
+    progress: 0,
+    message: "Waiting to upload",
+  }));
+  setProcessingDocuments(processingDocuments);
 
-    try {
-      const formData = new FormData();
-      selectedFiles.forEach((file) => {
-        formData.append("files", file);
-      });
-      formData.append("main_project_id", mainProjectId);
+  try {
+    const formData = new FormData();
+    selectedFiles.forEach((file) => {
+      formData.append("files", file);
+    });
+    formData.append("main_project_id", mainProjectId);
 
-      // Calculate total upload size for progress tracking
-      const totalUploadSize = selectedFiles.reduce(
-        (total, file) => total + file.size,
-        0
-      );
+    const totalUploadSize = selectedFiles.reduce(
+      (total, file) => total + file.size,
+      0
+    );
 
-      // Setup internal tracking variables
-      let uploadStage = 0; // 0: starting, 1: uploading, 2: processing, 3: completed
+    let uploadStage = 0;
 
-      // Make the upload request with progress tracking
-      const response = await documentServiceNB.uploadDocument(
-        formData,
-        mainProjectId,
-        {
-          onUploadProgress: (progressEvent) => {
-            // Calculate upload progress (0-70%)
-            const uploadPercentage = Math.round(
-              (progressEvent.loaded * 100) / totalUploadSize
-            );
-            const scaledProgress = Math.floor(uploadPercentage * 0.7); // Scale to 0-70%
+    // Simple fix: just remove timeout and add better progress messages
+    const response = await documentService.uploadDocument(
+      formData,
+      mainProjectId,
+      {
+        onUploadProgress: (progressEvent) => {
+          const uploadPercentage = Math.round(
+            (progressEvent.loaded * 100) / totalUploadSize
+          );
+          const scaledProgress = Math.floor(uploadPercentage * 0.7);
 
-            uploadStage = 1; // mark as uploading
-            setProcessingProgress(scaledProgress);
+          uploadStage = 1;
+          setProcessingProgress(scaledProgress);
 
-            // Update document statuses
-            setProcessingDocuments((prevDocs) => {
-              return prevDocs.map((doc, index) => {
-                // Stagger the upload progress for multiple files
-                const fileProgress = Math.min(
-                  100,
-                  uploadPercentage - index * 10 // Stagger by 10% per file
-                );
+          setProcessingDocuments((prevDocs) => {
+            return prevDocs.map((doc, index) => {
+              const fileProgress = Math.min(
+                100,
+                uploadPercentage - index * 10
+              );
 
-                return {
-                  ...doc,
-                  status: fileProgress > 0 ? "uploading" : "waiting",
-                  progress: Math.max(0, fileProgress),
-                  message:
-                    fileProgress > 0
-                      ? `Uploading: ${Math.min(100, fileProgress)}%`
-                      : "Waiting to upload",
-                };
-              });
-            });
-          },
-        }
-      );
-
-      // Upload is complete, now show processing stage (70-90%)
-      uploadStage = 2;
-      setProcessingProgress(75);
-
-      // Update document statuses to reflect the transition to processing
-      setProcessingDocuments((prevDocs) => {
-        return prevDocs.map((doc) => ({
-          ...doc,
-          status: "processing",
-          progress: 75,
-          message: "Processing document",
-        }));
-      });
-
-      // Process the response
-      const documents = response.data.documents || [];
-      const uploadResults = response.data.upload_results || [];
-
-      // Update document statuses with results from the server
-      if (uploadResults.length > 0) {
-        setProcessingDocuments((prevDocs) => {
-          const updatedDocs = [...prevDocs];
-
-          // Match results to documents by filename
-          uploadResults.forEach((result) => {
-            const docIndex = updatedDocs.findIndex(
-              (doc) => doc.filename === result.filename
-            );
-            if (docIndex !== -1) {
-              updatedDocs[docIndex] = {
-                ...updatedDocs[docIndex],
-                id: result.id,
-                status: result.status,
-                progress: result.progress,
-                message: result.message,
+              return {
+                ...doc,
+                status: fileProgress > 0 ? "uploading" : "waiting",
+                progress: Math.max(0, fileProgress),
+                message:
+                  fileProgress > 0
+                    ? `Uploading: ${Math.min(100, fileProgress)}%`
+                    : "Waiting to upload",
               };
-            }
+            });
           });
-
-          return updatedDocs;
-        });
+        },
       }
+    );
 
-      // Gradually increase progress to 100% to show processing completion
-      for (let progress = 80; progress <= 100; progress += 5) {
-        setProcessingProgress(progress);
-        await new Promise((resolve) => setTimeout(resolve, 300)); // Short delay between updates
-      }
+    // Processing stage
+    uploadStage = 2;
+    setProcessingProgress(75);
 
-      uploadStage = 3; // mark as completed
+    setProcessingDocuments((prevDocs) => {
+      return prevDocs.map((doc) => ({
+        ...doc,
+        status: "processing",
+        progress: 75,
+        message: "Processing document - please wait, this may take several minutes for large files",
+      }));
+    });
 
-      if (documents.length > 0) {
-        // Automatically select all uploaded documents
-        const newSelectedDocuments = documents.map((doc) => doc.id.toString());
-        setLocalSelectedDocuments(newSelectedDocuments);
+    const documents = response.data.documents || [];
+    const uploadResults = response.data.upload_results || [];
 
-        if (setSelectedDocuments) {
-          setSelectedDocuments(newSelectedDocuments);
-        }
-
-        setCurrentView("chat");
-
-        // Update documents list
-        setDocuments((prevDocs) => {
-          const newDocs = documents.filter(
-            (newDoc) =>
-              !prevDocs.some((existingDoc) => existingDoc.id === newDoc.id)
-          );
-          return [...prevDocs, ...newDocs];
-        });
-
-        // Show success message and close dialog
-        setTimeout(() => {
-          toast.success(
-            `${documents.length} document${
-              documents.length > 1 ? "s" : ""
-            } uploaded successfully!`
-          );
-          setIsDocumentProcessing(false);
-        }, 1000);
-      }
-    } catch (error) {
-      console.error("Upload Error:", error);
-      toast.error("Upload failed. Please try again.");
-      setIsDocumentProcessing(false);
-
-      // Update document statuses to error
+    if (uploadResults.length > 0) {
       setProcessingDocuments((prevDocs) => {
-        return prevDocs.map((doc) => ({
-          ...doc,
-          status: "error",
-          progress: 0,
-          message: "Upload failed",
-        }));
+        const updatedDocs = [...prevDocs];
+
+        uploadResults.forEach((result) => {
+          const docIndex = updatedDocs.findIndex(
+            (doc) => doc.filename === result.filename
+          );
+          if (docIndex !== -1) {
+            updatedDocs[docIndex] = {
+              ...updatedDocs[docIndex],
+              id: result.id,
+              status: result.status,
+              progress: result.progress,
+              message: result.message,
+            };
+          }
+        });
+
+        return updatedDocs;
       });
     }
-  };
 
+    // Complete progress
+    for (let progress = 80; progress <= 100; progress += 5) {
+      setProcessingProgress(progress);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    uploadStage = 3;
+
+    if (documents.length > 0) {
+      const newSelectedDocuments = documents.map((doc) => doc.id.toString());
+      setLocalSelectedDocuments(newSelectedDocuments);
+
+      if (setSelectedDocuments) {
+        setSelectedDocuments(newSelectedDocuments);
+      }
+
+      setCurrentView("chat");
+
+      setDocuments((prevDocs) => {
+        const newDocs = documents.filter(
+          (newDoc) =>
+            !prevDocs.some((existingDoc) => existingDoc.id === newDoc.id)
+        );
+        return [...prevDocs, ...newDocs];
+      });
+
+      setTimeout(() => {
+        toast.success(
+          `${documents.length} document${
+            documents.length > 1 ? "s" : ""
+          } uploaded successfully!`
+        );
+        setIsDocumentProcessing(false);
+      }, 1000);
+    }
+  } catch (error) {
+    console.error("Upload Error:", error);
+    
+    // Better error messages based on error type
+    let errorMessage = "Upload failed. Please try again.";
+    
+    if (error.code === 'ECONNABORTED') {
+      errorMessage = "Connection timed out. Please check your internet and try again.";
+    } else if (!error.response && error.request) {
+      errorMessage = "Network error. Please check your connection.";
+    } else if (error.response?.status === 413) {
+      errorMessage = "File size too large. Please try with smaller files.";
+    } else if (error.response?.status >= 500) {
+      errorMessage = "Server error. Please try again in a few minutes.";
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    }
+    
+    toast.error(errorMessage);
+    setIsDocumentProcessing(false);
+
+    setProcessingDocuments((prevDocs) => {
+      return prevDocs.map((doc) => ({
+        ...doc,
+        status: "error",
+        progress: 0,
+        message: "Upload failed",
+      }));
+    });
+  }
+};
 const handleSendMessage = async (message) => {
   if (!message.trim()) return;
 

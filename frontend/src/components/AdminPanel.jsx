@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { adminService, documentService } from "../utils/axiosConfig";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { adminService, documentService,adminNotebookServiceNB } from "../utils/axiosConfig";
 import {
   FaUserPlus,
   FaUserEdit,
@@ -25,6 +25,9 @@ import {
   FaEye,
   FaChevronDown,
   FaChevronUp,
+  FaUser,
+  FaSearch,
+  FaGlobe,
 } from "react-icons/fa";
 import Header from "../components/dashboard/Header";
 import { toast } from "react-toastify";
@@ -77,8 +80,12 @@ const AdminPanel = () => {
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isModulePermissionsModalOpen, setIsModulePermissionsModalOpen] = useState(false);
-  const [isRightPanelPermissionsModalOpen, setIsRightPanelPermissionsModalOpen] = useState(false);
+  const [isModulePermissionsModalOpen, setIsModulePermissionsModalOpen] =
+    useState(false);
+  const [
+    isRightPanelPermissionsModalOpen,
+    setIsRightPanelPermissionsModalOpen,
+  ] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isEditCategoryModalOpen, setIsEditCategoryModalOpen] = useState(false);
@@ -89,7 +96,7 @@ const AdminPanel = () => {
     username: "",
     email: "",
     password: "",
-    huggingface_token: "",
+    nebius_token: "",
     gemini_token: "",
     llama_token: "",
   });
@@ -107,6 +114,8 @@ const AdminPanel = () => {
   const [selectedProject, setSelectedProject] = useState("");
   const [userProjects, setUserProjects] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [userStats, setUserStats] = useState([]);
+  const [notebookUserStats, setNotebookUserStats] = useState([]);
 
   const fileInputRef = useRef(null);
 
@@ -115,20 +124,45 @@ const AdminPanel = () => {
   const [rightPanelPermissions, setRightPanelPermissions] = useState({});
 
   // Fetch all users on component mount
-  useEffect(() => {
-    if (activeTab === "users" || activeTab === "modules" || activeTab === "uploads" || activeTab === "features") {
-      fetchUsers();
-    } else if (activeTab === "categories") {
-      fetchCategories();
-    }
-  }, [activeTab]);
 
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+useEffect(() => {
+  if (
+    activeTab === "users" ||
+    activeTab === "modules" ||
+    activeTab === "uploads" ||
+    activeTab === "features"
+  ) {
+    fetchUsers();
+    fetchUserStats();
+    fetchNotebookUserStats(); // <-- Fetch notebook stats on tab change
+  } else if (activeTab === "categories") {
+    fetchCategories();
+  }
+}, [activeTab]);
+
+
+
+
+  const fetchUserStats = async () => {
+    try {
+      const stats = await adminService.getUserStats();
+      setUserStats(stats.user_stats || []);
+    } catch (err) {
+      console.error("Failed to fetch user stats:", err);
+    }
   };
+
+const fetchNotebookUserStats = async () => {
+  try {
+    const stats = await adminNotebookServiceNB.getNotebookUserStats(); // <-- Use the NB admin service
+    setNotebookUserStats(stats.user_stats || []);
+  } catch (err) {
+    console.error("Failed to fetch notebook user stats:", err);
+  }
+};
+
+
+  
 
   // Updated fetchUsers function with debug logging
   const fetchUsers = async () => {
@@ -136,16 +170,18 @@ const AdminPanel = () => {
     setError(null);
     try {
       const data = await adminService.getAllUsers();
-      
+
       console.log("=== FETCH USERS DEBUG ===");
       console.log("Raw backend response:", JSON.stringify(data, null, 2));
-      
+
       data.forEach((user) => {
         console.log(`User ${user.username}:`, {
           id: user.id,
           disabled_features: user.disabled_features,
           disabled_features_type: typeof user.disabled_features,
-          disabled_features_keys: user.disabled_features ? Object.keys(user.disabled_features) : 'null/undefined'
+          disabled_features_keys: user.disabled_features
+            ? Object.keys(user.disabled_features)
+            : "null/undefined",
         });
       });
 
@@ -157,14 +193,11 @@ const AdminPanel = () => {
           : true;
         permissions[user.id] = Boolean(canUpload);
 
-        console.log(
-          `User ${user.id} (${user.username}):`,
-          {
-            upload_permissions: permissions[user.id],
-            disabled_features: user.disabled_features,
-            disabled_modules: user.disabled_modules
-          }
-        );
+        console.log(`User ${user.id} (${user.username}):`, {
+          upload_permissions: permissions[user.id],
+          disabled_features: user.disabled_features,
+          disabled_modules: user.disabled_modules,
+        });
       });
 
       setUserUploadPermissions(permissions);
@@ -214,7 +247,7 @@ const AdminPanel = () => {
   const handleOpenEditModal = (user) => {
     setCurrentUser(user);
     setFormData({
-      huggingface_token: user.api_tokens.huggingface_token || "",
+      nebius_token: user.api_tokens.nebius_token || "",
       gemini_token: user.api_tokens.gemini_token || "",
       llama_token: user.api_tokens.llama_token || "",
     });
@@ -232,7 +265,7 @@ const AdminPanel = () => {
   const handleOpenRightPanelPermissionsModal = (user) => {
     console.log("Opening right panel permissions for user:", user.username);
     console.log("User disabled_features:", user.disabled_features);
-    
+
     setCurrentUser(user);
     const currentPermissions = user.disabled_features || {};
     console.log("Setting rightPanelPermissions to:", currentPermissions);
@@ -400,7 +433,7 @@ const AdminPanel = () => {
         username: "",
         email: "",
         password: "",
-        huggingface_token: "",
+        nebius_token: "",
         gemini_token: "",
         llama_token: "",
       });
@@ -421,7 +454,7 @@ const AdminPanel = () => {
     setLoading(true);
     try {
       await adminService.updateUserTokens(currentUser.id, {
-        huggingface_token: formData.huggingface_token,
+        nebius_token: formData.nebius_token,
         gemini_token: formData.gemini_token,
         llama_token: formData.llama_token,
       });
@@ -470,21 +503,24 @@ const AdminPanel = () => {
       console.log("=== UPDATING PERMISSIONS ===");
       console.log("Sending to backend:", {
         user_id: currentUser.id,
-        disabled_features: rightPanelPermissions
-      });
-
-      const response = await adminService.updateUserRightPanelPermissions(currentUser.id, {
         disabled_features: rightPanelPermissions,
       });
-      
+
+      const response = await adminService.updateUserRightPanelPermissions(
+        currentUser.id,
+        {
+          disabled_features: rightPanelPermissions,
+        }
+      );
+
       console.log("Backend response:", response);
-      
+
       setIsRightPanelPermissionsModalOpen(false);
 
       setTimeout(async () => {
         await fetchUsers();
       }, 500);
-      
+
       toast.success("Right panel permissions updated successfully");
     } catch (err) {
       console.error("Error updating right panel permissions:", err);
@@ -556,7 +592,11 @@ const AdminPanel = () => {
   };
 
   const handleDeleteCategory = async (categoryId, categoryName) => {
-    if (window.confirm(`Are you sure you want to delete category "${categoryName}"?`)) {
+    if (
+      window.confirm(
+        `Are you sure you want to delete category "${categoryName}"?`
+      )
+    ) {
       setLoading(true);
       try {
         await adminService.deleteCategory(categoryId);
@@ -572,73 +612,78 @@ const AdminPanel = () => {
     }
   };
 
-
-
- const UserInfoSection = () => (
-  <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
-    <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
-            <FaUsers className="text-[#a55233] dark:text-emerald-400" size={20} />
+  const UserInfoSection = () => {
+    console.log("userStats:", userStats); // Add this line
+    return (
+      <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
+                <FaUsers
+                  className="text-[#a55233] dark:text-emerald-400"
+                  size={20}
+                />
+              </div>
+              <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
+                User Information
+              </h3>
+            </div>
+            <button
+              className="bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
+              onClick={() => setIsAddModalOpen(true)}
+            >
+              <FaUserPlus className="mr-2" size={14} /> Add New User
+            </button>
           </div>
-          <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
-            User Information
-          </h3>
         </div>
-        <button
-          className="bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
-          onClick={() => setIsAddModalOpen(true)}
-        >
-          <FaUserPlus className="mr-2" size={14} /> Add New User
-        </button>
-      </div>
-    </div>
-    
-    <div className="p-6">
-      <div className="space-y-6">
-        <p className="text-[#5e4636] dark:text-gray-300 text-base">
-          Manage user accounts and basic information
-        </p>
-        
-        {loading ? (
-          <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
-            <span className="ml-3 text-[#5e4636] dark:text-emerald-300">Loading users...</span>
-          </div>
-        ) : (
-          <div className="grid gap-6">
-            {users.map((user) => (
-              <div
-                key={user.id}
-                className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-6 border border-[#e3d5c8] dark:border-gray-700/50 hover:shadow-md transition-all"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 mr-4">
-                    <div className="flex items-center space-x-4 mb-5">
-                      <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                        {user.username.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-lg">
-                          {user.username}
-                        </h4>
-                        <p className="text-sm text-[#5a544a] dark:text-gray-400 mt-1">
-                          ID: {user.id} • {user.email}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
-                      <div className="space-y-2">
-                        <p className="text-sm font-bold text-[#556052] dark:text-blue-400 uppercase tracking-wide">
-                          API Tokens
-                        </p>
-                        <div className="text-sm space-y-2">
-                          <div className="flex justify-between">
-                            <span className="font-medium">HuggingFace:</span>
+
+        <div className="p-6">
+          <div className="space-y-6">
+            <p className="text-[#5e4636] dark:text-gray-300 text-base">
+              Manage user accounts and basic information
+            </p>
+
+            {loading ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
+                <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
+                  Loading users...
+                </span>
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {users.map((user) => (
+                  <div
+                    key={user.id}
+                    className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-6 border border-[#e3d5c8] dark:border-gray-700/50 hover:shadow-md transition-all"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 mr-4">
+                        <div className="flex items-center space-x-4 mb-5">
+                          <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+                            {user.username.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-lg">
+                              {user.username}
+                            </h4>
+                            <p className="text-sm text-[#5a544a] dark:text-gray-400 mt-1">
+                              ID: {user.id} • {user.email}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+                          <div className="space-y-2">
+                            <p className="text-sm font-bold text-[#556052] dark:text-blue-400 uppercase tracking-wide">
+                              API Tokens
+                            </p>
+                            <div className="text-sm space-y-2">
+                              <div className="flex justify-between">
+                            <span className="font-medium">Nebius:</span>
                             <span className="text-[#5e4636] dark:text-gray-300">
-                              {user.api_tokens.huggingface_token ? `${user.api_tokens.huggingface_token.slice(0, 30)}...` : "Not set"}
+                              {user.api_tokens.nebius_token ? `${user.api_tokens.nebius_token.slice(0, 30)}...` : "Not set"}
                             </span>
                           </div>
                           <div className="flex justify-between">
@@ -658,99 +703,168 @@ const AdminPanel = () => {
                       
                      
 
-<div className="space-y-3">
-  <p className="text-sm font-bold text-[#556052] dark:text-purple-400 uppercase tracking-wide">
-    Module Access
-  </p>
-  <div className="text-sm">
-    <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
-      <span className="text-[#5e4636] dark:text-gray-300 font-medium">
-        {(() => {
-          const totalModules = availableModules.length;
-          const disabledModules = user.disabled_modules || {};
-          
-          // Count how many modules are actually disabled (value = true)
-          const disabledCount = Object.values(disabledModules).filter(isDisabled => isDisabled === true).length;
-          const enabledCount = totalModules - disabledCount;
-          
-          if (disabledCount === 0) {
-            return `All ${totalModules} modules enabled`;
-          } else if (enabledCount === 0) {
-            return `All modules disabled`;
-          } else {
-            return `${enabledCount}/${totalModules} modules enabled`;
-          }
-        })()}
-      </span>
-    </div>
-  </div>
-</div>
-                      <div className="space-y-3">
-                        <p className="text-sm font-bold text-[#556052] dark:text-cyan-400 uppercase tracking-wide">
-                          Upload Status
-                        </p>
-                        <div className="text-sm">
-                          <div className={`rounded-lg p-3 font-medium ${
-                            userUploadPermissions[user.id] 
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                          }`}>
-                            {userUploadPermissions[user.id] ? 'Upload Enabled' : 'Upload Disabled'}
+                          <div className="space-y-3">
+                            <p className="text-sm font-bold text-[#556052] dark:text-purple-400 uppercase tracking-wide">
+                              Module Access
+                            </p>
+                            <div className="text-sm">
+                              <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
+                                <span className="text-[#5e4636] dark:text-gray-300 font-medium">
+                                  {(() => {
+                                    const totalModules = availableModules.length;
+                                    const disabledModules =
+                                      user.disabled_modules || {};
+
+                                    // Count how many modules are actually disabled (value = true)
+                                    const disabledCount = Object.values(
+                                      disabledModules
+                                    ).filter(
+                                      (isDisabled) => isDisabled === true
+                                    ).length;
+                                    const enabledCount =
+                                      totalModules - disabledCount;
+
+                                    if (disabledCount === 0) {
+                                      return `All ${totalModules} modules enabled`;
+                                    } else if (enabledCount === 0) {
+                                      return `All modules disabled`;
+                                    } else {
+                                      return `${enabledCount}/${totalModules} modules enabled`;
+                                    }
+                                  })()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <p className="text-sm font-bold text-[#556052] dark:text-cyan-400 uppercase tracking-wide">
+                              Upload Status
+                            </p>
+                            <div className="text-sm">
+                              <div
+                                className={`rounded-lg p-3 font-medium ${
+                                  userUploadPermissions[user.id]
+                                    ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                    : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                }`}
+                              >
+                                {userUploadPermissions[user.id]
+                                  ? "Upload Enabled"
+                                  : "Upload Disabled"}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
+
+                      <div className="flex flex-col space-y-2">
+                        <button
+                          className="p-3 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-lg transition-all"
+                          onClick={() => handleOpenEditModal(user)}
+                          title="Edit API Tokens"
+                        >
+                          <FaKey size={18} />
+                        </button>
+                        <button
+                          className="p-3 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                          onClick={() => handleDeleteUser(user.id, user.username)}
+                          title="Delete User"
+                          disabled={user.username === "admin"}
+                        >
+                          <FaUserMinus size={18} />
+                        </button>
+                      </div>
                     </div>
+                    {/* Show question stats if available */}
+                    {userStats.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold text-[#a55233] dark:text-emerald-400 mb-1">
+                          Document Q&A Documents & Questions:
+                        </p>
+                        <ul className="text-xs bg-[#e9dcc9]/50 dark:bg-black/20 rounded-md p-2 space-y-1">
+                          {(userStats.find((u) => u.user_id === user.id)
+                            ?.documents || []
+                          ).map((doc) => (
+                            <li key={doc.document_id} className="flex justify-between">
+                              <span>{doc.filename}</span>
+                              <span className="font-mono">
+                                {doc.questions_asked} questions
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-xs mt-2 text-[#5e4636] dark:text-gray-400">
+                          Total uploads:{" "}
+                          <span className="font-bold">
+                            {
+                              userStats.find((u) => u.user_id === user.id)
+                                ?.document_upload_count || 0
+                            }
+                          </span>
+                        </p>
+                        
+                      </div>
+                    )}
+                    {notebookUserStats.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold text-[#a55233] dark:text-emerald-400 mb-1">
+                          Notebook Documents & Questions:
+                        </p>
+                        <ul className="text-xs bg-[#e9dcc9]/50 dark:bg-black/20 rounded-md p-2 space-y-1">
+                          {(notebookUserStats.find((u) => u.user_id === user.id)?.documents || []).map((doc) => (
+                            <li key={doc.document_id} className="flex justify-between">
+                              <span>{doc.filename}</span>
+                              <span className="font-mono">
+                                {doc.questions_asked} questions
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-xs mt-2 text-[#5e4636] dark:text-gray-400">
+                          Total notebook uploads:{" "}
+                          <span className="font-bold">
+                            {notebookUserStats.find((u) => u.user_id === user.id)?.document_upload_count || 0}
+                          </span>
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="flex flex-col space-y-2">
-                    <button
-                      className="p-3 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-lg transition-all"
-                      onClick={() => handleOpenEditModal(user)}
-                      title="Edit API Tokens"
-                    >
-                      <FaKey size={18} />
-                    </button>
-                    <button
-                      className="p-3 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                      onClick={() => handleDeleteUser(user.id, user.username)}
-                      title="Delete User"
-                      disabled={user.username === "admin"}
-                    >
-                      <FaUserMinus size={18} />
-                    </button>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
+        </div>
       </div>
-    </div>
-  </div>
-);
+    );
+  };
   const ModulePermissionsSection = () => (
     <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
       <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
         <div className="flex items-center space-x-3">
           <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
-            <FaShieldAlt className="text-[#a55233] dark:text-emerald-400" size={20} />
+            <FaShieldAlt
+              className="text-[#a55233] dark:text-emerald-400"
+              size={20}
+            />
           </div>
           <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
             Module Permissions
           </h3>
         </div>
       </div>
-      
+
       <div className="p-6">
         <div className="space-y-4">
           <p className="text-[#5e4636] dark:text-gray-300 mb-4">
             Control access to different modules for each user
           </p>
-          
+
           {loading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
-              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">Loading users...</span>
+              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
+                Loading users...
+              </span>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -775,7 +889,7 @@ const AdminPanel = () => {
                       <FaCog className="mr-2" size={12} /> Configure
                     </button>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {availableModules.map((module) => {
                       const isDisabled = user.disabled_modules?.[module.id];
@@ -784,11 +898,15 @@ const AdminPanel = () => {
                           key={module.id}
                           className={`text-xs px-2 py-1 rounded-md flex items-center ${
                             isDisabled
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                              : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
                           }`}
                         >
-                          {isDisabled ? <FaLock size={10} className="mr-1" /> : <FaUnlock size={10} className="mr-1" />}
+                          {isDisabled ? (
+                            <FaLock size={10} className="mr-1" />
+                          ) : (
+                            <FaUnlock size={10} className="mr-1" />
+                          )}
                           {module.name}
                         </div>
                       );
@@ -808,24 +926,29 @@ const AdminPanel = () => {
       <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
         <div className="flex items-center space-x-3">
           <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
-            <FaCloudUploadAlt className="text-[#a55233] dark:text-emerald-400" size={20} />
+            <FaCloudUploadAlt
+              className="text-[#a55233] dark:text-emerald-400"
+              size={20}
+            />
           </div>
           <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
             Upload Controls
           </h3>
         </div>
       </div>
-      
+
       <div className="p-6">
         <div className="space-y-4">
           <p className="text-[#5e4636] dark:text-gray-300 mb-4">
             Manage file upload permissions and upload files for users
           </p>
-          
+
           {loading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
-              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">Loading users...</span>
+              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
+                Loading users...
+              </span>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -843,15 +966,21 @@ const AdminPanel = () => {
                         <span className="font-medium text-[#0a3b25] dark:text-emerald-400">
                           {user.username}
                         </span>
-                        <div className={`text-xs mt-1 ${
-                          userUploadPermissions[user.id] 
-                            ? 'text-green-600 dark:text-green-400' 
-                            : 'text-red-600 dark:text-red-400'}`}>
-                          Upload {userUploadPermissions[user.id] ? 'Enabled' : 'Disabled'}
+                        <div
+                          className={`text-xs mt-1 ${
+                            userUploadPermissions[user.id]
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
+                          Upload{" "}
+                          {userUploadPermissions[user.id]
+                            ? "Enabled"
+                            : "Disabled"}
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex space-x-2">
                       <button
                         className="bg-[#556052] hover:bg-[#4a5249] dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-all"
@@ -859,12 +988,12 @@ const AdminPanel = () => {
                       >
                         <FaFileUpload className="mr-2" size={12} /> Upload Files
                       </button>
-                      
+
                       <button
                         className={`px-3 py-1.5 rounded-lg text-sm flex items-center transition-all ${
                           userUploadPermissions[user.id]
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50'
-                            : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50'
+                            ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+                            : "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
                         }`}
                         onClick={() => toggleUploadPermission(user.id)}
                         disabled={uploadLoading[user.id]}
@@ -904,17 +1033,19 @@ const AdminPanel = () => {
           </h3>
         </div>
       </div>
-      
+
       <div className="p-6">
         <div className="space-y-4">
           <p className="text-[#5e4636] dark:text-gray-300 mb-4">
             Control access to right panel and advanced features
           </p>
-          
+
           {loading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
-              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">Loading users...</span>
+              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
+                Loading users...
+              </span>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -932,12 +1063,17 @@ const AdminPanel = () => {
                         <span className="font-medium text-[#0a3b25] dark:text-emerald-400">
                           {user.username}
                         </span>
-                        <div className={`text-xs mt-1 ${
-                          user.disabled_features?.['right-panel-access'] 
-                            ? 'text-red-600 dark:text-red-400' 
-                            : 'text-green-600 dark:text-green-400'
-                        }`}>
-                          Right Panel {user.disabled_features?.['right-panel-access'] ? 'Disabled' : 'Enabled'}
+                        <div
+                          className={`text-xs mt-1 ${
+                            user.disabled_features?.["right-panel-access"]
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-green-600 dark:text-green-400"
+                          }`}
+                        >
+                          Right Panel{" "}
+                          {user.disabled_features?.["right-panel-access"]
+                            ? "Disabled"
+                            : "Enabled"}
                         </div>
                       </div>
                     </div>
@@ -948,7 +1084,7 @@ const AdminPanel = () => {
                       <FaTags className="mr-2" size={12} /> Configure
                     </button>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {availableRightPanelFeatures.slice(0, 4).map((feature) => {
                       const isDisabled = user.disabled_features?.[feature.id];
@@ -957,11 +1093,15 @@ const AdminPanel = () => {
                           key={feature.id}
                           className={`text-xs px-2 py-1 rounded-md flex items-center ${
                             isDisabled
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                              : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
                           }`}
                         >
-                          {isDisabled ? <FaLock size={10} className="mr-1" /> : <FaUnlock size={10} className="mr-1" />}
+                          {isDisabled ? (
+                            <FaLock size={10} className="mr-1" />
+                          ) : (
+                            <FaUnlock size={10} className="mr-1" />
+                          )}
                           {feature.name}
                         </div>
                       );
@@ -976,13 +1116,65 @@ const AdminPanel = () => {
     </div>
   );
 
-  const CategoryManagementSection = () => (
+const CategoryManagementSection = () => {
+  const [expandedUsers, setExpandedUsers] = useState(new Set());
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Group categories by username and separate global categories
+  const { globalCategories, userCategories } = useMemo(() => {
+    const global = categories.filter(cat => cat.is_global);
+    const user = categories.filter(cat => !cat.is_global);
+    
+    const grouped = user.reduce((acc, category) => {
+      const username = category.username;
+      if (!acc[username]) {
+        acc[username] = [];
+      }
+      acc[username].push(category);
+      return acc;
+    }, {});
+
+    return { globalCategories: global, userCategories: grouped };
+  }, [categories]);
+
+  // Filter users based on search term
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return Object.entries(userCategories);
+    
+    return Object.entries(userCategories).filter(([username, cats]) => 
+      username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cats.some(cat => cat.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [userCategories, searchTerm]);
+
+  const toggleUserExpansion = (username) => {
+    const newExpanded = new Set(expandedUsers);
+    if (newExpanded.has(username)) {
+      newExpanded.delete(username);
+    } else {
+      newExpanded.add(username);
+    }
+    setExpandedUsers(newExpanded);
+  };
+
+  const expandAll = () => {
+    setExpandedUsers(new Set(Object.keys(userCategories)));
+  };
+
+  const collapseAll = () => {
+    setExpandedUsers(new Set());
+  };
+
+  return (
     <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
       <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
-              <FaTags className="text-[#a55233] dark:text-emerald-400" size={20} />
+              <FaTags
+                className="text-[#a55233] dark:text-emerald-400"
+                size={20}
+              />
             </div>
             <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
               Category Management
@@ -996,200 +1188,362 @@ const AdminPanel = () => {
           </button>
         </div>
       </div>
-      
+
       <div className="p-6">
-        <div className="space-y-4">
-          <p className="text-[#5e4636] dark:text-gray-300">
-            Organize and manage content categories
-          </p>
-          
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <p className="text-[#5e4636] dark:text-gray-300">
+              Organize and manage content categories
+            </p>
+            
+            {/* Search and Controls */}
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <div className="relative">
+                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#5e4636] dark:text-gray-400" size={14} />
+                <input
+                  type="text"
+                  placeholder="Search users or categories..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-[#e3d5c8] dark:border-gray-700 rounded-lg bg-white/60 dark:bg-gray-800/60 text-[#0a3b25] dark:text-gray-200 placeholder-[#5e4636] dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={expandAll}
+                  className="px-3 py-2 text-xs bg-[#a55233]/10 hover:bg-[#a55233]/20 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 text-[#a55233] dark:text-emerald-400 rounded-lg transition-all"
+                >
+                  Expand All
+                </button>
+                <button
+                  onClick={collapseAll}
+                  className="px-3 py-2 text-xs bg-gray-200/60 hover:bg-gray-300/60 dark:bg-gray-700/60 dark:hover:bg-gray-600/60 text-[#5e4636] dark:text-gray-300 rounded-lg transition-all"
+                >
+                  Collapse All
+                </button>
+              </div>
+            </div>
+          </div>
+
           {loading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
-              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">Loading categories...</span>
+              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
+                Loading categories...
+              </span>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {categories.map((category) => (
-                <div
-                  key={category.id}
-                  className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-4 border border-[#e3d5c8] dark:border-gray-700/50 hover:shadow-md transition-all"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <div className="w-10 h-10 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-purple-500 dark:to-pink-500 rounded-lg flex items-center justify-center">
-                          <FaTags className="text-white" size={16} />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400">
-                            {category.name}
-                          </h4>
-                          <p className="text-sm text-[#5a544a] dark:text-gray-400">
-                            Created by {category.username} • {new Date(category.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
+            <div className="space-y-4">
+              {/* Global Categories Section */}
+              {globalCategories.length > 0 && (
+                <div className="bg-gradient-to-r from-[#f9f4ef] to-[#f5e6d8] dark:from-gray-800/70 dark:to-gray-700/50 rounded-xl p-5 border-2 border-[#a55233]/30 dark:border-emerald-500/30 shadow-md">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                      <FaGlobe className="text-white" size={18} />
                     </div>
-                    
-                    <div className="flex space-x-2">
-                      <button
-                        className="p-2 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-lg transition-all"
-                        onClick={() => handleOpenEditCategoryModal(category)}
-                        title="Edit Category"
-                      >
-                        <FaEdit size={16} />
-                      </button>
-                      <button
-                        className="p-2 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                        onClick={() => handleDeleteCategory(category.id, category.name)}
-                        title="Delete Category"
-                      >
-                        <FaTrash size={16} />
-                      </button>
+                    <div>
+                      <h4 className="font-bold text-[#0a3b25] dark:text-emerald-400 text-lg flex items-center">
+                        Global Categories
+                        <span className="ml-2 px-2 py-1 bg-[#a55233]/20 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
+                          {globalCategories.length}
+                        </span>
+                      </h4>
+                      <p className="text-sm text-[#5a544a] dark:text-gray-400">
+                        Available to all users
+                      </p>
                     </div>
                   </div>
+
+                  <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {globalCategories.map((category) => (
+                      <div
+                        key={category.id}
+                        className="bg-white/80 dark:bg-gray-900/60 rounded-lg p-4 border border-[#e8ddcc] dark:border-gray-600/40 hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <div className="w-8 h-8 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-lg flex items-center justify-center">
+                                <FaTags className="text-white" size={12} />
+                              </div>
+                              <div>
+                                <h5 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-sm">
+                                  {category.name}
+                                </h5>
+                                <p className="text-xs text-[#5a544a] dark:text-gray-500">
+                                  {new Date(category.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex space-x-1">
+                            <button
+                              className="p-1.5 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-md transition-all"
+                              onClick={() => handleOpenEditCategoryModal(category)}
+                              title="Edit Category"
+                            >
+                              <FaEdit size={12} />
+                            </button>
+                            <button
+                              className="p-1.5 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
+                              onClick={() => handleDeleteCategory(category.id, category.name)}
+                              title="Delete Category"
+                            >
+                              <FaTrash size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* User Categories Section */}
+              <div className="space-y-3">
+                {filteredUsers.length === 0 && searchTerm ? (
+                  <div className="text-center py-8 text-[#5e4636] dark:text-gray-400">
+                    <FaSearch className="mx-auto mb-3 text-3xl opacity-50" />
+                    <p>No categories found matching "{searchTerm}"</p>
+                  </div>
+                ) : (
+                  filteredUsers.map(([username, userCats]) => {
+                    const isExpanded = expandedUsers.has(username);
+                    
+                    return (
+                      <div
+                        key={username}
+                        className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg border border-[#e3d5c8] dark:border-gray-700/50 overflow-hidden transition-all duration-200 hover:shadow-md"
+                      >
+                        {/* Collapsible User Header */}
+                        <button
+                          onClick={() => toggleUserExpansion(username)}
+                          className="w-full flex items-center justify-between p-4 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50 transition-all"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-purple-500 dark:to-pink-500 rounded-full flex items-center justify-center">
+                              <FaUser className="text-white" size={16} />
+                            </div>
+                            <div className="text-left">
+                              <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400">
+                                {username}
+                              </h4>
+                              <p className="text-sm text-[#5a544a] dark:text-gray-400">
+                                {userCats.length} {userCats.length === 1 ? 'category' : 'categories'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2 py-1 bg-[#a55233]/10 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
+                              {userCats.length}
+                            </span>
+                            {isExpanded ? (
+                              <FaChevronUp className="text-[#5e4636] dark:text-gray-400" size={14} />
+                            ) : (
+                              <FaChevronDown className="text-[#5e4636] dark:text-gray-400" size={14} />
+                            )}
+                          </div>
+                        </button>
+
+                        {/* Expandable Categories */}
+                        {isExpanded && (
+                          <div className="px-4 pb-4 border-t border-[#e3d5c8] dark:border-gray-700/50">
+                            <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-4">
+                              {userCats.map((category) => (
+                                <div
+                                  key={category.id}
+                                  className="bg-white/60 dark:bg-gray-900/40 rounded-lg p-3 border border-[#e8ddcc] dark:border-gray-600/30 hover:shadow-md hover:scale-[1.02] transition-all duration-200"
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2 mb-2">
+                                        <div className="w-7 h-7 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-md flex items-center justify-center">
+                                          <FaTags className="text-white" size={10} />
+                                        </div>
+                                        <div>
+                                          <h5 className="font-medium text-[#0a3b25] dark:text-emerald-400 text-sm">
+                                            {category.name}
+                                          </h5>
+                                          <p className="text-xs text-[#5a544a] dark:text-gray-500">
+                                            {new Date(category.created_at).toLocaleDateString()}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex space-x-1">
+                                      <button
+                                        className="p-1 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded transition-all"
+                                        onClick={() => handleOpenEditCategoryModal(category)}
+                                        title="Edit Category"
+                                      >
+                                        <FaEdit size={11} />
+                                      </button>
+                                      <button
+                                        className="p-1 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded transition-all"
+                                        onClick={() => handleDeleteCategory(category.id, category.name)}
+                                        title="Delete Category"
+                                      >
+                                        <FaTrash size={11} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
     </div>
   );
+};
+  return (
+    <div className="bg-[#faf4ee] dark:bg-black min-h-screen text-[#5e4636] dark:text-white">
+      <Header />
 
-return (
-  <div className="bg-[#faf4ee] dark:bg-black min-h-screen text-[#5e4636] dark:text-white">
-    <Header />
-    
-  
-   {/* Fixed Navigation Bar */}
-<div className="sticky top-14 z-40 bg-[#faf4ee]/95 dark:bg-black backdrop-blur-lg  border-[#e8ddcc]/50 dark:border-emerald-900/30">
-  <div className="max-w-7xl mx-auto px-3 py-3">
-    {/* Error Alert */}
-    {error && (
-      <div className="bg-[#fff0f0] text-[#ff4a4a] dark:bg-red-500/80 dark:text-white p-4 mb-4 rounded-lg shadow-lg">
-        {error}
-      </div>
-    )}
-    
-    {/* Page Title and Navigation in One Line */}
-     <div className="stagger-item flex items-center justify-between gap-6" style={{ animationDelay: '0.2s', opacity: 0, animationFillMode: 'forwards' }}>
-      {/* Title Section */}
-     
-        <h1 className="text-3xl font-serif text-[#0a3b25] dark:text-emerald-400 duration-500">
-          Admin Panel
-        </h1>
-      
-      {/* Modern Tab Navigation */}
-      <div className="flex items-center space-x-2 bg-white/60 dark:bg-black/40 p-2 rounded-2xl shadow-inner border border-[#e8ddcc]/50 dark:border-emerald-900/30">
-        <button
-          className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
-            activeTab === "users"
-              ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
-              : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
-          }`}
-          onClick={() => setActiveTab("users")}
-        >
-          <FaUsers className="mr-2" size={14} />
-          <span className="hidden sm:inline">User Info</span>
-          <span className="sm:hidden">Users</span>
-        </button>
-        <button
-          className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
-            activeTab === "modules"
-              ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
-              : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
-          }`}
-          onClick={() => setActiveTab("modules")}
-        >
-          <FaShieldAlt className="mr-2" size={14} />
-          <span className="hidden sm:inline">Module Control</span>
-          <span className="sm:hidden">Modules</span>
-        </button>
-        <button
-          className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
-            activeTab === "uploads"
-              ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
-              : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
-          }`}
-          onClick={() => setActiveTab("uploads")}
-        >
-          <FaCloudUploadAlt className="mr-2" size={14} />
-          <span className="hidden sm:inline">Upload Control</span>
-          <span className="sm:hidden">Uploads</span>
-        </button>
-        <button
-          className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
-            activeTab === "features"
-              ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
-              : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
-          }`}
-          onClick={() => setActiveTab("features")}
-        >
-          <FaEye className="mr-2" size={14} />
-          <span className="hidden sm:inline">Feature Permissions</span>
-          <span className="sm:hidden">Features</span>
-        </button>
-        <button
-          className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
-            activeTab === "categories"
-              ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
-              : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
-          }`}
-          onClick={() => setActiveTab("categories")}
-        >
-          <FaTags className="mr-2" size={14} />
-          <span className="hidden sm:inline">Category Management</span>
-          <span className="sm:hidden">Categories</span>
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+      {/* Fixed Navigation Bar */}
+      <div className="sticky top-14 z-40 bg-[#faf4ee]/95 dark:bg-black backdrop-blur-lg  border-[#e8ddcc]/50 dark:border-emerald-900/30">
+        <div className="max-w-7xl mx-auto px-3 py-3">
+          {/* Error Alert */}
+          {error && (
+            <div className="bg-[#fff0f0] text-[#ff4a4a] dark:bg-red-500/80 dark:text-white p-4 mb-4 rounded-lg shadow-lg">
+              {error}
+            </div>
+          )}
 
-    {/* Scrollable Content Area */}
-    <div className="max-w-7xl mx-auto px-6 py-12 mt-8">
+          {/* Page Title and Navigation in One Line */}
+          <div
+            className="stagger-item flex items-center justify-between gap-6"
+            style={{
+              animationDelay: "0.2s",
+              opacity: 0,
+              animationFillMode: "forwards",
+            }}
+          >
+            {/* Title Section */}
 
-      {/* Content Sections */}
-     
-<div className="relative min-h-[600px]">
-  <div 
-    key={activeTab} 
-    className="smooth-appear"
-    style={{
-      animationDelay: '0.1s',
-      opacity: 0,
-      animationFillMode: 'forwards'
-    }}
-  >
-    {activeTab === "users" && (
-      <div className="space-y-8">
-        <UserInfoSection />
+            <h1 className="text-3xl font-serif text-[#0a3b25] dark:text-emerald-400 duration-500">
+              Admin Panel
+            </h1>
+
+            {/* Modern Tab Navigation */}
+            <div className="flex items-center space-x-2 bg-white/60 dark:bg-black/40 p-2 rounded-2xl shadow-inner border border-[#e8ddcc]/50 dark:border-emerald-900/30">
+              <button
+                className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
+                  activeTab === "users"
+                    ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
+                    : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
+                }`}
+                onClick={() => setActiveTab("users")}
+              >
+                <FaUsers className="mr-2" size={14} />
+                <span className="hidden sm:inline">User Info</span>
+                <span className="sm:hidden">Users</span>
+              </button>
+              <button
+                className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
+                  activeTab === "modules"
+                    ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
+                    : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
+                }`}
+                onClick={() => setActiveTab("modules")}
+              >
+                <FaShieldAlt className="mr-2" size={14} />
+                <span className="hidden sm:inline">Module Control</span>
+                <span className="sm:hidden">Modules</span>
+              </button>
+              <button
+                className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
+                  activeTab === "uploads"
+                    ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
+                    : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
+                }`}
+                onClick={() => setActiveTab("uploads")}
+              >
+                <FaCloudUploadAlt className="mr-2" size={14} />
+                <span className="hidden sm:inline">Upload Control</span>
+                <span className="sm:hidden">Uploads</span>
+              </button>
+              <button
+                className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
+                  activeTab === "features"
+                    ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
+                    : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
+                }`}
+                onClick={() => setActiveTab("features")}
+              >
+                <FaEye className="mr-2" size={14} />
+                <span className="hidden sm:inline">Feature Permissions</span>
+                <span className="sm:hidden">Features</span>
+              </button>
+              <button
+                className={`px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 font-medium text-sm whitespace-nowrap ${
+                  activeTab === "categories"
+                    ? "bg-gradient-to-r from-[#a55233] to-[#8b4513] dark:from-blue-600 dark:to-emerald-600 text-white shadow-lg transform scale-105"
+                    : "text-[#5e4636] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-black/30 hover:scale-102"
+                }`}
+                onClick={() => setActiveTab("categories")}
+              >
+                <FaTags className="mr-2" size={14} />
+                <span className="hidden sm:inline">Category Management</span>
+                <span className="sm:hidden">Categories</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    )}
-    {activeTab === "modules" && (
-      <div className="space-y-8">
-        <ModulePermissionsSection />
-      </div>
-    )}
-    {activeTab === "uploads" && (
-      <div className="space-y-8">
-        <UploadControlsSection />
-      </div>
-    )}
-    {activeTab === "features" && (
-      <div className="space-y-8">
-        <FeaturePermissionsSection />
-      </div>
-    )}
-    {activeTab === "categories" && (
-      <div className="space-y-8">
-        <CategoryManagementSection />
-      </div>
-    )}
-  </div>
-</div>
+
+      {/* Scrollable Content Area */}
+      <div className="max-w-7xl mx-auto px-6 py-12 mt-8">
+        {/* Content Sections */}
+
+        <div className="relative min-h-[600px]">
+          <div
+            key={activeTab}
+            className="smooth-appear"
+            style={{
+              animationDelay: "0.1s",
+              opacity: 0,
+              animationFillMode: "forwards",
+            }}
+          >
+            {activeTab === "users" && (
+              <div className="space-y-8">
+                <UserInfoSection />
+              </div>
+            )}
+            {activeTab === "modules" && (
+              <div className="space-y-8">
+                <ModulePermissionsSection />
+              </div>
+            )}
+            {activeTab === "uploads" && (
+              <div className="space-y-8">
+                <UploadControlsSection />
+              </div>
+            )}
+            {activeTab === "features" && (
+              <div className="space-y-8">
+                <FeaturePermissionsSection />
+              </div>
+            )}
+            {activeTab === "categories" && (
+              <div className="space-y-8">
+                <CategoryManagementSection />
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Add User Modal */}
         {isAddModalOpen && (
@@ -1252,8 +1606,8 @@ return (
                   </label>
                   <input
                     type="text"
-                    name="huggingface_token"
-                    value={formData.huggingface_token}
+                    name="nebius_token"
+                    value={formData.nebius_token}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                   />
@@ -1330,12 +1684,12 @@ return (
               <form onSubmit={handleUpdateTokens} className="p-4">
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
-                    Hugging Face Token
+                    Nebius Token
                   </label>
                   <input
                     type="text"
-                    name="huggingface_token"
-                    value={formData.huggingface_token}
+                    name="nebius_token"
+                    value={formData.nebius_token}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                   />
@@ -1420,16 +1774,18 @@ return (
                       key={module.id}
                       className="flex items-center justify-between p-3 bg-[#e9dcc9] dark:bg-black/30 border border-[#d6cbbf] dark:border-emerald-900/30 rounded-lg"
                     >
-                      <span className="text-[#5e4636] dark:text-white">{module.name}</span>
+                      <span className="text-[#5e4636] dark:text-white">
+                        {module.name}
+                      </span>
                       <button
                         type="button"
                         onClick={() => toggleModulePermission(module.id)}
-                        className={`px-3 py-1.5 rounded-lg flex items-center space-x-2 
+                        className={`px-3 py-1.5 rounded-lg flex items-center space-x-2
                           ${
                             modulePermissions[module.id]
                               ? "bg-[#ff4a4a]/20 text-[#ff4a4a] hover:bg-[#ff4a4a]/40 dark:bg-red-600/20 dark:text-red-300 dark:hover:bg-red-600/40"
                               : "bg-[#556052]/20 text-[#556052] hover:bg-[#556052]/40 dark:bg-emerald-600/20 dark:text-emerald-300 dark:hover:bg-emerald-600/40"
-                          } 
+                          }
                           transition-colors`}
                       >
                         {modulePermissions[module.id] ? (
@@ -1519,7 +1875,7 @@ return (
                             rightPanelPermissions[feature.id]
                               ? "bg-[#ff4a4a]/20 text-[#ff4a4a] hover:bg-[#ff4a4a]/40 dark:bg-red-600/20 dark:text-red-300 dark:hover:bg-red-600/40"
                               : "bg-[#556052]/20 text-[#556052] hover:bg-[#556052]/40 dark:bg-emerald-600/20 dark:text-emerald-300 dark:hover:bg-emerald-600/40"
-                          } 
+                          }
                           transition-colors`}
                       >
                         {rightPanelPermissions[feature.id] ? (
@@ -1539,16 +1895,29 @@ return (
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 rounded-lg p-3 mb-6">
                   <div className="flex items-start">
                     <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg
+                        className="h-5 w-5 text-yellow-400"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                     </div>
                     <div className="ml-3">
                       <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
                         Important Note
+                     
                       </h3>
                       <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
-                        <p>Disabling "Right Panel Access" will hide the entire right panel for this user. Other right panel features will be automatically inaccessible.</p>
+                        <p>
+                          Disabling "Right Panel Access" will hide the entire
+                          right panel for this user. Other right panel features
+                          will be automatically inaccessible.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1695,7 +2064,9 @@ return (
                   <button
                     type="submit"
                     className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white rounded-md flex items-center transition-colors shadow-md"
-                    disabled={loading || !selectedFiles.length || !selectedProject}
+                    disabled={
+                      loading || !selectedFiles.length || !selectedProject
+                    }
                   >
                     {loading ? (
                       <>
@@ -1739,7 +2110,7 @@ return (
                     value={categoryFormData.user_id}
                     onChange={handleCategoryInputChange}
                     className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
-                    required
+                    
                   >
                     <option value="">Select a user</option>
                     {users.map((user) => (
@@ -1763,6 +2134,18 @@ return (
                     placeholder="Enter category name"
                   />
                 </div>
+                {/* <div className="mb-4">
+                  <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    name="description"
+                    value={categoryFormData.description}
+                    onChange={handleCategoryInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div> */}
                 <div className="flex justify-end">
                   <button
                     type="button"

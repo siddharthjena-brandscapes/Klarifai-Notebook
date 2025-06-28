@@ -20,14 +20,57 @@ GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash',
     }
 )
 
+# In your models.py or signals.py
+from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+ 
 class UserAPITokens(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='api_tokens')
-    huggingface_token = models.CharField(max_length=255, blank=True, null=True)
-    gemini_token = models.CharField(max_length=255, blank=True, null=True)
-    llama_token = models.CharField(max_length=255, blank=True, null=True)
-    
+    huggingface_token = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        default='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'
+    )
+    gemini_token = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        default='AIzaSyC5Dqjx0DLbkRXH9YWqWZ1SPTK0w0C4oFY'
+    )
+    llama_token = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        default='sk-vZTTKgcY3z9idJLCBaTHT3BlbkFJL9axkgC5FdoKyRIcx2B'
+    )
+    nebius_token = models.CharField(max_length=1024, blank=True, null=True, default='eyJhbGciOiJIUzI1NiIsImtpZCI6IlV6SXJWd1h0dnprLVRvdzlLZWstc0M1akptWXBvX1VaVkxUZlpnMDRlOFUiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJnb29nbGUtb2F1dGgyfDEwNDA3NjM1MTQxNjY5Mzc1MzgxNiIsInNjb3BlIjoib3BlbmlkIG9mZmxpbmVfYWNjZXNzIiwiaXNzIjoiYXBpX2tleV9pc3N1ZXIiLCJhdWQiOlsiaHR0cHM6Ly9uZWJpdXMtaW5mZXJlbmNlLmV1LmF1dGgwLmNvbS9hcGkvdjIvIl0sImV4cCI6MTkwODA5OTQyNywidXVpZCI6IjY5N2ExOGI1LTVmMjMtNDM4YS1iYmVmLTdhNmYwZGUxYzY2MyIsIm5hbWUiOiJpbWdfZ2VuIiwiZXhwaXJlc19hdCI6IjIwMzAtMDYtMTlUMTE6Mzc6MDcrMDAwMCJ9.X_f-n1ginmJkWBmbkhMt12L-k-fapnoo8ws4WXFWC4E')
+   
     def __str__(self):
         return f"{self.user.username}'s API Tokens"
+ 
+# Signal to automatically create UserAPITokens when a User is created
+@receiver(post_save, sender=User)
+def create_user_api_tokens(sender, instance, created, **kwargs):
+    if created:
+        UserAPITokens.objects.create(user=instance)
+        print(f"Created API tokens for user: {instance.username}")  # Debug log
+
+
+class SSOAllowedUser(models.Model):
+    email = models.EmailField(unique=True)
+ 
+    def __str__(self):
+        return self.email
+ 
+@receiver(post_save, sender=User)
+def save_user_api_tokens(sender, instance, **kwargs):
+    # This ensures existing users get tokens if they don't have them
+    if not hasattr(instance, 'api_tokens'):
+        UserAPITokens.objects.create(user=instance)
+        print(f"Created missing API tokens for user: {instance.username}")
 
 class Document(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
