@@ -9253,9 +9253,10 @@ class MindMapView(APIView):
             if not processed_docs.exists():
                 return Response({'error': 'No valid processed documents found'}, status=status.HTTP_404_NOT_FOUND)
 
-            # --- Combine content from all selected documents ---
-            all_text_chunks = []
-            document_info = []
+            # # --- Combine content from all selected documents ---
+            # all_text_chunks = []
+            # document_info = []
+
 
             # for proc_doc in processed_docs:
             #     try:
@@ -9295,14 +9296,17 @@ class MindMapView(APIView):
             #         logger.error(f"Error extracting content from {proc_doc.document.filename}: {str(e)}")
             #         continue
 
-
+             # # Step 1: Load and chunk each document individually, tracking source
+            per_doc_chunks = []
+            document_info = []
+ 
             for proc_doc in processed_docs:
                 try:
-                    # Try markdown path first (LlamaParse)
+                    text_content = ""
+                    # Read file content
                     if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
                         with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
                             text_content = f.read()
-                    # Otherwise, use metadata chunks
                     elif proc_doc.metadata and os.path.exists(proc_doc.metadata):
                         with open(proc_doc.metadata, 'rb') as f:
                             chunks = pickle.load(f)
@@ -9310,10 +9314,9 @@ class MindMapView(APIView):
                             text_content = "\n\n".join([chunk.get('text', chunk.get('content', '')) for chunk in chunks if isinstance(chunk, dict)])
                         else:
                             text_content = str(chunks)
-                    else:
-                        text_content = ""
+ 
                     if text_content and len(text_content.strip()) > 100:
-                        # Use langchain_text_splitters if available, else fallback to simple split
+                        # Chunk the content
                         try:
                             splitter = RecursiveCharacterTextSplitter(
                                 chunk_size=CHUNK_SIZE,
@@ -9321,18 +9324,35 @@ class MindMapView(APIView):
                             )
                             chunks = splitter.split_text(text_content)
                         except Exception:
-                            # Fallback: split by paragraphs
                             chunks = [text_content[i:i+CHUNK_SIZE] for i in range(0, len(text_content), CHUNK_SIZE)]
-                        all_text_chunks.extend(chunks)
+ 
+                        # Track per-document chunks
+                        per_doc_chunks.append({
+                            'document_id': proc_doc.document.id,
+                            'filename': proc_doc.document.filename,
+                            'chunks': chunks
+                        })
+ 
                         document_info.append({
                             'filename': proc_doc.document.filename,
                             'text_length': len(text_content),
                             'chunks': len(chunks),
                             'document_id': proc_doc.document.id
                         })
+ 
                 except Exception as e:
                     logger.error(f"Error extracting content from {proc_doc.document.filename}: {str(e)}")
                     continue
+ 
+            # # Collect interleaved chunks
+            interleaved_chunks = []
+            max_len = max(len(doc['chunks']) for doc in per_doc_chunks) if per_doc_chunks else 0
+            for i in range(max_len):
+                for doc in per_doc_chunks:
+                    if i < len(doc['chunks']):
+                        interleaved_chunks.append(doc['chunks'][i])
+ 
+            all_text_chunks = interleaved_chunks
 
 
             if not all_text_chunks:
