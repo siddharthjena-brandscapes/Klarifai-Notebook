@@ -1259,6 +1259,10 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
             onClose={handleEditClose}
             onUpdate={handleProjectUpdate}
              userCategories={userCategories} 
+              onCategoryCreated={(updatedCategories) => {
+    // This ensures both components stay in sync
+    setUserCategories(updatedCategories);
+  }}
           />
         )}
 

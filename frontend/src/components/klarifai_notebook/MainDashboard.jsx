@@ -368,11 +368,11 @@ const handleDocumentContextChange = useCallback((newDocuments, source = 'unknown
   const handleGenerateMindmap = async (forceDocuments = null) => {
   const documentsToUse = forceDocuments || selectedDocuments;
   
-  // If multiple documents selected, show selection modal
-  if (documentsToUse.length > 1) {
-    setIsDocumentSelectionModalOpen(true);
-    return;
-  }
+  // // If multiple documents selected, show selection modal
+  // if (documentsToUse.length > 1) {
+  //   setIsDocumentSelectionModalOpen(true);
+  //   return;
+  // }
   
   if (documentsToUse.length === 0) {
     alert('Please select at least one document to generate a mindmap');
@@ -817,8 +817,8 @@ const handleDocumentSelectionChange = (newSelection) => {
               transition-all 
               duration-300 
               ease-in-out 
-              pl-16
-              mx-16
+             ${isRightPanelOpen ? 'pl-4' : 'pl-16'}
+  ${isRightPanelOpen ? 'mx-4' : 'mx-16'}
               ${!isMobile && isSidebarOpen 
                 ? 'ml-0 w-[100%]' 
                 : 'ml-0 w-full'
@@ -946,7 +946,7 @@ const handleDocumentSelectionChange = (newSelection) => {
         isFromHistory={!!currentMindmapId}
       />
 
-<DocumentSelectionModal
+{/* <DocumentSelectionModal
   isOpen={isDocumentSelectionModalOpen}
   onClose={() => setIsDocumentSelectionModalOpen(false)}
   selectedDocuments={selectedDocuments}
@@ -955,7 +955,7 @@ const handleDocumentSelectionChange = (newSelection) => {
   onGenerateMindmap={handleGenerateMindmap}
   theme={theme}
   mainProjectId={mainProjectId}
-/>
+/> */}
 
       {/* Brain Loading Modal */}
       {isMindmapGenerating && (

@@ -1,18 +1,43 @@
+
+
 /* eslint-disable no-unused-vars */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import LoginForm from '../../components/auth/LoginForm';
 import SignupForm from '../../components/auth/SignupForm';
 import backgroundImage from '../../assets/woman_face_merging_into_the_AI.jpg';
 import logo from '../../assets/klarifi-logo-blue.png';
 import FaqButton from '../../components/faq/FaqButton';
+import brandscapeLogo from '../../assets/brand-scarpes-logo.png';
+import { coreService } from '../../utils/axiosConfig';
 
 const LoginSignup = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState(location.state?.error || '');
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      coreService.getCurrentUser()
+        .then((res) => {
+          const user = res.data || res;
+          setUserProfile(user);
+          if (user.username === 'admin') {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+          }
+        })
+        .catch(() => setIsAdmin(false));
+    } else {
+      setIsAdmin(false);
+    }
+  }, []);
 
   const toggleForm = () => {
     setIsAnimating(true);
@@ -42,7 +67,7 @@ const LoginSignup = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-white">
+    <div className="flex flex-col md:flex-row h-screen bg-white relative">
       {/* Left Side: AI-Themed Image - Hidden on mobile, visible on md and up */}
       <div
         className="hidden md:block md:w-1/2 bg-cover bg-center"
@@ -51,7 +76,7 @@ const LoginSignup = () => {
 
       {/* Right Side: Login/Signup Form - Full width on mobile, half on md and up */}
       <div
-        className="w-full md:w-1/2 flex items-center justify-center bg-cover bg-center p-4 overflow-auto"
+        className="w-full md:w-1/2 flex flex-col items-center justify-center bg-cover bg-center p-4 overflow-auto relative"
         style={{
           backgroundImage: "url('./clone/src/assets/geometric_abstract_background.jpg')"
         }}
@@ -80,27 +105,26 @@ const LoginSignup = () => {
               </div>
               
               <h2 className="text-xl sm:text-2xl font-bold text-center dark:text-gray-800 mb-4 sm:mb-6">
-                {isLogin ? "Welcome!" : "Create Account"}
+                Welcome!
               </h2>
-              
-              {isLogin ? (
-                <LoginForm onSuccess={handleAuthSuccess} initialError={error}  />
-              ) : (
-                <SignupForm onSuccess={handleAuthSuccess} />
-              )}
-              
+              <LoginForm onSuccess={handleAuthSuccess} initialError={error}  />
               <div className="mt-4 sm:mt-6 text-center pb-2">
                 <p className="text-sm text-gray-600">
-                  {isLogin ? "Don't have an account?" : "Already have an account?"}
-                  <button
-                    onClick={toggleForm}
-                    className="ml-2 font-medium text-blue-900 hover:text-blue-800 transition-all duration-300"
-                  >
-                    {isLogin ? "Sign Up" : "Login"}
-                  </button>
+                  {/* Signup is only available to admin in Admin Panel */}
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+        {/* Footer Branding - centered below the form */}
+        <div className="flex flex-col items-center w-full mt-6">
+          <div className="flex items-center justify-center space-x-2 text-gray-600 text-sm">
+            <span>Powered by:</span>
+            <img
+              src={brandscapeLogo}
+              alt="Brandscape"
+              className="h-6 w-auto"
+            />
           </div>
         </div>
       </div>

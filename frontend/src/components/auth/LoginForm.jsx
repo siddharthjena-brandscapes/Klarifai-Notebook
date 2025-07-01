@@ -98,17 +98,17 @@ const LoginForm = ({ onSuccess = () => {} }) => {
                     <path fill="#7fba00" d="M1 13h10v10H1z"/>
                     <path fill="#ffb900" d="M13 13h10v10H13z"/>
                 </svg>
-                {ssoLoading ? 'Redirecting...' : 'Sign in with Microsoft'}
+                {ssoLoading ? 'Redirecting...' : 'Sign in with Brandscapes'}
             </button>
 
-            <div className="text-center items-center justify-center">
+            {/* <div className="text-center items-center justify-center">
                 <Link
                     to="/forgot-password"
                     className="text-sm dark:text-blue-900 hover:text-blue-700 justify-center items-center"
                 >
                     Forgot Password?
                 </Link>
-            </div>
+            </div> */}
         </div>
     );
 };

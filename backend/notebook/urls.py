@@ -23,7 +23,8 @@ from .views import ( DocumentUploadView,
     WebsiteLinkUploadView,
     PlainTextUploadView,
     AdminNotebookUserStatsView,
-    GenerateIdeaContextView
+    GenerateIdeaContextView,
+    CheckUploadPermissionsView,
 
 
 
@@ -75,7 +76,7 @@ urlpatterns = [
     path('mindmap/<int:mindmap_id>/', get_mindmap_data, name='get_mindmap_data'),
     path('admin-notebook-user-stats/', AdminNotebookUserStatsView.as_view(), name='admin_notebook_user_stats'),
 
-
+    path('check-upload-permissions-NB/', CheckUploadPermissionsView.as_view(), name='check_upload_permissions'),
     # Add these to your existing urls.py file
 
 

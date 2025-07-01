@@ -4097,10 +4097,24 @@ const handleDeleteConversation = async (conversationId) => {
   //   }
   // };
 
+  // const handleDeleteChatConfirmation = (chat) => {
+  //   setChatToDelete(chat);
+  //   setIsDeleteChatModalOpen(true);
+  // };
+
   const handleDeleteChatConfirmation = (chat) => {
-    setChatToDelete(chat);
-    setIsDeleteChatModalOpen(true);
-  };
+  // Select the chat before opening the delete modal
+  if (chat && chat.conversation_id) {
+    // Set as active in sidebar
+    setActiveConversationId(chat.conversation_id);
+    // Notify parent to set as selected in main area
+    if (onSelectChat) {
+      handleChatSelection(chat); // This will fetch and set the chat as selected
+    }
+  }
+  setChatToDelete(chat);
+  setIsDeleteChatModalOpen(true);
+};
 
   function formatRelativeDate(dateString) {
     const date = new Date(dateString);

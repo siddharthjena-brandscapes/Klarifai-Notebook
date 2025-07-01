@@ -27,6 +27,11 @@ from .models import (
     ConversationMemoryBuffer,
     UserModulePermissions,
     Note,
+    UserUploadPermissions,
+    ConversationTransaction,
+    UserTransaction,
+    DocumentTransaction,
+    TransactionType
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -82,6 +87,8 @@ import json
 from typing import List, Dict, Tuple
 import yt_dlp
 from django.db import transaction
+from PyPDF2 import PdfReader
+import fitz
 
 logger = logging.getLogger(__name__)
 
@@ -1268,13 +1275,13 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
 
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
-    
+   
     def post(self, request):
         files = request.FILES.getlist('files')
         user = request.user
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
-        
+       
         if target_user_id and request.user.username == 'admin':
             # Admin uploading for another user
             try:
@@ -1286,7 +1293,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         else:
             # Regular upload
             user = request.user
-
+ 
         try:
             permissions = UserModulePermissions.objects.get(user=user)
             if permissions.disabled_modules.get('document-upload', False):
@@ -1295,26 +1302,26 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 }, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
             pass
-
+ 
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
             uploaded_docs = []
             last_processed_doc_id = None
             processed_data = None  # Initialize processed_data outside the loop
-
+ 
             for file in files:
                 file_ext = os.path.splitext(file.name)[1].lower()
                 is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
                 is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
                 is_media_file = is_audio_file or is_video_file
-                
+               
                 # Check for existing document with the same name
                 existing_doc = Document.objects.filter(
-                    user=user, 
+                    user=user,
                     filename=file.name,
                     main_project=main_project
                 ).first()
-
+ 
                 # If this is an audio/video file, handle it specially
                 if is_media_file:
                     # Process the media file to get transcript
@@ -1322,7 +1329,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         for chunk in file.chunks():
                             tmp_file.write(chunk)
                         file_path = tmp_file.name
-                    
+                   
                     try:
                         # Extract text based on file type
                         if is_video_file:
@@ -1331,27 +1338,27 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         else:  # audio file
                             print(f"Processing audio file: {file.name}")
                             extracted_text = self.extract_text_from_audio(file_path, user=user)
-                        
+                       
                         if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
                             return Response({
                                 'error': f'Failed to extract text from media file: {file.name}'
                             }, status=status.HTTP_400_BAD_REQUEST)
-                        
+                       
                         # Create transcript filename based on original file
                         base_name = os.path.splitext(file.name)[0]
                         file_type = "video" if is_video_file else "audio"
                         transcript_filename = f"{base_name}_{file_type}_transcript.txt"
-                        
+                       
                         # Create a temporary file with the transcript
                         transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
                         with open(transcript_file_path, 'w', encoding='utf-8') as f:
                             f.write(extracted_text)
-                        
+                       
                         # Create a Django File object from the transcript
                         with open(transcript_file_path, 'rb') as f:
                             from django.core.files import File
                             django_file = File(f, name=transcript_filename)
-                            
+                           
                             # Now create or update document with transcript instead of media
                             if existing_doc:
                                 # Update existing document
@@ -1367,13 +1374,20 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                     filename=transcript_filename,
                                     main_project=main_project
                                 )
-                        
+ 
+                                file_size = file.size if hasattr(file, 'size') else None
+                                upload_method = 'video_transcript' if is_video_file else 'audio_transcript' if is_audio_file else 'regular'
+                                print(f"##################Upload method: {upload_method}")
+                                print(f"### Inside post, about to call create_document_transaction for {file.name}")
+                                self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
+                                print(f"### Finished create_document_transaction for {file.name}")
+                       
                         # Delete the temporary transcript file
                         os.unlink(transcript_file_path)
-                        
+                       
                         # Process the document for RAG
                         processed_data = self.process_document_from_text(extracted_text, transcript_filename)
-                        
+                       
                         # Create ProcessedIndex
                         ProcessedIndex.objects.create(
                             document=document,
@@ -1382,20 +1396,20 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                             summary="",
                             markdown_path=processed_data.get('markdown_path', '')
                         )
-                        
+                       
                         uploaded_docs.append({
                             'id': document.id,
                             'filename': transcript_filename,
                             'original_media_type': file_type
                         })
-                        
+                       
                         last_processed_doc_id = document.id
-                    
+                   
                     finally:
                         # Clean up temporary file
                         if os.path.exists(file_path):
                             os.unlink(file_path)
-                
+               
                 # Regular file processing (non-media)
                 else:
                     if existing_doc:
@@ -1406,11 +1420,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 'filename': existing_doc.filename
                             })
                             last_processed_doc_id = existing_doc.id
-                            
+                           
                         except ProcessedIndex.DoesNotExist:
                             # Process the document if no existing index
                             processed_data = self.process_document(file, user)
-                            
+                           
                             # Create ProcessedIndex
                             ProcessedIndex.objects.create(
                                 document=existing_doc,
@@ -1419,7 +1433,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 summary="",
                                 markdown_path=processed_data.get('markdown_path', '')
                             )
-                            
+                           
                             uploaded_docs.append({
                                 'id': existing_doc.id,
                                 'filename': existing_doc.filename
@@ -1428,15 +1442,22 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     else:
                         # Create new document
                         document = Document.objects.create(
-                            user=user, 
-                            file=file, 
+                            user=user,
+                            file=file,
                             filename=file.name,
                             main_project=main_project
                         )
-                        
+ 
+                        file_size = file.size if hasattr(file, 'size') else None
+                        upload_method = 'video_transcript' if is_video_file else 'audio_transcript' if is_audio_file else 'regular'
+                        print(f"##################Upload method: {upload_method}")
+                        print(f"### Inside post, about to call create_document_transaction for {file.name}")
+                        self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
+                        print(f"### Finished create_document_transaction for {file.name}")
+                       
                         # Process it
                         processed_data = self.process_document(file, user)
-                        
+                       
                         # Create ProcessedIndex
                         ProcessedIndex.objects.create(
                             document=document,
@@ -1445,40 +1466,73 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                             summary="",
                             markdown_path=processed_data.get('markdown_path', '')
                         )
-                        
+                       
                         uploaded_docs.append({
                             'id': document.id,
                             'filename': document.filename
                         })
                         last_processed_doc_id = document.id
-                        
+                       
                         print(f"Uploaded Document - ID: {document.id}")
                         print(f"Filename: {document.filename}")
-
+ 
             # Store the last processed document ID in the session
             request.session['active_document_id'] = last_processed_doc_id
-
+ 
             # Ensure we have processed_data before using it
             if processed_data is None:
                 return Response({
                     'error': 'No documents were successfully processed'
                 }, status=status.HTTP_400_BAD_REQUEST)
-
+ 
             # Update project timestamp to track activity
             update_project_timestamp(main_project_id, user)
-
+ 
             return Response({
                 'message': 'Documents uploaded successfully',
                 'documents': uploaded_docs,
                 'active_document_id': last_processed_doc_id
             }, status=status.HTTP_201_CREATED)
-
+ 
         except Exception as e:
             print(f"Error processing document: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while processing the document'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+       
+ 
+    def create_document_transaction(self, user, document, main_project, upload_method, file_size=None):
+        """Create transaction record for document upload"""
+        try:
+            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+            # Create main transaction record
+            user_transaction = UserTransaction.objects.create(
+                user=user,
+                transaction_type=TransactionType.DOCUMENT_UPLOAD,
+                document_name=document.filename,
+                document_id=document.id,
+                main_project=main_project,
+                metadata={
+                    'upload_timestamp': timezone.now().isoformat(),
+                    'upload_method': upload_method,
+                    'file_size': file_size or getattr(document.file, 'size', None)
+                }
+            )
+           
+            # Create detailed document transaction
+            DocumentTransaction.objects.create(
+                user_transaction=user_transaction,
+                original_filename=document.filename,
+                file_size=file_size or getattr(document.file, 'size', None),
+                file_type=os.path.splitext(document.filename)[1].lower(),
+                upload_method=upload_method
+            )
+           
+            print(f"Transaction recorded for document: {document.filename}")
+           
+        except Exception as e:
+            print(f"Error creating document transaction: {str(e)}")
     # -------------------------------
     # Keep the complexity detection from original code
     # -------------------------------
@@ -1495,7 +1549,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error detecting images in PDF: {e}")
             return False
-    
+   
     # Add LlamaParse integration from Streamlit code
     def process_complex_document_with_llamaparse(self, file_path, file_name, user):
         """
@@ -1507,23 +1561,23 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         import faiss
         import pickle
         from llama_parse import LlamaParse
-        
+       
         try:
             # Get the user's Llama API token
             try:
                 user_api_tokens = UserAPITokens.objects.get(user=user)
                 llama_api_key = user_api_tokens.llama_token
-                
+               
                 # If no token is saved for the user, use a fallback mechanism or raise an error
                 if not llama_api_key:
                     logger.warning(f"No Llama API token found for user {user.username}")
                     # Optional: You could implement a fallback or raise an error
                     raise ValueError("Llama API token is required for processing complex documents")
-                    
+                   
             except UserAPITokens.DoesNotExist:
                 logger.error(f"No API tokens record found for user {user.username}")
                 raise ValueError("User API tokens not configured")
-            
+           
             parser = LlamaParse(
                 api_key=llama_api_key,  # Use the user's Llama API token
                 result_type="markdown",
@@ -1531,10 +1585,22 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 images=True,
                 premium_mode=True
             )
-            
+           
             parsed_documents = parser.load_data(file_path)
             full_text = '\n'.join([doc.text for doc in parsed_documents])
-            
+           
+            # Check if extracted text is empty or only whitespace
+            if not full_text or not full_text.strip():
+                logger.error(f"No text could be extracted from document: {file_name}")
+                raise ValueError(f"Failed to extract any text content from the document '{file_name}'. The document may be corrupted, password-protected, or in an unsupported format.")
+           
+            # Additional check for very short content (optional - adjust threshold as needed)
+            if len(full_text.strip()) < 5:  # Less than 10 characters
+                logger.warning(f"Very little text extracted from document: {file_name} (only {len(full_text.strip())} characters)")
+                raise ValueError(f"Insufficient text content extracted from document '{file_name}'. Only {len(full_text.strip())} characters were extracted.")
+           
+            logger.info(f"Successfully extracted {len(full_text)} characters from document: {file_name}")
+           
             # Save markdown (adapted from Streamlit implementation)
             base_name = os.path.splitext(file_name)[0]
             safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
@@ -1542,27 +1608,31 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             os.makedirs("markdown_files", exist_ok=True)
             with open(md_path, "w", encoding='utf-8') as f:
                 f.write(full_text)
-            
+           
             # Create FAISS index
             text_embedding_dim = 1536  # OpenAI embedding dimension
             faiss_index = faiss.IndexFlatL2(text_embedding_dim)
             metadata_store = []
-            
+           
             # Create chunks with overlap for better retrieval (from Streamlit implementation)
             chunked_texts = []
             for doc in parsed_documents:
+                # Skip documents with no meaningful content
+                if not doc.text or not doc.text.strip():
+                    continue
+                   
                 # Original document as a chunk
                 chunked_texts.append(doc.text)
                 metadata_store.append({
                     "content": doc.text,
                     "source_file": file_name
                 })
-                
+               
                 # Create additional smaller chunks for better retrieval
                 words = doc.text.split()
                 chunk_size = 200  # Smaller chunk size as in Streamlit
                 stride = 100      # With overlap
-                
+               
                 if len(words) > chunk_size:
                     for i in range(0, len(words) - chunk_size, stride):
                         chunk = " ".join(words[i:i+chunk_size])
@@ -1572,31 +1642,36 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 "content": chunk,
                                 "source_file": file_name
                             })
-            
+           
+            # Final check to ensure we have chunks to process
+            if not chunked_texts:
+                logger.error(f"No valid text chunks created from document: {file_name}")
+                raise ValueError(f"Unable to create text chunks from document '{file_name}'. The document content may be insufficient or invalid.")
+           
             # Process in batches to avoid API limitations
-            if chunked_texts:
-                batch_size = 50  # Adjust based on API limits
-                for i in range(0, len(chunked_texts), batch_size):
-                    batch = chunked_texts[i:i+batch_size]
-                    embeddings = self.get_embeddings(batch)
-                    
-                    if embeddings:
-                        faiss_index.add(np.array(embeddings).astype('float32'))
-                    else:
-                        print(f"Failed to generate embeddings for a batch in {file_name}. Continuing with next batch...")
-            
+            batch_size = 50  # Adjust based on API limits
+            for i in range(0, len(chunked_texts), batch_size):
+                batch = chunked_texts[i:i+batch_size]
+                embeddings = self.get_embeddings(batch)
+               
+                if embeddings:
+                    faiss_index.add(np.array(embeddings).astype('float32'))
+                else:
+                    print(f"Failed to generate embeddings for a batch in {file_name}. Continuing with next batch...")
+           
             # Save index and metadata
             session_id = uuid.uuid4().hex
             index_file, pickle_file = self.save_faiss_index(faiss_index, metadata_store, session_id)
-            
+           
             return {
                 'index_path': index_file,
                 'metadata_path': pickle_file,
                 'full_text': full_text,
                 'markdown_path': md_path  # Include the markdown path
             }
-            
+           
         except Exception as e:
+            logger.error(f"Error in complex document processing for file '{file_name}': {str(e)}")
             print(f"Error in complex document processing: {str(e)}")
             raise
     def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
@@ -1850,6 +1925,37 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             print(f"Error in process_document: {str(e)}")
             raise
 
+class CheckUploadPermissionsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            user = request.user
+            
+            # Skip permission check for admin users
+            if user.username == 'admin':
+                return Response({
+                    'can_upload': True
+                }, status=status.HTTP_200_OK)
+            
+            # Check if the user has upload permissions
+            try:
+                permissions = UserUploadPermissions.objects.get(user=user)
+                can_upload = permissions.can_upload
+            except UserUploadPermissions.DoesNotExist:
+                # Default to allowed if no permissions are explicitly set
+                can_upload = True
+            
+            return Response({
+                'can_upload': can_upload
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in CheckUploadPermissionsView: {str(e)}")
+            return Response({
+                'error': f'Failed to check upload permissions: {str(e)}',
+                'can_upload': False  # Default to disallowing upload on error
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
@@ -2157,7 +2263,7 @@ logger = logging.getLogger(__name__)
 
 class ChatView(APIView):
     permission_classes = [IsAuthenticated]
-
+ 
     def __init__(self, post_process_func=post_process_response):
         self.post_process_func = post_process_func
         self.agent = Agent(
@@ -2172,6 +2278,10 @@ class ChatView(APIView):
                 markdown=True
             )
 
+    def normalize_citation_markers(self, text):
+        # Replace [Source n] or [source n] with [n]
+        return re.sub(r'\[(?:source|Source)\s*(\d+)\]', r'[\1]', text)
+ 
     def post(self, request):
         user = request.user
         try:
@@ -2180,41 +2290,41 @@ class ChatView(APIView):
             conversation_id = request.data.get('conversation_id')
             main_project_id = request.data.get('main_project_id')
             selected_documents = request.data.get('selected_documents', [])
-            
+           
             # Extract web_mode flag from request
             use_web_knowledge = request.data.get('use_web_knowledge', False)
-            
+           
             # Extract general_chat_mode flag
             general_chat_mode = request.data.get('general_chat_mode', False)
-
+ 
             # Extract response_length preference
             response_length = request.data.get('response_length', 'comprehensive')
-            
+           
             # Extract response_format parameter or default to 'natural'
             response_format = request.data.get('response_format', 'natural')
-
+ 
             if not main_project_id:
                 return Response({
                     'error': 'Main project ID is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+           
             # Validate message
             if not message:
                 return Response(
-                    {'error': 'Message is required'}, 
+                    {'error': 'Message is required'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
+ 
             # Process URLs in the query - new feature
             modified_message, url_context, extracted_urls = self.process_urls_in_query(message)
             has_url_content = bool(url_context)
-            
+           
             # Log URL processing results
             if has_url_content:
                 print(f"URLs detected in query: {extracted_urls}")
                 print(f"Modified query: {modified_message}")
                 print(f"URL context size: {len(url_context)} characters")
-
+ 
             conversation_context = ""
             if conversation_id:
                 try:
@@ -2223,21 +2333,21 @@ class ChatView(APIView):
                         conversation_id=conversation_id,
                         user=user
                     )
-                    
+                   
                     # Get last 5 conversation messages (max 10 messages = 5 turns)
                     recent_messages = ChatMessage.objects.filter(
                         chat_history=conversation
                     ).order_by('-created_at')[:10]
-                    
+                   
                     # Format for context
                     if recent_messages:
                         context_messages = []
                         for msg in recent_messages:
                             prefix = "User: " if msg.role == 'user' else "Assistant: "
                             context_messages.append(f"{prefix}{msg.content[:400]}...")
-                        
+                       
                         conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
-                    
+                   
                     # Try to get memory buffer
                     try:
                         memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
@@ -2246,28 +2356,28 @@ class ChatView(APIView):
                     except ConversationMemoryBuffer.DoesNotExist:
                         # No memory buffer yet, that's fine
                         pass
-                        
+                       
                 except ChatHistory.DoesNotExist:
                     # No conversation yet, that's fine
                     pass
-            
+           
             # Skip document validation if in general chat mode or if URLs are present
             if not general_chat_mode and not has_url_content:
                 # First, check for active document in session
                 active_document_id = request.session.get('active_document_id')
-                
+               
                 if not selected_documents:
                     active_document_id = request.session.get('active_document_id')
                     if active_document_id:
                         selected_documents = [active_document_id]
-                
+               
                 # Validate document selection only when not in general chat mode and no URLs are provided
                 if not selected_documents:
                     return Response(
                         {'error': 'Please select at least one document or set an active document'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-
+ 
             # Log the inputs for debugging
             print(f"Chat request received")
             print(f"Message: {message}")
@@ -2278,26 +2388,26 @@ class ChatView(APIView):
             print(f"Response length: {response_length}")
             print(f"Has conversation context: {bool(conversation_context)}")
             print(f"Has URL content: {has_url_content}")
-
+ 
             # Process document search early to get context for format detection
             all_chunks = []
             content_sources = []
             similar_contents = []  # Store document content separately
             citation_sources = {}  # Initialize citation sources dict
-            
+           
             if not general_chat_mode:
                 try:
                     processed_docs = ProcessedIndex.objects.filter(
-                        document_id__in=selected_documents, 
+                        document_id__in=selected_documents,
                         document__user=user
                     )
-                    
+                   
                     if not processed_docs.exists() and not has_url_content:
                         return Response(
                             {'error': 'No valid documents found'},
                             status=status.HTTP_404_NOT_FOUND
                         )
-                        
+                       
                     # Log the processed docs for debugging
                     print(f"Found {processed_docs.count()} processed documents")
                     for doc in processed_docs:
@@ -2305,7 +2415,7 @@ class ChatView(APIView):
                         print(f"FAISS index path: {doc.faiss_index}")
                         print(f"Metadata path: {doc.metadata}")
                         print(f"Markdown path: {doc.markdown_path}")
-                        
+                       
                 except Exception as e:
                     print(f"Error fetching documents: {str(e)}")
                     if not has_url_content:
@@ -2313,20 +2423,20 @@ class ChatView(APIView):
                             {'error': f'Document retrieval error: {str(e)}'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-
+ 
                 # Create a merged metadata store from all selected documents
                 all_metadata_store = []
-                
+               
                 # Load FAISS indices and chunks for all selected documents
                 for proc_doc in processed_docs:
                     if not proc_doc.faiss_index or not proc_doc.metadata:
                         print(f"Missing index or metadata for {proc_doc.document.filename}")
                         continue
-                    
+                   
                     if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
                         print(f"Index or metadata file does not exist for {proc_doc.document.filename}")
                         continue
-                    
+                   
                     # Check if this is a LlamaParse document with direct markdown access
                     if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
                         print(f"Found LlamaParse markdown for {proc_doc.document.filename}")
@@ -2336,12 +2446,12 @@ class ChatView(APIView):
                             'source_file': proc_doc.document.filename,
                             'document_id': proc_doc.document.id
                         })
-                    
+                   
                     # Load metadata - this is needed for both LlamaParse and simple documents
                     try:
                         with open(proc_doc.metadata, 'rb') as f:
                             chunks = pickle.load(f)
-                        
+                       
                         # Validate the chunks format
                         if not isinstance(chunks, list):
                             print(f"Warning: chunks is not a list for {proc_doc.document.filename}, type: {type(chunks)}")
@@ -2349,42 +2459,42 @@ class ChatView(APIView):
                                 chunks = [chunks]
                             else:
                                 chunks = []
-                        
+                       
                         # Add document source information to each chunk
                         for chunk in chunks:
                             if isinstance(chunk, dict):
                                 if 'source_file' not in chunk:
                                     chunk['source_file'] = proc_doc.document.filename
-                                
+                               
                                 # Ensure 'text' key exists
                                 if 'text' not in chunk:
                                     for key in ['content', 'document_content', 'chunk_text']:
                                         if key in chunk:
                                             chunk['text'] = chunk[key]
                                             break
-                                            
+                                           
                         # Add to all metadata store
                         print(f"Adding {len(chunks)} chunks from {proc_doc.document.filename}")
                         all_metadata_store.extend(chunks)
-                        
+                       
                     except Exception as e:
                         print(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
                         continue
-                
+               
                 # Now search using the improved approach
                 if all_metadata_store:
                     print(f"Searching in {len(all_metadata_store)} chunks across all documents")
                     # Get relevant content based on query - use modified_message if URLs detected
                     # Use updated search_similar_content that returns citation_sources
                     similar_contents, content_sources, chunk_citation_sources = self.search_similar_content(
-                        modified_message if has_url_content else message, 
+                        modified_message if has_url_content else message,
                         processed_docs,
                         all_metadata_store
                     )
-                    
+                   
                     # Store citation sources
                     citation_sources = chunk_citation_sources
-                    
+                   
                     if similar_contents:
                         print(f"Found {len(similar_contents)} relevant content chunks")
                         all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
@@ -2394,12 +2504,12 @@ class ChatView(APIView):
                 else:
                     print("No metadata found for any document")
                     all_chunks = []
-            
+           
             # Check if we should auto-detect the response format
             if response_format == 'auto_detect':
                 context_snippets = [chunk.get('text', '') for chunk in all_chunks[:5]] if all_chunks else []
                 detected_format, secondary_format, confidence = self.detect_question_format(modified_message if has_url_content else message, context_snippets)
-                
+               
                 # Use the detected format if confidence is reasonable, otherwise default to 'natural'
                 if confidence >= 5.0:
                     response_format = detected_format
@@ -2407,12 +2517,12 @@ class ChatView(APIView):
                 else:
                     response_format = 'natural'
                     print(f"Low confidence in format detection ({confidence}), defaulting to 'natural'")
-            
+           
             # Get answer based on mode
             web_knowledge_response = None
             web_sources = []
             doc_citation_sources = {}
-            
+           
             # Get answer based on mode
             if general_chat_mode:
                 # For general chat mode, consider URL content if available
@@ -2420,14 +2530,14 @@ class ChatView(APIView):
                     # Create a hybrid prompt that includes the URL content
                     augmented_query = f"""
                     Please answer this question: {modified_message}
-                    
+                   
                     The question references content from URLs, which is provided here:
-                    
+                   
                     {url_context}
-                    
+                   
                     Based on this URL content, answer the user's question.
                     """
-                    
+                   
                     # Use the existing general chat function but with our augmented query
                     answer = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format, user=user)
                     print("Generated response using general chat mode with URL content")
@@ -2438,17 +2548,17 @@ class ChatView(APIView):
             else:
                 # Document chat mode - now handles URL content too
                 document_content_exists = bool(all_chunks)
-                
+               
                 if document_content_exists or has_url_content:
                     # If we have URL content, add it to the context
                     if has_url_content:
                         # Add URL context to similar_contents and content_sources
                         combined_contents = similar_contents.copy() if similar_contents else []
                         combined_contents.append(url_context)
-                        
+                       
                         combined_sources = content_sources.copy() if content_sources else []
                         combined_sources.append("URL Content")
-                        
+                       
                         # Add URL to citation sources
                         if citation_sources:
                             url_citation_key = max(citation_sources.keys()) + 1 if citation_sources else 1
@@ -2459,51 +2569,51 @@ class ChatView(APIView):
                                 'score': 0.9,  # High score for URL content
                                 'display_num': url_citation_key
                             }
-                        
+                       
                         # Generate response using combined context with citation sources
                         if response_length == 'short':
                             document_answer, doc_citation_sources = self.generate_short_response(
-                                modified_message, 
-                                combined_contents, 
-                                combined_sources, 
-                                False, 
-                                response_format, 
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
                         else:  # Default to comprehensive
                             document_answer, doc_citation_sources = self.generate_response(
-                                modified_message, 
-                                combined_contents, 
-                                combined_sources, 
-                                False, 
-                                response_format, 
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
-                        
+                       
                         print(f"Generated document-based answer with URL content using {response_length} response length")
                     else:
                         # Standard document-based response without URL content
                         if response_length == 'short':
                             document_answer, doc_citation_sources = self.generate_short_response(
-                                message, 
-                                similar_contents, 
-                                content_sources, 
-                                False, 
-                                response_format, 
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
                         else:  # Default to comprehensive
                             document_answer, doc_citation_sources = self.generate_response(
-                                message, 
-                                similar_contents, 
-                                content_sources, 
-                                False, 
-                                response_format, 
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
-                        
+                       
                         print(f"Generated document-based answer using {response_length} response length")
-                    
+                   
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
                         web_response_data = self.get_web_knowledge_response(
@@ -2511,7 +2621,7 @@ class ChatView(APIView):
                             user=user,
                             document_context=similar_contents  # Pass document context to enhance web search  
                         )
-
+ 
                         # Extract the components from the JSON response
                         if isinstance(web_response_data, dict):
                             web_knowledge_response = web_response_data.get("content", "No web response received")
@@ -2521,27 +2631,27 @@ class ChatView(APIView):
                             web_knowledge_response = str(web_response_data)
                             web_sources = []
                         print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
-                        
+                       
                         # Combine document and web responses
-                    
+                   
                         combined_response_data, combined_citation_sources = self.combine_document_and_web_responses(
-                            modified_message if has_url_content else message, 
-                            document_answer, 
-                            web_knowledge_response, 
-                            combined_sources if has_url_content else content_sources, 
+                            modified_message if has_url_content else message,
+                            document_answer,
+                            web_knowledge_response,
+                            combined_sources if has_url_content else content_sources,
                             web_sources,
                             response_format,
                             conversation_context,
                             original_doc_context=similar_contents,
                         )
-
+ 
                         # Extract the answer from the JSON response
                         if isinstance(combined_response_data, dict):
                             answer = combined_response_data.get("content", "Error combining responses")
                         else:
                             answer = str(combined_response_data)
                         print("Combined document and web responses")
-                        
+                       
                         # Update citation sources with combined sources
                         doc_citation_sources = combined_citation_sources
                     else:
@@ -2555,7 +2665,7 @@ class ChatView(APIView):
                             modified_message if has_url_content else message,
                             user=user
                         )
-
+ 
                         if isinstance(web_response_data, dict):
                             answer = web_response_data.get("content", "No web response received")
                             web_sources = web_response_data.get("web_sources", [])
@@ -2566,7 +2676,7 @@ class ChatView(APIView):
                     else:
                         print("No document content found and web knowledge not enabled")
                         answer = "I couldn't find any relevant information in the documents."
-            
+           
             # Extract main response and citation info (if any)
             if "\n\n*Sources:" in answer:
                 parts = answer.split("\n\n*Sources:")
@@ -2575,7 +2685,7 @@ class ChatView(APIView):
             else:
                 clean_response = answer
                 source_info = "Web search results" if use_web_knowledge else ""
-                
+               
                 # Add URL sources if applicable
                 if has_url_content:
                     urls_domains = [self.extract_domain(url) for url in extracted_urls]
@@ -2584,12 +2694,14 @@ class ChatView(APIView):
                         source_info += f", URLs: {url_sources}"
                     else:
                         source_info = f"URLs: {url_sources}"
-            
+
+            clean_response = self.normalize_citation_markers(clean_response)
+           
             # Generate follow-up questions (either from documents or general chat)
             if general_chat_mode:
                 follow_up_questions = self.generate_general_follow_up_questions(
-                    modified_message if has_url_content else message, 
-                    clean_response, 
+                    modified_message if has_url_content else message,
+                    clean_response,
                     user=user
                 )
             else:
@@ -2602,7 +2714,7 @@ class ChatView(APIView):
                         "Would you like me to elaborate on any specific point?",
                         "Do you have any other questions I can help with?"
                     ]
-            
+           
             # Create citations from chunks and citation sources
             citations = []
             if not general_chat_mode:
@@ -2617,7 +2729,7 @@ class ChatView(APIView):
                         'snippet': formatted_snippet,
                         'document_id': citation_info.get('document_id', 'Unknown')
                     })
-                
+               
                 # If no enhanced citations, fall back to chunk-based citations (original method)
                 if not citations:
                     for chunk in all_chunks:
@@ -2630,7 +2742,7 @@ class ChatView(APIView):
                             'snippet': formatted_snippet[:200] + "..." if len(formatted_snippet) > 200 else formatted_snippet,
                             'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
                         })
-                
+               
                 # Add URL citations if applicable
                 if has_url_content:
                     for idx, url in enumerate(extracted_urls):
@@ -2643,7 +2755,7 @@ class ChatView(APIView):
                             'document_id': f"url_{idx}",
                             'url': url
                         })
-                
+               
                 # Add web citations if applicable
                 if use_web_knowledge and web_sources:
                     for idx, source in enumerate(web_sources):
@@ -2655,11 +2767,11 @@ class ChatView(APIView):
                             'document_id': f"web_{idx}",
                             'url': source.get('url', '')
                         })
-
+ 
             # Prepare conversation details
             conversation_id = conversation_id or str(uuid.uuid4())
             title = f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-
+ 
             # Create or retrieve conversation
             if conversation_id:
                 conversation, created = ChatHistory.objects.get_or_create(
@@ -2672,14 +2784,24 @@ class ChatView(APIView):
                         'follow_up_questions': follow_up_questions,
                     }
                 )
-
+ 
+            if created:
+                # Create conversation transaction
+                self.create_conversation_transaction(
+                    user, conversation, main_project_id,
+                    use_web_knowledge, response_format, response_length
+                )
+            else:
+                # Update existing conversation transaction
+                self.update_conversation_transaction(conversation, use_web_knowledge)
+ 
             # Create user message
             user_message = ChatMessage.objects.create(
                 chat_history=conversation,
                 role='user',
                 content=message
             )
-
+ 
             # Create AI response message
             ai_message = ChatMessage.objects.create(
                 chat_history=conversation,
@@ -2688,39 +2810,39 @@ class ChatView(APIView):
                 citations=citations,
                 use_web_knowledge=use_web_knowledge,
                 response_length=response_length,
-                response_format=response_format
+                response_format=response_format,
             )
-
+ 
             # Update or create memory buffer
             memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
                 conversation=conversation
             )
-            
+           
             # Get all messages for this conversation
             all_messages = ChatMessage.objects.filter(
                 chat_history=conversation
             ).order_by('created_at')
-            
+           
             # Update memory with all messages
             memory_buffer.update_memory(all_messages)
-
+ 
             # Add selected documents to the conversation (skip if general chat mode)
             if selected_documents and not general_chat_mode:
                 documents = Document.objects.filter(
-                    id__in=selected_documents, 
+                    id__in=selected_documents,
                     user=user
                 )
                 conversation.documents.set(documents)
-
+ 
             # Update project timestamp to track activity
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
-
+ 
             # Update conversation details
             conversation.title = title
             conversation.follow_up_questions = follow_up_questions
             conversation.save()
-
+ 
             # Use citation_sources in the response data if available
             response_data = {
                 'response': clean_response,
@@ -2736,7 +2858,7 @@ class ChatView(APIView):
                 'url_content_used': has_url_content,  # Flag if URL content was used
                 'extracted_urls': extracted_urls if has_url_content else []  # List of extracted URLs
             }
-
+ 
             # Print detailed chat response information
             print("\n--- Chat Interaction Logged ---")
             print(f"User Question: {message}")
@@ -2750,15 +2872,74 @@ class ChatView(APIView):
             print(f"Citation count: {len(citations)}")
             print(f"Follow-up Questions: {len(follow_up_questions)}")
             print("-----------------------------\n")
-
+ 
             return Response(response_data, status=status.HTTP_200_OK)
-
+ 
         except Exception as e:
             logger.error(f"Unexpected error in ChatView: {str(e)}", exc_info=True)
             return Response(
-                {'error': f'An unexpected error occurred: {str(e)}'}, 
+                {'error': f'An unexpected error occurred: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+       
+    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
+        """Create transaction record for conversation"""
+        try:
+            # Get the project
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Create main transaction record
+            user_transaction = UserTransaction.objects.create(
+                user=user,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                conversation_title=conversation.title,
+                conversation_id=conversation.conversation_id,
+                main_project=main_project,
+                metadata={
+                    'creation_timestamp': timezone.now().isoformat(),
+                    'web_knowledge_used': use_web_knowledge,
+                    'response_format': response_format,
+                    'response_length': response_length
+                }
+            )
+           
+            # Create detailed conversation transaction
+            ConversationTransaction.objects.create(
+                user_transaction=user_transaction,
+                message_count=1,  # Initial message
+                web_knowledge_used=use_web_knowledge,
+                response_format=response_format,
+                response_length=response_length
+            )
+           
+            print(f"Transaction recorded for conversation: {conversation.title}")
+           
+        except Exception as e:
+            print(f"Error creating conversation transaction: {str(e)}")
+ 
+    def update_conversation_transaction(self, conversation, use_web_knowledge):
+        """Update existing conversation transaction when new messages are added"""
+        try:
+            # Find existing transaction for this conversation
+            user_transaction = UserTransaction.objects.filter(
+                conversation_id=conversation.conversation_id,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                is_active=True
+            ).first()
+           
+            if user_transaction and hasattr(user_transaction, 'conversation_details'):
+                # Update message count
+                user_transaction.conversation_details.message_count += 1
+                if use_web_knowledge:
+                    user_transaction.conversation_details.web_knowledge_used = True
+                user_transaction.conversation_details.save()
+               
+                # Update metadata
+                user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
+                user_transaction.save()
+               
+        except Exception as e:
+            print(f"Error updating conversation transaction: {str(e)}")
 
     def _parse_json_response(self, response_content, fallback_message="Error processing response"):
         """Helper method to safely parse JSON responses from LLM"""
@@ -8998,53 +9179,60 @@ mindmap_model = genai.GenerativeModel(GEMINI_MODEL)
 class MindMapView(APIView):
     """Generate mindmap for selected documents - matches your 'generate-mindmap/' endpoint"""
     permission_classes = [IsAuthenticated]
-   
+
+
     def post(self, request):
-        """Generate mindmap for selected documents"""
         try:
             user = request.user
             main_project_id = request.data.get('main_project_id')
-            selected_documents = request.data.get('selected_documents', [])
+            if not main_project_id:
+                return Response({'error': 'Main project ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+
             target_user_id = request.data.get('target_user_id')
             force_regenerate = request.data.get('force_regenerate', False)
-           
+            selected_documents = request.data.get('selected_documents', [])
+            if not isinstance(selected_documents, list):
+                selected_documents = [selected_documents]
+            try:
+                selected_documents = [int(doc_id) for doc_id in selected_documents]
+            except (ValueError, TypeError) as e:
+                return Response({'error': 'Invalid document ID format'}, status=status.HTTP_400_BAD_REQUEST)
+
+            processed_docs = ProcessedIndex.objects.filter(
+                document_id__in=selected_documents,
+                document__user=user
+            )
+            logger.info(f"Found {processed_docs.count()} processed docs for mindmap generation")
+
             # Handle admin uploading for another user
             if target_user_id and request.user.username == 'admin':
                 try:
                     user = User.objects.get(id=target_user_id)
                 except User.DoesNotExist:
-                    return Response({
-                        'error': 'Target user not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-           
+                    return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
+
             if not main_project_id:
-                return Response({
-                    'error': 'Main project ID is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
+                return Response({'error': 'Main project ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
             if not selected_documents:
                 # Try to get active document from session
                 active_document_id = request.session.get('active_document_id')
                 if active_document_id:
                     selected_documents = [active_document_id]
                 else:
-                    return Response({
-                        'error': 'Please select at least one document'
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'error': 'Please select at least one document'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Verify project access
             try:
                 main_project = Project.objects.get(id=main_project_id, user=user)
             except Project.DoesNotExist:
-                return Response({
-                    'error': 'Project not found'
-                }, status=status.HTTP_404_NOT_FOUND)
+                return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
 
             # Check if mindmap already exists for these documents (unless force regenerate)
             if not force_regenerate:
                 existing_mindmap = self.find_existing_mindmap(user, main_project_id, selected_documents)
                 if existing_mindmap:
-                    logger.info(f"Found existing mindmap {existing_mindmap.id} for documents: {selected_documents}")
                     return Response({
                         'success': True,
                         'mindmap': existing_mindmap.data,
@@ -9060,93 +9248,126 @@ class MindMapView(APIView):
                             'created_at': existing_mindmap.created_at.isoformat()
                         }
                     }, status=status.HTTP_200_OK)
-           
-            # Get processed documents
-            try:
-                processed_docs = ProcessedIndex.objects.filter(
-                    document_id__in=selected_documents,
-                    document__user=user
-                )
-               
-                if not processed_docs.exists():
-                    return Response({
-                        'error': 'No valid processed documents found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-               
-                logger.info(f"Found {processed_docs.count()} processed documents for mindmap generation")
-               
-            except Exception as e:
-                logger.error(f"Error fetching documents: {str(e)}")
-                return Response({
-                    'error': f'Document retrieval error: {str(e)}'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Extract text from processed documents
+
+
+            if not processed_docs.exists():
+                return Response({'error': 'No valid processed documents found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # --- Combine content from all selected documents ---
             all_text_chunks = []
             document_info = []
-           
+
+            # for proc_doc in processed_docs:
+            #     try:
+            #         # Try markdown path first (LlamaParse)
+            #         if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+            #             with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+            #                 text_content = f.read()
+            #         # Otherwise, use metadata chunks
+            #         elif proc_doc.metadata and os.path.exists(proc_doc.metadata):
+            #             with open(proc_doc.metadata, 'rb') as f:
+            #                 chunks = pickle.load(f)
+            #             if isinstance(chunks, list):
+            #                 text_content = "\n\n".join([chunk.get('text', chunk.get('content', '')) for chunk in chunks if isinstance(chunk, dict)])
+            #             else:
+            #                 text_content = str(chunks)
+            #         else:
+            #             text_content = ""
+            #         if text_content and len(text_content.strip()) > 100:
+            #             # Use langchain_text_splitters if available, else fallback to simple split
+            #             try:
+            #                 splitter = RecursiveCharacterTextSplitter(
+            #                     chunk_size=CHUNK_SIZE,
+            #                     chunk_overlap=CHUNK_OVERLAP
+            #                 )
+            #                 chunks = splitter.split_text(text_content)
+            #             except Exception:
+            #                 # Fallback: split by paragraphs
+            #                 chunks = [text_content[i:i+CHUNK_SIZE] for i in range(0, len(text_content), CHUNK_SIZE)]
+            #             all_text_chunks.extend(chunks)
+            #             document_info.append({
+            #                 'filename': proc_doc.document.filename,
+            #                 'text_length': len(text_content),
+            #                 'chunks': len(chunks),
+            #                 'document_id': proc_doc.document.id
+            #             })
+            #     except Exception as e:
+            #         logger.error(f"Error extracting content from {proc_doc.document.filename}: {str(e)}")
+            #         continue
+
+
             for proc_doc in processed_docs:
                 try:
-                    text_content = self.extract_document_content(proc_doc)
-                   
+                    # Try markdown path first (LlamaParse)
+                    if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+                        with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+                            text_content = f.read()
+                    # Otherwise, use metadata chunks
+                    elif proc_doc.metadata and os.path.exists(proc_doc.metadata):
+                        with open(proc_doc.metadata, 'rb') as f:
+                            chunks = pickle.load(f)
+                        if isinstance(chunks, list):
+                            text_content = "\n\n".join([chunk.get('text', chunk.get('content', '')) for chunk in chunks if isinstance(chunk, dict)])
+                        else:
+                            text_content = str(chunks)
+                    else:
+                        text_content = ""
                     if text_content and len(text_content.strip()) > 100:
-                        # Chunk the text for better analysis
-                        chunks = self.chunk_text_for_mindmap(text_content)
+                        # Use langchain_text_splitters if available, else fallback to simple split
+                        try:
+                            splitter = RecursiveCharacterTextSplitter(
+                                chunk_size=CHUNK_SIZE,
+                                chunk_overlap=CHUNK_OVERLAP
+                            )
+                            chunks = splitter.split_text(text_content)
+                        except Exception:
+                            # Fallback: split by paragraphs
+                            chunks = [text_content[i:i+CHUNK_SIZE] for i in range(0, len(text_content), CHUNK_SIZE)]
                         all_text_chunks.extend(chunks)
-                       
                         document_info.append({
                             'filename': proc_doc.document.filename,
                             'text_length': len(text_content),
                             'chunks': len(chunks),
                             'document_id': proc_doc.document.id
                         })
-                       
-                        logger.info(f"Added {len(chunks)} chunks from {proc_doc.document.filename}")
-                   
                 except Exception as e:
-                    logger.error(f"Error processing {proc_doc.document.filename}: {str(e)}")
+                    logger.error(f"Error extracting content from {proc_doc.document.filename}: {str(e)}")
                     continue
-           
+
+
             if not all_text_chunks:
-                return Response({
-                    'error': 'No readable content found in selected documents'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            logger.info(f"Total chunks for mindmap generation: {len(all_text_chunks)}")
-           
-            # Generate mindmap
+                return Response({'error': 'No readable content found in selected documents'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # --- Generate mindmap from combined content ---
             mindmap_data = self.generate_comprehensive_mindmap(all_text_chunks)
-           
             if not mindmap_data or 'name' not in mindmap_data:
-                return Response({
-                    'error': 'Failed to generate mindmap'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({'error': 'Failed to generate mindmap'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # --- Set the root name to combined filenames ---
+            # combined_filenames = " + ".join([doc['filename'] for doc in document_info])
+            # mindmap_data['name'] = f"Mindmap: {combined_filenames}"
+            
+            combined_text = "\n\n".join(all_text_chunks)
+            heading = self.generate_mindmap_heading(combined_text)
+            if heading:
+                mindmap_data['name'] = heading
+            else:
+                # Fallback to filenames if LLM fails
+                combined_filenames = " + ".join([doc['filename'] for doc in document_info])
+                mindmap_data['name'] = f"Mindmap: {combined_filenames}"
            
-            # Count nodes for statistics
             node_count = self.count_mindmap_nodes(mindmap_data)
-           
-            # Create MindMap record with proper error handling
-            try:
-                mindmap_record = MindMap.objects.create(
-                    user=user,
-                    main_project=main_project,
-                    data=mindmap_data,
-                    document_sources=[doc['filename'] for doc in document_info],  # Store as list directly
-                    total_nodes=node_count
-                )
-               
-                logger.info(f"Successfully created mindmap record with ID: {mindmap_record.id}")
-                
-                # Update project timestamp
-                update_project_timestamp(main_project_id, user)
-               
-            except Exception as e:
-                logger.error(f"Error saving mindmap: {str(e)}")
-                return Response({
-                    'error': f'Failed to save mindmap: {str(e)}'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-           
-            # Prepare response
+
+            # Save MindMap record
+            mindmap_record = MindMap.objects.create(
+                user=user,
+                main_project=main_project,
+                data=mindmap_data,
+                document_sources=[doc['filename'] for doc in document_info],
+                total_nodes=node_count
+            )
+            update_project_timestamp(main_project_id, user)
+
             response_data = {
                 'success': True,
                 'mindmap': mindmap_data,
@@ -9162,20 +9383,41 @@ class MindMapView(APIView):
                     'created_at': mindmap_record.created_at.isoformat()
                 }
             }
-           
             return Response(response_data, status=status.HTTP_200_OK)
-           
+
         except Exception as e:
             logger.error(f"Error in MindMapView: {str(e)}")
-            return Response({
-                'error': f'Internal server error: {str(e)}',
-                'success': False
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': f'Internal server error: {str(e)}', 'success': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def find_existing_mindmap(self, user, main_project_id, selected_documents):
-        """Find existing mindmap for the same set of documents"""
+    def generate_mindmap_heading(self, combined_text, api_key=None):
+        """
+        Use Gemini API to generate a meaningful mindmap heading based on document content.
+        """
         try:
-            # Get document filenames for comparison
+            import google.generativeai as genai
+            if api_key:
+                genai.configure(api_key=api_key)
+            else:
+                genai.configure(api_key=GEMINI_API_KEY)
+            model = genai.GenerativeModel(GEMINI_MODEL)
+            prompt = (
+                "Given the following combined document content, generate a concise, descriptive title "
+                "that best summarizes the main subject or theme. Avoid generic titles. "
+                "Return only the title as a single line.\n\n"
+                f"DOCUMENT CONTENT:\n{combined_text[:3000]}"
+            )
+            response = model.generate_content(prompt)
+            title = response.text.strip().replace('\n', ' ')
+            # Clean up any quotes or markdown
+            if title.startswith('"') and title.endswith('"'):
+                title = title[1:-1]
+            return title
+        except Exception as e:
+            logger.error(f"Error generating mindmap heading: {e}")
+            return None
+    
+    def find_existing_mindmap(self, user, main_project_id, selected_documents):
+        try:
             document_filenames = set()
             for doc_id in selected_documents:
                 try:
@@ -9183,93 +9425,38 @@ class MindMapView(APIView):
                     document_filenames.add(doc.filename)
                 except Document.DoesNotExist:
                     continue
-            
             if not document_filenames:
                 return None
-            
-            # Find mindmaps for this project
             existing_mindmaps = MindMap.objects.filter(
                 user=user,
                 main_project_id=main_project_id
             ).order_by('-created_at')
-            
             for mindmap in existing_mindmaps:
                 mindmap_sources = set(mindmap.get_document_sources_list())
                 if mindmap_sources == document_filenames:
-                    logger.info(f"Found matching mindmap {mindmap.id} for documents: {document_filenames}")
                     return mindmap
-            
             return None
-            
-        except Exception as e:
-            logger.error(f"Error finding existing mindmap: {str(e)}")
+        except Exception:
             return None
 
-    def extract_document_content(self, proc_doc):
-        """Extract content from processed document"""
-        try:
-            # Check if we have LlamaParse markdown
-            if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
-                with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-            
-            # Load from metadata chunks
-            if proc_doc.metadata and os.path.exists(proc_doc.metadata):
-                with open(proc_doc.metadata, 'rb') as f:
-                    chunks = pickle.load(f)
-                
-                # Extract text from chunks
-                if isinstance(chunks, list):
-                    return "\n\n".join([
-                        chunk.get('text', chunk.get('content', ''))
-                        for chunk in chunks
-                        if isinstance(chunk, dict)
-                    ])
-                else:
-                    return str(chunks)
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error extracting content from {proc_doc.document.filename}: {str(e)}")
-            return None
-   
-    def chunk_text_for_mindmap(self, text):
-        """Split text into chunks for mindmap analysis."""
-        try:
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=CHUNK_SIZE,
-                chunk_overlap=CHUNK_OVERLAP
-            )
-            return splitter.split_text(text)
-        except Exception as e:
-            logger.error(f"Error chunking text: {e}")
-            return [text]
-   
     def count_mindmap_nodes(self, data):
-        """Count total nodes in mindmap structure"""
         if not isinstance(data, dict):
             return 0
-       
-        count = 1  # Current node
+        count = 1
         if 'children' in data and isinstance(data['children'], list):
             for child in data['children']:
                 count += self.count_mindmap_nodes(child)
-       
         return count
-   
+
     def generate_comprehensive_mindmap(self, text_chunks):
-        """Generate comprehensive mind map using multiple chunks."""
         try:
-            # Limit chunks for API efficiency
             selected_chunks = text_chunks[:25] if len(text_chunks) > 25 else text_chunks
             comprehensive_text = "\n\n".join(selected_chunks)
-           
             prompt = f"""
             You are an expert knowledge architect and document analyzer. Create a comprehensive, hierarchical mind map by systematically extracting and organizing ALL meaningful content from the document(s).
 
             DOCUMENT TEXT:
-            {comprehensive_text[:15000]}  # Limit for API
+            {comprehensive_text}
 
             Create a JSON mind map with this structure:
             {{
@@ -9296,29 +9483,25 @@ class MindMapView(APIView):
             }}
 
             REQUIREMENTS:
-            1. Extract 5-8 major topics
-            2. Each major topic must have 3+ subtopics
-            3. Go 4-6 levels deep
+            1. Extract all major topics
+            2. Each major topic must have possible subtopics
+            3. Go 9-12 possible levels deep
             4. Use exact terminology from the document
             5. Include meaningful summaries
             6. Ensure hierarchical organization
 
             Return only valid JSON:
             """
-           
             try:
                 response = mindmap_model.generate_content(
                     prompt,
                     generation_config=genai.types.GenerationConfig(
-                        temperature=0.1,
+                        temperature=0,
                         max_output_tokens=12288,
                         top_p=0.8
                     )
                 )
-               
-                # Extract JSON from response
                 parsed_data = self.extract_json_from_response(response.text)
-               
                 if parsed_data:
                     validated_data = self.validate_mindmap_structure(parsed_data)
                     logger.info(f"Successfully generated mindmap with {len(validated_data.get('children', []))} main branches")
@@ -9326,41 +9509,29 @@ class MindMapView(APIView):
                 else:
                     logger.warning("Failed to parse JSON, creating fallback")
                     return self.create_enhanced_fallback_mindmap(comprehensive_text)
-                   
             except Exception as api_error:
                 logger.error(f"API Error: {api_error}")
                 return self.create_enhanced_fallback_mindmap(comprehensive_text)
-               
         except Exception as e:
             logger.error(f"Error generating mindmap: {e}")
             return self.create_enhanced_fallback_mindmap(text_chunks[0] if text_chunks else "No content")
-   
+
     def extract_json_from_response(self, response_text):
-        """Extract JSON from Gemini response."""
         try:
             cleaned_text = response_text.strip()
-           
-            # Remove markdown formatting
             if cleaned_text.startswith("```json"):
                 cleaned_text = cleaned_text[7:]
             elif cleaned_text.startswith("```"):
                 cleaned_text = cleaned_text[3:]
-           
             if cleaned_text.endswith("```"):
                 cleaned_text = cleaned_text[:-3]
-           
             cleaned_text = cleaned_text.strip()
-           
-            # Try direct parsing
             try:
                 return json.loads(cleaned_text)
             except json.JSONDecodeError:
                 pass
-           
-            # Extract with regex
             json_pattern = r'\{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*\}'
             matches = re.findall(json_pattern, cleaned_text, re.DOTALL)
-           
             for match in matches:
                 try:
                     parsed = json.loads(match)
@@ -9368,23 +9539,16 @@ class MindMapView(APIView):
                         return parsed
                 except json.JSONDecodeError:
                     continue
-           
             return None
-           
         except Exception as e:
             logger.error(f"Error extracting JSON: {e}")
             return None
-   
+
     def validate_mindmap_structure(self, data):
-        """Validate and fix mind map structure."""
         if not isinstance(data, dict):
             return {"name": "Document", "children": []}
-       
-        # Ensure required 'name' field
         if 'name' not in data:
             data['name'] = "Document Analysis"
-       
-        # Handle children
         if 'children' in data:
             if not isinstance(data['children'], list):
                 data['children'] = []
@@ -9397,30 +9561,20 @@ class MindMapView(APIView):
                 data['children'] = validated_children
         else:
             data['children'] = []
-       
-        # Keep only allowed fields
         allowed_fields = {'name', 'children', 'description', 'type', 'summary'}
         cleaned_data = {k: v for k, v in data.items() if k in allowed_fields}
-       
         return cleaned_data
-   
+
     def create_enhanced_fallback_mindmap(self, text):
-        """Create fallback mindmap when AI generation fails."""
         try:
-            # Extract basic information
             sentences = [s.strip() for s in text.split('.') if 15 < len(s.strip()) < 200]
             paragraphs = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 50]
-           
-            # Extract key terms
             words = re.findall(r'\b[A-Za-z]{4,}\b', text.lower())
             word_freq = {}
             for word in words:
                 if word not in ['these', 'those', 'which', 'where', 'there', 'should', 'would']:
                     word_freq[word] = word_freq.get(word, 0) + 1
-           
             top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:15]
-           
-            # Create structure
             children = [
                 {
                     "name": "Document Overview",
@@ -9441,8 +9595,6 @@ class MindMapView(APIView):
                     ]
                 }
             ]
-           
-            # Add key terms section if available
             if top_keywords:
                 term_children = []
                 for keyword, freq in top_keywords[:8]:
@@ -9451,25 +9603,20 @@ class MindMapView(APIView):
                         "children": [],
                         "summary": f"Mentioned {freq} times in document"
                     })
-               
                 children.append({
                     "name": "Key Terms and Concepts",
                     "summary": "Important terminology from the document",
                     "children": term_children
                 })
-           
-            # Determine root name
             root_name = "Document Analysis"
             if sentences:
                 first_sentence = sentences[0]
                 if len(first_sentence) < 100:
                     root_name = first_sentence
-           
             return {
                 "name": root_name,
                 "children": children
             }
-           
         except Exception as e:
             logger.error(f"Error in fallback mindmap: {e}")
             return {
@@ -9487,32 +9634,1318 @@ class MindMapView(APIView):
             }
 
 
-    def get_document_ids_for_mindmap(self, user, main_project_id, document_sources):
-        """Get document IDs for mindmap document sources"""
+    def detect_document_complexity(self,file_path):
+        """Detect if PDF contains images or other complex elements."""
         try:
-            if not document_sources:
-                return []
+            doc = fitz.open(file_path)
+            for page in doc:
+                images = page.get_images()
+                if images:
+                    doc.close()
+                    return True
+            doc.close()
+            return False
+        except Exception as e:
+            print(f"Error detecting images in PDF: {e}")
+            return False
+
+    def extract_text_simple_pdf(self,file_content):
+        """Extract text from simple PDFs using PyPDF2."""
+        try:
+            reader = PdfReader(file_content)
+            text_parts = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+            return "\n".join(text_parts)
+        except Exception as e:
+            print(f"Error extracting text with PyPDF2: {e}")
+            return ""
+
+    def process_complex_document_with_llamaparse(self,file_path, llama_api_key):
+        """Process complex document using LlamaParse."""
+        try:
+            parser = LlamaParse(
+                api_key=llama_api_key,
+                result_type="markdown",
+                verbose=True,
+                images=True,
+                premium_mode=True,
+            )
             
-            # Query documents by filename and user
-            documents = Document.objects.filter(
-                user=user,
-                filename__in=document_sources
-            ).values('id', 'filename')
+            parsed_documents = parser.load_data(file_path)
+            full_text = '\n'.join([doc.text for doc in parsed_documents])
             
-            document_ids = [str(doc['id']) for doc in documents]
-            
-            logger.info(f"Found {len(document_ids)} document IDs for mindmap sources: {document_ids}")
-            
-            return document_ids
+            return full_text
             
         except Exception as e:
-            logger.error(f"Error getting document IDs for mindmap: {str(e)}")
-            return []
+            print(f"Error in complex document processing: {str(e)}")
+            raise
+
+    def extract_text_from_pdf(self,uploaded_file, llama_api_key=None):
+        """Enhanced text extraction that uses LlamaParse for complex documents."""
+        tmp_file_path = None
+        try:
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                for chunk in uploaded_file.chunks():
+                    tmp_file.write(chunk)
+                tmp_file_path = tmp_file.name
+            
+            # Detect complexity
+            is_complex = self.detect_document_complexity(tmp_file_path)
+            
+            # Extract text based on complexity
+            if is_complex and llama_api_key:
+                text = self.process_complex_document_with_llamaparse(tmp_file_path, llama_api_key)
+            else:
+                # Reset file pointer for PyPDF2
+                uploaded_file.seek(0)
+                text = self.extract_text_simple_pdf(uploaded_file)
+            
+            return text, is_complex
+        
+        except Exception as e:
+            print(f"Error in extract_text_from_pdf: {str(e)}")
+            raise
+        finally:
+            # Clean up temporary file
+            if tmp_file_path and os.path.exists(tmp_file_path):
+                try:
+                    os.unlink(tmp_file_path)
+                except Exception as e:
+                    print(f"Error deleting temp file: {e}")
+
+    def chunk_text(self,text):
+        """Split text into chunks."""
+        try:
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP
+            )
+            return splitter.split_text(text)
+        except Exception as e:
+            print(f"Error chunking text: {e}")
+            return [text]
+
+
+
+    def generate_deep_hierarchical_mindmap_from_batch(self,text_chunks, batch_number, total_batches):
+        """Generate deep hierarchical mind map (topic->subtopic->sub-subtopic->continue) from a batch of chunks."""
+        try:
+            # Combine chunks in the current batch
+            batch_text = "\n\n".join(text_chunks)
+            
+            # # Limit text size to prevent API issues
+            # if len(batch_text) > 15000:
+            #     batch_text = batch_text[:15000] + "..."
+            
+            print(f"Generating deep hierarchy for batch {batch_number}/{total_batches} with {len(batch_text)} characters from {len(text_chunks)} chunks")
+            
+            # Context-aware instruction based on batch position
+            if batch_number == 1:
+                context_instruction = "This is the first section of the document. Extract foundational topics, main themes, and primary structural elements with deep hierarchical organization."
+            elif batch_number == total_batches:
+                context_instruction = "This is the final section of the document. Extract conclusions, summaries, final insights, and any remaining topics with complete hierarchical depth."
+            else:
+                context_instruction = f"This is section {batch_number} of {total_batches} from the document. Extract all specific topics and organize them into deep hierarchical structures."
+            
+            # Enhanced prompt for human-understandable hierarchical mind map generation
+            prompt = f"""
+            You are an expert document analyst creating a CLEAR, HUMAN-UNDERSTANDABLE hierarchical mind map with logical organization.
+
+            BATCH CONTEXT: {context_instruction}
+
+            DOCUMENT SECTION TEXT:
+            {batch_text}
+
+            HUMAN UNDERSTANDING & CLARITY REQUIREMENTS:
+            1. Use CLEAR, EVERYDAY LANGUAGE that anyone can understand
+            2. Create LOGICAL groupings that make intuitive sense to humans
+            3. Use familiar terms and avoid unnecessary jargon
+            4. Group related concepts together naturally
+            5. Make topic relationships obvious and meaningful
+            6. Focus on PRACTICAL understanding over technical complexity
+
+            TOPIC ORGANIZATION PRINCIPLES:
+            - Group similar concepts under clear, descriptive headings
+            - Use topic names that immediately convey meaning
+            - Organize from general concepts to specific details
+            - Create logical flow that follows human thinking patterns
+            - Avoid overly technical or abstract groupings
+            - Prioritize clarity over comprehensive detail extraction
+
+            JSON FORMAT REQUIREMENTS:
+            1. Return ONLY valid JSON with no additional text, markdown, or comments
+            2. Structure: {{"name": "Clear Topic Name", "children": [{{"name": "Logical Subtopic", "children": [{{"name": "Specific Detail", "children": []}}]}}]}}
+            3. Each node MUST have "name" and "children" fields
+            4. "children" must be an array (empty array [] for leaf nodes only)
+            5. NO empty, vague, or overly technical node names
+            6. Topic names: clear and descriptive (maximum 60 characters)
+
+            CONTENT ORGANIZATION REQUIREMENTS:
+            - Identify main themes and organize content around them
+            - Group related information under logical headings
+            - Use clear, descriptive names for topics and subtopics
+            - Create intuitive hierarchies that follow natural thinking patterns
+            - Focus on key concepts, main ideas, and important details
+            - Organize information in a way that helps human comprehension
+            - Use explanatory summaries that clarify meaning
+
+            HIERARCHY GUIDELINES FOR HUMAN UNDERSTANDING:
+            Level 1 (Root): Main theme in clear, simple language
+            Level 2: Key topics organized by logical themes
+            Level 3: Specific aspects explained in plain terms
+            Level 4: Detailed examples and practical applications
+            Level 5: Specific information and supporting details
+
+            EXAMPLE CLEAR STRUCTURE:
+            {{
+            "name": "How Research Was Conducted",
+            "children": [
+                {{
+                "name": "Gathering Information",
+                "children": [
+                    {{
+                    "name": "Survey Methods",
+                    "children": [
+                        {{
+                        "name": "Types of Questions Asked",
+                        "children": [
+                            {{"name": "Rating Scale Questions", "children": [], "summary": "Questions where people rate things from 1 to 5"}},
+                            {{"name": "Open Response Questions", "children": [], "summary": "Questions where people write their own answers"}}
+                        ]
+                        }},
+                        {{
+                        "name": "Choosing Participants",
+                        "children": [
+                            {{"name": "Random Selection", "children": [], "summary": "Picking people randomly to get fair results"}},
+                            {{"name": "Balanced Groups", "children": [], "summary": "Making sure different types of people are included"}}
+                        ]
+                        }}
+                    ]
+                    }}
+                ]
+                }}
+            ]
+            }}
+
+            FOCUS ON CLARITY: Create topic groupings that make immediate sense to humans. Use clear language and logical organization that helps people understand the content quickly and easily.
+
+            Generate the human-understandable hierarchical mind map JSON now:
+            """
+            
+            # Generate with rate limiting
+            try:
+                # Progressive delay to prevent rate limiting
+                delay_time = 2.5 + (batch_number * 0.7)  # Increased delay for complex generation
+                time.sleep(delay_time)
+                
+                response = genai.Client.model.generate_content(
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0,  # Slightly higher for more natural language
+                        max_output_tokens=7000,  # Adjusted for clear, human-readable content
+                        top_p=0.85,
+                        top_k=40
+                    )
+                )
+                
+                print(f"Generated deep hierarchy response for batch {batch_number}: {len(response.text)} characters")
+                
+                # Extract JSON from response
+                parsed_data = self.extract_json_from_response(response.text)
+                
+                if parsed_data:
+                    # Validate and fix structure
+                    validated_data = self.validate_mindmap_structure(parsed_data)
+                    node_count = self.count_mindmap_nodes(validated_data)
+                    depth = self.calculate_max_depth(validated_data)
+                    print(f"Successfully parsed batch {batch_number}: {node_count} nodes, max depth: {depth}")
+                    return validated_data
+                else:
+                    print(f"Failed to extract valid JSON for batch {batch_number}, creating deep fallback")
+                    return self.create_deep_hierarchical_fallback(batch_text, batch_number)
+                    
+            except Exception as api_error:
+                print(f"API Error for batch {batch_number}: {api_error}")
+                if "429" in str(api_error) or "quota" in str(api_error).lower():
+                    print(f"Rate limit hit for batch {batch_number} - using deep fallback")
+                    time.sleep(5)  # Extra delay before fallback
+                    return self.create_deep_hierarchical_fallback(batch_text, batch_number)
+                else:
+                    raise api_error
+                
+        except Exception as e:
+            print(f"Error generating deep hierarchical mindmap for batch {batch_number}: {e}")
+            return self.create_deep_hierarchical_fallback(text_chunks[0] if text_chunks else f"Batch {batch_number} content", batch_number)
+        
+    
+
+
+    def create_batch_fallback_mindmap(self,text, batch_number):
+        """Create a fallback mind map for a specific batch."""
+        try:
+            # Extract key information from the batch text
+            sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 20][:15]
+            
+            # Extract keywords
+            words = re.findall(r'\b[A-Za-z]{4,}\b', text.lower())
+            word_freq = {}
+            stop_words = {'these', 'those', 'which', 'where', 'there', 'their', 'should', 'would', 'could', 'have', 'been', 'will', 'with', 'from', 'they', 'this', 'that', 'also', 'more', 'such', 'many', 'some', 'into', 'were', 'than', 'only'}
+            
+            for word in words:
+                if word not in stop_words and len(word) > 3:
+                    word_freq[word] = word_freq.get(word, 0) + 1
+            
+            top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:8]
+            
+            # Create children based on keywords and content
+            children = []
+            
+            if top_keywords:
+                for i, (keyword, freq) in enumerate(top_keywords[:4]):
+                    children.append({
+                        "name": keyword.title().replace('_', ' '),
+                        "children": [
+                            {"name": f"Key Points", "children": [], "summary": f"Important aspects of {keyword} discussed in this section"},
+                            {"name": f"Details", "children": [], "summary": f"Specific information about {keyword} mentioned {freq} times"}
+                        ]
+                    })
+            
+            # Add content overview if we have sentences
+            if sentences:
+                children.append({
+                    "name": "Section Content",
+                    "children": [
+                        {"name": "Main Ideas", "children": [], "summary": "Primary concepts covered in this section"},
+                        {"name": "Supporting Information", "children": [], "summary": "Additional details and context"}
+                    ]
+                })
+            
+            root_name = f"Document Section {batch_number}"
+            if sentences and len(sentences[0]) < 80:
+                root_name = sentences[0][:60] + "..." if len(sentences[0]) > 60 else sentences[0]
+            
+            return {
+                "name": root_name,
+                "children": children if children else [
+                    {"name": "Content Overview", "children": [], "summary": f"Information from section {batch_number}"}
+                ]
+            }
+            
+        except Exception as e:
+            print(f"Error in batch fallback for batch {batch_number}: {e}")
+            return {
+                "name": f"Document Section {batch_number}",
+                "children": [
+                    {"name": "Section Content", "children": [], "summary": f"Content from batch {batch_number}"}
+                ]
+            }
+                
+        except Exception as e:
+            print(f"Error generating deep hierarchical mindmap for batch {batch_number}: {e}")
+            # return create_deep_hierarchical_fallback(text_chunks[0] if text_chunks else f"Batch {batch_number} content", batch_number)
+
+    def calculate_max_depth(self,node, current_depth=0):
+        """Calculate the maximum depth of a mindmap structure."""
+        if not isinstance(node, dict) or 'children' not in node:
+            return current_depth
+        
+        children = node.get('children', [])
+        if not children:
+            return current_depth
+        
+        max_child_depth = current_depth
+        for child in children:
+            child_depth = self.calculate_max_depth(child, current_depth + 1)
+            max_child_depth = max(max_child_depth, child_depth)
+        
+        return max_child_depth
+
+    def create_deep_hierarchical_fallback(self,text, batch_number):
+        """Create a deep hierarchical fallback mind map for a specific batch."""
+        try:
+            # Enhanced text analysis for deeper hierarchy
+            sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 15][:25]
+            paragraphs = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 50][:15]
+            
+            # Extract keywords with frequency
+            words = re.findall(r'\b[A-Za-z]{3,}\b', text.lower())
+            word_freq = {}
+            stop_words = {'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use'}
+            
+            for word in words:
+                if word not in stop_words and len(word) > 3:
+                    word_freq[word] = word_freq.get(word, 0) + 1
+            
+            top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:12]
+            
+            # Create deep hierarchical structure
+            children = []
+            
+            # Group keywords into thematic categories for deeper hierarchy
+            if top_keywords:
+                # Create 3-4 main categories with deep sub-structures
+                keyword_groups = [
+                    top_keywords[0:3],   # Primary concepts
+                    top_keywords[3:6],   # Secondary concepts  
+                    top_keywords[6:9],   # Supporting concepts
+                    top_keywords[9:12]   # Additional concepts
+                ]
+                
+                category_names = [
+                    "Primary Concepts",
+                    "Secondary Concepts", 
+                    "Supporting Elements",
+                    "Additional Information"
+                ]
+                
+                for i, (category_name, keyword_group) in enumerate(zip(category_names, keyword_groups)):
+                    if not keyword_group:
+                        continue
+                        
+                    category_children = []
+                    for keyword, freq in keyword_group:
+                        # Create deep structure for each keyword
+                        keyword_node = {
+                            "name": keyword.title().replace('_', ' '),
+                            "children": [
+                                {
+                                    "name": "Definition & Context",
+                                    "children": [
+                                        {"name": "Core Meaning", "children": [], "summary": f"Primary definition and significance of {keyword}"},
+                                        {"name": "Usage Context", "children": [], "summary": f"How {keyword} is used in this section"}
+                                    ]
+                                },
+                                {
+                                    "name": "Details & Examples",
+                                    "children": [
+                                        {"name": "Specific Details", "children": [], "summary": f"Detailed information about {keyword}"},
+                                        {"name": "Related Examples", "children": [], "summary": f"Examples and instances of {keyword} mentioned {freq} times"}
+                                    ]
+                                }
+                            ]
+                        }
+                        category_children.append(keyword_node)
+                    
+                    if category_children:
+                        children.append({
+                            "name": category_name,
+                            "children": category_children
+                        })
+            
+            # Add content structure analysis
+            if sentences:
+                content_structure = {
+                    "name": "Content Structure",
+                    "children": [
+                        {
+                            "name": "Main Information",
+                            "children": [
+                                {
+                                    "name": "Key Statements",
+                                    "children": [
+                                        {"name": "Primary Points", "children": [], "summary": "Main ideas expressed in this section"},
+                                        {"name": "Supporting Points", "children": [], "summary": "Additional supporting information"}
+                                    ]
+                                },
+                                {
+                                    "name": "Detailed Content",
+                                    "children": [
+                                        {"name": "Explanations", "children": [], "summary": "Detailed explanations and descriptions"},
+                                        {"name": "Specifications", "children": [], "summary": "Specific details and technical information"}
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Organization",
+                            "children": [
+                                {"name": "Information Flow", "children": [], "summary": "How information is organized in this section"},
+                                {"name": "Topic Progression", "children": [], "summary": "Sequence and development of topics"}
+                            ]
+                        }
+                    ]
+                }
+                children.append(content_structure)
+            
+            # Determine root name based on content
+            root_name = f"Section {batch_number} Analysis"
+            if sentences and len(sentences[0]) < 100:
+                clean_sentence = re.sub(r'[^\w\s]', '', sentences[0])
+                if len(clean_sentence) > 10:
+                    root_name = clean_sentence[:70] + "..." if len(clean_sentence) > 70 else clean_sentence
+            
+            return {
+                "name": root_name,
+                "children": children if children else [
+                    {
+                        "name": "Content Overview",
+                        "children": [
+                            {
+                                "name": "Section Information",
+                                "children": [
+                                    {"name": "Main Content", "children": [], "summary": f"Primary information from section {batch_number}"},
+                                    {"name": "Supporting Details", "children": [], "summary": f"Additional details from section {batch_number}"}
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+            
+        except Exception as e:
+            print(f"Error in deep hierarchical fallback for batch {batch_number}: {e}")
+            return {
+                "name": f"Section {batch_number} Content",
+                "children": [
+                    {
+                        "name": "Document Content",
+                        "children": [
+                            {
+                                "name": "Information",
+                                "children": [
+                                    {"name": "Content Details", "children": [], "summary": f"Content from batch {batch_number}"}
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+
+    def create_batch_fallback_mindmap(self,text, batch_number):
+        """Create a fallback mind map for a specific batch."""
+        try:
+            # Extract key information from the batch text
+            sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 20][:15]
+            
+            # Extract keywords
+            words = re.findall(r'\b[A-Za-z]{4,}\b', text.lower())
+            word_freq = {}
+            stop_words = {'these', 'those', 'which', 'where', 'there', 'their', 'should', 'would', 'could', 'have', 'been', 'will', 'with', 'from', 'they', 'this', 'that', 'also', 'more', 'such', 'many', 'some', 'into', 'were', 'than', 'only'}
+            
+            for word in words:
+                if word not in stop_words and len(word) > 3:
+                    word_freq[word] = word_freq.get(word, 0) + 1
+            
+            top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:8]
+            
+            # Create children based on keywords and content
+            children = []
+            
+            if top_keywords:
+                for i, (keyword, freq) in enumerate(top_keywords[:4]):
+                    children.append({
+                        "name": keyword.title().replace('_', ' '),
+                        "children": [
+                            {"name": f"Key Points", "children": [], "summary": f"Important aspects of {keyword} discussed in this section"},
+                            {"name": f"Details", "children": [], "summary": f"Specific information about {keyword} mentioned {freq} times"}
+                        ]
+                    })
+            
+            # Add content overview if we have sentences
+            if sentences:
+                children.append({
+                    "name": "Section Content",
+                    "children": [
+                        {"name": "Main Ideas", "children": [], "summary": "Primary concepts covered in this section"},
+                        {"name": "Supporting Information", "children": [], "summary": "Additional details and context"}
+                    ]
+                })
+            
+            root_name = f"Document Section {batch_number}"
+            if sentences and len(sentences[0]) < 80:
+                root_name = sentences[0][:60] + "..." if len(sentences[0]) > 60 else sentences[0]
+            
+            return {
+                "name": root_name,
+                "children": children if children else [
+                    {"name": "Content Overview", "children": [], "summary": f"Information from section {batch_number}"}
+                ]
+            }
+            
+        except Exception as e:
+            print(f"Error in batch fallback for batch {batch_number}: {e}")
+            return {
+                "name": f"Document Section {batch_number}",
+                "children": [
+                    {"name": "Section Content", "children": [], "summary": f"Content from batch {batch_number}"}
+                ]
+            }
+
+    def normalize_topic_name(name):
+        """Normalize topic name for comparison - case insensitive, strip whitespace, handle variations."""
+        if not name or not isinstance(name, str):
+            return ""
+        
+        # Convert to lowercase and strip whitespace
+        normalized = name.strip().lower()
+        
+        # Remove common variations in formatting
+        normalized = re.sub(r'\s+', ' ', normalized)  # Multiple spaces to single space
+        normalized = re.sub(r'[^\w\s]', '', normalized)  # Remove special characters
+        
+        return normalized
+
+    def find_matching_topic(self,topic_name, existing_children):
+        """Find if a topic already exists in the children list with fuzzy matching."""
+        normalized_new = self.normalize_topic_name(topic_name)
+        
+        for i, child in enumerate(existing_children):
+            if isinstance(child, dict) and 'name' in child:
+                normalized_existing = self.normalize_topic_name(child['name'])
+                
+                # Exact match
+                if normalized_new == normalized_existing:
+                    return i, child
+                
+                # Fuzzy match - check if one contains the other (for similar topics)
+                if len(normalized_new) > 3 and len(normalized_existing) > 3:
+                    if normalized_new in normalized_existing or normalized_existing in normalized_new:
+                        # Additional check - ensure they're actually related topics
+                        words_new = set(normalized_new.split())
+                        words_existing = set(normalized_existing.split())
+                        
+                        # If they share significant words, consider them a match
+                        if len(words_new.intersection(words_existing)) >= min(len(words_new), len(words_existing)) * 0.6:
+                            return i, child
+        
+        return None, None
+
+    def merge_hierarchical_topics(self,existing_node, new_node, depth=0):
+        """
+        Advanced hierarchical merging that handles deep topic structures:
+        topic -> subtopic -> sub-subtopic -> continue...
+        
+        Logic:
+        1. If topic exists, merge subtopics into it
+        2. If topic doesn't exist, add it completely
+        3. Recursively apply this at all levels
+        """
+        try:
+            if not existing_node or not isinstance(existing_node, dict):
+                return new_node if new_node else {}
+            
+            if not new_node or not isinstance(new_node, dict):
+                return existing_node
+            
+            print(f"{'  ' * depth}Merging at depth {depth}: '{existing_node.get('name', 'Unknown')}' + '{new_node.get('name', 'Unknown')}'")
+            
+            # Start with existing node as base
+            merged_node = existing_node.copy()
+            
+            # Update summary if new node has better content
+            if 'summary' in new_node:
+                if 'summary' not in merged_node or not merged_node.get('summary') or len(new_node['summary']) > len(merged_node.get('summary', '')):
+                    merged_node['summary'] = new_node['summary']
+            
+            # Get children from both nodes
+            existing_children = existing_node.get('children', [])
+            new_children = new_node.get('children', [])
+            
+            if not new_children:
+                return merged_node
+            
+            # Start with copy of existing children
+            merged_children = existing_children.copy()
+            
+            # Process each new child
+            for new_child in new_children:
+                if not isinstance(new_child, dict) or 'name' not in new_child:
+                    continue
+                
+                # Try to find matching existing topic
+                match_index, matching_child = self.find_matching_topic(new_child['name'], merged_children)
+                
+                if matching_child is not None:
+                    # Topic already exists - merge the subtopics recursively
+                    print(f"{'  ' * depth}  ↳ Merging subtopics into existing topic: '{matching_child['name']}'")
+                    merged_children[match_index] = self.merge_hierarchical_topics(matching_child, new_child, depth + 1)
+                    
+                    # Count new subtopics added
+                    existing_subtopic_count = len(matching_child.get('children', []))
+                    new_subtopic_count = len(merged_children[match_index].get('children', []))
+                    if new_subtopic_count > existing_subtopic_count:
+                        print(f"{'  ' * depth}    ✓ Added {new_subtopic_count - existing_subtopic_count} new subtopics")
+                        
+                else:
+                    # Topic doesn't exist - add it completely with all its hierarchy
+                    merged_children.append(new_child)
+                    subtopic_count = self.count_mindmap_nodes(new_child) - 1  # Subtract 1 for the topic itself
+                    print(f"{'  ' * depth}  ✓ Added new topic: '{new_child['name']}' (with {subtopic_count} subtopics)")
+            
+            merged_node['children'] = merged_children
+            return merged_node
+            
+        except Exception as e:
+            print(f"Error in hierarchical merging at depth {depth}: {e}")
+            return existing_node if existing_node else new_node
+
+    def merge_mindmap_nodes(self,existing_node, new_node):
+        """Enhanced wrapper for hierarchical topic merging with detailed logging."""
+        try:
+            print(f"\n=== Starting Hierarchical Merge ===")
+            print(f"Existing structure: {self.count_mindmap_nodes(existing_node)} nodes")
+            print(f"New structure: {self.count_mindmap_nodes(new_node)} nodes")
+            
+            result = self.merge_hierarchical_topics(existing_node, new_node, 0)
+            
+            final_count = self.count_mindmap_nodes(result)
+            print(f"Final merged structure: {final_count} nodes")
+            print(f"=== Merge Complete ===\n")
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in mindmap merging: {e}")
+            return existing_node if existing_node else new_node
+
+    def generate_iterative_deep_hierarchical_mindmap(self,text_chunks):
+        """
+        Generate comprehensive mind map using iterative batch processing with deep hierarchical merging.
+        
+        Process:
+        1. Take first 25 chunks -> extract topic->subtopic->sub-subtopic->continue
+        2. Take next 25 chunks -> extract topic->subtopic->sub-subtopic->continue  
+        3. Merge: if topic exists, add new subtopics into existing; if new topic, add complete hierarchy
+        4. Continue until all chunks processed
+        """
+        try:
+            total_chunks = len(text_chunks)
+            batch_size = 25
+            total_batches = (total_chunks + batch_size - 1) // batch_size  # Ceiling division
+            
+            print(f"\n🚀 Starting DEEP HIERARCHICAL iterative mindmap generation:")
+            print(f"   📊 Total chunks: {total_chunks}")
+            print(f"   📦 Batches: {total_batches} (25 chunks each)")
+            print(f"   🌳 Target: Deep hierarchical structures (topic→subtopic→sub-subtopic→continue)")
+            
+            # Step 1: Initialize with the first batch (first 25 chunks)
+            print(f"\n📥 STEP 1: Processing first batch (1/{total_batches})")
+            first_batch = text_chunks[:batch_size]
+            base_mindmap = self.generate_deep_hierarchical_mindmap_from_batch(first_batch, 1, total_batches)
+            
+            if not base_mindmap:
+                print("❌ Failed to generate base mindmap, using deep fallback")
+                base_mindmap = self.create_deep_hierarchical_fallback("\n".join(first_batch), 1)
+            
+            base_nodes = self.count_mindmap_nodes(base_mindmap)
+            base_depth = self.calculate_max_depth(base_mindmap)
+            print(f"✅ Base mindmap created: {base_nodes} nodes, depth: {base_depth}")
+            
+            # Step 2: Process remaining batches and merge hierarchically
+            for batch_num in range(2, total_batches + 1):
+                print(f"\n📥 STEP {batch_num}: Processing batch {batch_num}/{total_batches}")
+                
+                start_idx = (batch_num - 1) * batch_size
+                end_idx = min(start_idx + batch_size, total_chunks)
+                current_batch = text_chunks[start_idx:end_idx]
+                
+                print(f"   📋 Analyzing chunks {start_idx+1}-{end_idx} ({len(current_batch)} chunks)")
+                
+                # Generate deep hierarchical mindmap for current batch
+                batch_mindmap = self.generate_deep_hierarchical_mindmap_from_batch(current_batch, batch_num, total_batches)
+                
+                if batch_mindmap:
+                    batch_nodes = self.count_mindmap_nodes(batch_mindmap)
+                    batch_depth = self.calculate_max_depth(batch_mindmap)
+                    print(f"   ✅ Batch {batch_num} generated: {batch_nodes} nodes, depth: {batch_depth}")
+                    
+                    # Merge the batch mindmap into the base mindmap using hierarchical logic
+                    print(f"   🔄 Merging batch {batch_num} into base structure...")
+                    base_mindmap = self.merge_mindmap_nodes(base_mindmap, batch_mindmap)
+                    
+                    final_nodes = self.count_mindmap_nodes(base_mindmap)
+                    final_depth = self.calculate_max_depth(base_mindmap)
+                    nodes_added = final_nodes - base_nodes
+                    print(f"   ✅ Merge complete: {final_nodes} total nodes (+{nodes_added}), depth: {final_depth}")
+                    base_nodes = final_nodes
+                    
+                else:
+                    print(f"   ❌ Failed to generate mindmap for batch {batch_num}, skipping")
+            
+            # Step 3: Final validation and enhancement
+            print(f"\n🔧 STEP FINAL: Validating and enhancing structure...")
+            final_mindmap = self.validate_mindmap_structure(base_mindmap)
+            final_node_count = self.count_mindmap_nodes(final_mindmap)
+            final_depth = self.calculate_max_depth(final_mindmap)
+            
+            # Enhance root name to reflect comprehensive nature
+            if final_mindmap.get('name') and not any(word in final_mindmap['name'].lower() for word in ['comprehensive', 'complete', 'full']):
+                original_name = final_mindmap['name']
+                final_mindmap['name'] = f"Comprehensive Analysis: {original_name}"
+            
+            print(f"\n🎉 DEEP HIERARCHICAL PROCESSING COMPLETE!")
+            print(f"   📈 Final result: {final_node_count} total nodes")
+            print(f"   📏 Maximum depth: {final_depth} levels")
+            print(f"   📦 Batches processed: {total_batches}")
+            print(f"   🎯 Coverage: 100% of document content")
+            
+            return final_mindmap
+            
+        except Exception as e:
+            print(f"❌ Error in deep hierarchical iterative mindmap generation: {e}")
+            # Fallback to simpler method if deep hierarchical fails
+            print("🔄 Falling back to standard iterative method...")
+            return self.generate_iterative_comprehensive_mindmap(text_chunks)
+
+    def generate_iterative_comprehensive_mindmap(self,text_chunks):
+        """Generate comprehensive mind map using iterative batch processing and merging (FALLBACK METHOD)."""
+        try:
+            total_chunks = len(text_chunks)
+            batch_size = 25
+            total_batches = (total_chunks + batch_size - 1) // batch_size  # Ceiling division
+            
+            print(f"Starting iterative mindmap generation: {total_chunks} chunks in {total_batches} batches")
+            
+            # Initialize the base mindmap with the first batch
+            first_batch = text_chunks[:batch_size]
+            base_mindmap = self.generate_mindmap_from_batch(first_batch, 1, total_batches)
+            
+            if not base_mindmap:
+                print("Failed to generate base mindmap, using fallback")
+                base_mindmap = self.create_enhanced_fallback_mindmap("\n".join(first_batch))
+            
+            print(f"Base mindmap created with {self.count_mindmap_nodes(base_mindmap)} nodes")
+            
+            # Process remaining batches and merge incrementally
+            for batch_num in range(2, total_batches + 1):
+                start_idx = (batch_num - 1) * batch_size
+                end_idx = min(start_idx + batch_size, total_chunks)
+                current_batch = text_chunks[start_idx:end_idx]
+                
+                print(f"Processing batch {batch_num}/{total_batches} (chunks {start_idx+1}-{end_idx})")
+                
+                # Generate mindmap for current batch
+                batch_mindmap = self.generate_mindmap_from_batch(current_batch, batch_num, total_batches)
+                
+                if batch_mindmap:
+                    # Merge the batch mindmap into the base mindmap
+                    print(f"Merging batch {batch_num} into base mindmap...")
+                    base_mindmap = self.merge_mindmap_nodes(base_mindmap, batch_mindmap)
+                    print(f"After merging batch {batch_num}: {self.count_mindmap_nodes(base_mindmap)} total nodes")
+                else:
+                    print(f"Failed to generate mindmap for batch {batch_num}, skipping")
+            
+            # Final validation and cleanup
+            final_mindmap = self.validate_mindmap_structure(base_mindmap)
+            final_node_count = self.count_mindmap_nodes(final_mindmap)
+            
+            print(f"Iterative mindmap generation completed: {final_node_count} total nodes from {total_batches} batches")
+            
+            # Ensure the root name reflects the comprehensive nature
+            if final_mindmap.get('name') and not final_mindmap['name'].startswith('Comprehensive'):
+                final_mindmap['name'] = f"Comprehensive Analysis: {final_mindmap['name']}"
+            
+            return final_mindmap
+            
+        except Exception as e:
+            print(f"Error in iterative mindmap generation: {e}")
+            # Fallback to original method if iterative fails
+            return self.generate_comprehensive_mindmap_original(text_chunks[:25])
+
+    def generate_mindmap_from_batch(self,text_chunks, batch_number, total_batches):
+        """Generate mind map from a batch of chunks with context-aware prompting (FALLBACK METHOD)."""
+        try:
+            # Combine chunks in the current batch
+            batch_text = "\n\n".join(text_chunks)
+            
+            # Limit text size to prevent API issues
+            if len(batch_text) > 15000:
+                batch_text = batch_text[:15000] + "..."
+            
+            print(f"Analyzing batch {batch_number}/{total_batches} with {len(batch_text)} characters from {len(text_chunks)} chunks")
+            
+            # Context-aware prompt based on batch position
+            if batch_number == 1:
+                context_instruction = "This is the first section of the document. Focus on extracting the foundational topics, main themes, and primary structural elements."
+            elif batch_number == total_batches:
+                context_instruction = "This is the final section of the document. Focus on conclusions, summaries, final insights, and any remaining important topics."
+            else:
+                context_instruction = f"This is section {batch_number} of {total_batches} from the document. Focus on the specific topics and detailed content in this section."
+            
+            # Enhanced prompt for batch-specific mind map generation
+            prompt = f"""
+            You are an expert document analyst creating a hierarchical mind map for a section of a larger document.
+
+            BATCH CONTEXT: {context_instruction}
+
+            DOCUMENT SECTION TEXT:
+            {batch_text}
+
+            CRITICAL JSON FORMAT REQUIREMENTS:
+            1. Return ONLY valid JSON with no additional text, markdown, or comments
+            2. Use this EXACT structure: {{"name": "Section Topic", "children": [{{"name": "Subtopic", "children": [], "summary": "Brief description"}}]}}
+            3. Each node MUST have "name" and "children" fields
+            4. Add optional "summary" field for leaf nodes with key insights
+            5. "children" must be an array (empty array [] for leaf nodes)
+            6. NO empty or blank node names
+            7. Keep topic names descriptive but concise (maximum 60 characters)
+
+            CONTENT ANALYSIS REQUIREMENTS:
+            - Identify the main theme/subject of this section as the root node
+            - Create 3-7 major branches covering the important aspects in this section
+            - Each major branch should have 2-5 sub-branches with specific details
+            - Go 3-4 levels deep maximum
+            - Focus on topics, concepts, methodologies, findings, and examples present in THIS section
+            - Include key definitions, processes, data, results specific to this content
+            - Add "summary" field to leaf nodes with 1-2 sentence insights
+            - Be section-specific, not generic
+
+            STRUCTURE GUIDELINES:
+            Root Level: Main topic/theme of this document section
+            Level 1: Major topics within this section
+            Level 2: Specific subtopics and concepts
+            Level 3: Detailed points, examples, or findings
+            Level 4: Granular details (only when necessary)
+
+            Generate the section-specific mind map JSON now:
+            """
+            
+            # Generate with rate limiting
+            try:
+                # Add progressive delay based on batch number to prevent rate limiting
+                delay_time = 2.0 + (batch_number * 0.5)  # Increasing delay for later batches
+                time.sleep(delay_time)
+                
+                response = genai.Client.model.generate_content(
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0,
+                        max_output_tokens=6000,
+                        top_p=0.8,
+                        top_k=40
+                    )
+                )
+                
+                print(f"Generated response length for batch {batch_number}: {len(response.text)} characters")
+                
+                # Extract JSON from response
+                parsed_data = self.extract_json_from_response(response.text)
+                
+                if parsed_data:
+                    # Validate and fix structure
+                    validated_data = self.validate_mindmap_structure(parsed_data)
+                    print(f"Successfully parsed batch {batch_number} mindmap with {len(validated_data.get('children', []))} main branches")
+                    return validated_data
+                else:
+                    print(f"Failed to extract valid JSON for batch {batch_number}, creating fallback")
+                    return self.create_batch_fallback_mindmap(batch_text, batch_number)
+                    
+            except Exception as api_error:
+                print(f"API Error for batch {batch_number}: {api_error}")
+                if "429" in str(api_error) or "quota" in str(api_error).lower():
+                    print(f"Rate limit hit for batch {batch_number} - using fallback")
+                    return self.create_batch_fallback_mindmap(batch_text, batch_number)
+                else:
+                    raise api_error
+                
+        except Exception as e:
+            print(f"Error generating mindmap for batch {batch_number}: {e}")
+            return self.create_batch_fallback_mindmap(text_chunks[0] if text_chunks else f"Batch {batch_number} content", batch_number)
+
+
+    def generate_comprehensive_mindmap_original(self, text_chunks):
+        """Original comprehensive mind map generation method (FINAL FALLBACK)."""
+        try:
+            # Original fallback implementation - uses only first 25 chunks
+            sample_chunks = text_chunks[:25]
+            comprehensive_text = "\n\n".join(sample_chunks)
+            
+            # # Limit text size to prevent API issues
+            # if len(comprehensive_text) > 15000:
+            #     comprehensive_text = comprehensive_text[:15000] + "..."
+            
+            print(f"Original Method: Analyzing {len(comprehensive_text)} characters from {len(sample_chunks)} chunks")
+            
+            # Enhanced prompt for better mind map generation
+            prompt = f"""
+            You are an expert document analyst. Create a comprehensive, well-structured hierarchical mind map in JSON format for the following document. This mind map should help users understand the document's content systematically.
+
+            DOCUMENT TEXT:
+            {comprehensive_text}
+
+            CRITICAL JSON FORMAT REQUIREMENTS:
+            1. Return ONLY valid JSON with no additional text, markdown, or comments
+            2. Use this EXACT structure: {{"name": "Main Topic", "children": [{{"name": "Subtopic", "children": [], "summary": "Brief description"}}]}}
+            3. Each node MUST have "name" and "children" fields
+            4. Add optional "summary" field for leaf nodes with key insights
+            5. "children" must be an array (empty array [] for leaf nodes)
+            6. NO empty or blank node names
+            7. Keep topic names descriptive but concise (maximum 60 characters)
+
+            CONTENT ANALYSIS REQUIREMENTS:
+            - Identify the main subject/theme as the root node
+            - Create 5-7 major branches covering all important aspects
+            - Each major branch should have 3-6 sub-branches with specific details
+            - Go 3-4 levels deep maximum
+            - Include key concepts, methodologies, findings, examples, and conclusions
+            - Cover definitions, processes, data, results, and implications
+            - Ensure comprehensive coverage of ALL document content
+            - Add "summary" field to leaf nodes with 1-2 sentence insights
+
+            STRUCTURE GUIDELINES:
+            Root Level: Main document topic/subject
+            Level 1: Major sections/themes (Introduction, Core Concepts, Methods, Results, Applications, etc.)
+            Level 2: Specific topics within each section
+            Level 3: Detailed subtopics, examples, or specific findings
+            Level 4: Granular details (only when necessary)
+
+            QUALITY REQUIREMENTS:
+            - Comprehensive coverage of ALL important document content
+            - Logical hierarchical relationships
+            - No redundant or overlapping nodes
+            - Clear, informative node names
+            - Balanced tree structure
+            - Include actionable insights in summaries
+
+            Generate the comprehensive mind map JSON now:
+            """
+            
+            # Generate with rate limiting
+            try:
+                # Standard delay for original method
+                time.sleep(2.0)
+                
+                response = genai.Client.model.generate_content(
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0,
+                        max_output_tokens=6000,
+                        top_p=0.8,
+                        top_k=40
+                    )
+                )
+                
+                print(f"Generated original method response length: {len(response.text)} characters")
+                
+                # Extract JSON from response
+                parsed_data = self.extract_json_from_response(response.text)
+                
+                if parsed_data:
+                    # Validate and fix structure
+                    validated_data = self.validate_mindmap_structure(parsed_data)
+                    node_count = self.count_mindmap_nodes(validated_data)
+                    print(f"Successfully parsed original mindmap with {len(validated_data.get('children', []))} main branches, {node_count} total nodes")
+                    return validated_data
+                else:
+                    print("Failed to extract valid JSON from original method, creating enhanced fallback")
+                    return self.create_enhanced_fallback_mindmap(comprehensive_text)
+                    
+            except Exception as api_error:
+                print(f"API Error in original method: {api_error}")
+                if "429" in str(api_error) or "quota" in str(api_error).lower():
+                    print("Rate limit hit in original method - using enhanced fallback")
+                    return self.create_enhanced_fallback_mindmap(comprehensive_text)
+                else:
+                    # For other API errors, still try fallback
+                    print("Other API error in original method - using enhanced fallback")
+                    return self.create_enhanced_fallback_mindmap(comprehensive_text)
+                    
+        except Exception as e:
+            print(f"Error in original comprehensive mindmap generation: {e}")
+            # Final fallback - create a basic structure
+            return self.create_basic_fallback_mindmap(text_chunks)
+
+    def create_basic_fallback_mindmap(text_chunks):
+        """Create a basic fallback mind map when all other methods fail."""
+        try:
+            # Use first chunk or create default
+            sample_text = text_chunks[0] if text_chunks else "No content available"
+            
+            # Extract basic keywords
+            words = re.findall(r'\b[A-Za-z]{4,}\b', sample_text.lower())
+            word_freq = {}
+            stop_words = {'this', 'that', 'with', 'from', 'they', 'have', 'been', 'will', 'were', 'said', 'each', 'which', 'their', 'time', 'some', 'what', 'only', 'about', 'would', 'could', 'other', 'after', 'first', 'well', 'water', 'very', 'when', 'come', 'here', 'just', 'like', 'long', 'make', 'many', 'over', 'such', 'take', 'than', 'them', 'work', 'year'}
+            
+            for word in words:
+                if word not in stop_words and len(word) > 3:
+                    word_freq[word] = word_freq.get(word, 0) + 1
+            
+            top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:6]
+            
+            # Create basic structure
+            children = []
+            
+            if top_keywords:
+                for keyword, freq in top_keywords:
+                    children.append({
+                        "name": keyword.title().replace('_', ' '),
+                        "children": [
+                            {"name": "Overview", "children": [], "summary": f"General information about {keyword}"},
+                            {"name": "Details", "children": [], "summary": f"Specific details about {keyword} (mentioned {freq} times)"}
+                        ]
+                    })
+            
+            # Add general sections if no keywords found
+            if not children:
+                children = [
+                    {
+                        "name": "Document Content",
+                        "children": [
+                            {"name": "Main Information", "children": [], "summary": "Primary content from the document"},
+                            {"name": "Supporting Details", "children": [], "summary": "Additional information and context"}
+                        ]
+                    },
+                    {
+                        "name": "Key Concepts",
+                        "children": [
+                            {"name": "Important Ideas", "children": [], "summary": "Significant concepts discussed"},
+                            {"name": "Related Topics", "children": [], "summary": "Connected themes and subjects"}
+                        ]
+                    }
+                ]
+            
+            return {
+                "name": "Document Analysis",
+                "children": children
+            }
+            
+        except Exception as e:
+            print(f"Error in basic fallback: {e}")
+            # Absolute minimum fallback
+            return {
+                "name": "Document Analysis",
+                "children": [
+                    {
+                        "name": "Content Overview",
+                        "children": [
+                            {"name": "Information", "children": [], "summary": "Document contains textual information"},
+                            {"name": "Structure", "children": [], "summary": "Document has organized content"}
+                        ]
+                    }
+                ]
+            }
+
+
+    def generate_iterative_deep_hierarchical_mindmap(self, text_chunks):
+        """
+        Generate comprehensive mind map using iterative batch processing with deep hierarchical merging.
+        
+        Process:
+        1. Take first 25 chunks -> extract topic->subtopic->sub-subtopic->continue
+        2. Take next 25 chunks -> extract topic->subtopic->sub-subtopic->continue  
+        3. Merge: if topic exists, add new subtopics into existing; if new topic, add complete hierarchy
+        4. Continue until all chunks processed
+        """
+        try:
+            total_chunks = len(text_chunks)
+            batch_size = 25
+            total_batches = (total_chunks + batch_size - 1) // batch_size  # Ceiling division
+            
+            print(f"\n🚀 Starting DEEP HIERARCHICAL iterative mindmap generation:")
+            print(f"   📊 Total chunks: {total_chunks}")
+            print(f"   📦 Batches: {total_batches} (25 chunks each)")
+            print(f"   🌳 Target: Deep hierarchical structures (topic→subtopic→sub-subtopic→continue)")
+            
+            # Step 1: Initialize with the first batch (first 25 chunks)
+            print(f"\n📥 STEP 1: Processing first batch (1/{total_batches})")
+            first_batch = text_chunks[:batch_size]
+            base_mindmap = self.generate_deep_hierarchical_mindmap_from_batch(first_batch, 1, total_batches)
+            
+            if not base_mindmap:
+                print("❌ Failed to generate base mindmap, using deep fallback")
+                base_mindmap = self.create_deep_hierarchical_fallback("\n".join(first_batch), 1)
+            
+            base_nodes = self.count_mindmap_nodes(base_mindmap)
+            base_depth = self.calculate_max_depth(base_mindmap)
+            print(f"✅ Base mindmap created: {base_nodes} nodes, depth: {base_depth}")
+            
+            # Step 2: Process remaining batches and merge hierarchically
+            for batch_num in range(2, total_batches + 1):
+                print(f"\n📥 STEP {batch_num}: Processing batch {batch_num}/{total_batches}")
+                
+                start_idx = (batch_num - 1) * batch_size
+                end_idx = min(start_idx + batch_size, total_chunks)
+                current_batch = text_chunks[start_idx:end_idx]
+                
+                print(f"   📋 Analyzing chunks {start_idx+1}-{end_idx} ({len(current_batch)} chunks)")
+                
+                # Generate deep hierarchical mindmap for current batch
+                batch_mindmap = self.generate_deep_hierarchical_mindmap_from_batch(current_batch, batch_num, total_batches)
+                
+                if batch_mindmap:
+                    batch_nodes = self.count_mindmap_nodes(batch_mindmap)
+                    batch_depth = self.calculate_max_depth(batch_mindmap)
+                    print(f"   ✅ Batch {batch_num} generated: {batch_nodes} nodes, depth: {batch_depth}")
+                    
+                    # Merge the batch mindmap into the base mindmap using hierarchical logic
+                    print(f"   🔄 Merging batch {batch_num} into base structure...")
+                    base_mindmap = self.merge_mindmap_nodes(base_mindmap, batch_mindmap)
+                    
+                    final_nodes = self.count_mindmap_nodes(base_mindmap)
+                    final_depth = self.calculate_max_depth(base_mindmap)
+                    nodes_added = final_nodes - base_nodes
+                    print(f"   ✅ Merge complete: {final_nodes} total nodes (+{nodes_added}), depth: {final_depth}")
+                    base_nodes = final_nodes
+                    
+                else:
+                    print(f"   ❌ Failed to generate mindmap for batch {batch_num}, skipping")
+            
+            # Step 3: Final validation and enhancement
+            print(f"\n🔧 STEP FINAL: Validating and enhancing structure...")
+            final_mindmap = self.validate_mindmap_structure(base_mindmap)
+            final_node_count = self.count_mindmap_nodes(final_mindmap)
+            final_depth = self.calculate_max_depth(final_mindmap)
+            
+            # Enhance root name to reflect comprehensive nature
+            if final_mindmap.get('name') and not any(word in final_mindmap['name'].lower() for word in ['comprehensive', 'complete', 'full']):
+                original_name = final_mindmap['name']
+                final_mindmap['name'] = f"Comprehensive Analysis: {original_name}"
+            
+            print(f"\n🎉 DEEP HIERARCHICAL PROCESSING COMPLETE!")
+            print(f"   📈 Final result: {final_node_count} total nodes")
+            print(f"   📏 Maximum depth: {final_depth} levels")
+            print(f"   📦 Batches processed: {total_batches}")
+            print(f"   🎯 Coverage: 100% of document content")
+            
+            return final_mindmap
+            
+        except Exception as e:
+            print(f"❌ Error in deep hierarchical iterative mindmap generation: {e}")
+            # Fallback to simpler method if deep hierarchical fails
+            print("🔄 Falling back to standard iterative method...")
+            return self.generate_iterative_comprehensive_mindmap(text_chunks)
 
 
 # In your backend views.py, update the MindMapQuestionView:
 
 class MindMapQuestionView(APIView):
+    """Generate question for mindmap node - matches your 'mindmap-question/' endpoint"""
+    permission_classes = [IsAuthenticated]
+   
+    def post(self, request):
+        try:
+            user = request.user
+            main_project_id = request.data.get('main_project_id')
+            if not main_project_id:
+                return Response({'error': 'Main project ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            mindmap_id = request.data.get('mindmap_id')
+            topic_name = request.data.get('topic_name', '')
+            topic_summary = request.data.get('topic_summary', '')
+            node_path = request.data.get('node_path', '')
+            selected_documents = request.data.get('selected_documents', [])
+            target_user_id = request.data.get('target_user_id')
+            force_new_context = request.data.get('force_new_context', False)
+            current_timestamp = request.data.get('current_timestamp')
+            mindmap_document_sources = request.data.get('mindmap_document_sources', [])
+
+            # Handle admin operation for another user
+            if target_user_id and request.user.username == 'admin':
+                try:
+                    user = User.objects.get(id=target_user_id)
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'Target user not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+
+            if not all([main_project_id, topic_name]):
+                return Response({
+                    'error': 'Missing required parameters'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # If multiple documents are selected, combine their context for question generation
+            if selected_documents:
+                valid_docs = Document.objects.filter(
+                    id__in=selected_documents,
+                    user=user
+                ).count()
+                if valid_docs != len(selected_documents):
+                    valid_doc_ids = list(Document.objects.filter(
+                        id__in=selected_documents,
+                        user=user
+                    ).values_list('id', flat=True))
+                    selected_documents = [str(doc_id) for doc_id in valid_doc_ids]
+
+            # Generate specific question for the topic using combined context
+            question = self.generate_topic_question(
+                topic_name,
+                topic_summary,
+                node_path,
+                mindmap_id=mindmap_id,
+                document_context=selected_documents
+            )
+
+            return Response({
+                'success': True,
+                'question': question,
+                'topic': topic_name,
+                'node_path': node_path,
+                'mindmap_id': mindmap_id,
+                'selected_documents': selected_documents,
+                'timestamp': current_timestamp or int(time.time() * 1000)
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error in MindMapQuestionView: {str(e)}")
+            return Response({
+                'error': f'Internal server error: {str(e)}',
+                'success': False
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+    def generate_topic_question(self, topic_name, topic_summary, node_path, mindmap_id=None, document_context=None):
+        """Generate a specific question for the mindmap topic with enhanced context."""
+        try:
+            time.sleep(1.0)  # Rate limiting
+            
+            # ✅ NEW: Enhanced prompt with document context awareness
+            context_info = ""
+            if document_context and len(document_context) > 0:
+                context_info = f"The user has selected {len(document_context)} specific document(s) for this question context. "
+            
+            prompt = f"""
+                Generate ONE simple and helpful question about "{topic_name}" that will make it easier for users to understand this topic.
+
+                Topic: {topic_name}  
+                Summary: {topic_summary}  
+                Context Path: {node_path}
+                Mindmap ID: {mindmap_id}
+                {context_info}
+
+                Create a question that:
+                1. Uses simple language  
+                2. Helps someone understand the topic better  
+                3. Is 10–25 words long  
+                4. Focuses on practical use or basic understanding
+                5. {"Should be answerable from the selected documents" if document_context else "Can be answered from general knowledge"}
+
+                Examples of good questions:
+                - "How is [topic] used in real life?"  
+                - "What is the main idea behind [topic]?"  
+                - "Why is [topic] important or useful?"
+
+                Generate ONE question:
+            """
+           
+            response = mindmap_model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.2,
+                    max_output_tokens=512
+                )
+            )
+           
+            question = response.text.strip()
+           
+            # Clean the question
+            if question.startswith('"') and question.endswith('"'):
+                question = question[1:-1]
+                
+            # ✅ NEW: Log the generated question with context
+            logger.info(f"Generated question for mindmap {mindmap_id}: {question}")
+            logger.info(f"Question context: {len(document_context or [])} documents")
+           
+            return question
+           
+        except Exception as e:
+            logger.error(f"Error generating topic question: {e}")
+            return f"What are the key aspects and details about '{topic_name}' in this document?"
+
+
     """Generate question for mindmap node - matches your 'mindmap-question/' endpoint"""
     permission_classes = [IsAuthenticated]
    

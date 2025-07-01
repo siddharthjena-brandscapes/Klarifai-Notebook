@@ -6,6 +6,9 @@ import google.generativeai as genai
 import os
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.db.models.signals import pre_delete
+from django.utils import timezone
+
 # Ensure you have the GENERATIVE_MODEL configured at the top of your views.py or in a separate configuration file
 GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash', 
     generation_config={
@@ -57,6 +60,10 @@ def create_user_api_tokens(sender, instance, created, **kwargs):
     if created:
         UserAPITokens.objects.create(user=instance)
         print(f"Created API tokens for user: {instance.username}")  # Debug log
+
+
+ 
+ 
 
 
 class SSOAllowedUser(models.Model):
@@ -295,3 +302,144 @@ def save_user_module_permissions(sender, instance, **kwargs):
         instance.module_permissions.save()
     except UserModulePermissions.DoesNotExist:
         UserModulePermissions.objects.create(user=instance)
+
+
+
+class TransactionType(models.TextChoices):
+    DOCUMENT_UPLOAD = 'document_upload', 'Document Upload'
+    CONVERSATION_CREATE = 'conversation_create', 'Conversation Create'
+    CHAT_MESSAGE = 'chat_message', 'Chat Message'
+    DOCUMENT_DELETE = 'document_delete', 'Document Delete'
+    CONVERSATION_DELETE = 'conversation_delete', 'Conversation Delete'
+ 
+class UserTransaction(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='transactions')
+    transaction_type = models.CharField(max_length=50, choices=TransactionType.choices)
+   
+    # Reference fields - store original names/IDs even after deletion
+    document_name = models.CharField(max_length=255, null=True, blank=True)
+    document_id = models.IntegerField(null=True, blank=True)  # Store original ID
+    conversation_title = models.CharField(max_length=255, null=True, blank=True)
+    conversation_id = models.UUIDField(null=True, blank=True)  # Store original UUID
+   
+    # Project reference
+    main_project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='transactions')
+   
+    # Transaction metadata
+    metadata = models.JSONField(default=dict, blank=True)  # Store additional info
+    created_at = models.DateTimeField(auto_now_add=True)
+   
+    # Status tracking
+    is_active = models.BooleanField(default=True)  # False when referenced item is deleted
+   
+    class Meta:
+        ordering = ['-created_at']
+        app_label = 'chat'
+   
+    def __str__(self):
+        return f"{self.user.username} - {self.get_transaction_type_display()} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+ 
+class DocumentTransaction(models.Model):
+    """Specific tracking for document operations"""
+    user_transaction = models.OneToOneField(UserTransaction, on_delete=models.CASCADE, related_name='document_details')
+    original_filename = models.CharField(max_length=255)
+    file_size = models.BigIntegerField(null=True, blank=True)
+    file_type = models.CharField(max_length=50, null=True, blank=True)
+    processing_status = models.CharField(max_length=50, default='completed')
+    upload_method = models.CharField(max_length=50, default='regular')  # 'regular', 'audio_transcript', 'video_transcript'
+   
+    class Meta:
+        app_label = 'chat'
+ 
+class ConversationTransaction(models.Model):
+    """Specific tracking for conversation operations"""
+    user_transaction = models.OneToOneField(UserTransaction, on_delete=models.CASCADE, related_name='conversation_details')
+    message_count = models.PositiveIntegerField(default=0)
+   
+    input_api_tokens = models.PositiveIntegerField(default=0)
+    output_api_tokens = models.PositiveIntegerField(default=0)
+   
+    total_tokens_used = models.PositiveIntegerField(default=0)  # optional: keep it updated via save()
+ 
+    web_knowledge_used = models.BooleanField(default=False)
+    response_format = models.CharField(max_length=50, default='natural')
+    response_length = models.CharField(max_length=20, default='comprehensive')
+ 
+    class Meta:
+        app_label = 'chat'
+ 
+    def save(self, *args, **kwargs):
+        # Automatically update total_tokens_used
+        self.total_tokens_used = self.input_api_tokens + self.output_api_tokens
+        super().save(*args, **kwargs)
+ 
+ 
+ 
+# Add these signal handlers to your models.py
+ 
+@receiver(pre_delete, sender=Document)
+def track_document_deletion(sender, instance, **kwargs):
+    """Track when a document is deleted"""
+    try:
+        # Mark the transaction as inactive
+        UserTransaction.objects.filter(
+            document_id=instance.id,
+            transaction_type=TransactionType.DOCUMENT_UPLOAD,
+            is_active=True
+        ).update(
+            is_active=False,
+            metadata=models.F('metadata') | {'deletion_timestamp': timezone.now().isoformat()}
+        )
+       
+        # Create a deletion transaction record
+        if instance.main_project:
+            UserTransaction.objects.create(
+                user=instance.user,
+                transaction_type=TransactionType.DOCUMENT_DELETE,
+                document_name=instance.filename,
+                document_id=instance.id,
+                main_project=instance.main_project,
+                metadata={
+                    'deletion_timestamp': timezone.now().isoformat(),
+                    'original_upload_date': instance.uploaded_at.isoformat() if instance.uploaded_at else None
+                }
+            )
+       
+        print(f"Document deletion tracked: {instance.filename}")
+       
+    except Exception as e:
+        print(f"Error tracking document deletion: {str(e)}")
+ 
+@receiver(pre_delete, sender=ChatHistory)
+def track_conversation_deletion(sender, instance, **kwargs):
+    """Track when a conversation is deleted"""
+    try:
+        # Mark the transaction as inactive
+        UserTransaction.objects.filter(
+            conversation_id=instance.conversation_id,
+            transaction_type=TransactionType.CONVERSATION_CREATE,
+            is_active=True
+        ).update(
+            is_active=False,
+            metadata=models.F('metadata') | {'deletion_timestamp': timezone.now().isoformat()}
+        )
+       
+        # Create a deletion transaction record
+        if instance.main_project:
+            UserTransaction.objects.create(
+                user=instance.user,
+                transaction_type=TransactionType.CONVERSATION_DELETE,
+                conversation_title=instance.title,
+                conversation_id=instance.conversation_id,
+                main_project=instance.main_project,
+                metadata={
+                    'deletion_timestamp': timezone.now().isoformat(),
+                    'original_creation_date': instance.created_at.isoformat() if instance.created_at else None,
+                    'message_count': instance.messages.count()
+                }
+            )
+       
+        print(f"Conversation deletion tracked: {instance.title}")
+       
+    except Exception as e:
+        print(f"Error tracking conversation deletion: {str(e)}")

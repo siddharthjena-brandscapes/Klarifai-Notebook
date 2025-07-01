@@ -1,6 +1,8 @@
 
-// NotePad.jsx - Add auto-expand functionality
+// NotePad.jsx - Fixed version with proper dark mode, rich text, and deletion sync
 import { useState, useEffect, useRef } from 'react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { 
   Plus, 
   Save, 
@@ -21,7 +23,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { noteServiceNB } from '../../utils/axiosConfig';
-import NoteEditorModal from './NoteEditorModal';  
 import PropTypes from 'prop-types';
 import { useUser } from '../../context/UserContext';
 
@@ -45,12 +46,35 @@ const NotePad = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isConverting, setIsConverting] = useState(false);
+ 
   const [convertingNoteId, setConvertingNoteId] = useState(null);
   const textareaRef = useRef(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+ 
   const { rightPanelPermissions, loading: permissionsLoading } = useUser();
-const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
+  const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
+
+  // ReactQuill modules with proper toolbar
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+     
+    ],
+  };
+  const stripHtml = (html) => {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
+  const quillFormats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet',
+    'color', 'background',
+    'link'
+  ];
 
   // Fetch notes on component mount
   useEffect(() => {
@@ -71,6 +95,22 @@ const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
       fetchNotes();
     };
 
+    // Handle note deletion from external components
+    const handleNoteDeleted = (event) => {
+      const deletedNoteId = event.detail?.noteId;
+      if (deletedNoteId) {
+        setNotes(prevNotes => prevNotes.filter(note => note.id !== deletedNoteId));
+        
+        // Clear selected note if it was deleted
+        if (selectedNote?.id === deletedNoteId) {
+          setSelectedNote(null);
+          setNoteTitle('');
+          setNoteContent('');
+          setIsEditing(false);
+        }
+      }
+    };
+
     // NEW: Add auto-expand functionality
     const handleExpand = () => {
       if (!isOpen) {
@@ -87,14 +127,14 @@ const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
 
     document.addEventListener('refreshNotePad', handleRefresh);
     document.addEventListener('expandNotePad', handleExpand);
+    document.addEventListener('noteDeleted', handleNoteDeleted);
     
     return () => {
       document.removeEventListener('refreshNotePad', handleRefresh);
       document.removeEventListener('expandNotePad', handleExpand);
+      document.removeEventListener('noteDeleted', handleNoteDeleted);
     };
-  }, [mainProjectId, isOpen, onToggle]); 
-
-  // ... rest of your existing functions remain the same ...
+  }, [mainProjectId, isOpen, onToggle, selectedNote]);
 
   const fetchNotes = async () => {
     setIsLoading(true);
@@ -149,6 +189,9 @@ const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
         setNoteTitle(note.title || '');
         setNoteContent(note.content || '');
         setIsEditing(false);
+      }
+      if (note.is_converted_to_document) {
+        setIsEditing(false); // Force read-only mode for documents
       }
     } else {
       setSelectedNote(note);
@@ -223,6 +266,11 @@ const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
   };
 
   const handleShowDeleteConfirmation = (note) => {
+    // Close note editor if the note being deleted is currently selected
+    if (selectedNote?.id === note.id) {
+      handleCloseNoteEditor();
+    }
+    
     if (onShowConfirmation) {
       onShowConfirmation({
         isOpen: true,
@@ -243,6 +291,12 @@ const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
       });
     }
   };
+  const handleCloseNoteEditor = () => {
+  setSelectedNote(null);
+  setNoteTitle('');
+  setNoteContent('');
+  setIsEditing(false);
+};
 
   const filteredNotes = notes.filter(note => {
     if (!searchTerm.trim()) return true;
@@ -266,24 +320,24 @@ const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
     }
   };
 
-if (!isOpen) {
-  return (
-    <button
-      onClick={isNotesPanelDisabled ? undefined : onToggle}
-      disabled={isNotesPanelDisabled}
-      className={`fixed right-4 top-1/2 transform -translate-y-1/2 z-30 
-                 p-3 rounded-l-xl shadow-lg
-                 transition-all duration-300 border-l border-t border-b
-                 ${isNotesPanelDisabled 
-                   ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed opacity-50 border-gray-300 dark:border-gray-600'
-                   : 'bg-[#f5e6d8] dark:bg-gray-800/90 text-[#5e4636] dark:text-white hover:bg-[#e8d5c4] dark:hover:bg-gray-700/90 border-[#d6cbbf] dark:border-blue-500/20'
-                 }`}
-      title={isNotesPanelDisabled ? "Notes access disabled by administrator" : "Open Notes"}
-    >
-      <StickyNote className="h-5 w-5" />
-    </button>
-  );
-}
+  if (!isOpen) {
+    return (
+      <button
+        onClick={isNotesPanelDisabled ? undefined : onToggle}
+        disabled={isNotesPanelDisabled}
+        className={`fixed right-4 top-1/2 transform -translate-y-1/2 z-30 
+                   p-3 rounded-l-xl shadow-lg
+                   transition-all duration-300 border-l border-t border-b
+                   ${isNotesPanelDisabled 
+                     ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed opacity-50 border-gray-300 dark:border-gray-600'
+                     : 'bg-[#f5e6d8] dark:bg-gray-800/90 text-[#5e4636] dark:text-white hover:bg-[#e8d5c4] dark:hover:bg-gray-700/90 border-[#d6cbbf] dark:border-blue-500/20'
+                   }`}
+        title={isNotesPanelDisabled ? "Notes access disabled by administrator" : "Open Notes"}
+      >
+        <StickyNote className="h-5 w-5" />
+      </button>
+    );
+  }
 
   return (
     <div className="fixed right-0 top-16 bottom-0 w-80 z-30 rounded-md
@@ -293,19 +347,19 @@ if (!isOpen) {
                     flex flex-col overflow-hidden">
 
       {/* Add permission check overlay */}
-    {isNotesPanelDisabled && (
-  <div className="absolute top-16 left-0 right-0 bottom-0 bg-black/50 z-40 flex items-center justify-center">
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl text-center max-w-xs">
-      <StickyNote className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
-        Access Restricted
-      </h3>
-      <p className="text-gray-600 dark:text-gray-300 text-sm">
-        Notes access has been disabled by your administrator.
-      </p>
-    </div>
-  </div>
-)}
+      {isNotesPanelDisabled && (
+        <div className="absolute top-16 left-0 right-0 bottom-0 bg-black/50 z-40 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl text-center max-w-xs">
+            <StickyNote className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
+              Access Restricted
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">
+              Notes access has been disabled by your administrator.
+            </p>
+          </div>
+        </div>
+      )}
       
       {/* Header */}
       <div className="p-4 border-b border-[#e3d5c8] dark:border-blue-500/20 
@@ -319,18 +373,17 @@ if (!isOpen) {
           </div>
           
           <div className="flex items-center space-x-2">
-
-             {/* History Button */}
-  {onViewMindmapHistory && (
-    <button
-      onClick={onViewMindmapHistory}
-      className="p-2 rounded-lg transition-colors
-                 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white"
-      title="View MindMap History"
-    >
-      <History className="h-4 w-4" />
-    </button>
-  )}
+            {/* History Button */}
+            {onViewMindmapHistory && (
+              <button
+                onClick={onViewMindmapHistory}
+                className="p-2 rounded-lg transition-colors
+                           bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white"
+                title="View MindMap History"
+              >
+                <History className="h-4 w-4" />
+              </button>
+            )}
             {/* Mindmap Button */}
             {onGenerateMindmap && (
               <button
@@ -350,9 +403,6 @@ if (!isOpen) {
                 }
               >
                 <Brain className={`h-4 w-4 ${isMindmapGenerating ? 'animate-pulse' : ''}`} />
-                {/* <span className="text-xs hidden lg:inline">
-                  {isMindmapGenerating ? 'Generating...' : 'Mindmap'}
-                </span> */}
               </button>
             )}
 
@@ -438,7 +488,9 @@ if (!isOpen) {
                       {note.title || 'Untitled Note'}
                     </h3>
                     <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1 line-clamp-2">
-                      {note.content ? note.content.substring(0, 100) + (note.content.length > 100 ? '...' : '') : 'No content'}
+                  {note.content 
+            ? stripHtml(note.content).substring(0, 100) + (stripHtml(note.content).length > 100 ? '...' : '') 
+            : 'No content'}
                     </p>
                     <div className="flex items-center space-x-2 mt-2">
                       <Calendar className="h-3 w-3 text-[#8c715f] dark:text-gray-500" />
@@ -497,7 +549,7 @@ if (!isOpen) {
         )}
       </div>
 
-      {/* Note Editor - Keep exactly the same */}
+      {/* Note Editor */}
       {(selectedNote || isEditing) && (
         <div className="p-1 border-t border-[#e3d5c8] dark:border-blue-500/20 
                 bg-white dark:bg-gray-800/50 flex flex-col">
@@ -512,41 +564,48 @@ if (!isOpen) {
                 </span>
               </div>
               <div className="flex space-x-1">
-                {isEditing && onOpenEditor && (
-                  <button
-                    onClick={() => onOpenEditor({
-                      id: selectedNote?.id,
-                      title: noteTitle,
-                      content: noteContent
-                    })}
-                    className="p-1.5 text-[#8c715f] dark:text-gray-400 
-                               hover:text-[#a55233] dark:hover:text-blue-400
-                               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
-                               rounded transition-colors"
-                    title="Expand Editor"
-                  >
-                    <Expand className="h-3 w-3" />
-                  </button>
-                )}
-               {onOpenViewer && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenViewer(selectedNote);
-                    }}
-                    className="p-1 text-[#8c715f] dark:text-gray-400 
-                               hover:text-[#a55233] dark:hover:text-blue-400
-                               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
-                               rounded transition-colors"
-                    title="View Note"
-                  >
-                    <Eye className="h-3 w-3" />
-                  </button>
-                )}
+               {isEditing && onOpenEditor && (
+  <button
+    onClick={() => {
+      onOpenEditor({
+        id: selectedNote?.id,
+        title: noteTitle,
+        content: noteContent
+      });
+      handleCloseNoteEditor(); 
+    }}
+    className="p-1.5 text-[#8c715f] dark:text-gray-400 
+               hover:text-[#a55233] dark:hover:text-blue-400
+               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
+               rounded transition-colors"
+    title="Expand Editor"
+  >
+    <Expand className="h-3 w-3" />
+  </button>
+)}
 
-                {!isEditing && (
+
+{onOpenViewer && (
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      onOpenViewer(selectedNote);
+      handleCloseNoteEditor(); // Add this line
+    }}
+    className="p-1 text-[#8c715f] dark:text-gray-400 
+               hover:text-[#a55233] dark:hover:text-blue-400
+               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
+               rounded transition-colors"
+    title="View Note"
+  >
+    <Eye className="h-3 w-3" />
+  </button>
+)}
+{!isEditing && !selectedNote?.is_converted_to_document && (
                   <button
-                    onClick={() => setIsEditing(true)}
+                    onClick={() => {setIsEditing(true);
+                      
+                    }}
                     className="p-1.5 text-[#8c715f] dark:text-gray-400 
                                hover:text-[#a55233] dark:hover:text-blue-400
                                hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
@@ -556,6 +615,20 @@ if (!isOpen) {
                     <Edit3 className="h-3 w-3" />
                   </button>
                 )}
+                
+{!isEditing && (
+  <button
+    onClick={handleCloseNoteEditor}
+    className="p-1.5 text-[#8c715f] dark:text-gray-400 
+               hover:text-red-600 dark:hover:text-red-400
+               hover:bg-red-50 dark:hover:bg-red-900/20 
+               rounded transition-colors"
+    title="Close Note"
+  >
+    <X className="h-3 w-3" />
+  </button>
+)}
+
                 {isEditing && (
                   <>
                     <button
@@ -625,32 +698,26 @@ if (!isOpen) {
           </div>
 
           {/* Content Editor */}
-          <div className=" p-3 ">
-            {isEditing ? (
-              <textarea
-                ref={textareaRef}
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-                placeholder="Start writing your note..."
-                className="w-full text-sm rounded-lg resize-none
-                           bg-[#f9f7f4] dark:bg-gray-700/50
-                           border border-[#d6cbbf] dark:border-blue-500/20
-                           text-[#5e4636] dark:text-white
-                           placeholder:text-[#8c715f] dark:placeholder:text-gray-400
-                           focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
-                           focus:border-transparent custom-scrollbar overflow-y-auto"
-                style={{ height: '200px', padding: '8px', boxSizing: 'border-box' }}
-              />
-            ) : (
-              <div className="text-sm text-[#5e4636] dark:text-white 
-                  overflow-y-auto custom-scrollbar
-                  whitespace-pre-wrap bg-[#f9f7f4] dark:bg-gray-700/50
-                  border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg"
-                  style={{ height: '200px', padding: '8px', boxSizing: 'border-box' }}>
-                {noteContent || 'No content'}
-              </div>
-            )}
-          </div>
+          <div className="p-3 flex-1 overflow-hidden">
+  {isEditing ? (
+    <div className="notepad-quill-container">
+      <ReactQuill
+        value={noteContent}
+        onChange={setNoteContent}
+        modules={quillModules}
+        formats={quillFormats}
+        theme="snow"
+        className="notepad-quill-editor"
+        style={{ height: '200px' }}
+      />
+    </div>
+  ) : (
+    <div 
+      className="notepad-content-viewer custom-scrollbar overflow-y-auto max-h-64"
+      dangerouslySetInnerHTML={{ __html: noteContent || '<p style="color: #8c715f;">No content</p>' }}
+    />
+  )}
+</div>
         </div>
       )}
 
@@ -688,6 +755,29 @@ if (!isOpen) {
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
         }
+          .ql-editor {
+  padding: 8px;
+  font-size: 0.875rem;
+  color: #5e4636;
+  background-color: #f9f7f4;
+}
+.dark .ql-editor {
+  color: white;
+  background-color: rgba(31, 41, 55, 0.5);
+}
+.ql-container.ql-snow {
+  border: none !important;
+}
+
+
+.ql-editor {
+  font-size: 0.875rem;
+  padding: 8px !important;
+  color: #5e4636;
+}
+.dark .ql-editor {
+  color: white;
+}
       `}</style>
     </div>
   );

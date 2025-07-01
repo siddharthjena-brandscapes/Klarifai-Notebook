@@ -30,7 +30,11 @@ from .models import (
     ConversationMemoryBuffer,
     UserModulePermissions,
     UserUploadPermissions,
-    SSOAllowedUser
+    SSOAllowedUser,
+    ConversationTransaction,
+    UserTransaction,
+    DocumentTransaction,
+    TransactionType
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -85,6 +89,7 @@ from django.shortcuts import redirect
 from rest_framework.permissions import AllowAny
 from msal import ConfidentialClientApplication
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -121,7 +126,7 @@ class SignupView(APIView):
     # Explicitly set permission to allow any user (including unauthenticated)
     permission_classes = [AllowAny]
     authentication_classes = []  # Disable authentication checks
-
+ 
     def post(self, request):
         # Extract data from request
         username = request.data.get('username')
@@ -130,44 +135,44 @@ class SignupView(APIView):
         nebius_token = request.data.get('nebius_token', '')
         gemini_token = request.data.get('gemini_token', '')
         llama_token = request.data.get('llama_token', '')  # New field for Llama API token
-
+ 
         # Validate input
         if not username or not email or not password:
             return Response({
                 'error': 'Please provide username, email, and password'
             }, status=status.HTTP_400_BAD_REQUEST)
-
+ 
         # Check if user already exists
         if User.objects.filter(username=username).exists():
             return Response({
                 'error': 'Username already exists'
             }, status=status.HTTP_400_BAD_REQUEST)
-
+ 
         # Create new user
         try:
             user = User.objects.create_user(
-                username=username, 
-                email=email, 
+                username=username,
+                email=email,
                 password=password
             )
-            
-            # Create API tokens record
-            UserAPITokens.objects.create(
-                user=user,
-                nebius_token=nebius_token,
-                gemini_token=gemini_token,
-                llama_token=llama_token  # Save the Llama API token
-            )
-            
+            # Update the automatically created API tokens with provided values
+            # The post_save signal already created UserAPITokens with default values
+            api_tokens = user.api_tokens
+            if nebius_token:
+                api_tokens.nebius_token = nebius_token
+            if gemini_token:
+                api_tokens.gemini_token = gemini_token
+            if llama_token:
+                api_tokens.llama_token = llama_token
+            api_tokens.save()
             # Generate token for the new user
             token, _ = Token.objects.get_or_create(user=user)
-            
             return Response({
                 'message': 'User created successfully',
                 'token': token.key,
                 'username': user.username
             }, status=status.HTTP_201_CREATED)
-
+ 
         except Exception as e:
             return Response({
                 'error': str(e)
@@ -204,7 +209,6 @@ class LoginView(APIView):
             'error': 'Invalid credentials'
         }, status=status.HTTP_401_UNAUTHORIZED)
     
-
 
 class MicrosoftSSOView(APIView):
     """Single view to handle Microsoft SSO - direct redirect approach"""
@@ -287,11 +291,6 @@ class MicrosoftSSOCallbackView(APIView):
             logger.error("No email found in user info")
             return None
        
-        #  Check against whitelist
-        if not SSOAllowedUser.objects.filter(email=email).exists():
-            logger.warning(f"Unauthorized SSO attempt by {email}")
-            return None
-       
         try:
             # Get existing user
             user = User.objects.get(email=email)
@@ -320,10 +319,10 @@ class MicrosoftSSOCallbackView(APIView):
             user.set_unusable_password()
             user.save()
            
-            # REMOVE THIS - Let the signal handle it automatically
+            # Create empty API tokens record for SSO users
             # UserAPITokens.objects.create(
             #     user=user,
-            #     huggingface_token='',
+            #     nebius_token='',
             #     gemini_token='',
             #     llama_token=''
             # )
@@ -405,7 +404,6 @@ class MicrosoftSSOCallbackView(APIView):
         except Exception as e:
             logger.error(f"SSO callback exception: {str(e)}")
             return redirect(f"{settings.FRONTEND_URL}/login?error=sso_exception")
-
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1654,13 +1652,13 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
 
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
-    
+   
     def post(self, request):
         files = request.FILES.getlist('files')
         user = request.user
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
-        
+       
         if target_user_id and request.user.username == 'admin':
             # Admin uploading for another user
             try:
@@ -1672,7 +1670,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         else:
             # Regular upload
             user = request.user
-
+ 
         try:
             permissions = UserModulePermissions.objects.get(user=user)
             if permissions.disabled_modules.get('document-upload', False):
@@ -1681,26 +1679,26 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 }, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
             pass
-
+ 
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
             uploaded_docs = []
             last_processed_doc_id = None
             processed_data = None  # Initialize processed_data outside the loop
-
+ 
             for file in files:
                 file_ext = os.path.splitext(file.name)[1].lower()
                 is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
                 is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
                 is_media_file = is_audio_file or is_video_file
-                
+               
                 # Check for existing document with the same name
                 existing_doc = Document.objects.filter(
-                    user=user, 
+                    user=user,
                     filename=file.name,
                     main_project=main_project
                 ).first()
-
+ 
                 # If this is an audio/video file, handle it specially
                 if is_media_file:
                     # Process the media file to get transcript
@@ -1708,7 +1706,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         for chunk in file.chunks():
                             tmp_file.write(chunk)
                         file_path = tmp_file.name
-                    
+                   
                     try:
                         # Extract text based on file type
                         if is_video_file:
@@ -1717,27 +1715,27 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         else:  # audio file
                             print(f"Processing audio file: {file.name}")
                             extracted_text = self.extract_text_from_audio(file_path, user=user)
-                        
+                       
                         if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
                             return Response({
                                 'error': f'Failed to extract text from media file: {file.name}'
                             }, status=status.HTTP_400_BAD_REQUEST)
-                        
+                       
                         # Create transcript filename based on original file
                         base_name = os.path.splitext(file.name)[0]
                         file_type = "video" if is_video_file else "audio"
                         transcript_filename = f"{base_name}_{file_type}_transcript.txt"
-                        
+                       
                         # Create a temporary file with the transcript
                         transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
                         with open(transcript_file_path, 'w', encoding='utf-8') as f:
                             f.write(extracted_text)
-                        
+                       
                         # Create a Django File object from the transcript
                         with open(transcript_file_path, 'rb') as f:
                             from django.core.files import File
                             django_file = File(f, name=transcript_filename)
-                            
+                           
                             # Now create or update document with transcript instead of media
                             if existing_doc:
                                 # Update existing document
@@ -1753,13 +1751,20 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                     filename=transcript_filename,
                                     main_project=main_project
                                 )
-                        
+ 
+                                file_size = file.size if hasattr(file, 'size') else None
+                                upload_method = 'video_transcript' if is_video_file else 'audio_transcript' if is_audio_file else 'regular'
+                                print(f"##################Upload method: {upload_method}")
+                                print(f"### Inside post, about to call create_document_transaction for {file.name}")
+                                self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
+                                print(f"### Finished create_document_transaction for {file.name}")
+                       
                         # Delete the temporary transcript file
                         os.unlink(transcript_file_path)
-                        
+                       
                         # Process the document for RAG
                         processed_data = self.process_document_from_text(extracted_text, transcript_filename)
-                        
+                       
                         # Create ProcessedIndex
                         ProcessedIndex.objects.create(
                             document=document,
@@ -1768,20 +1773,20 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                             summary="",
                             markdown_path=processed_data.get('markdown_path', '')
                         )
-                        
+                       
                         uploaded_docs.append({
                             'id': document.id,
                             'filename': transcript_filename,
                             'original_media_type': file_type
                         })
-                        
+                       
                         last_processed_doc_id = document.id
-                    
+                   
                     finally:
                         # Clean up temporary file
                         if os.path.exists(file_path):
                             os.unlink(file_path)
-                
+               
                 # Regular file processing (non-media)
                 else:
                     if existing_doc:
@@ -1792,11 +1797,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 'filename': existing_doc.filename
                             })
                             last_processed_doc_id = existing_doc.id
-                            
+                           
                         except ProcessedIndex.DoesNotExist:
                             # Process the document if no existing index
                             processed_data = self.process_document(file, user)
-                            
+                           
                             # Create ProcessedIndex
                             ProcessedIndex.objects.create(
                                 document=existing_doc,
@@ -1805,7 +1810,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 summary="",
                                 markdown_path=processed_data.get('markdown_path', '')
                             )
-                            
+                           
                             uploaded_docs.append({
                                 'id': existing_doc.id,
                                 'filename': existing_doc.filename
@@ -1814,15 +1819,21 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     else:
                         # Create new document
                         document = Document.objects.create(
-                            user=user, 
-                            file=file, 
+                            user=user,
+                            file=file,
                             filename=file.name,
                             main_project=main_project
                         )
-                        
+                        file_size = file.size if hasattr(file, 'size') else None
+                        upload_method = 'video_transcript' if is_video_file else 'audio_transcript' if is_audio_file else 'regular'
+                        print(f"##################Upload method: {upload_method}")
+                        print(f"### Inside post, about to call create_document_transaction for {file.name}")
+                        self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
+                        print(f"### Finished create_document_transaction for {file.name}")
+ 
                         # Process it
                         processed_data = self.process_document(file, user)
-                        
+                       
                         # Create ProcessedIndex
                         ProcessedIndex.objects.create(
                             document=document,
@@ -1831,40 +1842,74 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                             summary="",
                             markdown_path=processed_data.get('markdown_path', '')
                         )
-                        
+                       
                         uploaded_docs.append({
                             'id': document.id,
                             'filename': document.filename
                         })
                         last_processed_doc_id = document.id
-                        
+                       
                         print(f"Uploaded Document - ID: {document.id}")
                         print(f"Filename: {document.filename}")
-
+ 
             # Store the last processed document ID in the session
             request.session['active_document_id'] = last_processed_doc_id
-
+ 
             # Ensure we have processed_data before using it
             if processed_data is None:
                 return Response({
                     'error': 'No documents were successfully processed'
                 }, status=status.HTTP_400_BAD_REQUEST)
-
+ 
             # Update project timestamp to track activity
             update_project_timestamp(main_project_id, user)
-
+ 
             return Response({
                 'message': 'Documents uploaded successfully',
                 'documents': uploaded_docs,
                 'active_document_id': last_processed_doc_id
             }, status=status.HTTP_201_CREATED)
-
+ 
         except Exception as e:
             print(f"Error processing document: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while processing the document'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+ 
+ 
+    def create_document_transaction(self, user, document, main_project, upload_method, file_size=None):
+        """Create transaction record for document upload"""
+        try:
+            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+            # Create main transaction record
+            user_transaction = UserTransaction.objects.create(
+                user=user,
+                transaction_type=TransactionType.DOCUMENT_UPLOAD,
+                document_name=document.filename,
+                document_id=document.id,
+                main_project=main_project,
+                metadata={
+                    'upload_timestamp': timezone.now().isoformat(),
+                    'upload_method': upload_method,
+                    'file_size': file_size or getattr(document.file, 'size', None)
+                }
+            )
+           
+            # Create detailed document transaction
+            DocumentTransaction.objects.create(
+                user_transaction=user_transaction,
+                original_filename=document.filename,
+                file_size=file_size or getattr(document.file, 'size', None),
+                file_type=os.path.splitext(document.filename)[1].lower(),
+                upload_method=upload_method
+            )
+           
+            print(f"Transaction recorded for document: {document.filename}")
+           
+        except Exception as e:
+            print(f"Error creating document transaction: {str(e)}")
     # -------------------------------
     # Keep the complexity detection from original code
     # -------------------------------
@@ -1893,23 +1938,23 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         import faiss
         import pickle
         from llama_parse import LlamaParse
-        
+       
         try:
             # Get the user's Llama API token
             try:
                 user_api_tokens = UserAPITokens.objects.get(user=user)
                 llama_api_key = user_api_tokens.llama_token
-                
+               
                 # If no token is saved for the user, use a fallback mechanism or raise an error
                 if not llama_api_key:
                     logger.warning(f"No Llama API token found for user {user.username}")
                     # Optional: You could implement a fallback or raise an error
                     raise ValueError("Llama API token is required for processing complex documents")
-                    
+                   
             except UserAPITokens.DoesNotExist:
                 logger.error(f"No API tokens record found for user {user.username}")
                 raise ValueError("User API tokens not configured")
-            
+           
             parser = LlamaParse(
                 api_key=llama_api_key,  # Use the user's Llama API token
                 result_type="markdown",
@@ -1917,10 +1962,22 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 images=True,
                 premium_mode=True
             )
-            
+           
             parsed_documents = parser.load_data(file_path)
             full_text = '\n'.join([doc.text for doc in parsed_documents])
-            
+           
+            # Check if extracted text is empty or only whitespace
+            if not full_text or not full_text.strip():
+                logger.error(f"No text could be extracted from document: {file_name}")
+                raise ValueError(f"Failed to extract any text content from the document '{file_name}'. The document may be corrupted, password-protected, or in an unsupported format.")
+           
+            # Additional check for very short content (optional - adjust threshold as needed)
+            if len(full_text.strip()) < 5:  # Less than 10 characters
+                logger.warning(f"Very little text extracted from document: {file_name} (only {len(full_text.strip())} characters)")
+                raise ValueError(f"Insufficient text content extracted from document '{file_name}'. Only {len(full_text.strip())} characters were extracted.")
+           
+            logger.info(f"Successfully extracted {len(full_text)} characters from document: {file_name}")
+           
             # Save markdown (adapted from Streamlit implementation)
             base_name = os.path.splitext(file_name)[0]
             safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
@@ -1928,27 +1985,31 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             os.makedirs("markdown_files", exist_ok=True)
             with open(md_path, "w", encoding='utf-8') as f:
                 f.write(full_text)
-            
+           
             # Create FAISS index
             text_embedding_dim = 1536  # OpenAI embedding dimension
             faiss_index = faiss.IndexFlatL2(text_embedding_dim)
             metadata_store = []
-            
+           
             # Create chunks with overlap for better retrieval (from Streamlit implementation)
             chunked_texts = []
             for doc in parsed_documents:
+                # Skip documents with no meaningful content
+                if not doc.text or not doc.text.strip():
+                    continue
+                   
                 # Original document as a chunk
                 chunked_texts.append(doc.text)
                 metadata_store.append({
                     "content": doc.text,
                     "source_file": file_name
                 })
-                
+               
                 # Create additional smaller chunks for better retrieval
                 words = doc.text.split()
                 chunk_size = 200  # Smaller chunk size as in Streamlit
                 stride = 100      # With overlap
-                
+               
                 if len(words) > chunk_size:
                     for i in range(0, len(words) - chunk_size, stride):
                         chunk = " ".join(words[i:i+chunk_size])
@@ -1958,31 +2019,36 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 "content": chunk,
                                 "source_file": file_name
                             })
-            
+           
+            # Final check to ensure we have chunks to process
+            if not chunked_texts:
+                logger.error(f"No valid text chunks created from document: {file_name}")
+                raise ValueError(f"Unable to create text chunks from document '{file_name}'. The document content may be insufficient or invalid.")
+           
             # Process in batches to avoid API limitations
-            if chunked_texts:
-                batch_size = 50  # Adjust based on API limits
-                for i in range(0, len(chunked_texts), batch_size):
-                    batch = chunked_texts[i:i+batch_size]
-                    embeddings = self.get_embeddings(batch)
-                    
-                    if embeddings:
-                        faiss_index.add(np.array(embeddings).astype('float32'))
-                    else:
-                        print(f"Failed to generate embeddings for a batch in {file_name}. Continuing with next batch...")
-            
+            batch_size = 50  # Adjust based on API limits
+            for i in range(0, len(chunked_texts), batch_size):
+                batch = chunked_texts[i:i+batch_size]
+                embeddings = self.get_embeddings(batch)
+               
+                if embeddings:
+                    faiss_index.add(np.array(embeddings).astype('float32'))
+                else:
+                    print(f"Failed to generate embeddings for a batch in {file_name}. Continuing with next batch...")
+           
             # Save index and metadata
             session_id = uuid.uuid4().hex
             index_file, pickle_file = self.save_faiss_index(faiss_index, metadata_store, session_id)
-            
+           
             return {
                 'index_path': index_file,
                 'metadata_path': pickle_file,
                 'full_text': full_text,
                 'markdown_path': md_path  # Include the markdown path
             }
-            
+           
         except Exception as e:
+            logger.error(f"Error in complex document processing for file '{file_name}': {str(e)}")
             print(f"Error in complex document processing: {str(e)}")
             raise
     def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
@@ -2517,7 +2583,7 @@ logger = logging.getLogger(__name__)
 
 class ChatView(APIView):
     permission_classes = [IsAuthenticated]
-
+ 
     def __init__(self, post_process_func=post_process_response):
         self.post_process_func = post_process_func
         self.agent = Agent(
@@ -2531,7 +2597,11 @@ class ChatView(APIView):
                 show_tool_calls=True,
                 markdown=True
             )
-
+        
+    def normalize_citation_markers(self, text):
+        # Replace [Source n] or [source n] with [n]
+        return re.sub(r'\[(?:source|Source)\s*(\d+)\]', r'[\1]', text)
+ 
     def post(self, request):
         user = request.user
         try:
@@ -2540,41 +2610,41 @@ class ChatView(APIView):
             conversation_id = request.data.get('conversation_id')
             main_project_id = request.data.get('main_project_id')
             selected_documents = request.data.get('selected_documents', [])
-            
+           
             # Extract web_mode flag from request
             use_web_knowledge = request.data.get('use_web_knowledge', False)
-            
+           
             # Extract general_chat_mode flag
             general_chat_mode = request.data.get('general_chat_mode', False)
-
+ 
             # Extract response_length preference
             response_length = request.data.get('response_length', 'comprehensive')
-            
+           
             # Extract response_format parameter or default to 'natural'
             response_format = request.data.get('response_format', 'natural')
-
+ 
             if not main_project_id:
                 return Response({
                     'error': 'Main project ID is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+           
             # Validate message
             if not message:
                 return Response(
-                    {'error': 'Message is required'}, 
+                    {'error': 'Message is required'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
+ 
             # Process URLs in the query - new feature
             modified_message, url_context, extracted_urls = self.process_urls_in_query(message)
             has_url_content = bool(url_context)
-            
+           
             # Log URL processing results
             if has_url_content:
                 print(f"URLs detected in query: {extracted_urls}")
                 print(f"Modified query: {modified_message}")
                 print(f"URL context size: {len(url_context)} characters")
-
+ 
             conversation_context = ""
             if conversation_id:
                 try:
@@ -2583,21 +2653,21 @@ class ChatView(APIView):
                         conversation_id=conversation_id,
                         user=user
                     )
-                    
+                   
                     # Get last 5 conversation messages (max 10 messages = 5 turns)
                     recent_messages = ChatMessage.objects.filter(
                         chat_history=conversation
                     ).order_by('-created_at')[:10]
-                    
+                   
                     # Format for context
                     if recent_messages:
                         context_messages = []
                         for msg in recent_messages:
                             prefix = "User: " if msg.role == 'user' else "Assistant: "
                             context_messages.append(f"{prefix}{msg.content[:400]}...")
-                        
+                       
                         conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
-                    
+                   
                     # Try to get memory buffer
                     try:
                         memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
@@ -2606,28 +2676,28 @@ class ChatView(APIView):
                     except ConversationMemoryBuffer.DoesNotExist:
                         # No memory buffer yet, that's fine
                         pass
-                        
+                       
                 except ChatHistory.DoesNotExist:
                     # No conversation yet, that's fine
                     pass
-            
+           
             # Skip document validation if in general chat mode or if URLs are present
             if not general_chat_mode and not has_url_content:
                 # First, check for active document in session
                 active_document_id = request.session.get('active_document_id')
-                
+               
                 if not selected_documents:
                     active_document_id = request.session.get('active_document_id')
                     if active_document_id:
                         selected_documents = [active_document_id]
-                
+               
                 # Validate document selection only when not in general chat mode and no URLs are provided
                 if not selected_documents:
                     return Response(
                         {'error': 'Please select at least one document or set an active document'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-
+ 
             # Log the inputs for debugging
             print(f"Chat request received")
             print(f"Message: {message}")
@@ -2638,26 +2708,26 @@ class ChatView(APIView):
             print(f"Response length: {response_length}")
             print(f"Has conversation context: {bool(conversation_context)}")
             print(f"Has URL content: {has_url_content}")
-
+ 
             # Process document search early to get context for format detection
             all_chunks = []
             content_sources = []
             similar_contents = []  # Store document content separately
             citation_sources = {}  # Initialize citation sources dict
-            
+           
             if not general_chat_mode:
                 try:
                     processed_docs = ProcessedIndex.objects.filter(
-                        document_id__in=selected_documents, 
+                        document_id__in=selected_documents,
                         document__user=user
                     )
-                    
+                   
                     if not processed_docs.exists() and not has_url_content:
                         return Response(
                             {'error': 'No valid documents found'},
                             status=status.HTTP_404_NOT_FOUND
                         )
-                        
+                       
                     # Log the processed docs for debugging
                     print(f"Found {processed_docs.count()} processed documents")
                     for doc in processed_docs:
@@ -2665,7 +2735,7 @@ class ChatView(APIView):
                         print(f"FAISS index path: {doc.faiss_index}")
                         print(f"Metadata path: {doc.metadata}")
                         print(f"Markdown path: {doc.markdown_path}")
-                        
+                       
                 except Exception as e:
                     print(f"Error fetching documents: {str(e)}")
                     if not has_url_content:
@@ -2673,20 +2743,20 @@ class ChatView(APIView):
                             {'error': f'Document retrieval error: {str(e)}'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-
+ 
                 # Create a merged metadata store from all selected documents
                 all_metadata_store = []
-                
+               
                 # Load FAISS indices and chunks for all selected documents
                 for proc_doc in processed_docs:
                     if not proc_doc.faiss_index or not proc_doc.metadata:
                         print(f"Missing index or metadata for {proc_doc.document.filename}")
                         continue
-                    
+                   
                     if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
                         print(f"Index or metadata file does not exist for {proc_doc.document.filename}")
                         continue
-                    
+                   
                     # Check if this is a LlamaParse document with direct markdown access
                     if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
                         print(f"Found LlamaParse markdown for {proc_doc.document.filename}")
@@ -2696,12 +2766,12 @@ class ChatView(APIView):
                             'source_file': proc_doc.document.filename,
                             'document_id': proc_doc.document.id
                         })
-                    
+                   
                     # Load metadata - this is needed for both LlamaParse and simple documents
                     try:
                         with open(proc_doc.metadata, 'rb') as f:
                             chunks = pickle.load(f)
-                        
+                       
                         # Validate the chunks format
                         if not isinstance(chunks, list):
                             print(f"Warning: chunks is not a list for {proc_doc.document.filename}, type: {type(chunks)}")
@@ -2709,42 +2779,42 @@ class ChatView(APIView):
                                 chunks = [chunks]
                             else:
                                 chunks = []
-                        
+                       
                         # Add document source information to each chunk
                         for chunk in chunks:
                             if isinstance(chunk, dict):
                                 if 'source_file' not in chunk:
                                     chunk['source_file'] = proc_doc.document.filename
-                                
+                               
                                 # Ensure 'text' key exists
                                 if 'text' not in chunk:
                                     for key in ['content', 'document_content', 'chunk_text']:
                                         if key in chunk:
                                             chunk['text'] = chunk[key]
                                             break
-                                            
+                                           
                         # Add to all metadata store
                         print(f"Adding {len(chunks)} chunks from {proc_doc.document.filename}")
                         all_metadata_store.extend(chunks)
-                        
+                       
                     except Exception as e:
                         print(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
                         continue
-                
+               
                 # Now search using the improved approach
                 if all_metadata_store:
                     print(f"Searching in {len(all_metadata_store)} chunks across all documents")
                     # Get relevant content based on query - use modified_message if URLs detected
                     # Use updated search_similar_content that returns citation_sources
                     similar_contents, content_sources, chunk_citation_sources = self.search_similar_content(
-                        modified_message if has_url_content else message, 
+                        modified_message if has_url_content else message,
                         processed_docs,
                         all_metadata_store
                     )
-                    
+                   
                     # Store citation sources
                     citation_sources = chunk_citation_sources
-                    
+                   
                     if similar_contents:
                         print(f"Found {len(similar_contents)} relevant content chunks")
                         all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
@@ -2754,12 +2824,12 @@ class ChatView(APIView):
                 else:
                     print("No metadata found for any document")
                     all_chunks = []
-            
+           
             # Check if we should auto-detect the response format
             if response_format == 'auto_detect':
                 context_snippets = [chunk.get('text', '') for chunk in all_chunks[:5]] if all_chunks else []
                 detected_format, secondary_format, confidence = self.detect_question_format(modified_message if has_url_content else message, context_snippets)
-                
+               
                 # Use the detected format if confidence is reasonable, otherwise default to 'natural'
                 if confidence >= 5.0:
                     response_format = detected_format
@@ -2767,12 +2837,12 @@ class ChatView(APIView):
                 else:
                     response_format = 'natural'
                     print(f"Low confidence in format detection ({confidence}), defaulting to 'natural'")
-            
+           
             # Get answer based on mode
             web_knowledge_response = None
             web_sources = []
             doc_citation_sources = {}
-            
+           
             # Get answer based on mode
             if general_chat_mode:
                 # For general chat mode, consider URL content if available
@@ -2780,14 +2850,14 @@ class ChatView(APIView):
                     # Create a hybrid prompt that includes the URL content
                     augmented_query = f"""
                     Please answer this question: {modified_message}
-                    
+                   
                     The question references content from URLs, which is provided here:
-                    
+                   
                     {url_context}
-                    
+                   
                     Based on this URL content, answer the user's question.
                     """
-                    
+                   
                     # Use the existing general chat function but with our augmented query
                     answer = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format, user=user)
                     print("Generated response using general chat mode with URL content")
@@ -2798,17 +2868,17 @@ class ChatView(APIView):
             else:
                 # Document chat mode - now handles URL content too
                 document_content_exists = bool(all_chunks)
-                
+               
                 if document_content_exists or has_url_content:
                     # If we have URL content, add it to the context
                     if has_url_content:
                         # Add URL context to similar_contents and content_sources
                         combined_contents = similar_contents.copy() if similar_contents else []
                         combined_contents.append(url_context)
-                        
+                       
                         combined_sources = content_sources.copy() if content_sources else []
                         combined_sources.append("URL Content")
-                        
+                       
                         # Add URL to citation sources
                         if citation_sources:
                             url_citation_key = max(citation_sources.keys()) + 1 if citation_sources else 1
@@ -2819,51 +2889,51 @@ class ChatView(APIView):
                                 'score': 0.9,  # High score for URL content
                                 'display_num': url_citation_key
                             }
-                        
+                       
                         # Generate response using combined context with citation sources
                         if response_length == 'short':
                             document_answer, doc_citation_sources = self.generate_short_response(
-                                modified_message, 
-                                combined_contents, 
-                                combined_sources, 
-                                False, 
-                                response_format, 
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
                         else:  # Default to comprehensive
                             document_answer, doc_citation_sources = self.generate_response(
-                                modified_message, 
-                                combined_contents, 
-                                combined_sources, 
-                                False, 
-                                response_format, 
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
-                        
+                       
                         print(f"Generated document-based answer with URL content using {response_length} response length")
                     else:
                         # Standard document-based response without URL content
                         if response_length == 'short':
                             document_answer, doc_citation_sources = self.generate_short_response(
-                                message, 
-                                similar_contents, 
-                                content_sources, 
-                                False, 
-                                response_format, 
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
                         else:  # Default to comprehensive
                             document_answer, doc_citation_sources = self.generate_response(
-                                message, 
-                                similar_contents, 
-                                content_sources, 
-                                False, 
-                                response_format, 
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
-                        
+                       
                         print(f"Generated document-based answer using {response_length} response length")
-                    
+                   
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
                         web_response_data = self.get_web_knowledge_response(
@@ -2871,7 +2941,7 @@ class ChatView(APIView):
                             user=user,
                             document_context=similar_contents  # Pass document context to enhance web search  
                         )
-
+ 
                         # Extract the components from the JSON response
                         if isinstance(web_response_data, dict):
                             web_knowledge_response = web_response_data.get("content", "No web response received")
@@ -2881,27 +2951,27 @@ class ChatView(APIView):
                             web_knowledge_response = str(web_response_data)
                             web_sources = []
                         print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
-                        
+                       
                         # Combine document and web responses
-                    
+                   
                         combined_response_data, combined_citation_sources = self.combine_document_and_web_responses(
-                            modified_message if has_url_content else message, 
-                            document_answer, 
-                            web_knowledge_response, 
-                            combined_sources if has_url_content else content_sources, 
+                            modified_message if has_url_content else message,
+                            document_answer,
+                            web_knowledge_response,
+                            combined_sources if has_url_content else content_sources,
                             web_sources,
                             response_format,
                             conversation_context,
                             original_doc_context=similar_contents,
                         )
-
+ 
                         # Extract the answer from the JSON response
                         if isinstance(combined_response_data, dict):
                             answer = combined_response_data.get("content", "Error combining responses")
                         else:
                             answer = str(combined_response_data)
                         print("Combined document and web responses")
-                        
+                       
                         # Update citation sources with combined sources
                         doc_citation_sources = combined_citation_sources
                     else:
@@ -2915,7 +2985,7 @@ class ChatView(APIView):
                             modified_message if has_url_content else message,
                             user=user
                         )
-
+ 
                         if isinstance(web_response_data, dict):
                             answer = web_response_data.get("content", "No web response received")
                             web_sources = web_response_data.get("web_sources", [])
@@ -2926,7 +2996,7 @@ class ChatView(APIView):
                     else:
                         print("No document content found and web knowledge not enabled")
                         answer = "I couldn't find any relevant information in the documents."
-            
+           
             # Extract main response and citation info (if any)
             if "\n\n*Sources:" in answer:
                 parts = answer.split("\n\n*Sources:")
@@ -2935,7 +3005,7 @@ class ChatView(APIView):
             else:
                 clean_response = answer
                 source_info = "Web search results" if use_web_knowledge else ""
-                
+               
                 # Add URL sources if applicable
                 if has_url_content:
                     urls_domains = [self.extract_domain(url) for url in extracted_urls]
@@ -2944,12 +3014,14 @@ class ChatView(APIView):
                         source_info += f", URLs: {url_sources}"
                     else:
                         source_info = f"URLs: {url_sources}"
-            
+
+            clean_response = self.normalize_citation_markers(clean_response)
+           
             # Generate follow-up questions (either from documents or general chat)
             if general_chat_mode:
                 follow_up_questions = self.generate_general_follow_up_questions(
-                    modified_message if has_url_content else message, 
-                    clean_response, 
+                    modified_message if has_url_content else message,
+                    clean_response,
                     user=user
                 )
             else:
@@ -2962,7 +3034,7 @@ class ChatView(APIView):
                         "Would you like me to elaborate on any specific point?",
                         "Do you have any other questions I can help with?"
                     ]
-            
+           
             # Create citations from chunks and citation sources
             citations = []
             if not general_chat_mode:
@@ -2977,7 +3049,7 @@ class ChatView(APIView):
                         'snippet': formatted_snippet,
                         'document_id': citation_info.get('document_id', 'Unknown')
                     })
-                
+               
                 # If no enhanced citations, fall back to chunk-based citations (original method)
                 if not citations:
                     for chunk in all_chunks:
@@ -2990,7 +3062,7 @@ class ChatView(APIView):
                             'snippet': formatted_snippet[:200] + "..." if len(formatted_snippet) > 200 else formatted_snippet,
                             'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
                         })
-                
+               
                 # Add URL citations if applicable
                 if has_url_content:
                     for idx, url in enumerate(extracted_urls):
@@ -3003,7 +3075,7 @@ class ChatView(APIView):
                             'document_id': f"url_{idx}",
                             'url': url
                         })
-                
+               
                 # Add web citations if applicable
                 if use_web_knowledge and web_sources:
                     for idx, source in enumerate(web_sources):
@@ -3015,11 +3087,11 @@ class ChatView(APIView):
                             'document_id': f"web_{idx}",
                             'url': source.get('url', '')
                         })
-
+ 
             # Prepare conversation details
             conversation_id = conversation_id or str(uuid.uuid4())
             title = f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-
+ 
             # Create or retrieve conversation
             if conversation_id:
                 conversation, created = ChatHistory.objects.get_or_create(
@@ -3032,14 +3104,24 @@ class ChatView(APIView):
                         'follow_up_questions': follow_up_questions,
                     }
                 )
-
+ 
+            if created:
+                # Create conversation transaction
+                self.create_conversation_transaction(
+                    user, conversation, main_project_id,
+                    use_web_knowledge, response_format, response_length
+                )
+            else:
+                # Update existing conversation transaction
+                self.update_conversation_transaction(conversation, use_web_knowledge)
+ 
             # Create user message
             user_message = ChatMessage.objects.create(
                 chat_history=conversation,
                 role='user',
                 content=message
             )
-
+ 
             # Create AI response message
             ai_message = ChatMessage.objects.create(
                 chat_history=conversation,
@@ -3050,37 +3132,37 @@ class ChatView(APIView):
                 response_length=response_length,
                 response_format=response_format
             )
-
+ 
             # Update or create memory buffer
             memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
                 conversation=conversation
             )
-            
+           
             # Get all messages for this conversation
             all_messages = ChatMessage.objects.filter(
                 chat_history=conversation
             ).order_by('created_at')
-            
+           
             # Update memory with all messages
             memory_buffer.update_memory(all_messages)
-
+ 
             # Add selected documents to the conversation (skip if general chat mode)
             if selected_documents and not general_chat_mode:
                 documents = Document.objects.filter(
-                    id__in=selected_documents, 
+                    id__in=selected_documents,
                     user=user
                 )
                 conversation.documents.set(documents)
-
+ 
             # Update project timestamp to track activity
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
-
+ 
             # Update conversation details
             conversation.title = title
             conversation.follow_up_questions = follow_up_questions
             conversation.save()
-
+ 
             # Use citation_sources in the response data if available
             response_data = {
                 'response': clean_response,
@@ -3096,7 +3178,7 @@ class ChatView(APIView):
                 'url_content_used': has_url_content,  # Flag if URL content was used
                 'extracted_urls': extracted_urls if has_url_content else []  # List of extracted URLs
             }
-
+ 
             # Print detailed chat response information
             print("\n--- Chat Interaction Logged ---")
             print(f"User Question: {message}")
@@ -3110,15 +3192,76 @@ class ChatView(APIView):
             print(f"Citation count: {len(citations)}")
             print(f"Follow-up Questions: {len(follow_up_questions)}")
             print("-----------------------------\n")
-
+ 
             return Response(response_data, status=status.HTTP_200_OK)
-
+ 
         except Exception as e:
             logger.error(f"Unexpected error in ChatView: {str(e)}", exc_info=True)
             return Response(
-                {'error': f'An unexpected error occurred: {str(e)}'}, 
+                {'error': f'An unexpected error occurred: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+ 
+ 
+    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
+        """Create transaction record for conversation"""
+        try:
+            # Get the project
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Create main transaction record
+            user_transaction = UserTransaction.objects.create(
+                user=user,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                conversation_title=conversation.title,
+                conversation_id=conversation.conversation_id,
+                main_project=main_project,
+                metadata={
+                    'creation_timestamp': timezone.now().isoformat(),
+                    'web_knowledge_used': use_web_knowledge,
+                    'response_format': response_format,
+                    'response_length': response_length
+                }
+            )
+           
+            # Create detailed conversation transaction
+            ConversationTransaction.objects.create(
+                user_transaction=user_transaction,
+                message_count=1,  # Initial message
+                web_knowledge_used=use_web_knowledge,
+                response_format=response_format,
+                response_length=response_length
+            )
+           
+            print(f"Transaction recorded for conversation: {conversation.title}")
+           
+        except Exception as e:
+            print(f"Error creating conversation transaction: {str(e)}")
+ 
+    def update_conversation_transaction(self, conversation, use_web_knowledge):
+        """Update existing conversation transaction when new messages are added"""
+        try:
+            # Find existing transaction for this conversation
+            user_transaction = UserTransaction.objects.filter(
+                conversation_id=conversation.conversation_id,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                is_active=True
+            ).first()
+           
+            if user_transaction and hasattr(user_transaction, 'conversation_details'):
+                # Update message count
+                user_transaction.conversation_details.message_count += 1
+                if use_web_knowledge:
+                    user_transaction.conversation_details.web_knowledge_used = True
+                user_transaction.conversation_details.save()
+               
+                # Update metadata
+                user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
+                user_transaction.save()
+               
+        except Exception as e:
+            print(f"Error updating conversation transaction: {str(e)}")
+ 
 
     def _parse_json_response(self, response_content, fallback_message="Error processing response"):
         """Helper method to safely parse JSON responses from LLM"""
@@ -7668,48 +7811,51 @@ class AdminUserManagementView(APIView):
                 return Response({
                     'error': 'Unauthorized. Only admin users can create new users'
                 }, status=status.HTTP_403_FORBIDDEN)
-           
+       
             # Extract data from request
             username = request.data.get('username')
             email = request.data.get('email')
             password = request.data.get('password')
-            nebius_token = request.data.get('nebius_token')
-            gemini_token = request.data.get('gemini_token')
-            llama_token = request.data.get('llama_token')  # Get Llama token
-           
+            nebius_token = request.data.get('nebius_token', '')
+            gemini_token = request.data.get('gemini_token', '')
+            llama_token = request.data.get('llama_token', '')
+       
             # Validate required fields
             if not all([username, email, password]):
                 return Response({
                     'error': 'Username, email, and password are required fields'
                 }, status=status.HTTP_400_BAD_REQUEST)
-           
+       
             # Check if username already exists
             if User.objects.filter(username=username).exists():
                 return Response({
                     'error': 'Username already exists'
                 }, status=status.HTTP_400_BAD_REQUEST)
-           
+       
             # Create the user
             user = User.objects.create_user(
                 username=username,
                 email=email,
                 password=password
             )
-           
-            # Create API tokens for the user
-            UserAPITokens.objects.create(
-                user=user,
-                nebius_token=nebius_token,
-                gemini_token=gemini_token,
-                llama_token=llama_token  # Save Llama token
-            )
-           
+       
+            # Update the automatically created API tokens with provided values
+            # The post_save signal already created UserAPITokens with default values
+            api_tokens = user.api_tokens
+            if nebius_token:
+                api_tokens.nebius_token = nebius_token
+            if gemini_token:
+                api_tokens.gemini_token = gemini_token
+            if llama_token:
+                api_tokens.llama_token = llama_token
+            api_tokens.save()
+       
             return Response({
                 'success': True,
                 'message': f'User {username} created successfully',
                 'user_id': user.id
             }, status=status.HTTP_201_CREATED)
-           
+       
         except Exception as e:
             print(f"Error in AdminUserManagementView.post: {str(e)}")
             return Response(

@@ -809,7 +809,7 @@ const handleUpdateIdea = async (ideaId) => {
     setIsGenerating(true);
     setError(null);
     setGenerationProgress(0); // Reset progress
-
+ 
     const activeFields = Object.entries(dynamicFields)
       .filter(([fieldId]) => fieldActivation[fieldId] !== false)
       .reduce(
@@ -819,7 +819,7 @@ const handleUpdateIdea = async (ideaId) => {
         }),
         {}
       );
-
+ 
     const submissionData = {
       ...formData,
       description_length: formData.description_length || 70,
@@ -827,27 +827,48 @@ const handleUpdateIdea = async (ideaId) => {
       dynamicFields: activeFields,
       negative_prompt: negativePrompt,
     };
-
-    try {
-      // Create a progress interval to simulate progress
-      const progressInterval = setInterval(() => {
+ 
+    // Create a more realistic progress simulation
+    let progressInterval;
+    let currentProgress = 0;
+ 
+    const startProgressSimulation = () => {
+      progressInterval = setInterval(() => {
         setGenerationProgress(prev => {
-          // Don't go beyond 90% until we're done
-          return prev < 90 ? prev + 10 : prev;
+          currentProgress = prev;
+          // Slower progression as it gets higher, more realistic for AI generation
+          if (prev < 30) {
+            return prev + 5; // Quick start
+          } else if (prev < 60) {
+            return prev + 3; // Medium speed
+          } else if (prev < 85) {
+            return prev + 2; // Slower
+          } else if (prev < 95) {
+            return prev + 1; // Very slow near end
+          }
+          return prev; // Stop at 95% until actual completion
         });
-      }, 500);
-
+      }, 800); // Slightly slower intervals for more realistic feel
+    };
+ 
+    try {
+      // Start progress simulation
+      setGenerationProgress(5);
+      startProgressSimulation();
+ 
       const response = await ideaService.generateIdeas(submissionData);
-
+ 
+      // Clear the simulation interval
+      clearInterval(progressInterval);
+ 
       if (response.data.success) {
         const { ideas: newIdeas, stored_data } = response.data;
         const currentSetNumber = stored_data.current_set;
-
+ 
+        // Jump to 96% to show we're processing the response
+        setGenerationProgress(96);
+ 
         const ideasWithMetadata = (newIdeas || []).map((idea, index) => {
-          // Calculate progress per idea (for better UX)
-          const ideaProgress = Math.min(90 + Math.round(((index + 1) / newIdeas.length) * 10), 99);
-          setGenerationProgress(ideaProgress);
-
           const metadata = {
             baseData: {
               product: stored_data.product,
@@ -865,7 +886,7 @@ const handleUpdateIdea = async (ideaId) => {
             dynamicFields: stored_data.dynamic_fields,
             timestamp: new Date().toISOString(),
           };
-
+ 
           return {
             ...idea,
             idea_set: currentSetNumber,
@@ -875,22 +896,21 @@ const handleUpdateIdea = async (ideaId) => {
             metadata,
           };
         });
-
+ 
         // Complete the progress
         setGenerationProgress(100);
-        clearInterval(progressInterval);
-
+ 
         // Update metadata state
         const newMetadata = ideasWithMetadata.reduce((acc, idea) => {
           acc[idea.idea_id] = idea.metadata;
           return acc;
         }, {});
-
+ 
         setIdeaMetadata((prev) => ({
           ...prev,
           ...newMetadata,
         }));
-
+ 
         // Update ideas state
         setIdeas((prevIdeas) => {
           const uniqueNewIdeas = ideasWithMetadata.filter(
@@ -902,23 +922,23 @@ const handleUpdateIdea = async (ideaId) => {
           const combinedIDeas = [...uniqueNewIdeas, ...prevIdeas];
           return combinedIDeas;
         });
-
+ 
         setIdeaSetCounter((prev) => prev + 1);
-
+ 
         if (showForm) {
           setShowForm(false);
         }
-        
+       
         // ONLY reset hasFormChanged after successful idea generation
         setHasFormChanged(false);
       } else {
         setError(response.data.error || "Failed to generate ideas");
-        clearInterval(progressInterval);
       }
     } catch (err) {
+      // Clear interval in case of error
+      clearInterval(progressInterval);
       setError(err.response?.data?.error || "Failed to connect to the server");
       console.error("Generation error:", err);
-      clearInterval(progressInterval);
     } finally {
       setIsLoading(false);
       setIsGenerating(false);

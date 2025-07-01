@@ -206,7 +206,7 @@ useEffect(() => {
 // In MainChat.jsx - Update the handlePinMessage function
 
 const handlePinMessage = async (message, messageIndex) => {
-   // Check if notes panel is disabled
+  // Check if notes panel is disabled
   if (rightPanelPermissions?.['notes-panel']) {
     toast.error('Notes access is disabled by administrator');
     return;
@@ -220,14 +220,12 @@ const handlePinMessage = async (message, messageIndex) => {
       ? `Chat Response - ${new Date().toLocaleDateString()}`
       : `Chat: ${firstLine.substring(0, 50)}...`;
     
-    // Clean content for note
-    const tempElement = document.createElement("div");
-    tempElement.innerHTML = message.content;
-    const cleanContent = tempElement.textContent || tempElement.innerText;
-    
+    // Remove citation numbers in square brackets from HTML string (but keep HTML tags)
+    let richContent = message.content.replace(/\s*\[\d+\]\s*/g, ' ');
+
     const response = await noteServiceNB.saveNote(
       noteTitle,
-      cleanContent,
+      richContent, // Save as HTML
       mainProjectId,
       {},
       null,
@@ -1442,7 +1440,7 @@ const renderSummaryView = () => {
     let uploadStage = 0;
 
     // Simple fix: just remove timeout and add better progress messages
-    const response = await documentService.uploadDocument(
+    const response = await documentServiceNB.uploadDocument(
       formData,
       mainProjectId,
       {
@@ -2224,8 +2222,8 @@ const WebSourcesDisplay = ({ sources }) => {
           transition-all 
           duration-300 
           ease-in-out
-          
           "
+         
     >
       {/* Conditional Rendering based on current view */}
       <div className="absolute inset-0 top-16 overflow-hidden">
@@ -2408,7 +2406,8 @@ const WebSourcesDisplay = ({ sources }) => {
   />
 ) : (
   // Use SimpleCitationManager for assistant messages with citations
-  msg.citations && msg.citations.length > 0 ? (
+  <div className="overflow-x-auto max-w-full  custom-scrollbar">
+  {msg.citations && msg.citations.length > 0 ? (
     <div className={`message-content ${getTextSizeClass(textSize)}`}>
       <ImprovedCitationManager 
     content={msg.content} 
@@ -2416,6 +2415,7 @@ const WebSourcesDisplay = ({ sources }) => {
     textSizeClass={getTextSizeClass(textSize)}
   />
     </div>
+    
   ) : (
     // Fallback to current HTML rendering for messages without citations
     <div
@@ -2481,7 +2481,8 @@ const WebSourcesDisplay = ({ sources }) => {
           .replace(/<\/strong>\s*\n+/g, "</strong>\n"),
       }}
     />
-  )
+  )}
+  </div>
 )}
 {/* NEW: Display web sources if available */}
     {msg.webSources && msg.webSources.length > 0 && (

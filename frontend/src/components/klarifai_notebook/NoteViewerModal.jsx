@@ -1,4 +1,4 @@
-// NoteViewerModal.jsx - Create this as a new component file
+// NoteViewerModal.jsx
 import { useState, useEffect, useRef } from 'react';
 import { 
   X, 
@@ -14,6 +14,7 @@ import {
   Check
 } from 'lucide-react';
 import PropTypes from 'prop-types';
+import DOMPurify from 'dompurify';
 
 const NoteViewerModal = ({ 
   isOpen, 
@@ -56,14 +57,16 @@ const NoteViewerModal = ({
         hour: '2-digit',
         minute: '2-digit'
       });
-    } catch (error) {
+    } catch {
       return 'Invalid date';
     }
   };
 
   const handleCopyContent = async () => {
     try {
-      const textToCopy = `${note?.title || 'Untitled Note'}\n\n${note?.content || ''}`;
+      // Strip HTML tags when copying
+      const textToCopy = `${note?.title || 'Untitled Note'}\n\n${note?.content ? 
+        note.content.replace(/<[^>]*>/g, '') : ''}`;
       await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -74,7 +77,8 @@ const NoteViewerModal = ({
 
   const getWordCount = (text) => {
     if (!text) return 0;
-    return text.split(/\s+/).filter(word => word.length > 0).length;
+    // Strip HTML tags before counting words
+    return text.replace(/<[^>]*>/g, '').split(/\s+/).filter(word => word.length > 0).length;
   };
 
   const getReadingTime = (text) => {
@@ -82,6 +86,13 @@ const NoteViewerModal = ({
     const readingSpeed = 200; // words per minute
     const minutes = Math.ceil(words / readingSpeed);
     return minutes;
+  };
+
+  // Sanitize HTML content before rendering
+  const createSanitizedHtml = (html) => {
+    return {
+      __html: DOMPurify.sanitize(html || '')
+    };
   };
 
   if (!isOpen || !note) return null;
@@ -144,21 +155,22 @@ const NoteViewerModal = ({
                 <Maximize2 className="h-4 w-4" />
               )}
             </button>
-
-            {/* Edit Button */}
-            <button
-              onClick={() => {
-                onEdit();
-                onClose();
-              }}
-              className="px-4 py-2 bg-[#a55233] dark:bg-blue-600 hover:bg-[#8b4513] dark:hover:bg-blue-700
-                         text-white rounded-lg transition-colors
-                         flex items-center space-x-2"
-              title="Edit Note"
-            >
-              <Edit3 className="h-4 w-4" />
-              <span>Edit</span>
-            </button>
+{/* Edit Button - Only show if not a Document Source */}
+           {!note.is_converted_to_document && (
+  <button
+    onClick={() => {
+      onEdit();
+      onClose();
+    }}
+    className="px-4 py-2 bg-[#a55233] dark:bg-blue-600 hover:bg-[#8b4513] dark:hover:bg-blue-700
+               text-white rounded-lg transition-colors
+               flex items-center space-x-2"
+    title="Edit Note"
+  >
+    <Edit3 className="h-4 w-4" />
+    <span>Edit</span>
+  </button>
+)}
 
             {/* Close Button */}
             <button
@@ -177,21 +189,21 @@ const NoteViewerModal = ({
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col">
             {/* Title Section */}
-            <div className="p-6 border-b border-[#e3d5c8] dark:border-blue-500/20">
+            <div className="p-4 border-b border-[#e3d5c8] dark:border-blue-500/20">
               <div className="flex items-start space-x-3">
                 <Type className="h-6 w-6 text-[#a55233] dark:text-blue-400 flex-shrink-0 mt-1" />
-                <div className="flex-1">
-                  <h1 className="text-2xl font-bold text-[#5e4636] dark:text-white mb-2 leading-tight">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl font-bold text-[#5e4636] dark:text-white mb-2 leading-tight break-words">
                     {note.title || 'Untitled Note'}
-                  </h1>
-                  <div className="flex items-center space-x-4 text-sm text-[#8c715f] dark:text-gray-400">
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-[#8c715f] dark:text-gray-400">
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-4 w-4" />
                       <span>Last updated: {formatDate(note.updated_at || note.created_at)}</span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <Hash className="h-4 w-4" />
-                      <span>{note.content ? note.content.length : 0} characters</span>
+                      <span>{note.content ? note.content.replace(/<[^>]*>/g, '').length : 0} characters</span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <FileText className="h-4 w-4" />
@@ -210,15 +222,16 @@ const NoteViewerModal = ({
               <div 
                 ref={contentRef}
                 tabIndex={0}
-                className="prose prose-lg max-w-none 
+                className="prose prose-lg max-w-none min-w-0
                            text-[#5e4636] dark:text-white
                            focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
-                           rounded-lg p-4 -m-4"
+                           rounded-lg p-6 -m-4"
               >
                 {note.content ? (
-                  <div className="whitespace-pre-wrap leading-relaxed text-base">
-                    {note.content}
-                  </div>
+                  <div 
+                    className="ql-editor" 
+                    dangerouslySetInnerHTML={createSanitizedHtml(note.content)}
+                  />
                 ) : (
                   <div className="text-center text-[#8c715f] dark:text-gray-400 italic py-12">
                     <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
@@ -230,9 +243,9 @@ const NoteViewerModal = ({
             </div>
 
             {/* Footer Info */}
-            <div className="flex items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 p-6 pt-0">
+            <div className="flex flex-wrap items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 p-6 pt-0 gap-2">
               <span>
-                {note.content ? note.content.length : 0} characters • {getWordCount(note.content)} words
+                {note.content ? note.content.replace(/<[^>]*>/g, '').length : 0} characters • {getWordCount(note.content)} words
               </span>
               <span>
                 Press Esc to close • Edit to modify
@@ -251,7 +264,7 @@ const NoteViewerModal = ({
                 {/* Creation Date */}
                 <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
                   <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-1">Created</h4>
-                  <p className="text-sm text-[#5e4636] dark:text-white">
+                  <p className="text-sm text-[#5e4636] dark:text-white break-words">
                     {formatDate(note.created_at)}
                   </p>
                 </div>
@@ -259,7 +272,7 @@ const NoteViewerModal = ({
                 {/* Last Modified */}
                 <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
                   <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-1">Last Modified</h4>
-                  <p className="text-sm text-[#5e4636] dark:text-white">
+                  <p className="text-sm text-[#5e4636] dark:text-white break-words">
                     {formatDate(note.updated_at)}
                   </p>
                 </div>
@@ -270,7 +283,7 @@ const NoteViewerModal = ({
                   <div className="space-y-2 text-sm text-[#5e4636] dark:text-white">
                     <div className="flex justify-between">
                       <span>Characters:</span>
-                      <span>{note.content ? note.content.length : 0}</span>
+                      <span>{note.content ? note.content.replace(/<[^>]*>/g, '').length : 0}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Words:</span>
@@ -354,8 +367,148 @@ const NoteViewerModal = ({
           background: rgba(59, 130, 246, 0.3);
         }
 
+        /* Styles for rendered rich text content - FIXED LINE SPACING */
+        .ql-editor {
+          padding: 0;
+          font-family: inherit;
+          font-size: 1rem;
+          line-height: 1.5;
+          color: inherit;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          min-width: 0;
+          width: 100%;
+        }
+
+        .ql-editor * {
+          max-width: 100%;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+
+        .ql-editor h1,
+        .ql-editor h2,
+        .ql-editor h3 {
+          color: inherit;
+          margin-top: 1.2em;
+          margin-bottom: 0.4em;
+          word-wrap: break-word;
+          line-height: 1.3;
+        }
+
+        .ql-editor h1 {
+          font-size: 1.8em;
+        }
+
+        .ql-editor h2 {
+          font-size: 1.4em;
+        }
+
+        .ql-editor h3 {
+          font-size: 1.2em;
+        }
+
+        .ql-editor p {
+          margin-bottom: 0.8em;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          line-height: 1.5;
+        }
+
+        .ql-editor ul,
+        .ql-editor ol {
+          padding-left: 1.5em;
+          margin-bottom: 0.8em;
+        }
+
+        .ql-editor li {
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          margin-bottom: 0.2em;
+          line-height: 1.5;
+        }
+
+        .ql-editor blockquote {
+          border-left: 4px solid #e3d5c8;
+          padding-left: 1em;
+          margin-left: 0;
+          margin-right: 0;
+          margin-bottom: 0.8em;
+          color: #8c715f;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          line-height: 1.5;
+        }
+
+        .dark .ql-editor blockquote {
+          border-left-color: rgba(59, 130, 246, 0.5);
+          color: rgba(156, 163, 175, 0.8);
+        }
+
+        .ql-editor a {
+          color: #a55233;
+          text-decoration: underline;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+
+        .dark .ql-editor a {
+          color: #3b82f6;
+        }
+
+        /* Fixed code block styling with proper line spacing */
+        .ql-editor pre {
+          background-color: #f5f5f5;
+          padding: 0.8em;
+          border-radius: 4px;
+          overflow-x: auto;
+          margin-bottom: 0.8em;
+          white-space: pre;
+          word-wrap: normal;
+          overflow-wrap: normal;
+          font-family: 'Courier New', monospace;
+          font-size: 0.9em;
+          line-height: 1.4;
+          color: #333;
+        }
+
+        .dark .ql-editor pre {
+          background-color: #2d3748;
+          color: #e2e8f0;
+        }
+
+        .ql-editor code {
+          font-family: 'Courier New', monospace;
+          background-color: #f5f5f5;
+          padding: 0.1em 0.3em;
+          border-radius: 3px;
+          font-size: 0.9em;
+          color: #333;
+        }
+
+        .dark .ql-editor code {
+          background-color: #2d3748;
+          color: #e2e8f0;
+        }
+
         .prose {
-          line-height: 1.7;
+          line-height: 1.5;
+          max-width: none;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+
+        .prose * {
+          max-width: 100%;
+        }
+
+        /* Remove extra spacing from Quill editor */
+        .ql-editor > *:first-child {
+          margin-top: 0;
+        }
+
+        .ql-editor > *:last-child {
+          margin-bottom: 0;
         }
       `}</style>
     </div>

@@ -13,6 +13,7 @@ import AdminPanel from '../components/AdminPanel';
 import FaqPage from '../components/faq/FaqPage';
 import MainDashboard from '../components/klarifai_notebook/MainDashboard';
 import SSOCallback from '../components/auth/SSOCallback';
+import SignupForm from '../components/auth/SignupForm';
   
  
 const AppRoutes = () => {
@@ -24,6 +25,7 @@ const AppRoutes = () => {
         <Route path="/forgot-password" element={<ForgotPasswordForm />} />
         <Route path="/reset-password" element={<ResetPasswordForm />} />
         <Route path="/sso-callback" element={<SSOCallback />} />
+        <Route path="/auth/signup" element={<SignupForm />} />
  
        
         {/* Main Landing Page */}

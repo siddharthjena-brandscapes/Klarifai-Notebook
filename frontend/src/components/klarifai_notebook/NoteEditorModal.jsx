@@ -1,5 +1,5 @@
-// NoteEditorModal.jsx - Create this as a new component file
-import  { useState, useEffect, useRef } from 'react';
+// NoteEditorModal.jsx
+import { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Save, 
@@ -7,9 +7,11 @@ import {
   Minimize2,
   Type,
   FileText,
-  Loader
+  Loader,
 } from 'lucide-react';
 import PropTypes from 'prop-types';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 const NoteEditorModal = ({ 
   isOpen, 
@@ -22,22 +24,42 @@ const NoteEditorModal = ({
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isMaximized, setIsMaximized] = useState(false);
-  const textareaRef = useRef(null);
+  const quillRef = useRef(null);
   const modalRef = useRef(null);
+
+  // Custom toolbar with Lucide icons
+  const modules = {
+    toolbar: {
+       container: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      [{ 'color': [] }, { 'background': [] }],
+      ['link'],
+      ['clean']
+    ],
+      handlers: {
+        // Custom handlers can be added here
+      }
+    },
+    clipboard: {
+      matchVisual: false,
+    }
+  };
+
+  const formats = [
+     'header',
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet',
+    'color', 'background',
+    'link'
+  ];
 
   // Update local state when props change
   useEffect(() => {
     setTitle(noteTitle || '');
     setContent(noteContent || '');
   }, [noteTitle, noteContent, isOpen]);
-
-  // Auto-focus and resize textarea
-  useEffect(() => {
-    if (isOpen && textareaRef.current) {
-      textareaRef.current.focus();
-      autoResizeTextarea();
-    }
-  }, [isOpen, content]);
 
   // Handle escape key to close modal
   useEffect(() => {
@@ -51,13 +73,6 @@ const NoteEditorModal = ({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  const autoResizeTextarea = () => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'inherit';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  };
-
   const handleSave = () => {
     onSave(title.trim() || 'Untitled Note', content.trim());
   };
@@ -68,6 +83,12 @@ const NoteEditorModal = ({
       e.preventDefault();
       handleSave();
     }
+  };
+
+  const getWordCount = (text) => {
+    if (!text) return 0;
+    // Strip HTML tags before counting words
+    return text.replace(/<[^>]*>/g, '').split(/\s+/).filter(word => word.length > 0).length;
   };
 
   if (!isOpen) return null;
@@ -91,7 +112,7 @@ const NoteEditorModal = ({
           <div className="flex items-center space-x-3">
             <FileText className="h-5 w-5 text-[#a55233] dark:text-blue-400" />
             <h2 className="text-lg font-semibold text-[#5e4636] dark:text-white">
-              Expanded Note Editor
+               Text Note Editor
             </h2>
           </div>
           
@@ -144,107 +165,54 @@ const NoteEditorModal = ({
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col">
             {/* Title Section */}
-            <div className="p-6 border-b border-[#e3d5c8] dark:border-blue-500/20">
+            <div className="p-4 border-b border-[#e3d5c8] dark:border-blue-500/20">
               <div className="flex items-start space-x-3">
                 <Type className="h-6 w-6 text-[#a55233] dark:text-blue-400 flex-shrink-0 mt-1" />
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Note title..."
-                    className="w-full text-2xl font-bold bg-transparent border-none outline-none
+                    className="w-full text-xl font-bold bg-transparent border-none outline-none
                                text-[#5e4636] dark:text-white
                                placeholder:text-[#8c715f] dark:placeholder:text-gray-400
                                focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
-                               rounded-lg p-2 -m-2"
+                               rounded-lg p-2 -m-2 leading-tight break-words"
                     onKeyDown={handleKeyDown}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Content Textarea */}
-            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
-              <textarea
-                ref={textareaRef}
+            {/* Rich Text Editor */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <ReactQuill
+                ref={quillRef}
                 value={content}
-                onChange={(e) => {
-                  setContent(e.target.value);
-                  autoResizeTextarea();
-                }}
+                onChange={setContent}
+                modules={modules}
+                formats={formats}
                 placeholder="Start writing your note... (Ctrl+S to save)"
-                className="w-full h-full min-h-[400px] p-4 text-base rounded-lg resize-none
-                           bg-[#f9f7f4] dark:bg-gray-800/50
-                           border border-[#d6cbbf] dark:border-blue-500/20
-                           text-[#5e4636] dark:text-white
-                           placeholder:text-[#8c715f] dark:placeholder:text-gray-400
-                           focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
-                           focus:border-transparent
-                           custom-scrollbar leading-relaxed"
-                onKeyDown={handleKeyDown}
+                className="flex-1 flex flex-col overflow-hidden editor-container"
+                theme="snow"
               />
             </div>
 
             {/* Footer Info */}
-            <div className="flex items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 p-6 pt-0">
+            <div className="flex flex-wrap items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 p-6 pt-3 gap-2">
               <span>
-                {content.length} characters • {content.split(/\s+/).filter(word => word.length > 0).length} words
+                {content.replace(/<[^>]*>/g, '').length} characters • {getWordCount(content)} words
               </span>
               <span>
                 Press Ctrl+S to save • Esc to close
               </span>
             </div>
           </div>
-
-          {/* Sidebar (only in maximized mode) */}
-          {isMaximized && (
-            <div className="w-80 border-l border-[#e3d5c8] dark:border-blue-500/20 bg-[#f9f7f4] dark:bg-gray-800/50 p-4 overflow-y-auto custom-scrollbar">
-              <h3 className="text-sm font-semibold text-[#5e4636] dark:text-white mb-4">
-                Editor Information
-              </h3>
-              
-              <div className="space-y-4">
-                {/* Statistics */}
-                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
-                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-2">Statistics</h4>
-                  <div className="space-y-2 text-sm text-[#5e4636] dark:text-white">
-                    <div className="flex justify-between">
-                      <span>Characters:</span>
-                      <span>{content ? content.length : 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Words:</span>
-                      <span>{content.split(/\s+/).filter(word => word.length > 0).length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Lines:</span>
-                      <span>{content ? content.split('\n').length : 0}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Keyboard Shortcuts */}
-                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
-                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-2">Shortcuts</h4>
-                  <div className="space-y-1 text-xs text-[#5e4636] dark:text-white">
-                    <div className="flex justify-between">
-                      <span>Save note:</span>
-                      <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-600 rounded text-xs">Ctrl+S</kbd>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Close editor:</span>
-                      <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-600 rounded text-xs">Esc</kbd>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Custom Scrollbar Styles */}
+      {/* Custom Scrollbar and Editor Styles */}
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
@@ -269,6 +237,211 @@ const NoteEditorModal = ({
         }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: rgba(59, 130, 246, 0.3);
+        }
+
+        /* Enhanced Quill editor styles to match viewer */
+        .editor-container .ql-toolbar {
+          border-color: #e3d5c8 !important;
+          background-color: #f9f7f4;
+          border-bottom: 1px solid #e3d5c8;
+          border-top: none;
+          border-left: none;
+          border-right: none;
+          border-radius: 0;
+          padding: 12px 16px;
+        }
+        
+        .editor-container .ql-container {
+          border: none !important;
+          font-family: inherit;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+           overflow: hidden; /* <-- Add this */
+          min-height: 0;  
+        }
+        
+        .editor-container .ql-editor {
+          color: #5e4636;
+          font-size: 1rem;
+          line-height: 1.5;
+          padding: 1.5rem;
+          flex: 1;
+          overflow-y: auto;
+          min-height: 0;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          min-height: 0;      
+  padding-bottom: 2rem;
+        }
+        
+        .editor-container .ql-editor.ql-blank::before {
+          color: #8c715f;
+          font-style: normal;
+          left: 1.5rem;
+          font-size: 1rem;
+        }
+
+        /* Enhanced editor content styling */
+        .editor-container .ql-editor h1,
+        .editor-container .ql-editor h2,
+        .editor-container .ql-editor h3 {
+          color: inherit;
+          margin-top: 1.2em;
+          margin-bottom: 0.4em;
+          word-wrap: break-word;
+          line-height: 1.3;
+        }
+
+        .editor-container .ql-editor h1 {
+          font-size: 1.8em;
+        }
+
+        .editor-container .ql-editor h2 {
+          font-size: 1.4em;
+        }
+
+        .editor-container .ql-editor h3 {
+          font-size: 1.2em;
+        }
+
+        .editor-container .ql-editor p {
+          margin-bottom: 0.8em;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          line-height: 1.5;
+        }
+
+        .editor-container .ql-editor ul,
+        .editor-container .ql-editor ol {
+          padding-left: 1.5em;
+          margin-bottom: 0.8em;
+        }
+
+        .editor-container .ql-editor li {
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          margin-bottom: 0.2em;
+          line-height: 1.5;
+        }
+
+        .editor-container .ql-editor blockquote {
+          border-left: 4px solid #e3d5c8;
+          padding-left: 1em;
+          margin-left: 0;
+          margin-right: 0;
+          margin-bottom: 0.8em;
+          color: #8c715f;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          line-height: 1.5;
+        }
+
+        .editor-container .ql-editor a {
+          color: #a55233;
+          text-decoration: underline;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+
+        /* Dark mode styles */
+        .dark .editor-container .ql-toolbar {
+          background-color: rgba(31, 41, 55, 0.5);
+          border-color: rgba(59, 130, 246, 0.2) !important;
+        }
+        
+        .dark .editor-container .ql-container {
+          background-color: transparent;
+        }
+        
+        .dark .editor-container .ql-editor {
+          color: white;
+        }
+        
+        .dark .editor-container .ql-editor.ql-blank::before {
+          color: rgba(156, 163, 175, 0.7);
+        }
+        
+        .dark .ql-snow .ql-stroke {
+          stroke: rgba(209, 213, 219, 0.8);
+        }
+        
+        .dark .ql-snow .ql-fill {
+          fill: rgba(209, 213, 219, 0.8);
+        }
+        
+        .dark .ql-snow .ql-picker {
+          color: rgba(209, 213, 219, 0.8);
+        }
+
+        .dark .editor-container .ql-editor h1,
+        .dark .editor-container .ql-editor h2,
+        .dark .editor-container .ql-editor h3 {
+          color: white !important;
+        }
+
+        .dark .ql-snow .ql-picker-label {
+          color: rgba(209, 213, 219, 0.8) !important;
+        }
+
+        .dark .ql-snow .ql-picker-options {
+          background-color: rgba(31, 41, 55, 0.9) !important;
+          color: white !important;
+        }
+
+        .dark .editor-container .ql-editor blockquote {
+          border-left-color: rgba(59, 130, 246, 0.5);
+          color: rgba(156, 163, 175, 0.8);
+        }
+
+        .dark .editor-container .ql-editor a {
+          color: #3b82f6;
+        }
+
+        /* Custom scrollbar for editor content */
+        .editor-container .ql-editor::-webkit-scrollbar {
+          width: 6px;
+        }
+        .editor-container .ql-editor::-webkit-scrollbar-track {
+          background: rgba(214, 203, 191, 0.1);
+          border-radius: 10px;
+        }
+        .editor-container .ql-editor::-webkit-scrollbar-thumb {
+          background: rgba(165, 82, 51, 0.2);
+          border-radius: 10px;
+        }
+        .editor-container .ql-editor::-webkit-scrollbar-thumb:hover {
+          background: rgba(165, 82, 51, 0.3);
+        }
+        
+        .dark .editor-container .ql-editor::-webkit-scrollbar-track {
+          background: rgba(59, 130, 246, 0.1);
+        }
+        .dark .editor-container .ql-editor::-webkit-scrollbar-thumb {
+          background: rgba(59, 130, 246, 0.2);
+        }
+        .dark .editor-container .ql-editor::-webkit-scrollbar-thumb:hover {
+          background: rgba(59, 130, 246, 0.3);
+        }
+
+        /* Remove first/last child margins */
+        .editor-container .ql-editor > *:first-child {
+          margin-top: 0;
+        }
+
+        .editor-container .ql-editor > *:last-child {
+          margin-bottom: 0;
+        }
+
+        /* Ensure proper flex layout for Quill */
+        .editor-container.ql-container {
+          height: auto !important;
+        }
+
+        .editor-container {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
         }
       `}</style>
     </div>

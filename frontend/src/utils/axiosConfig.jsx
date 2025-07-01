@@ -1222,6 +1222,10 @@ export const documentServiceNB = {
      
   },
 
+  checkUploadPermissions: () => {
+    return axiosInstance.get('notebook/check-upload-permissions-NB/');
+  },
+
   //added new instance for youtube links
 
   uploadYouTubeVideo: (youtubeUrl, mainProjectId, config = {}, targetUserId = null) => {
