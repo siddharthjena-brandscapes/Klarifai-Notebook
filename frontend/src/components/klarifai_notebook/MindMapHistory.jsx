@@ -1,8 +1,9 @@
 // MindMapHistory.jsx - Complete fixed version
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { Brain, Calendar, FileText, Trash2, Eye, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 import { ThemeContext } from '../../context/ThemeContext';
+import BrainLoadingAnimation from './BrainLoadingAnimation';
 
 const MindMapHistory = ({ 
   isOpen, 
@@ -20,6 +21,8 @@ const MindMapHistory = ({
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [loadingMindmapId, setLoadingMindmapId] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const abortControllerRef = useRef(null); // NEW
 
   useEffect(() => {
     if (isOpen && mainProjectId) {
@@ -147,9 +150,6 @@ const MindMapHistory = ({
   };
 
   const handleDeleteMindmap = async (mindmapId) => {
-    if (!confirm('Are you sure you want to delete this mindmap?')) {
-      return;
-    }
 
     try {
       setDeletingId(mindmapId);
@@ -170,13 +170,31 @@ const MindMapHistory = ({
     }
   };
 
+  // Cancel generation if modal is closed
+  useEffect(() => {
+    if (!isOpen && generating) {
+      // Abort the request if generating and modal closes
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setGenerating(false);
+    }
+    // eslint-disable-next-line
+  }, [isOpen]);
+
   const handleRegenerateMindmap = async () => {
+    setGenerating(true);
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
     try {
       const { mindmapServiceNB } = await import('../../utils/axiosConfig');
-      
       if (mindmapServiceNB.regenerateMindmap) {
-        const response = await mindmapServiceNB.regenerateMindmap(mainProjectId, selectedDocuments, targetUserId);
-        
+        const response = await mindmapServiceNB.regenerateMindmap(
+          mainProjectId,
+          selectedDocuments,
+          targetUserId,
+          { signal: abortController.signal } // Pass abort signal to axios/fetch
+        );
         if (response.data && response.data.success) {
           onViewMindmap(response.data.mindmap, response.data.mindmap_id, response.data.stats);
           onClose();
@@ -186,8 +204,16 @@ const MindMapHistory = ({
         onClose();
       }
     } catch (err) {
-      console.error('Error regenerating mindmap:', err);
-      setError(err.response?.data?.error || 'Failed to regenerate mindmap');
+      if (err.name === 'CanceledError' || err.name === 'AbortError') {
+        // Request was cancelled, do nothing or show a message if you want
+        console.log('Mindmap generation cancelled.');
+      } else {
+        console.error('Error regenerating mindmap:', err);
+        setError(err.response?.data?.error || 'Failed to regenerate mindmap');
+      }
+    } finally {
+      setGenerating(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -203,12 +229,22 @@ const MindMapHistory = ({
 
   if (!isOpen) return null;
 
+  // Helper to close and abort
+  const handleClose = () => {
+    if (generating && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setGenerating(false);
+      abortControllerRef.current = null;
+    }
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div 
         className={`fixed inset-0 ${theme === 'dark' ? 'bg-black' : 'bg-gray-900'} bg-opacity-50 backdrop-blur-sm`}
-        onClick={onClose}
+        onClick={handleClose} // <-- use handleClose
       />
       
       {/* Modal */}
@@ -232,7 +268,7 @@ const MindMapHistory = ({
             
             <div className="flex items-center space-x-2">
               <button
-                onClick={onClose}
+                onClick={handleClose} // <-- use handleClose
                 className={`px-4 py-2 rounded-lg ${
                   theme === 'dark' 
                     ? 'bg-gray-700 hover:bg-gray-600' 
@@ -265,7 +301,9 @@ const MindMapHistory = ({
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
-          {loading ? (
+          {generating ? (
+            <BrainLoadingAnimation theme={theme} />
+          ) : loading ? (
             <div className="flex items-center justify-center h-48">
               <div className="text-center">
                 <Brain className="w-8 h-8 animate-pulse mx-auto mb-4 text-purple-500" />
@@ -282,10 +320,10 @@ const MindMapHistory = ({
                 </p>
                 <button
                   onClick={handleRegenerateMindmap}
-                  disabled={!selectedDocuments || selectedDocuments.length === 0}
+                  disabled={!selectedDocuments || selectedDocuments.length === 0 || generating}
                   className={`
                     px-6 py-2 rounded-lg font-medium transition-all
-                    ${selectedDocuments && selectedDocuments.length > 0
+                    ${selectedDocuments && selectedDocuments.length > 0 && !generating
                       ? 'bg-purple-600 hover:bg-purple-700 text-white'
                       : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     }

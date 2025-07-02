@@ -2166,27 +2166,36 @@ const WebSourcesDisplay = ({ sources }) => {
   const [copyMessageIndex, setCopyMessageIndex] = useState(null);
 
   // Copy function with feedback
-  const handleCopyMessage = (content, index) => {
-    // Create a temporary element to strip HTML tags for plain text copy
-    const tempElement = document.createElement("div");
-    tempElement.innerHTML = content;
-    const textContent = tempElement.textContent || tempElement.innerText;
-
-    navigator.clipboard
-      .writeText(textContent)
+ const handleCopyMessage = (content, index) => {
+  // Try to use Clipboard API for HTML copy
+  if (navigator.clipboard && window.ClipboardItem) {
+    const htmlBlob = new Blob([content], { type: "text/html" });
+    const clipboardItem = new window.ClipboardItem({ "text/html": htmlBlob });
+    navigator.clipboard.write([clipboardItem])
       .then(() => {
-        // Show "Copied!" text
         setCopyMessageIndex(index);
-
-        // Reset after 2 seconds
-        setTimeout(() => {
-          setCopyMessageIndex(null);
-        }, 2000);
+        setTimeout(() => setCopyMessageIndex(null), 2000);
       })
-      .catch((err) => {
-        console.error("Failed to copy text: ", err);
+      .catch(() => {
+        // Fallback to plain text if HTML copy fails
+        fallbackCopyPlainText(content, index);
       });
-  };
+  } else {
+    // Fallback for older browsers
+    fallbackCopyPlainText(content, index);
+  }
+};
+
+const fallbackCopyPlainText = (content, index) => {
+  const tempElement = document.createElement("div");
+  tempElement.innerHTML = content;
+  const textContent = tempElement.textContent || tempElement.innerText;
+  navigator.clipboard.writeText(textContent).then(() => {
+    setCopyMessageIndex(index);
+    setTimeout(() => setCopyMessageIndex(null), 2000);
+  });
+};
+
 
   const cleanAndFormatHTML = (content) => {
     // If content doesn't have HTML tags, return it as is
