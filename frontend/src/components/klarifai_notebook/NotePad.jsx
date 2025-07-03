@@ -67,6 +67,11 @@ const NotePad = ({
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || '';
 };
+const getFirstLine = (html) => {
+  const text = stripHtml(html || '');
+  return text.split('\n').find(line => line.trim()) || 'Untitled Note';
+};
+
 
   const quillFormats = [
     'header',
@@ -209,6 +214,7 @@ const NotePad = ({
 
     setIsSaving(true);
     try {
+      const finalTitle =( noteTitle.trim() || getFirstLine(noteContent)).slice(0, 40);
       console.log('Saving note:', {
         title: noteTitle.trim() || 'Untitled Note',
         content: noteContent.trim(),
@@ -216,8 +222,8 @@ const NotePad = ({
         noteId: selectedNote?.id
       });
 
-      const response = await noteServiceNB.saveNote(
-        noteTitle.trim() || 'Untitled Note',
+     const response = await noteServiceNB.saveNote(
+        finalTitle,
         noteContent.trim(),
         mainProjectId,
         {},
@@ -485,7 +491,7 @@ const NotePad = ({
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-[#5e4636] dark:text-white truncate text-sm">
-                      {note.title || 'Untitled Note'}
+                       {note.title?.trim() ? note.title : getFirstLine(note.content)}
                     </h3>
                     <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1 line-clamp-2">
                   {note.content 
@@ -692,7 +698,7 @@ const NotePad = ({
               <div className="text-sm font-medium text-[#5e4636] dark:text-white 
                             p-2 bg-[#f9f7f4] dark:bg-gray-700/50
                             border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg">
-                {noteTitle || 'Untitled Note'}
+             {noteTitle?.trim() ? noteTitle : getFirstLine(noteContent)}
               </div>
             )}
           </div>
