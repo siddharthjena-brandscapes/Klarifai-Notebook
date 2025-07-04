@@ -9,6 +9,49 @@ const axiosInstance = axios.create({
   },
 });
 
+const generateIdeasStream = async (data, onProgress) => {
+  // Use the full URL with the correct base URL
+  const response = await fetch('http://localhost:8000/api/ideas/generate_ideas_stream/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Token ${localStorage.getItem('token')}`,
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+      
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            onProgress(data);
+          } catch (e) {
+            console.error('Error parsing SSE data:', e);
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+};
+
 // Add request interceptor for adding auth token
 axiosInstance.interceptors.request.use(
   (config) => {
@@ -86,6 +129,9 @@ export const ideaService = {
   generateIdeas: (data) => {
     return axiosInstance.post("/ideas/generate_ideas/", data);
   },
+  // Add the streaming function to ideaService
+  generateIdeasStream: generateIdeasStream,
+  
   getIdeaDetails: (ideaId) => {
     return axiosInstance.get(`/ideas/${ideaId}/details/`); // added for Visualization_ prompt(sourav/ 11-02-2025)
   },

@@ -124,9 +124,11 @@ const IdeaForm = () => {
   const { theme } = useContext(ThemeContext);
   const [versionHistories, setVersionHistories] = useState({});
   const [isSaving, setIsSaving] = useState(false);
-const saveTimeoutRef = useRef(null);
-const lastSavedDataRef = useRef(null);
-  
+  const saveTimeoutRef = useRef(null);
+  const lastSavedDataRef = useRef(null);
+  const [currentIdeaProgress, setCurrentIdeaProgress] = useState(0);
+  const [totalIdeasExpected, setTotalIdeasExpected] = useState(0);
+    
 
   // Effect to scroll to top when ideas are generated or added
   useEffect(() => {
@@ -849,8 +851,11 @@ const handleDeleteIdea = async () => {
     setIsLoading(true);
     setIsGenerating(true);
     setError(null);
-    setGenerationProgress(0); // Reset progress
- 
+    
+    // Initialize progress tracking
+    setCurrentIdeaProgress(0);
+    setTotalIdeasExpected(formData.number_of_ideas);
+
     const activeFields = Object.entries(dynamicFields)
       .filter(([fieldId]) => fieldActivation[fieldId] !== false)
       .reduce(
@@ -860,7 +865,7 @@ const handleDeleteIdea = async () => {
         }),
         {}
       );
- 
+
     const submissionData = {
       ...formData,
       description_length: formData.description_length || 70,
@@ -868,47 +873,70 @@ const handleDeleteIdea = async () => {
       dynamicFields: activeFields,
       negative_prompt: negativePrompt,
     };
- 
-    // Create a more realistic progress simulation
+
+    // More sophisticated progress tracking
     let progressInterval;
     let currentProgress = 0;
- 
-    const startProgressSimulation = () => {
+    const totalIdeas = formData.number_of_ideas;
+    let startTime = Date.now();
+    
+    // Estimate time based on complexity (number of dynamic fields + idea count)
+    const activeFieldCount = Object.keys(activeFields).length;
+    const baseTimePerIdea = 4000; // 4 seconds base
+    const complexityMultiplier = 1 + (activeFieldCount * 0.3); // More fields = more time
+    const estimatedTimePerIdea = baseTimePerIdea * complexityMultiplier;
+    const totalEstimatedTime = estimatedTimePerIdea * totalIdeas;
+
+    const updateProgress = () => {
       progressInterval = setInterval(() => {
-        setGenerationProgress(prev => {
-          currentProgress = prev;
-          // Slower progression as it gets higher, more realistic for AI generation
-          if (prev < 30) {
-            return prev + 5; // Quick start
-          } else if (prev < 60) {
-            return prev + 3; // Medium speed
-          } else if (prev < 85) {
-            return prev + 2; // Slower
-          } else if (prev < 95) {
-            return prev + 1; // Very slow near end
-          }
-          return prev; // Stop at 95% until actual completion
-        });
-      }, 800); // Slightly slower intervals for more realistic feel
+        const elapsedTime = Date.now() - startTime;
+        const progressRatio = Math.min(elapsedTime / totalEstimatedTime, 0.95); // Cap at 95% until completion
+        const expectedProgress = Math.floor(progressRatio * totalIdeas);
+        
+        // Smooth progression that doesn't jump too quickly
+        if (expectedProgress > currentProgress) {
+          currentProgress = Math.min(expectedProgress, totalIdeas - 1);
+          setCurrentIdeaProgress(currentProgress);
+        }
+      }, 500); // Update every 500ms for smoother progress
     };
- 
+
     try {
-      // Start progress simulation
-      setGenerationProgress(5);
-      startProgressSimulation();
- 
+      // Start progress tracking
+      updateProgress();
+
       const response = await ideaService.generateIdeas(submissionData);
- 
-      // Clear the simulation interval
-      clearInterval(progressInterval);
- 
+
       if (response.data.success) {
         const { ideas: newIdeas, stored_data } = response.data;
         const currentSetNumber = stored_data.current_set;
- 
-        // Jump to 96% to show we're processing the response
-        setGenerationProgress(96);
- 
+
+        // Show completion progress step by step
+        clearInterval(progressInterval);
+        
+        // Animate to completion
+        const animateToCompletion = async () => {
+          const finalCount = newIdeas.length;
+          
+          // If we're not at the final count, animate to it
+          if (currentProgress < finalCount) {
+            for (let i = currentProgress; i <= finalCount; i++) {
+              setCurrentIdeaProgress(i);
+              if (i < finalCount) {
+                await new Promise(resolve => setTimeout(resolve, 200)); // 200ms between steps
+              }
+            }
+          } else {
+            // Already at final count, just set it
+            setCurrentIdeaProgress(finalCount);
+          }
+          
+          // Hold the final progress for a moment
+          await new Promise(resolve => setTimeout(resolve, 800));
+        };
+
+        await animateToCompletion();
+
         const ideasWithMetadata = (newIdeas || []).map((idea, index) => {
           const metadata = {
             baseData: {
@@ -927,7 +955,7 @@ const handleDeleteIdea = async () => {
             dynamicFields: stored_data.dynamic_fields,
             timestamp: new Date().toISOString(),
           };
- 
+
           return {
             ...idea,
             idea_set: currentSetNumber,
@@ -937,21 +965,18 @@ const handleDeleteIdea = async () => {
             metadata,
           };
         });
- 
-        // Complete the progress
-        setGenerationProgress(100);
- 
+
         // Update metadata state
         const newMetadata = ideasWithMetadata.reduce((acc, idea) => {
           acc[idea.idea_id] = idea.metadata;
           return acc;
         }, {});
- 
+
         setIdeaMetadata((prev) => ({
           ...prev,
           ...newMetadata,
         }));
- 
+
         // Update ideas state
         setIdeas((prevIdeas) => {
           const uniqueNewIdeas = ideasWithMetadata.filter(
@@ -960,30 +985,33 @@ const handleDeleteIdea = async () => {
                 (existingIdea) => existingIdea.idea_id === newIdea.idea_id
               )
           );
-          const combinedIDeas = [...uniqueNewIdeas, ...prevIdeas];
-          return combinedIDeas;
+          const combinedIdeas = [...uniqueNewIdeas, ...prevIdeas];
+          return combinedIdeas;
         });
- 
+
         setIdeaSetCounter((prev) => prev + 1);
- 
+
         if (showForm) {
           setShowForm(false);
         }
-       
-        // ONLY reset hasFormChanged after successful idea generation
+      
         setHasFormChanged(false);
       } else {
+        clearInterval(progressInterval);
         setError(response.data.error || "Failed to generate ideas");
       }
     } catch (err) {
-      // Clear interval in case of error
       clearInterval(progressInterval);
       setError(err.response?.data?.error || "Failed to connect to the server");
       console.error("Generation error:", err);
     } finally {
       setIsLoading(false);
       setIsGenerating(false);
-      setTimeout(() => setGenerationProgress(0), 1000); // Reset after a delay
+      // Reset progress after completion
+      setTimeout(() => {
+        setCurrentIdeaProgress(0);
+        setTotalIdeasExpected(0);
+      }, 1500);
     }
   };
 
@@ -1946,18 +1974,19 @@ const fillFormWithDocParams = () => {
                   {/* Generate Button */}
                   <div className="flex justify-center pt-6 space-x-4">
                     <CircularProgressButton
-                        type="submit"
-                        disabled={!hasFormChanged || isLoading}
-                        isLoading={isLoading}
-                        progress={generationProgress}
-                        className={`px-12 py-3 text-lg rounded-lg transition-all ${
-                          !hasFormChanged
-                            ? "bg-[#d6cbbf] text-[#5e4636] dark:opacity-50 dark:cursor-not-allowed dark:bg-gray-600 dark:text-gray-400"
-                            : "bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-gradient-to-r dark:from-blue-500 dark:to-emerald-500 dark:hover:from-blue-600 dark:hover:to-emerald-600 dark:text-white"
-                        }`}
-                      >
-                        Generate Ideas
-                      </CircularProgressButton>
+                      type="submit"
+                      disabled={!hasFormChanged || isLoading}
+                      isLoading={isLoading}
+                      currentIdea={currentIdeaProgress}
+                      totalIdeas={totalIdeasExpected}
+                      className={`px-12 py-3 text-lg rounded-lg transition-all ${
+                        !hasFormChanged
+                          ? "bg-[#d6cbbf] text-[#5e4636] dark:opacity-50 dark:cursor-not-allowed dark:bg-gray-600 dark:text-gray-400"
+                          : "bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-gradient-to-r dark:from-blue-500 dark:to-emerald-500 dark:hover:from-blue-600 dark:hover:to-emerald-600 dark:text-white"
+                      }`}
+                    >
+                      Generate Ideas
+                    </CircularProgressButton>
                     {ideas.length > 0 && (
                       <button
                         type="button"

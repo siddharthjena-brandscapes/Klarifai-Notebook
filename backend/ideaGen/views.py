@@ -1,6 +1,7 @@
 # views.py
 from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse,HttpResponse
+from django.http import JsonResponse,HttpResponse, StreamingHttpResponse
+
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
@@ -169,6 +170,165 @@ def parse_text_format_ideas(response_text, brand):
     
     return validated_ideas
 
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def generate_ideas_stream(request):
+    """Stream idea generation progress in real-time"""
+    
+    def generate_ideas_with_progress():
+        try:
+            data = json.loads(request.body)
+            project_id = data.get('project_id')
+            number_of_ideas = int(data.get('number_of_ideas', 1))
+            
+            # Send initial progress
+            yield f"data: {json.dumps({'type': 'progress', 'current': 0, 'total': number_of_ideas, 'message': 'Starting generation...'})}\n\n"
+            
+            # Get project and setup (same as before)
+            project = Project.objects.get(id=project_id, user=request.user)
+            max_set_number = Idea.objects.filter(
+                product_idea__project_id=project_id
+            ).aggregate(Max('idea_set'))['idea_set__max'] or 0
+            current_set = max_set_number + 1
+            
+            # Extract other fields (same as before)
+            product = data.get('product')
+            brand = data.get('brand')
+            category = data.get('category')
+            description_length = int(data.get('description_length', 70))
+            dynamic_fields = data.get('dynamicFields', {})
+            negative_prompt = data.get('negative_prompt', '')
+            
+            formatted_dynamic_fields = generate_prompt_text(dynamic_fields)
+            
+            # Create ProductIdea2 instance
+            product_idea = ProductIdea2.objects.create(
+                user=request.user,
+                project=project,
+                product=product,
+                brand=brand,
+                category=category,
+                number_of_ideas=number_of_ideas,
+                description_length=description_length,
+                dynamic_fields=dynamic_fields,
+                negative_prompt=negative_prompt
+            )
+            
+            update_project_timestamp(project_id, request.user)
+            
+            user_tokens = UserAPITokens.objects.get(user=request.user)
+            GOOGLE_API_KEY = user_tokens.gemini_token 
+            client = genai.Client(api_key=GOOGLE_API_KEY)
+            
+            # Generate ideas one by one and stream progress
+            saved_ideas = []
+            
+            for i in range(number_of_ideas):
+                # Send progress update
+                yield f"data: {json.dumps({'type': 'progress', 'current': i, 'total': number_of_ideas, 'message': f'Generating idea {i+1}...'})}\n\n"
+                
+                # Generate single idea
+                single_idea_prompt = f"""
+                Generate exactly 1 unique and creative product idea for product named {product} from the brand {brand} with category {category}.
+                
+                Dynamic Attributes: {formatted_dynamic_fields}
+                
+                IMPORTANT CONSTRAINTS: Avoid generating ideas that involve the following terms or concepts: {negative_prompt}
+                
+                CRITICAL REQUIREMENTS:
+                1. ALWAYS include the brand name '{brand}' at the beginning of the product name
+                2. Description must be exactly {description_length} words
+                3. Format as a clean, valid JSON object
+                
+                Return ONLY a JSON object:
+                {{
+                    "product_name": "{brand} Product Name",
+                    "description": "Exactly {description_length} words description..."
+                }}
+                """
+                
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=single_idea_prompt,
+                    config=types.GenerateContentConfig(temperature=1.0)
+                )
+                
+                # Parse and process the idea
+                try:
+                    clean_response = re.sub(r'```json\s*|\s*```', '', response.text.strip())
+                    idea_data = json.loads(clean_response)
+                    
+                    if validate_and_process_idea(idea_data, brand):
+                        # Process the idea (decompose, synthesize, etc.)
+                        aspects = decompose_product_description(idea_data, client)
+                        enhanced_description = synthesize_product_aspects(idea_data, aspects, client)
+                        visualization_prompt = enhance_prompt(enhanced_description, client)
+                        
+                        idea_set_label = f"Set {current_set}-{i + 1}"
+                        idea = Idea.objects.create(
+                            product_idea=product_idea,
+                            product_name=idea_data['product_name'],
+                            description=idea_data['description'],
+                            decomposed_aspects=aspects,
+                            enhanced_description=enhanced_description,
+                            visualization_prompt=visualization_prompt,
+                            idea_set=current_set,
+                            idea_set_label=idea_set_label
+                        )
+                        
+                        idea_response = {
+                            'idea_id': idea.id,
+                            'product_name': idea.product_name,
+                            'description': idea.description,
+                            'decomposed_aspects': aspects,
+                            'enhanced_description': enhanced_description,
+                            'visualization_prompt': visualization_prompt,
+                            'idea_set': current_set,
+                            'idea_set_label': idea_set_label
+                        }
+                        
+                        saved_ideas.append(idea_response)
+                        
+                        # Send idea completion update
+                        yield f"data: {json.dumps({'type': 'idea_complete', 'current': i+1, 'total': number_of_ideas, 'idea': idea_response})}\n\n"
+                        
+                except Exception as e:
+                    print(f"Error processing idea {i+1}: {str(e)}")
+                    yield f"data: {json.dumps({'type': 'error', 'message': f'Error generating idea {i+1}'})}\n\n"
+            
+            # Send completion
+            response_data = {
+                "success": True,
+                "ideas": saved_ideas,
+                "ideas_generated": len(saved_ideas),
+                "ideas_requested": number_of_ideas,
+                "stored_data": {
+                    "product_idea_id": product_idea.id,
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "product": product_idea.product,
+                    "brand": product_idea.brand,
+                    "category": product_idea.category,
+                    "dynamic_fields": product_idea.dynamic_fields,
+                    "current_set": current_set,
+                    "negative_prompt": negative_prompt
+                }
+            }
+            
+            yield f"data: {json.dumps({'type': 'complete', 'data': response_data})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    response = StreamingHttpResponse(
+        generate_ideas_with_progress(),
+        content_type='text/event-stream'
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['Connection'] = 'keep-alive'
+    return response
 
 @api_view(['POST', 'GET', 'DELETE'])
 @authentication_classes([TokenAuthentication])
