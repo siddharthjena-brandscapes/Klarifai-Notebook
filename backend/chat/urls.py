@@ -26,7 +26,8 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
      AdminUserStatsView,
      MicrosoftSSOCallbackView,
      MicrosoftSSOView,
-     DocumentProcessingStatusView
+     DocumentProcessingStatusView,
+     DeleteMessagePairView
     
 )
 
@@ -80,7 +81,8 @@ urlpatterns = [
     path('microsoft-sso/', MicrosoftSSOView.as_view(), name='microsoft_sso'),
     path('get_token/', MicrosoftSSOCallbackView.as_view(), name='microsoft_sso_callback'),
     path('document-processing-status/', DocumentProcessingStatusView.as_view(), name='document-processing-status'),
-    
+
+    path('delete-message-pair/', DeleteMessagePairView.as_view(), name='delete_message_pair'),
    
     
 ]   

@@ -2137,6 +2137,7 @@ class GetChatHistoryView(APIView):
                 messages = conversation.messages_NB.all().order_by('created_at')
                 message_list = [
                     {
+                        'id': message.id,
                         'role': message.role,
                         'content': message.content,
                         'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
@@ -2836,6 +2837,7 @@ class ChatView(APIView):
                 chat_history=conversation,
                 role='assistant',
                 content=clean_response,
+                sources=source_info,
                 citations=citations,
                 use_web_knowledge=use_web_knowledge,
                 response_length=response_length,
@@ -2901,6 +2903,29 @@ class ChatView(APIView):
             print(f"Citation count: {len(citations)}")
             print(f"Follow-up Questions: {len(follow_up_questions)}")
             print("-----------------------------\n")
+
+            # Get all messages for this conversation (with IDs)
+            all_messages = ChatMessage.objects.filter(
+                chat_history=conversation
+            ).order_by('created_at')
+
+            message_list = []
+            for message in all_messages:
+                message_data = {
+                    'id': message.id,
+                    'role': message.role,
+                    'content': message.content,
+                    'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
+                    'citations': message.citations or []
+                }
+                # Add badge properties for assistant messages
+                if message.role == 'assistant':
+                    message_data['use_web_knowledge'] = getattr(message, 'use_web_knowledge', False)
+                    message_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
+                    message_data['response_format'] = getattr(message, 'response_format', 'natural')
+                message_list.append(message_data)
+
+            response_data['messages'] = message_list
  
             return Response(response_data, status=status.HTTP_200_OK)
  
@@ -6598,6 +6623,38 @@ class ChatView(APIView):
                 "How can I help clarify this information further?"
             ]
                 
+
+
+class DeleteMessagePairView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        user_message_id = request.data.get("user_message_id")
+        assistant_message_id = request.data.get("assistant_message_id")
+        conversation_id = request.data.get("conversation_id")
+
+        if not (user_message_id and assistant_message_id and conversation_id):
+            return Response({"error": "Missing required parameters."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                # Ensure both messages belong to the user and conversation
+                chat_history = ChatHistory.objects.get(conversation_id=conversation_id, user=user)
+                user_msg = ChatMessage.objects.get(id=user_message_id, chat_history=chat_history, role="user")
+                assistant_msg = ChatMessage.objects.get(id=assistant_message_id, chat_history=chat_history, role="assistant")
+
+                user_msg.delete()
+                assistant_msg.delete()
+
+            return Response({"success": True}, status=status.HTTP_200_OK)
+        except ChatHistory.DoesNotExist:
+            return Response({"error": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND)
+        except ChatMessage.DoesNotExist:
+            return Response({"error": "Message not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 class GetConversationView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -6617,23 +6674,25 @@ class GetConversationView(APIView):
                     messages = conversation.messages_NB.all().order_by('created_at')
                     
                     # Prepare message list - UPDATED to include all badge properties
+                    
                     message_list = []
                     for message in messages:
                         message_data = {
+                            'id': message.id,
                             'role': message.role,
                             'content': message.content,
                             'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
                             'citations': message.citations or []
                         }
-                        
-                        # Add badge properties for assistant messages
+                       
                         if message.role == 'assistant':
-                            # Add these fields with defaults if they don't exist yet
                             message_data['use_web_knowledge'] = getattr(message, 'use_web_knowledge', False)
                             message_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
                             message_data['response_format'] = getattr(message, 'response_format', 'natural')
-                        
+                            message_data['sources_info'] = getattr(message, 'sources', "")  # ✅ NEW LINE
+                       
                         message_list.append(message_data)
+ 
                     
                     return Response({
                         'conversation_id': str(conversation.conversation_id),
@@ -7199,10 +7258,24 @@ class ProcessCitationsView(APIView):
 
 # codes for chat download
 
-
 class ChatExportView(APIView):
     permission_classes = [IsAuthenticated]
-    
+ 
+    def remove_citations_from_html(self, html):
+        """
+        Remove all [n], [n][m], [n, m] style citations from HTML content.
+        """
+        if not html:
+            return html
+        # Remove [number] and [number][number] patterns
+        html = re.sub(r'(\[\d+(?:,\s*\d+)*\])+', '', html)
+        # Optionally, remove citations inside <sup> or <span> tags (if any)
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup.find_all(['sup', 'span']):
+            if tag.string and re.match(r'^\[\d+(?:,\s*\d+)*\]$', tag.string.strip()):
+                tag.decompose()
+        return str(soup)
+   
     def post(self, request):
         try:
             # Extract parameters from request
@@ -7210,26 +7283,26 @@ class ChatExportView(APIView):
             date_range = request.data.get('date_range')
             main_project_id = request.data.get('main_project_id')
             options = request.data.get('options', {})
-            
+           
             # Validate inputs
             if not chats and not (date_range and main_project_id):
                 return Response({
                     'error': 'Either chat data or date_range with main_project_id is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+           
             # Default options
             include_timestamps = options.get('includeTimestamps', True)
             include_metadata = options.get('includeChatMetadata', True)
             include_follow_ups = options.get('includeFollowUpQuestions', True)
             format_code = options.get('formatCode', True)
-            
+           
             # If we have date_range but no chats, fetch the chats from database
             if date_range and main_project_id and not chats:
                 try:
                     start_date = datetime.fromisoformat(date_range.get('startDate').replace('Z', '+00:00'))
                     end_date = datetime.fromisoformat(date_range.get('endDate').replace('Z', '+00:00'))
                     end_date = end_date + timedelta(days=1)  # Include the entire end day
-                    
+                   
                     # Fetch conversations from database
                     conversations = ChatHistory.objects.filter(
                         user=request.user,
@@ -7237,12 +7310,12 @@ class ChatExportView(APIView):
                         created_at__gte=start_date,
                         created_at__lt=end_date
                     ).order_by('-created_at')
-                    
+                   
                     if not conversations:
                         return Response({
                             'error': 'No conversations found in the specified date range'
                         }, status=status.HTTP_404_NOT_FOUND)
-                    
+                   
                     # Convert to the same format as frontend-processed chats
                     chats = [{
                         'conversation_id': conv.conversation_id,
@@ -7255,45 +7328,45 @@ class ChatExportView(APIView):
                         } for msg in conv.messages.all().order_by('created_at')],
                         'follow_up_questions': conv.follow_up_questions or []
                     } for conv in conversations]
-                    
+                   
                 except Exception as e:
                     return Response({
                         'error': f'Invalid date format: {str(e)}'
                     }, status=status.HTTP_400_BAD_REQUEST)
-            
+           
             # Create a DOCX file in memory
             doc = DocxDocument()
-            
+           
             # Set document styles
             styles = doc.styles
-            
+           
             # Heading styles
             heading1_style = styles['Heading 1']
             heading1_style.font.size = Pt(16)
             heading1_style.font.bold = True
             heading1_style.font.color.rgb = RGBColor(0, 0, 139)  # Dark blue
-            
+           
             heading2_style = styles['Heading 2']
             heading2_style.font.size = Pt(14)
             heading2_style.font.bold = True
             heading2_style.font.color.rgb = RGBColor(0, 0, 100)  # Slightly darker blue
-            
+           
             # Normal style
             normal_style = styles['Normal']
             normal_style.font.size = Pt(11)
             normal_style.font.name = 'Calibri'
-            
+           
             # List styles
             if 'List Bullet' in styles:
                 bullet_style = styles['List Bullet']
                 bullet_style.paragraph_format.left_indent = Inches(0.25)
                 bullet_style.paragraph_format.first_line_indent = Inches(-0.25)
-                
+               
             if 'List Number' in styles:
                 number_style = styles['List Number']
                 number_style.paragraph_format.left_indent = Inches(0.25)
                 number_style.paragraph_format.first_line_indent = Inches(-0.25)
-            
+           
             # Code style
             if 'Code' not in styles:
                 code_style = styles.add_style('Code', WD_STYLE_TYPE.PARAGRAPH)
@@ -7303,7 +7376,7 @@ class ChatExportView(APIView):
                 code_style.paragraph_format.space_after = Pt(6)
                 code_style.paragraph_format.left_indent = Inches(0.25)
                 code_style.font.color.rgb = RGBColor(50, 50, 50)
-            
+           
             # Set document margins
             sections = doc.sections
             for section in sections:
@@ -7311,8 +7384,8 @@ class ChatExportView(APIView):
                 section.right_margin = Inches(1.0)
                 section.top_margin = Inches(1.0)
                 section.bottom_margin = Inches(1.0)
-            
-            # Document title 
+           
+            # Document title
             if len(chats) == 1:
                 doc.add_heading(f"Chat Conversation: {chats[0]['title']}", level=0)
             else:
@@ -7320,58 +7393,62 @@ class ChatExportView(APIView):
                 start_date_str = date_range.get('startDate').split('T')[0] if date_range else chats[-1]['created_at'].split(' ')[0]
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d') + timedelta(days=1)
                 start_date_str = start_date.strftime('%Y-%m-%d')
-                
-                # Get the end date and add one day 
+               
+                # Get the end date and add one day
                 end_date_str = date_range.get('endDate').split('T')[0] if date_range else chats[0]['created_at'].split(' ')[0]
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1)
                 end_date_str = end_date.strftime('%Y-%m-%d')
-                
+               
                 doc.add_heading(f"Chat Conversations: {start_date_str} to {end_date_str}", level=0)
-            
+           
             # Process each conversation
             for i, chat in enumerate(chats):
                 # Add conversation title
                 section_heading = doc.add_heading(chat['title'], level=1)
-                
+               
                 # Add metadata if requested
                 if include_metadata:
                     metadata_para = doc.add_paragraph(style='Intense Quote')
                     metadata_para.add_run(f"Created: {chat['created_at']}")
-                
+               
                 # Process each message
                 for message in chat['messages']:
                     # Message role as heading
                     role_heading = "User Question:" if message['role'] == 'user' else "Assistant Answer:"
                     doc.add_heading(role_heading, level=2)
-                    
+                   
                     # Add timestamp if requested
                     if include_timestamps:
                         timestamp = doc.add_paragraph(style='Subtitle')
                         timestamp.add_run(f"{message['created_at']}")
-                    
+                   
+                    content = message['content']
+                    if message['role'] == 'assistant':
+                        content = self.remove_citations_from_html(content)
+ 
                     # Add the content (already processed by frontend)
-                    self.add_html_to_docx(doc, message['content'], format_code)
-                
+                    self.add_html_to_docx(doc, content, format_code)
+               
                 # Add follow-up questions if requested
                 if include_follow_ups and chat.get('follow_up_questions'):
                     doc.add_heading("Suggested Follow-up Questions:", level=2)
                     for question in chat['follow_up_questions']:
                         p = doc.add_paragraph(style='List Bullet')
                         p.add_run(question)
-                
+               
                 # Add page break between conversations if multiple
                 if i < len(chats) - 1:
                     doc.add_page_break()
-            
+           
             # Save document to a BytesIO object
             docx_file = BytesIO()
             doc.save(docx_file)
             docx_file.seek(0)
-
+ 
             # Update project timestamp if needed
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
-            
+           
             # Create response with file
             if len(chats) == 1:
                 safe_title = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in chat['title'])
@@ -7381,25 +7458,25 @@ class ChatExportView(APIView):
                 start_date = date_range.get('startDate').split('T')[0] if date_range else chats[-1]['created_at'].split(' ')[0]
                 end_date = date_range.get('endDate').split('T')[0] if date_range else chats[0]['created_at'].split(' ')[0]
                 filename = f"Chats_{start_date.replace('-', '')}_to_{end_date.replace('-', '')}.docx"
-            
+           
             response = HttpResponse(
                 docx_file.getvalue(),
                 content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             )
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
-            
+           
             return response
-            
+           
         except Exception as e:
             logger.error(f"Error exporting chat: {str(e)}", exc_info=True)
             return Response({
                 'error': f'Failed to export chat: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+   
     def add_html_to_docx(self, doc, html_content, format_code=True):
         """Parse HTML content and add it to the document with proper formatting."""
         soup = BeautifulSoup(html_content, "html.parser")
-        
+       
         # Process each top-level element
         for elem in soup.children:
             if isinstance(elem, NavigableString) and elem.strip():
@@ -7407,75 +7484,75 @@ class ChatExportView(APIView):
                 doc.add_paragraph(elem.strip())
             elif elem.name:
                 self.process_element(doc, elem, format_code, list_level=0)
-    
+   
     def process_element(self, doc, element, format_code=True, list_level=0):
         """Process a single HTML element and add it to the document."""
         # Handle different element types
         if element.name == 'p':
             p = doc.add_paragraph()
             self.process_inline_elements(p, element)
-        
+       
         elif element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
             level = int(element.name[1])
             doc.add_heading(element.get_text(), level=min(level, 9))
-        
+       
         elif element.name == 'ul':
             for li in element.find_all('li', recursive=False):
                 p = doc.add_paragraph(style='List Bullet')
                 p.paragraph_format.left_indent = Inches(0.25 + (0.25 * list_level))
                 p.paragraph_format.first_line_indent = Inches(-0.25)
-                
+               
                 has_nested_list = False
                 nested_list = None
-                
+               
                 for child in li.children:
                     if child.name in ['ul', 'ol']:
                         has_nested_list = True
                         nested_list = child
                         break
-                
+               
                 if has_nested_list and nested_list:
                     nested_list.extract()
-                
+               
                 self.process_inline_elements(p, li)
-                
+               
                 if has_nested_list and nested_list:
                     self.process_element(doc, nested_list, format_code, list_level + 1)
-        
+       
         elif element.name == 'ol':
             for i, li in enumerate(element.find_all('li', recursive=False), 1):
                 p = doc.add_paragraph(style='List Number')
                 p.paragraph_format.left_indent = Inches(0.25 + (0.25 * list_level))
                 p.paragraph_format.first_line_indent = Inches(-0.25)
-                
+               
                 has_nested_list = False
                 nested_list = None
-                
+               
                 for child in li.children:
                     if child.name in ['ul', 'ol']:
                         has_nested_list = True
                         nested_list = child
                         break
-                
+               
                 if has_nested_list and nested_list:
                     nested_list.extract()
-                
+               
                 self.process_inline_elements(p, li)
-                
+               
                 if has_nested_list and nested_list:
                     self.process_element(doc, nested_list, format_code, list_level + 1)
-        
+       
         elif element.name == 'pre' and format_code:
             code_element = element.find('code')
             code_text = code_element.get_text() if code_element else element.get_text()
             doc.add_paragraph(code_text, style='Code')
-        
+       
         elif element.name == 'code' and element.parent.name != 'pre' and format_code:
             p = doc.add_paragraph()
             code_run = p.add_run(element.get_text())
             code_run.font.name = 'Consolas'
             code_run.font.size = Pt(10)
-            
+           
         elif element.name == 'table':
             rows = element.find_all('tr')
             if rows:
@@ -7483,7 +7560,7 @@ class ChatExportView(APIView):
                 if max_cols > 0:
                     table = doc.add_table(rows=len(rows), cols=max_cols)
                     table.style = 'Table Grid'
-                    
+                   
                     for i, row in enumerate(rows):
                         cells = row.find_all(['td', 'th'])
                         for j, cell in enumerate(cells):
@@ -7494,28 +7571,28 @@ class ChatExportView(APIView):
                                     run.bold = True
                                 else:
                                     self.process_inline_elements(cell_para, cell)
-        
+       
         elif element.name == 'blockquote':
             p = doc.add_paragraph(style='Quote')
             self.process_inline_elements(p, element)
-        
+       
         elif element.name == 'div':
             for child in element.children:
                 if isinstance(child, NavigableString) and child.strip():
                     doc.add_paragraph(child.strip())
                 elif child.name:
                     self.process_element(doc, child, format_code)
-        
+       
         else:
             text = element.get_text(strip=True)
             if text:
                 doc.add_paragraph(text)
-    
+   
     def process_inline_elements(self, paragraph, element):
         """Process inline elements like bold, italic, etc. within a paragraph."""
         if element is None:
             return
-            
+           
         for child in element.children:
             if isinstance(child, NavigableString):
                 if str(child).strip():
@@ -7541,8 +7618,6 @@ class ChatExportView(APIView):
                 paragraph.add_run("\n")
             elif child.name not in ['ul', 'ol']:
                 self.process_inline_elements(paragraph, child)
-
-
 
 class YouTubeUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)

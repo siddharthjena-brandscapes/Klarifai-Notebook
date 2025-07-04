@@ -39,7 +39,8 @@ import {
   ToggleRight,
   ToggleLeft,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from "lucide-react";
 import { toast } from 'react-toastify';
 const IdeaForm = () => {
@@ -98,6 +99,10 @@ const IdeaForm = () => {
 
   //for negative prompt
   const [negativePrompt, setNegativePrompt] = useState("");
+
+  //for delete idea modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [ideaToDelete, setIdeaToDelete] = useState(null);
 
   //for image zooming
   const [zoomImageUrl, setZoomImageUrl] = useState(null);
@@ -642,6 +647,42 @@ const handleUpdateIdea = async (ideaId) => {
   }
 };
 
+// delete modal handlers for Ideas
+const openDeleteModal = (idea) => {
+  setIdeaToDelete(idea);
+  setShowDeleteModal(true);
+};
+
+const closeDeleteModal = () => {
+  setIdeaToDelete(null);
+  setShowDeleteModal(false);
+};
+
+const handleDeleteIdea = async () => {
+  if (!ideaToDelete) return;
+  try {
+    setIsLoading(true);
+    
+    // FIXED: Using your existing ideaService with correct parameter
+    await ideaService.deleteIdea(ideaToDelete.idea_id);
+    
+    setIdeas((prev) => prev.filter((i) => i.idea_id !== ideaToDelete.idea_id));
+    setAcceptedIdeas((prev) => prev.filter((i) => i.idea_id !== ideaToDelete.idea_id));
+    toast.success("Idea deleted successfully!", {
+      position: "bottom-right",
+      autoClose: 3000,
+    });
+    closeDeleteModal();
+  } catch (err) {
+    console.error('Delete error:', err);
+    toast.error("Failed to delete idea.", {
+      position: "bottom-right",
+      autoClose: 3000,
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
  
 
   const handleRegenerateImage = useCallback(
@@ -1957,7 +1998,7 @@ const fillFormWithDocParams = () => {
   return (
     <div 
       key={ideaId}
-      className={`p-6 rounded-lg border ${
+      className={`relative p-6 rounded-lg border ${
         isAccepted 
           ? "border-[#3f4f54] border-l-4 bg-white/90 dark:bg-gray-800/90 shadow-md" 
           : "border-[#e8ddcc] hover:border-[#a68a70] bg-white/80 dark:bg-gray-800/80 dark:border-gray-700 dark:hover:border-green-500"
@@ -1982,17 +2023,17 @@ const fillFormWithDocParams = () => {
               
             
              <input
-  type="checkbox"
-  checked={isAccepted}
-  onChange={() => {
-    if (isAccepted) {
-      handleUnaccept(idea.idea_id);
-    } else {
-      handleAccept(idea.idea_id);
-    }
-  }}
-  className="w-4 h-4 accent-[#ace000] dark:accent-emerald-600 mt-0 mb-1"
-/>
+                type="checkbox"
+                checked={isAccepted}
+                onChange={() => {
+                  if (isAccepted) {
+                    handleUnaccept(idea.idea_id);
+                  } else {
+                    handleAccept(idea.idea_id);
+                  }
+                }}
+                className="w-4 h-4 accent-[#ace000] dark:accent-emerald-600 mt-0 mb-1"
+              />
 
                      
                       <div className="flex-1 flex items-center mt-0.5">
@@ -2016,7 +2057,7 @@ const fillFormWithDocParams = () => {
               </div>
 
               <div className="flex flex-wrap gap-2">
-              <IdeaMetadata ideaMetadata={ideaMetadata[idea.idea_id]} />
+                <IdeaMetadata ideaMetadata={ideaMetadata[idea.idea_id]} />
                 <button
                   onClick={() => handleEdit(idea)}
                   className="px-4 py-2 bg-[#f8fbe5] hover:bg-[#ebf4b8] text-[#5e4636] border border-[#d6cbbf] dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
@@ -2024,7 +2065,13 @@ const fillFormWithDocParams = () => {
                 >
                   <Edit2 size={16} />
                 </button>
-            
+                <button
+                  onClick={() => openDeleteModal(idea)}
+                  className="px-4 py-2 bg-[#fbe5e5] hover:bg-[#fbb8b8] text-[#a55233] border border-[#d6cbbf] dark:bg-red-700 dark:hover:bg-red-800 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
+                  title="Delete idea"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </>
           )}
@@ -2080,6 +2127,43 @@ const fillFormWithDocParams = () => {
           </div>
         )}
       </div>
+
+      {/* MOVED: Delete Confirmation Modal - Now outside image section and available for ALL ideas */}
+      {showDeleteModal && ideaToDelete && ideaToDelete.idea_id === idea.idea_id && (
+        <div 
+          className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg animate-fadeIn"
+          onClick={closeDeleteModal}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-sm w-full border border-[#e8ddcc] dark:border-red-700 p-6 mx-4 animate-slideIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-[#a55233] dark:text-red-400 mb-4 flex items-center gap-2">
+              <Trash2 size={20} className="text-[#a55233] dark:text-red-400" />
+              Delete Idea?
+            </h3>
+            <p className="text-[#5e4636] dark:text-gray-300 mb-6">
+              Are you sure you want to delete <span className="font-semibold">{ideaToDelete.product_name}</span>?<br />
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={closeDeleteModal}
+                className="px-4 py-2 bg-white hover:bg-[#f5e6d8] text-[#5e4636] border border-[#d6cbbf] dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white dark:border-gray-600 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteIdea}
+                disabled={isLoading}
+                className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] text-white dark:bg-red-700 dark:hover:bg-red-800 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {isLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 })}
@@ -2178,6 +2262,34 @@ const fillFormWithDocParams = () => {
       margin-top: 0;
     }
   }
+
+  @keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slideIn {
+  animation: slideIn 0.25s ease-out;
+}
   
       `}</style>
     </div>

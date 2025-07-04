@@ -682,6 +682,15 @@ export const chatService = {
       });
   },
 
+  deleteMessagePair: (userMessageId, assistantMessageId, conversationId) => {
+  // You will create this endpoint in your Django backend
+   return axiosInstance.post("/delete-message-pair/", {
+    user_message_id: userMessageId,
+    assistant_message_id: assistantMessageId,
+    conversation_id: conversationId,
+  });
+},
+
   startConversation: (documentId, message) => {
     return axiosInstance.post("/conversation/start/", {
       document_id: documentId,
@@ -1553,6 +1562,14 @@ export const chatServiceNB = {
       return { data: [] };
     }
   },
+
+  deleteMessagePair: (userMessageId, assistantMessageId, conversationId) => {
+  return axiosInstance.post("notebook/delete-message-pair-NB/", {
+    user_message_id: userMessageId,
+    assistant_message_id: assistantMessageId,
+    conversation_id: conversationId,
+  });
+},
 
   // Optional: Method to delete a conversation
   deleteConversation: (conversationId) => {

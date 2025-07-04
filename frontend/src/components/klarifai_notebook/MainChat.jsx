@@ -34,6 +34,7 @@ import {
   BrainCog,
   CircleEllipsis,
   FilePlus,
+  Trash,
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
@@ -65,6 +66,7 @@ import DOMPurify from "dompurify";
 import { ImprovedCitationManager } from "../dashboard/CitationManager";
 import DocumentModeWelcome from "../dashboard/DocumentModeWelcome";
 import { useUser } from "../../context/UserContext";
+import DeleteChatConfirmationModal from "../dashboard/DeleteChatConfirmationModal";
 
 // Configure marked
 marked.setOptions({
@@ -73,203 +75,240 @@ marked.setOptions({
   smartypants: true,
 });
 
-const MainChat = forwardRef(({
-  selectedChat,
-  mainProjectId,
-  summary: propSummary,
-  followUpQuestions: initialFollowUpQuestions,
-  isSummaryPopupOpen,
-  onCloseSummary,
-  setSummary,
-  setFollowUpQuestions,
-  setIsSummaryPopupOpen,
-  selectedDocuments: propSelectedDocuments,
-  setSelectedDocuments,
-  onChatInputFocus,
-  onOpenYouTubeModal,
-}, ref) => {
-  const [file, setFile] = useState(null);
-  const [message, setMessage] = useState("");
-  const [conversation, setConversation] = useState([]);
-  const [conversationId, setConversationId] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [documents, setDocuments] = useState([]);
-  const [currentFollowUpQuestions, setCurrentFollowUpQuestions] = useState([]);
-  const chatEndRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const [isFollowUpQuestionsMinimized, setIsFollowUpQuestionsMinimized] =
-    useState(true);
-  const chatContainerRef = useRef(null);
+const MainChat = forwardRef(
+  (
+    {
+      selectedChat,
+      mainProjectId,
+      summary: propSummary,
+      followUpQuestions: initialFollowUpQuestions,
+      isSummaryPopupOpen,
+      onCloseSummary,
+      setSummary,
+      setFollowUpQuestions,
+      setIsSummaryPopupOpen,
+      selectedDocuments: propSelectedDocuments,
+      setSelectedDocuments,
+      onChatInputFocus,
+      onOpenYouTubeModal,
+    },
+    ref
+  ) => {
+    const [file, setFile] = useState(null);
+    const [message, setMessage] = useState("");
+    const [conversation, setConversation] = useState([]);
+    const [conversationId, setConversationId] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [documents, setDocuments] = useState([]);
+    const [currentFollowUpQuestions, setCurrentFollowUpQuestions] = useState(
+      []
+    );
+    const chatEndRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const [isFollowUpQuestionsMinimized, setIsFollowUpQuestionsMinimized] =
+      useState(true);
+    const chatContainerRef = useRef(null);
 
-  // New state for persistent summary
-  const [persistentSummary, setPersistentSummary] = useState("");
-  const [isSummaryVisible, setIsSummaryVisible] = useState(true);
-  const [keyPoints, setKeyPoints] = useState([]);
+    // New state for persistent summary
+    const [persistentSummary, setPersistentSummary] = useState("");
+    const [isSummaryVisible, setIsSummaryVisible] = useState(true);
+    const [keyPoints, setKeyPoints] = useState([]);
 
-  // New state for view toggle
-  const [currentView, setCurrentView] = useState("chat");
+    // New state for view toggle
+    const [currentView, setCurrentView] = useState("chat");
 
-  //  new state for document processing
-  const [isDocumentProcessing, setIsDocumentProcessing] = useState(false);
-  const [processingProgress, setProcessingProgress] = useState(0);
+    //  new state for document processing
+    const [isDocumentProcessing, setIsDocumentProcessing] = useState(false);
+    const [processingProgress, setProcessingProgress] = useState(0);
 
-  const [editingMessageId, setEditingMessageId] = useState(null);
-  const [messageHistory, setMessageHistory] = useState({});
-  const [viewingHistoryState, setViewingHistoryState] = useState({});
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [activeHistoryMessageIndex, setActiveHistoryMessageIndex] =
-    useState(null);
+    const [editingMessageId, setEditingMessageId] = useState(null);
+    const [messageHistory, setMessageHistory] = useState({});
+    const [viewingHistoryState, setViewingHistoryState] = useState({});
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [activeHistoryMessageIndex, setActiveHistoryMessageIndex] =
+      useState(null);
 
-  const [messageVersions, setMessageVersions] = useState({});
-  const [currentVersionIndex, setCurrentVersionIndex] = useState({});
+    const [messageVersions, setMessageVersions] = useState({});
+    const [currentVersionIndex, setCurrentVersionIndex] = useState({});
 
-  const [activeDocumentForSummary, setActiveDocumentForSummary] =
-    useState(null);
+    const [activeDocumentForSummary, setActiveDocumentForSummary] =
+      useState(null);
 
-  const [isSummaryGenerating, setIsSummaryGenerating] = useState(false);
+    const [isSummaryGenerating, setIsSummaryGenerating] = useState(false);
 
-  // Add this to the state declarations at the top of the component:
-  const [consolidatedSummary, setConsolidatedSummary] = useState("");
-  const [isConsolidatedView, setIsConsolidatedView] = useState(false);
-  const [isConsolidatedSummaryLoading, setIsConsolidatedSummaryLoading] =
-    useState(false);
+    // Add this to the state declarations at the top of the component:
+    const [consolidatedSummary, setConsolidatedSummary] = useState("");
+    const [isConsolidatedView, setIsConsolidatedView] = useState(false);
+    const [isConsolidatedSummaryLoading, setIsConsolidatedSummaryLoading] =
+      useState(false);
 
-  // Add this state variable inside MainContent component
-  const [useWebKnowledge, setUseWebKnowledge] = useState(
-    propSelectedDocuments.length === 0 ? true : false
-  );
-  const [isRecording, setIsRecording] = useState(false);
+    // Add this state variable inside MainContent component
+    const [useWebKnowledge, setUseWebKnowledge] = useState(
+      propSelectedDocuments.length === 0 ? true : false
+    );
+    const [isRecording, setIsRecording] = useState(false);
 
-  // Add a new Citation component for inline citations
-  const recognitionRef = useRef(null);
+    // Add a new Citation component for inline citations
+    const recognitionRef = useRef(null);
 
-  const [processingDocuments, setProcessingDocuments] = useState([]);
-  //for response length
-  const [responseLength, setResponseLength] = useState("short");
-  const [responseFormat, setResponseFormat] = useState("auto-detect");
-  const [hasUploadPermissions, setHasUploadPermissions] = useState(true);
+    const [processingDocuments, setProcessingDocuments] = useState([]);
+    //for response length
+    const [responseLength, setResponseLength] = useState("short");
+    const [responseFormat, setResponseFormat] = useState("auto-detect");
+    const [hasUploadPermissions, setHasUploadPermissions] = useState(true);
 
-  const [regeneratedResponses, setRegeneratedResponses] = useState({});
-  const [currentResponseIndex, setCurrentResponseIndex] = useState({});
-  const [textSize, setTextSize] = useState("medium");
-  const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
+    const [regeneratedResponses, setRegeneratedResponses] = useState({});
+    const [currentResponseIndex, setCurrentResponseIndex] = useState({});
+    const [textSize, setTextSize] = useState("medium");
+    const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
 
-  // Add these state variables near the top of your MainChat component
-const [webWelcomeDismissed, setWebWelcomeDismissed] = useState(false);
-const [docWelcomeDismissed, setDocWelcomeDismissed] = useState(false);
-const { rightPanelPermissions } = useUser();
+    // Add these state variables near the top of your MainChat component
+    const [webWelcomeDismissed, setWebWelcomeDismissed] = useState(false);
+    const [docWelcomeDismissed, setDocWelcomeDismissed] = useState(false);
+    const { rightPanelPermissions } = useUser();
 
-const [currentUploadFilenames, setCurrentUploadFilenames] = useState([]);
+    const [currentUploadFilenames, setCurrentUploadFilenames] = useState([]);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [messageToDelete, setMessageToDelete] = useState(null);
 
-// Reset dismissal when document selection changes
-useEffect(() => {
-  setWebWelcomeDismissed(false);
-  setDocWelcomeDismissed(false);
-}, [propSelectedDocuments.length]);
-  // Add this inside your MainContent component
-  useEffect(() => {
-    // Configure DOMPurify to allow standard HTML tags but sanitize potentially dangerous content
-    DOMPurify.setConfig({
-      ALLOWED_TAGS: [
-        'p', 'b', 'strong', 'i', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
-        'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 
-        'code', 'pre', 'blockquote', 'br', 'hr', 'span', 'div'
-      ],
-      ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
-      ALLOW_DATA_ATTR: false
-    });
-  }, []);
+    // Reset dismissal when document selection changes
+    useEffect(() => {
+      setWebWelcomeDismissed(false);
+      setDocWelcomeDismissed(false);
+    }, [propSelectedDocuments.length]);
+    // Add this inside your MainContent component
+    useEffect(() => {
+      // Configure DOMPurify to allow standard HTML tags but sanitize potentially dangerous content
+      DOMPurify.setConfig({
+        ALLOWED_TAGS: [
+          "p",
+          "b",
+          "strong",
+          "i",
+          "em",
+          "u",
+          "a",
+          "h1",
+          "h2",
+          "h3",
+          "h4",
+          "h5",
+          "h6",
+          "ul",
+          "ol",
+          "li",
+          "table",
+          "thead",
+          "tbody",
+          "tr",
+          "th",
+          "td",
+          "code",
+          "pre",
+          "blockquote",
+          "br",
+          "hr",
+          "span",
+          "div",
+        ],
+        ALLOWED_ATTR: ["href", "target", "rel", "class", "style"],
+        ALLOW_DATA_ATTR: false,
+      });
+    }, []);
 
-  useEffect(() => {
-    // Save to localStorage whenever textSize changes
-    localStorage.setItem('preferredTextSize', textSize);
-  }, [textSize]);
+    useEffect(() => {
+      // Save to localStorage whenever textSize changes
+      localStorage.setItem("preferredTextSize", textSize);
+    }, [textSize]);
 
-  // Add this useEffect to load saved preference on component mount
-  useEffect(() => {
-    const savedTextSize = localStorage.getItem('preferredTextSize');
-    if (savedTextSize) {
-      setTextSize(savedTextSize);
-    }
-  }, []);
+    // Add this useEffect to load saved preference on component mount
+    useEffect(() => {
+      const savedTextSize = localStorage.getItem("preferredTextSize");
+      if (savedTextSize) {
+        setTextSize(savedTextSize);
+      }
+    }, []);
 
-  useEffect(() => {
-    // Set key points when active document changes
-    if (activeDocumentForSummary && documents.length > 0) {
-      fetchExistingKeyPoints(activeDocumentForSummary);
-    } else if (propSelectedDocuments && propSelectedDocuments.length > 0 && documents.length > 0) {
-      // If no active document is set, use the first selected document
-      fetchExistingKeyPoints(propSelectedDocuments[0]);
-    } else {
-      setKeyPoints([]);
-    }
-  }, [activeDocumentForSummary, propSelectedDocuments, documents]);
+    useEffect(() => {
+      // Set key points when active document changes
+      if (activeDocumentForSummary && documents.length > 0) {
+        fetchExistingKeyPoints(activeDocumentForSummary);
+      } else if (
+        propSelectedDocuments &&
+        propSelectedDocuments.length > 0 &&
+        documents.length > 0
+      ) {
+        // If no active document is set, use the first selected document
+        fetchExistingKeyPoints(propSelectedDocuments[0]);
+      } else {
+        setKeyPoints([]);
+      }
+    }, [activeDocumentForSummary, propSelectedDocuments, documents]);
 
+    useEffect(() => {
+      let intervalId;
+      if (isDocumentProcessing) {
+        // Poll the backend every 2 seconds for document processing status
+        const fetchStatus = async () => {
+          try {
+            const res = await documentServiceNB.getProcessingStatus();
+            setProcessingDocuments(res.data); // [{filename, status, progress, message, document_id}]
+          } catch (e) {
+            // Optionally handle error
+          }
+        };
+        fetchStatus();
+        intervalId = setInterval(fetchStatus, 2000);
+      }
+      return () => clearInterval(intervalId);
+    }, [isDocumentProcessing]);
 
-useEffect(() => {
-  let intervalId;
-  if (isDocumentProcessing) {
-    // Poll the backend every 2 seconds for document processing status
-    const fetchStatus = async () => {
+    // In MainChat.jsx - Update the handlePinMessage function
+
+    const handlePinMessage = async (message, messageIndex) => {
+      // Check if notes panel is disabled
+      if (rightPanelPermissions?.["notes-panel"]) {
+        toast.error("Notes access is disabled by administrator");
+        return;
+      }
       try {
-        const res = await documentServiceNB.getProcessingStatus();
-        setProcessingDocuments(res.data); // [{filename, status, progress, message, document_id}]
-      } catch (e) {
-        // Optionally handle error
+        const { noteServiceNB } = await import("../../utils/axiosConfig");
+
+        // Create note title from first line or timestamp
+        const firstLine = message.content.split("\n")[0];
+        const noteTitle =
+          firstLine.length > 50
+            ? `Chat Response - ${new Date().toLocaleDateString()}`
+            : `Chat: ${firstLine.substring(0, 50)}...`;
+
+        // Remove citation numbers in square brackets from HTML string (but keep HTML tags)
+        let richContent = message.content.replace(/\s*\[\d+\]\s*/g, " ");
+
+        const response = await noteServiceNB.saveNote(
+          noteTitle,
+          richContent, // Save as HTML
+          mainProjectId,
+          {},
+          null,
+          null // new note
+        );
+
+        if (response.data) {
+          toast.success("Response saved to notes!");
+
+          // Trigger NotePad refresh
+          const refreshEvent = new CustomEvent("refreshNotePad");
+          document.dispatchEvent(refreshEvent);
+
+          // NEW: Trigger NotePad expansion if it's not already open
+          const expandNotePadEvent = new CustomEvent("expandNotePad");
+          document.dispatchEvent(expandNotePadEvent);
+        }
+      } catch (error) {
+        console.error("Failed to save response to notes:", error);
+        toast.error("Failed to save to notes");
       }
     };
-    fetchStatus();
-    intervalId = setInterval(fetchStatus, 2000);
-  }
-  return () => clearInterval(intervalId);
-}, [isDocumentProcessing]);
-
-
-// In MainChat.jsx - Update the handlePinMessage function
-
-const handlePinMessage = async (message, messageIndex) => {
-  // Check if notes panel is disabled
-  if (rightPanelPermissions?.['notes-panel']) {
-    toast.error('Notes access is disabled by administrator');
-    return;
-  }
-  try {
-    const { noteServiceNB } = await import('../../utils/axiosConfig');
-    
-    // Create note title from first line or timestamp
-    const firstLine = message.content.split('\n')[0];
-    const noteTitle = firstLine.length > 50 
-      ? `Chat Response - ${new Date().toLocaleDateString()}`
-      : `Chat: ${firstLine.substring(0, 50)}...`;
-    
-    // Remove citation numbers in square brackets from HTML string (but keep HTML tags)
-    let richContent = message.content.replace(/\s*\[\d+\]\s*/g, ' ');
-
-    const response = await noteServiceNB.saveNote(
-      noteTitle,
-      richContent, // Save as HTML
-      mainProjectId,
-      {},
-      null,
-      null // new note
-    );
-
-    if (response.data) {
-      toast.success('Response saved to notes!');
-      
-      // Trigger NotePad refresh
-      const refreshEvent = new CustomEvent('refreshNotePad');
-      document.dispatchEvent(refreshEvent);
-      
-      // NEW: Trigger NotePad expansion if it's not already open
-      const expandNotePadEvent = new CustomEvent('expandNotePad');
-      document.dispatchEvent(expandNotePadEvent);
-    }
-  } catch (error) {
-    console.error('Failed to save response to notes:', error);
-    toast.error('Failed to save to notes');
-  }
-};
 
     // Add this right after the imports and before the MainContent component definition
     const processWebSources = (sourcesInfo, extractedUrls) => {
@@ -424,18 +463,18 @@ const handlePinMessage = async (message, messageIndex) => {
 
         // Force web mode when no documents are selected
         const useWebMode =
-          localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+          propSelectedDocuments.length === 0 ? true : useWebKnowledge;
 
         // Prepare request data for the API
         const requestData = {
           message: userMessage,
           conversation_id: conversationId,
-          selected_documents: localSelectedDocuments,
+          selected_documents: propSelectedDocuments,
           main_project_id: mainProjectId,
           use_web_knowledge: useWebMode,
           response_length: length,
           response_format: responseFormat,
-          general_chat_mode: localSelectedDocuments.length === 0,
+          general_chat_mode: propSelectedDocuments.length === 0,
           regenerate: true,
         };
 
@@ -467,72 +506,6 @@ const handlePinMessage = async (message, messageIndex) => {
               console.warn("Failed to parse JSON response:", jsonError);
             }
           }
-  // Updated handleRegenerateResponse function
-const handleRegenerateResponse = async (messageIndex, length = responseLength) => {
-  // Find the user message that prompted this response
-  const userMessageIndex = messageIndex - 1;
-  
-  if (userMessageIndex < 0 || conversation[userMessageIndex].role !== 'user') {
-    toast.error('Could not find the question for this response');
-    return;
-  }
-  
-  const userMessage = conversation[userMessageIndex].content;
-  
-  try {
-    // Make sure regeneratedResponses exists for this message index
-    if (!regeneratedResponses[messageIndex]) {
-      // Store the original response as the first response in the array
-      setRegeneratedResponses(prev => ({
-        ...prev,
-        [messageIndex]: [conversation[messageIndex]]
-      }));
-      
-      // Set current index to 0 (the original response)
-      setCurrentResponseIndex(prev => ({
-        ...prev,
-        [messageIndex]: 0
-      }));
-    }
-    
-    // Force web mode when no documents are selected
-    const useWebMode = propSelectedDocuments.length === 0 ? true : useWebKnowledge;
-    
-    // Prepare request data for the API
-    const requestData = {
-      message: userMessage,
-      conversation_id: conversationId,
-      selected_documents: propSelectedDocuments,
-      main_project_id: mainProjectId,
-      use_web_knowledge: useWebMode,
-      response_length: length,
-      response_format: responseFormat,
-      general_chat_mode: propSelectedDocuments.length === 0,
-      regenerate: true
-    };
-    
-    const response = await chatServiceNB.sendMessage(requestData);
-    
-    if (response && response.data) {
-      // Parse the JSON response
-      let responseContent = response.data.response || response.data.content;
-      let citations = response.data.citations || [];
-      
-      // Process web sources using the helper function
-      const webSources = processWebSources(response.data.sources_info, response.data.extracted_urls);
-      
-      // Handle JSON response format
-      if (typeof responseContent === 'string' && responseContent.startsWith('{')) {
-        try {
-          const parsedResponse = JSON.parse(responseContent);
-          responseContent = parsedResponse.content || responseContent;
-          if (parsedResponse.citations) {
-            citations = parsedResponse.citations;
-          }
-        } catch (jsonError) {
-          console.warn("Failed to parse JSON response:", jsonError);
-        }
-      }
 
           const regeneratedMessage = {
             role: "assistant",
@@ -633,20 +606,20 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
       }
     };
 
-  // Add this to your useEffect hooks
-  useEffect(() => {
-    // Call this after component mounts
-    checkUploadPermissions();
-  }, []);
-  useEffect(() => {
-    // If no documents are selected, force web knowledge mode on
-    if (propSelectedDocuments.length === 0) {
-      setUseWebKnowledge(true);
-    } else {
-      // When documents are selected, default to context-only mode (web knowledge off)
-      setUseWebKnowledge(false);
-    }
-  }, [propSelectedDocuments]);
+    // Add this to your useEffect hooks
+    useEffect(() => {
+      // Call this after component mounts
+      checkUploadPermissions();
+    }, []);
+    useEffect(() => {
+      // If no documents are selected, force web knowledge mode on
+      if (propSelectedDocuments.length === 0) {
+        setUseWebKnowledge(true);
+      } else {
+        // When documents are selected, default to context-only mode (web knowledge off)
+        setUseWebKnowledge(false);
+      }
+    }, [propSelectedDocuments]);
 
     // Updated Response Length Toggle Component
     const ResponseLengthToggle = ({ responseLength, setResponseLength }) => {
@@ -884,24 +857,24 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
             opacity-100
             animate-fade-in
           "
-          >
-            <div className="font-bold mb-1">Source Details</div>
-            <div className="space-y-1">
-              <p>
-                <strong>Document:</strong> {citation.source_file}
-              </p>
-              <p>
-                <strong>Page:</strong> {citation.page_number}
-              </p>
-              <div className="mt-1 text-gray-300 italic">
-                {citation.snippet}
+            >
+              <div className="font-bold mb-1">Source Details</div>
+              <div className="space-y-1">
+                <p>
+                  <strong>Document:</strong> {citation.source_file}
+                </p>
+                <p>
+                  <strong>Page:</strong> {citation.page_number}
+                </p>
+                <div className="mt-1 text-gray-300 italic">
+                  {citation.snippet}
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </span>
-    );
-  };
+          )}
+        </span>
+      );
+    };
 
     InlineCitation.propTypes = {
       citation: PropTypes.shape({
@@ -919,7 +892,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
     // New method to toggle between chat and summary views
     // Updated toggleView method
     const toggleView = (view) => {
-      if (view === "summary" && localSelectedDocuments.length === 0) {
+      if (view === "summary" && propSelectedDocuments.length === 0) {
         toast.warning(
           "Please upload a document or select at least one document to view the summary."
         );
@@ -931,77 +904,52 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
       }
       setCurrentView(view);
     };
-  // New method to toggle between chat and summary views
-  // Updated toggleView method
-  const toggleView = (view) => {
-    if (view === "summary" && propSelectedDocuments.length === 0) {
-      toast.warning(
-        "Please upload a document or select at least one document to view the summary."
-      );
-      // Still allow the view change if switching to chat
-      if (view === "chat") {
-        setCurrentView(view);
+
+    // Add this function to handle the toggle
+    const toggleWebKnowledge = () => {
+      // If no documents are selected, don't allow turning off web mode
+      if (propSelectedDocuments.length === 0) {
+        toast.info("Web mode is required when no documents are selected");
+        return;
       }
-      return;
-    }
-    setCurrentView(view);
-  };
 
-  // Add this function to handle the toggle
-  const toggleWebKnowledge = () => {
-    // If no documents are selected, don't allow turning off web mode
-    if (propSelectedDocuments.length === 0) {
-      toast.info("Web mode is required when no documents are selected");
-      return;
-    }
+      setUseWebKnowledge((prev) => !prev);
+      // Show a toast to confirm the mode change
+      toast.info(
+        `Mode switched to ${
+          !useWebKnowledge ? "Web-Enhanced" : "Document-Only"
+        }`
+      );
+    };
 
-    setUseWebKnowledge((prev) => !prev);
-    // Show a toast to confirm the mode change
-    toast.info(
-      `Mode switched to ${!useWebKnowledge ? "Web-Enhanced" : "Document-Only"}`
-    );
-  };
+    // New method to copy summary to clipboard
+    const copySummaryToClipboard = () => {
+      if (persistentSummary) {
+        // Create a temporary textarea to copy text
+        const tempTextArea = document.createElement("textarea");
+        tempTextArea.value = persistentSummary.replace(/<[^>]*>/g, ""); // Strip HTML tags
+        document.body.appendChild(tempTextArea);
+        tempTextArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(tempTextArea);
 
-  // New method to copy summary to clipboard
-  const copySummaryToClipboard = () => {
-    if (persistentSummary) {
-      // Create a temporary textarea to copy text
-      const tempTextArea = document.createElement("textarea");
-      tempTextArea.value = persistentSummary.replace(/<[^>]*>/g, ""); // Strip HTML tags
-      document.body.appendChild(tempTextArea);
-      tempTextArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(tempTextArea);
-
-      toast.success("Summary copied to clipboard!");
-    }
-  };
+        toast.success("Summary copied to clipboard!");
+      }
+    };
 
     // Add new method to handle summary generation
     const handleGenerateSummary = async () => {
-      if (!localSelectedDocuments.length) {
+      if (!propSelectedDocuments.length) {
         toast.warning("Please select documents to generate summary");
         return;
       }
-  // Add new method to handle summary generation
-  const handleGenerateSummary = async () => {
-    if (!propSelectedDocuments.length) {
-      toast.warning("Please select documents to generate summary");
-      return;
-    }
 
       setIsSummaryGenerating(true);
       try {
         const response = await documentServiceNB.generateSummary(
-          localSelectedDocuments,
+          propSelectedDocuments,
           mainProjectId
         );
-    setIsSummaryGenerating(true);
-    try {
-      const response = await documentServiceNB.generateSummary(
-        propSelectedDocuments,
-        mainProjectId
-      );
 
         console.log("🔍 Full generateSummary response:", response.data); // Debug log
 
@@ -1036,7 +984,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
           if (response.data.summaries && response.data.summaries.length > 0) {
             // Find the summary for the active document
             const activeDocId =
-              activeDocumentForSummary || localSelectedDocuments[0];
+              activeDocumentForSummary || propSelectedDocuments[0];
             const activeSummary = response.data.summaries.find(
               (summary) => summary.document_id.toString() === activeDocId
             );
@@ -1054,20 +1002,6 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
               );
             }
           }
-        // Extract key points from the active document only
-        const allKeyPoints = [];
-        if (response.data.summaries && response.data.summaries.length > 0) {
-          // Find the summary for the active document
-          const activeDocId = activeDocumentForSummary || propSelectedDocuments[0];
-          const activeSummary = response.data.summaries.find(
-            summary => summary.document_id.toString() === activeDocId
-          );
-          
-          if (activeSummary && activeSummary.key_points && Array.isArray(activeSummary.key_points)) {
-            allKeyPoints.push(...activeSummary.key_points);
-            console.log("🔍 Key points for active document:", activeSummary.filename, allKeyPoints);
-          }
-        }
 
           console.log(
             "🔍 Final extracted key points for active document:",
@@ -1119,7 +1053,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
 
     const renderSummaryView = () => {
       // If no documents are selected, show a placeholder
-      if (!localSelectedDocuments || localSelectedDocuments.length === 0) {
+      if (!propSelectedDocuments || propSelectedDocuments.length === 0) {
         return (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-[#5a544a] dark:text-gray-400">
             <p className="mb-4">No documents selected</p>
@@ -1134,50 +1068,20 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
           </div>
         );
       }
-const renderSummaryView = () => {
-  // If no documents are selected, show a placeholder
-  if (!propSelectedDocuments || propSelectedDocuments.length === 0) {
-    return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-[#5a544a] dark:text-gray-400">
-        <p className="mb-4">No documents selected</p>
-        <button
-          onClick={() => toggleView("chat")}
-          className="px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] dark:bg-gray-800/50 dark:hover:bg-gray-700/50 rounded-lg transition-colors text-white"
-        >
-          <MessageCircle className="inline-block mr-2 h-4 w-4" />
-          Return to Chat
-        </button>
-        {isConsolidatedSummaryLoading && <ConsolidatedSummaryLoader />}
-      </div>
-    );
-  }
 
       // Get the currently active document for summary view
-      const currentDocId =
-        activeDocumentForSummary || localSelectedDocuments[0];
+      const currentDocId = activeDocumentForSummary || propSelectedDocuments[0];
       const currentDocument = documents.find(
         (doc) => doc.id.toString() === currentDocId
       );
-  // Get the currently active document for summary view
-  const currentDocId = activeDocumentForSummary || propSelectedDocuments[0];
-  const currentDocument = documents.find(
-    (doc) => doc.id.toString() === currentDocId
-  );
 
       // Check if all selected documents have summaries
       const selectedDocs = documents.filter((doc) =>
-        localSelectedDocuments.includes(doc.id.toString())
+        propSelectedDocuments.includes(doc.id.toString())
       );
       const allDocsHaveSummaries = selectedDocs.every(
         (doc) => doc.summary && doc.summary.trim() !== ""
       );
-  // Check if all selected documents have summaries
-  const selectedDocs = documents.filter((doc) =>
-    propSelectedDocuments.includes(doc.id.toString())
-  );
-  const allDocsHaveSummaries = selectedDocs.every(
-    (doc) => doc.summary && doc.summary.trim() !== ""
-  );
 
       // Determine which summary to show
       const summaryToShow = isConsolidatedView
@@ -1205,19 +1109,9 @@ const renderSummaryView = () => {
           // Move selected document to front of array
           const updatedDocs = [
             newDocId,
-            ...localSelectedDocuments.filter((id) => id !== newDocId),
+            ...propSelectedDocuments.filter((id) => id !== newDocId),
           ];
-          setLocalSelectedDocuments(updatedDocs);
-
-          if (setSelectedDocuments) {
-            setSelectedDocuments(updatedDocs);
-          }
-        // Move selected document to front of array
-        const updatedDocs = [
-          newDocId,
-          ...propSelectedDocuments.filter((id) => id !== newDocId),
-        ];
-        setSelectedDocuments(updatedDocs);
+          setSelectedDocuments(updatedDocs);
 
           // Key points will be automatically updated by the useEffect
         }
@@ -1254,51 +1148,52 @@ const renderSummaryView = () => {
                   : "text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50"
               }
             `}
-          >
-            <ScrollText className="inline-block mr-1.5 h-3 w-3" />
-            Summary
-          </button>
-        </div>
-      </div>
-
-      <div className="h-full w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-        <div className="h-full flex flex-col bg-white/90 dark:bg-gradient-to-br dark:from-gray-900/80 dark:via-gray-800/80 dark:to-gray-900/80 border border-[#d6cbbf] dark:border-blue-500/20 rounded-3xl shadow-md dark:shadow-2xl overflow-hidden">
-          {/* Header */}
-          <div className="px-4 sm:px-6 py-3 sm:py-2 bg-[#556052] dark:bg-gradient-to-r dark:from-gray-900/80 dark:via-gray-800/80 dark:to-gray-900/80  border-b border-[#e3d5c8] dark:border-blue-900/90 flex justify-between items-center">
-            <div>
-              <h2 className="text-sm sm:text-xl font-normal font-serif text-white">
-                {isConsolidatedView
-                  ? "Consolidated Document Summary"
-                  : "Document Summary"}
-              </h2>
-              
-
-              {isConsolidatedView && (
-                <ConsolidatedViewBadge
-                  documentCount={propSelectedDocuments.length}
-                />
-              )}
+              >
+                <ScrollText className="inline-block mr-1.5 h-3 w-3" />
+                Summary
+              </button>
             </div>
+          </div>
 
-            <div className="flex items-center space-x-3">
-              {/* Enhanced Document Selector */}
-              {propSelectedDocuments.length > 0 && (
-                <DocumentSelector
-                  documents={documents}
-                  selectedDocuments={propSelectedDocuments}
-                  activeDocumentId={activeDocumentForSummary}
-                  isConsolidatedView={isConsolidatedView}
-                  onDocumentChange={handleDocumentChange}
-                  onConsolidatedView={handleGenerateConsolidatedSummary}
-                  isConsolidatedSummaryLoading={isConsolidatedSummaryLoading}
-                />
-              )}
-              {/* Generate Summary Button - Only show if summaries don't exist */}
-              {!allDocsHaveSummaries && (
-                <button
-                  onClick={handleGenerateSummary}
-                  disabled={isSummaryGenerating}
-                  className={`
+          <div className="h-full w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+            <div className="h-full flex flex-col bg-white/90 dark:bg-gradient-to-br dark:from-gray-900/80 dark:via-gray-800/80 dark:to-gray-900/80 border border-[#d6cbbf] dark:border-blue-500/20 rounded-3xl shadow-md dark:shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="px-4 sm:px-6 py-3 sm:py-2 bg-[#556052] dark:bg-gradient-to-r dark:from-gray-900/80 dark:via-gray-800/80 dark:to-gray-900/80  border-b border-[#e3d5c8] dark:border-blue-900/90 flex justify-between items-center">
+                <div>
+                  <h2 className="text-sm sm:text-xl font-normal font-serif text-white">
+                    {isConsolidatedView
+                      ? "Consolidated Document Summary"
+                      : "Document Summary"}
+                  </h2>
+
+                  {isConsolidatedView && (
+                    <ConsolidatedViewBadge
+                      documentCount={propSelectedDocuments.length}
+                    />
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  {/* Enhanced Document Selector */}
+                  {propSelectedDocuments.length > 0 && (
+                    <DocumentSelector
+                      documents={documents}
+                      selectedDocuments={propSelectedDocuments}
+                      activeDocumentId={activeDocumentForSummary}
+                      isConsolidatedView={isConsolidatedView}
+                      onDocumentChange={handleDocumentChange}
+                      onConsolidatedView={handleGenerateConsolidatedSummary}
+                      isConsolidatedSummaryLoading={
+                        isConsolidatedSummaryLoading
+                      }
+                    />
+                  )}
+                  {/* Generate Summary Button - Only show if summaries don't exist */}
+                  {!allDocsHaveSummaries && (
+                    <button
+                      onClick={handleGenerateSummary}
+                      disabled={isSummaryGenerating}
+                      className={`
                     px-4 py-2 rounded-lg text-sm
                     ${
                       isSummaryGenerating
@@ -1421,28 +1316,30 @@ const renderSummaryView = () => {
     }, []);
 
     useEffect(() => {
-    if (selectedChat) {
-      console.log("Loading selected chat:", selectedChat);
+      if (selectedChat) {
+        console.log("Loading selected chat:", selectedChat);
 
-      // Set conversation state with messages
-      const chatMessages = selectedChat.messages || [];
-      
-      // Process messages and ensure webSources are included
-      const processedMessages = chatMessages.map(msg => {
-        if (msg.sources_info || msg.extracted_urls || msg.webSources) {
-          return {
-            ...msg,
-            webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
-          };
-        }
-        return msg;
-      });
-      
-      setConversation(
-        [...processedMessages].sort(
-          (a, b) => new Date(a.created_at) - new Date(b.created_at)
-        )
-      );
+        // Set conversation state with messages
+        const chatMessages = selectedChat.messages || [];
+
+        // Process messages and ensure webSources are included
+        const processedMessages = chatMessages.map((msg) => {
+          if (msg.sources_info || msg.extracted_urls || msg.webSources) {
+            return {
+              ...msg,
+              webSources:
+                msg.webSources ||
+                processWebSources(msg.sources_info, msg.extracted_urls),
+            };
+          }
+          return msg;
+        });
+
+        setConversation(
+          [...processedMessages].sort(
+            (a, b) => new Date(a.created_at) - new Date(b.created_at)
+          )
+        );
 
         // Set conversation ID
         setConversationId(selectedChat.conversation_id);
@@ -1453,27 +1350,20 @@ const renderSummaryView = () => {
           setPersistentSummary(selectedChat.summary);
         }
 
-      // Handle key points from selected chat
-      if (selectedChat.key_points && Array.isArray(selectedChat.key_points)) {
-        setKeyPoints(selectedChat.key_points);
-      } else {
-        setKeyPoints([]); // Reset if no key points
-      }
+        // Handle key points from selected chat
+        if (selectedChat.key_points && Array.isArray(selectedChat.key_points)) {
+          setKeyPoints(selectedChat.key_points);
+        } else {
+          setKeyPoints([]); // Reset if no key points
+        }
 
         // Handle documents
         if (selectedChat.selected_documents?.length > 0) {
           const documentIds = selectedChat.selected_documents.map((doc) =>
             typeof doc === "object" ? doc.id.toString() : doc.toString()
           );
-          setLocalSelectedDocuments(documentIds);
+          setSelectedDocuments(documentIds);
           setActiveDocumentForSummary(documentIds[0]);
-      // Handle documents
-      if (selectedChat.selected_documents?.length > 0) {
-        const documentIds = selectedChat.selected_documents.map((doc) =>
-          typeof doc === "object" ? doc.id.toString() : doc.toString()
-        );
-        setSelectedDocuments(documentIds);
-        setActiveDocumentForSummary(documentIds[0]);
 
           // Important: Also update the parent's selectedDocuments
           if (setSelectedDocuments) {
@@ -1523,45 +1413,25 @@ const renderSummaryView = () => {
     useEffect(() => {
       // Sync local state with prop when prop changes
       if (propSelectedDocuments) {
-        setLocalSelectedDocuments(propSelectedDocuments);
+        setSelectedDocuments(propSelectedDocuments);
       }
     }, [propSelectedDocuments]);
-  useEffect(() => {
-    // Sync local state with prop when prop changes
-    if (propSelectedDocuments) {
-      setSelectedDocuments(propSelectedDocuments);
-    }
-  }, [propSelectedDocuments]);
 
     useEffect(() => {
       // When local state changes, update the prop
       if (setSelectedDocuments) {
-        setSelectedDocuments(localSelectedDocuments);
+        setSelectedDocuments(propSelectedDocuments);
       }
-    }, [localSelectedDocuments, setSelectedDocuments]);
-  useEffect(() => {
-    // When local state changes, update the prop
-    if (setSelectedDocuments) {
-      setSelectedDocuments(propSelectedDocuments);
-    }
-  }, [propSelectedDocuments, setSelectedDocuments]);
+    }, [propSelectedDocuments, setSelectedDocuments]);
 
     // 4. Add method to generate consolidated summary
     const handleGenerateConsolidatedSummary = async () => {
-      if (localSelectedDocuments.length <= 1) {
+      if (propSelectedDocuments.length <= 1) {
         toast.warning(
           "Please select at least two documents for a consolidated summary"
         );
         return;
       }
-  // 4. Add method to generate consolidated summary
-  const handleGenerateConsolidatedSummary = async () => {
-    if (propSelectedDocuments.length <= 1) {
-      toast.warning(
-        "Please select at least two documents for a consolidated summary"
-      );
-      return;
-    }
 
       setIsConsolidatedSummaryLoading(true);
       setIsConsolidatedView(true); // Automatically switch to consolidated view
@@ -1574,32 +1444,30 @@ const renderSummaryView = () => {
         });
 
         const response = await documentServiceNB.generateConsolidatedSummary(
-          localSelectedDocuments,
+          propSelectedDocuments,
           mainProjectId
         );
-      const response = await documentServiceNB.generateConsolidatedSummary(
-        propSelectedDocuments,
-        mainProjectId
-      );
 
         if (response.data.consolidated_summary) {
           setConsolidatedSummary(response.data.consolidated_summary);
 
-        // Close the loading toast and show success
+          // Close the loading toast and show success
+          toast.dismiss("consolidated-summary-loading");
+          toast.success("Consolidated summary generated successfully!");
+        }
+      } catch (error) {
+        console.error("Consolidated Summary Generation Error:", error);
         toast.dismiss("consolidated-summary-loading");
-        toast.success("Consolidated summary generated successfully!");
-      }
-    } catch (error) {
-      console.error("Consolidated Summary Generation Error:", error);
-      toast.dismiss("consolidated-summary-loading");
-      toast.error("Failed to generate consolidated summary. Please try again.");
+        toast.error(
+          "Failed to generate consolidated summary. Please try again."
+        );
 
-      // Reset the view if generation fails
-      setIsConsolidatedView(false);
-    } finally {
-      setIsConsolidatedSummaryLoading(false);
-    }
-  };
+        // Reset the view if generation fails
+        setIsConsolidatedView(false);
+      } finally {
+        setIsConsolidatedSummaryLoading(false);
+      }
+    };
 
     const scrollToBottom = () => {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1634,12 +1502,12 @@ const renderSummaryView = () => {
               setKeyPoints(activeDoc.key_points);
             }
           } else if (
-            localSelectedDocuments &&
-            localSelectedDocuments.length > 0
+            propSelectedDocuments &&
+            propSelectedDocuments.length > 0
           ) {
             console.log("🔍 Setting key points for first selected document");
             const firstDoc = documentsData.find(
-              (doc) => doc.id.toString() === localSelectedDocuments[0]
+              (doc) => doc.id.toString() === propSelectedDocuments[0]
             );
             if (firstDoc && firstDoc.key_points) {
               setKeyPoints(firstDoc.key_points);
@@ -1650,34 +1518,7 @@ const renderSummaryView = () => {
         console.error("Failed to fetch documents:", error);
         toast.error("Failed to fetch documents");
       }
-    }, [mainProjectId, activeDocumentForSummary, localSelectedDocuments]);
-    try {
-      const response = await documentServiceNB.getUserDocuments(mainProjectId);
-      if (response?.data) {
-        const documentsData = Array.isArray(response.data) ? response.data : [];
-        console.log("🔍 Loaded documents with key points:", documentsData);
-        setDocuments(documentsData);
-        
-        // If we have an active document, fetch its key points from the loaded data
-        if (activeDocumentForSummary) {
-          console.log("🔍 Setting key points for active document after documents loaded");
-          const activeDoc = documentsData.find(doc => doc.id.toString() === activeDocumentForSummary);
-          if (activeDoc && activeDoc.key_points) {
-            setKeyPoints(activeDoc.key_points);
-          }
-        } else if (propSelectedDocuments && propSelectedDocuments.length > 0) {
-          console.log("🔍 Setting key points for first selected document");
-          const firstDoc = documentsData.find(doc => doc.id.toString() === propSelectedDocuments[0]);
-          if (firstDoc && firstDoc.key_points) {
-            setKeyPoints(firstDoc.key_points);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch documents:", error);
-      toast.error("Failed to fetch documents");
-    }
-  }, [mainProjectId, activeDocumentForSummary, propSelectedDocuments]);
+    }, [mainProjectId, activeDocumentForSummary, propSelectedDocuments]);
 
     // Update the useEffect for document fetching
     useEffect(() => {
@@ -1700,11 +1541,9 @@ const renderSummaryView = () => {
       const selectedFiles = Array.from(event.target.files);
       if (!selectedFiles.length) return;
 
+      setCurrentUploadFilenames(selectedFiles.map((f) => f.name));
       setIsDocumentProcessing(true);
       setProcessingProgress(0);
-  setCurrentUploadFilenames(selectedFiles.map(f => f.name));
-  setIsDocumentProcessing(true);
-  setProcessingProgress(0);
 
       const processingDocuments = selectedFiles.map((file) => ({
         filename: file.name,
@@ -1713,15 +1552,6 @@ const renderSummaryView = () => {
         message: "Waiting to upload",
       }));
       setProcessingDocuments(processingDocuments);
-  const processingDocuments = selectedFiles.map((file) => ({
-    filename: file.name,
-    status: "waiting",
-    progress: 0,
-    message: "Waiting to upload",
-  }));
-  setProcessingDocuments(processingDocuments);
-
- 
 
       try {
         const formData = new FormData();
@@ -1825,10 +1655,7 @@ const renderSummaryView = () => {
           const newSelectedDocuments = documents.map((doc) =>
             doc.id.toString()
           );
-          setLocalSelectedDocuments(newSelectedDocuments);
-    if (documents.length > 0) {
-      const newSelectedDocuments = documents.map((doc) => doc.id.toString());
-      setSelectedDocuments(newSelectedDocuments);
+          setSelectedDocuments(newSelectedDocuments);
 
           if (setSelectedDocuments) {
             setSelectedDocuments(newSelectedDocuments);
@@ -1885,25 +1712,72 @@ const renderSummaryView = () => {
         });
       }
     };
+
+    const filteredProcessingDocuments = processingDocuments.filter((doc) =>
+      currentUploadFilenames.includes(doc.filename)
+    );
+
+    const handleDeleteMessageClick = (index) => {
+      setMessageToDelete(index);
+      setDeleteModalOpen(true);
+    };
+
+    const confirmDeleteMessage = () => {
+      if (messageToDelete !== null) {
+        handleDeleteMessage(messageToDelete); // Call your existing function
+        setDeleteModalOpen(false);
+        setMessageToDelete(null);
+      }
+    };
+
+    const handleDeleteMessage = async (userMsgIndex) => {
+      if (
+        conversation[userMsgIndex]?.role !== "user" ||
+        !conversation[userMsgIndex + 1] ||
+        conversation[userMsgIndex + 1].role !== "assistant"
+      ) {
+        toast.error("Could not find the corresponding assistant response.");
+        return;
+      }
+
+      const userMessage = conversation[userMsgIndex];
+      const assistantMessage = conversation[userMsgIndex + 1];
+
+      // Optimistically update UI
+      setConversation((prev) => {
+        const updated = [...prev];
+        updated.splice(userMsgIndex, 2);
+        return updated;
+      });
+
+      try {
+        console.log("Deleting message pair:", {
+          userMessageId: userMessage.id,
+          assistantMessageId: assistantMessage.id,
+          conversationId,
+        });
+
+        // Call backend API to delete both messages by their IDs
+        await chatServiceNB.deleteMessagePair(
+          userMessage.id,
+          assistantMessage.id,
+          conversationId
+        );
+        toast.success("Message and response deleted.");
+      } catch (error) {
+        toast.error("Failed to delete message. Please refresh.");
+        // Optionally: reload chat from backend to sync
+        // Or revert the UI change:
+        setConversation((prev) => {
+          const updated = [...prev];
+          updated.splice(userMsgIndex, 0, userMessage, assistantMessage);
+          return updated;
+        });
+      }
+    };
+
     const handleSendMessage = async (message) => {
       if (!message.trim()) return;
-    setProcessingDocuments((prevDocs) => {
-      return prevDocs.map((doc) => ({
-        ...doc,
-        status: "error",
-        progress: 0,
-        message: "Upload failed",
-      }));
-    });
-  }
-};
-
- const filteredProcessingDocuments = processingDocuments.filter(doc =>
-  currentUploadFilenames.includes(doc.filename)
-);
-
-const handleSendMessage = async (message) => {
-  if (!message.trim()) return;
 
       // Add user message to conversation
       const newConversation = [
@@ -1921,36 +1795,20 @@ const handleSendMessage = async (message) => {
       try {
         // Force useWebKnowledge to true if no documents are selected
         const useWebMode =
-          localSelectedDocuments.length === 0 ? true : useWebKnowledge;
-  try {
-    // Force useWebKnowledge to true if no documents are selected
-    const useWebMode =
-      propSelectedDocuments.length === 0 ? true : useWebKnowledge;
+          propSelectedDocuments.length === 0 ? true : useWebKnowledge;
 
         // Prepare request data
         const messageData = {
           message,
           conversation_id: conversationId,
-          selected_documents: localSelectedDocuments,
+          selected_documents: propSelectedDocuments,
           main_project_id: mainProjectId,
           messages: newConversation,
           use_web_knowledge: useWebMode,
           response_length: responseLength,
           response_format: responseFormat,
-          general_chat_mode: localSelectedDocuments.length === 0,
+          general_chat_mode: propSelectedDocuments.length === 0,
         };
-    // Prepare request data
-    const messageData = {
-      message,
-      conversation_id: conversationId,
-      selected_documents: propSelectedDocuments,
-      main_project_id: mainProjectId,
-      messages: newConversation,
-      use_web_knowledge: useWebMode,
-      response_length: responseLength,
-      response_format: responseFormat,
-      general_chat_mode: propSelectedDocuments.length === 0,
-    };
 
         console.log("🚀 SENDING REQUEST TO BACKEND:", messageData);
 
@@ -1958,8 +1816,12 @@ const handleSendMessage = async (message) => {
 
         console.log("📦 Full Response Object:", response);
 
-        if (response && response.data) {
-          // Parse the JSON response from backend
+      if (response && response.data) {
+        // If backend returns the full conversation/messages array, use it:
+        if (response.data.messages && Array.isArray(response.data.messages)) {
+          setConversation(response.data.messages);
+        } else {
+          // Fallback: append assistant message as before
           let responseContent = response.data.response || response.data.content;
           let citations = response.data.citations || [];
 
@@ -2004,15 +1866,8 @@ const handleSendMessage = async (message) => {
             extracted_urls: response.data.extracted_urls, // Store original extracted_urls
           };
 
-          console.log(
-            "Final assistant message with sources:",
-            assistantMessage
-          );
-
-          // Update conversation with the new assistant message
-          const updatedConversation = [...newConversation, assistantMessage];
-          setConversation(updatedConversation);
-          setMessage("");
+          setConversation([...newConversation, assistantMessage]);
+        }
 
           // Update follow-up questions if available
           if (response.data.follow_up_questions) {
@@ -2054,67 +1909,93 @@ const handleSendMessage = async (message) => {
       }
     };
 
-useImperativeHandle(ref, () => ({
-  handleSendMessage: (message) => {
-    console.log('handleSendMessage called from ref with message:', message);
-    handleSendMessage(message);
-  },
-  updateDocumentSelection: (newSelection) => {
-    console.log('🔄 MainChat: Updating selection via ref:', newSelection);
-    setSelectedDocuments([...newSelection]);
-    
-    // Also update parent state to keep everything in sync
-    if (setSelectedDocuments) {
-      setSelectedDocuments([...newSelection]);
-    }
-  }
-}), [handleSendMessage, setSelectedDocuments]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        handleSendMessage: (message) => {
+          console.log(
+            "handleSendMessage called from ref with message:",
+            message
+          );
+          handleSendMessage(message);
+        },
+        updateDocumentSelection: (newSelection) => {
+          console.log("🔄 MainChat: Updating selection via ref:", newSelection);
+          setSelectedDocuments([...newSelection]);
 
-const WebSourcesDisplay = ({ sources }) => {
-  if (!sources || sources.length === 0) return null;
-  
-  // Define file extensions that should not be clickable
-  const fileExtensions = [
-    '.pdf', '.docx', '.txt', '.pptx', '.jpg', '.jpeg', '.bmp', 
-    '.png', '.mp3', '.mp4', '.wav', '.mpeg', '.doc', '.xls', 
-    '.xlsx', '.ppt', '.gif', '.tiff', '.zip', '.rar'
-  ];
-  
-  // Process sources to determine if they're web links or files
-  const processedSources = sources.map((source, index) => {
-    // Remove any leading/trailing whitespace and asterisks
-    let cleanSource = source.trim().replace(/\*$/, '');
-    
-    // Check if it's a file by looking for file extensions
-    const isFile = fileExtensions.some(ext => 
-      cleanSource.toLowerCase().includes(ext.toLowerCase())
+          // Also update parent state to keep everything in sync
+          if (setSelectedDocuments) {
+            setSelectedDocuments([...newSelection]);
+          }
+        },
+      }),
+      [handleSendMessage, setSelectedDocuments]
     );
-    
-    if (isFile) {
-      // For files, just return the clean source as display text
-      return {
-        type: 'file',
-        display: cleanSource,
-        url: null
-      };
-    } else {
-      // For web sources, process as before
-      // If it's just a domain without http/https, add https://
-      if (!cleanSource.startsWith('http')) {
-        cleanSource = `https://${cleanSource}`;
-      }
-      
-      // Extract just the domain for display
-      const domainMatch = cleanSource.match(/^https?:\/\/(?:www\.)?([^\/]+)/i);
-      const displayText = domainMatch ? domainMatch[1] : cleanSource;
-      
-      return {
-        type: 'web',
-        url: cleanSource,
-        display: displayText
-      };
-    }
-  });
+
+    const WebSourcesDisplay = ({ sources }) => {
+      if (!sources || sources.length === 0) return null;
+
+      // Define file extensions that should not be clickable
+      const fileExtensions = [
+        ".pdf",
+        ".docx",
+        ".txt",
+        ".pptx",
+        ".jpg",
+        ".jpeg",
+        ".bmp",
+        ".png",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".mpeg",
+        ".doc",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".gif",
+        ".tiff",
+        ".zip",
+        ".rar",
+      ];
+
+      // Process sources to determine if they're web links or files
+      const processedSources = sources.map((source, index) => {
+        // Remove any leading/trailing whitespace and asterisks
+        let cleanSource = source.trim().replace(/\*$/, "");
+
+        // Check if it's a file by looking for file extensions
+        const isFile = fileExtensions.some((ext) =>
+          cleanSource.toLowerCase().includes(ext.toLowerCase())
+        );
+
+        if (isFile) {
+          // For files, just return the clean source as display text
+          return {
+            type: "file",
+            display: cleanSource,
+            url: null,
+          };
+        } else {
+          // For web sources, process as before
+          // If it's just a domain without http/https, add https://
+          if (!cleanSource.startsWith("http")) {
+            cleanSource = `https://${cleanSource}`;
+          }
+
+          // Extract just the domain for display
+          const domainMatch = cleanSource.match(
+            /^https?:\/\/(?:www\.)?([^\/]+)/i
+          );
+          const displayText = domainMatch ? domainMatch[1] : cleanSource;
+
+          return {
+            type: "web",
+            url: cleanSource,
+            display: displayText,
+          };
+        }
+      });
 
       return (
         <div className="web-sources-container">
@@ -2319,35 +2200,20 @@ const WebSourcesDisplay = ({ sources }) => {
 
         // Force web mode when no documents are selected
         const useWebMode =
-          localSelectedDocuments.length === 0 ? true : useWebKnowledge;
-    // Force web mode when no documents are selected
-    const useWebMode =
-      propSelectedDocuments.length === 0 ? true : useWebKnowledge;
+          propSelectedDocuments.length === 0 ? true : useWebKnowledge;
 
         // Prepare request data for the API
         const requestData = {
           message: newContent,
           conversation_id: conversationId,
-          selected_documents: localSelectedDocuments,
+          selected_documents: propSelectedDocuments,
           main_project_id: mainProjectId,
           context: conversationUpToEdit,
           use_web_knowledge: useWebMode,
           response_length: currentResponseLength,
           response_format: currentResponseFormat,
-          general_chat_mode: localSelectedDocuments.length === 0,
+          general_chat_mode: propSelectedDocuments.length === 0,
         };
-    // Prepare request data for the API
-    const requestData = {
-      message: newContent,
-      conversation_id: conversationId,
-      selected_documents: propSelectedDocuments,
-      main_project_id: mainProjectId,
-      context: conversationUpToEdit,
-      use_web_knowledge: useWebMode,
-      response_length: currentResponseLength,
-      response_format: currentResponseFormat,
-      general_chat_mode: propSelectedDocuments.length === 0,
-    };
 
         // Send to API and get new response
         const response = await chatServiceNB.sendMessage(requestData);
@@ -2392,25 +2258,11 @@ const WebSourcesDisplay = ({ sources }) => {
             response.data.response_length || currentResponseLength,
           response_format:
             response.data.response_format || currentResponseFormat,
-          general_chat_mode: localSelectedDocuments.length === 0,
+          general_chat_mode: propSelectedDocuments.length === 0,
           webSources: webSources, // Add processed web sources
           sources_info: response.data.sources_info, // Store original sources_info
           extracted_urls: response.data.extracted_urls, // Store original extracted_urls
         };
-    // Add the new assistant response
-    const assistantMessage = {
-      role: "assistant",
-      content: responseContent,
-      citations: response.data.citations || [],
-      follow_up_questions: response.data.follow_up_questions || [],
-      use_web_knowledge: response.data.use_web_knowledge || useWebMode,
-      response_length: response.data.response_length || currentResponseLength,
-      response_format: response.data.response_format || currentResponseFormat,
-      general_chat_mode: propSelectedDocuments.length === 0,
-      webSources: webSources, // Add processed web sources
-      sources_info: response.data.sources_info, // Store original sources_info
-      extracted_urls: response.data.extracted_urls, // Store original extracted_urls
-    };
 
         const finalConversation = [...conversationUpToEdit, assistantMessage];
 
@@ -2542,44 +2394,59 @@ const WebSourcesDisplay = ({ sources }) => {
       // Update the conversation
       setConversation(updatedConversation);
 
-    // Update the current version index
-    setCurrentVersionIndex((prev) => ({
-      ...prev,
-      [messageIndex]: versionIndex,
-    }));
-  };
-  // Add a useEffect to further clean up conversation on initial load
-  useEffect(() => {
-    if (conversation.length > 0) {
-      const cleanedConversation = cleanupConversation(conversation);
-      if (cleanedConversation.length !== conversation.length) {
-        setConversation(cleanedConversation);
+      // Update the current version index
+      setCurrentVersionIndex((prev) => ({
+        ...prev,
+        [messageIndex]: versionIndex,
+      }));
+    };
+    // Add a useEffect to further clean up conversation on initial load
+    useEffect(() => {
+      if (conversation.length > 0) {
+        const cleanedConversation = cleanupConversation(conversation);
+        if (cleanedConversation.length !== conversation.length) {
+          setConversation(cleanedConversation);
+        }
       }
-    }
-  }, [conversation]);
+    }, [conversation]);
 
-  const [copyMessageIndex, setCopyMessageIndex] = useState(null);
+    const [copyMessageIndex, setCopyMessageIndex] = useState(null);
 
-  // Copy function with feedback
-  const handleCopyMessage = (content, index) => {
-    // Create a temporary element to strip HTML tags for plain text copy
-    const tempElement = document.createElement("div");
-    tempElement.innerHTML = content;
-    const textContent = tempElement.textContent || tempElement.innerText;
+    // Copy function with feedback
+    const handleCopyMessage = (content, index) => {
+      // Remove citation markers like [1], [2], etc. (both plain and inside <sup>)
+      let filteredContent = content
+        // Remove [1], [2], ... in plain text
+        .replace(/\s*\[\d+\]/g, "")
+        // Remove <sup>[1]</sup> and similar HTML
+        .replace(/<sup[^>]*>\s*\[\d+\]\s*<\/sup>/g, "");
 
-    navigator.clipboard
-      .writeText(textContent)
-      .then(() => {
-        // Show "Copied!" text
+      if (navigator.clipboard && window.ClipboardItem) {
+        const htmlBlob = new Blob([filteredContent], { type: "text/html" });
+        const clipboardItem = new window.ClipboardItem({
+          "text/html": htmlBlob,
+        });
+        navigator.clipboard
+          .write([clipboardItem])
+          .then(() => {
+            setCopyMessageIndex(index);
+            setTimeout(() => setCopyMessageIndex(null), 2000);
+          })
+          .catch(() => {
+            fallbackCopyPlainText(filteredContent, index);
+          });
+      } else {
+        fallbackCopyPlainText(filteredContent, index);
+      }
+    };
+
+    const fallbackCopyPlainText = (content, index) => {
+      const tempElement = document.createElement("div");
+      tempElement.innerHTML = content;
+      const textContent = tempElement.textContent || tempElement.innerText;
+      navigator.clipboard.writeText(textContent).then(() => {
         setCopyMessageIndex(index);
-
-        // Reset after 2 seconds
-        setTimeout(() => {
-          setCopyMessageIndex(null);
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error("Failed to copy text: ", err);
+        setTimeout(() => setCopyMessageIndex(null), 2000);
       });
     };
 
@@ -2654,30 +2521,39 @@ const WebSourcesDisplay = ({ sources }) => {
               custom-scrollbar
               pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
               ${!isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"}`}
-            >
-           
-{conversation.length === 0 && (
-  <div key={`welcome-${propSelectedDocuments.length}`}>
-    {propSelectedDocuments.length === 0 ? (
-      <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
-    ) : (
-      <DocumentModeWelcome 
-        className="mt-4 mx-auto max-w-3xl" 
-        selectedDocuments={propSelectedDocuments}
-        documents={documents}
-      />
-    )}
-  </div>
-)}
+              >
+                {conversation.length === 0 && (
+                  <div key={`welcome-${propSelectedDocuments.length}`}>
+                    {propSelectedDocuments.length === 0 ? (
+                      <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
+                    ) : (
+                      <DocumentModeWelcome
+                        className="mt-4 mx-auto max-w-3xl"
+                        selectedDocuments={propSelectedDocuments}
+                        documents={documents}
+                      />
+                    )}
+                  </div>
+                )}
 
                 {/* Rest of the chat messages rendering code */}
                 {conversation.map((msg, index) => (
                   <React.Fragment key={index}>
                     <div
-                      className={`flex ${
+                      className={`flex items-start ${
                         msg.role === "user" ? "justify-end " : "justify-start"
                       }`}
                     >
+                      {/* Delete button for user messages - positioned outside and to the left */}
+                      {msg.role === "user" && (
+                        <button
+                          onClick={() => handleDeleteMessageClick(index)}
+                          className="mr-2 mt-1 text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                          title="Delete this message and its response"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </button>
+                      )}
                       <div
                         className={`
     group
@@ -2799,128 +2675,152 @@ const WebSourcesDisplay = ({ sources }) => {
                           )}
                         </div>
 
-                      {msg.role === "user" ? (
-  <EditableMessage
-    message={msg}
-    messageIndex={index}
-    onUpdate={handleMessageUpdate}
-    messageVersions={messageVersions}
-    currentVersionIndex={currentVersionIndex}
-    onRestoreVersion={handleRestoreVersion}
-    onOpenHistoryModal={() => {
-      setActiveHistoryMessageIndex(index);
-      setIsHistoryModalOpen(true);
-    }}
-  />
-) : (
-  // Use SimpleCitationManager for assistant messages with citations
-  <div className="overflow-x-auto max-w-full  custom-scrollbar">
-  {msg.citations && msg.citations.length > 0 ? (
-    <div className={`message-content ${getTextSizeClass(textSize)}`}>
-      <ImprovedCitationManager 
-    content={msg.content} 
-    citations={msg.citations || []} 
-    textSizeClass={getTextSizeClass(textSize)}
-  />
-    </div>
-    
-  ) : (
-    // Fallback to current HTML rendering for messages without citations
-    <div
-      className={`message-content ${getTextSizeClass(textSize)}`}
-      dangerouslySetInnerHTML={{
-        __html: DOMPurify.sanitize(
-          // If the content has HTML list, paragraph, or formatting tags, process it as HTML
-          msg.content.includes('<li>') || msg.content.includes('<p>') || msg.content.includes('<b>') 
-            ? cleanAndFormatHTML(msg.content)  // Clean and format the HTML
-            : marked.parse(msg.content)        // Otherwise parse as markdown
-        )
-          // Remove code block markers
-          .replace(/```html/g, "")
-          .replace(/```/g, "")
-          .replace(/"""html/g, "")
-          .replace(/"""/g, "")
-          // Add proper spacing and styling
-          .replace(/<p>/g, '<p class="mb-4">')
-          .replace(/<b>/g, '<b class="font-bold">')
-          .replace(/<strong>/g, '<strong class="font-bold">')
-          .replace(
-            /<h3>/g,
-            '<h3 class="text-lg font-semibold mt-4 mb-2">'
-          )
-          .replace(
-            /<ul>/g,
-            '<ul class="list-disc pl-6 mb-4">'
-          )
-          .replace(
-            /<ol>/g,
-            '<ol class="list-decimal pl-6 mb-4">'
-          )
-          .replace(/<li>/g, '<li class="mb-2">')
-          // Add proper styling for tables
-          .replace(
-            /<table>/g,
-            '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
-          )
-          .replace(
-            /<th>/g,
-            '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
-          )
-          .replace(
-            /<td>/g,
-            '<td class="border border-gray-500 p-2">'
-          )
-          // Ensure proper spacing for tables
-          .replace(
-            /<\/table>\s*<p>/g,
-            '</table><p class="mt-4">'
-          )
-          // Convert markdown symbols to HTML
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
-          .replace(/\*(.*?)\*/g, '<em>$1</em>') 
-          // Link formatting
-          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">$1</a>')
-          // Code formatting
-          .replace(/`(.*?)`/g, '<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">$1</code>')
-          // Remove excess newlines
-          .replace(/\n{3,}/g, "\n\n")
-          // Ensure one line break after headers
-          .replace(/<\/b>\s*\n+/g, "</b>\n")
-          .replace(/<\/strong>\s*\n+/g, "</strong>\n"),
-      }}
-    />
-  )}
-  </div>
-)}
-{/* NEW: Display web sources if available */}
-   {msg.webSources && msg.webSources.length > 0 && propSelectedDocuments.length > 0 && (
-  <WebSourcesDisplay sources={msg.webSources} />
-)}
-
-                      {/* Add Copy option for Klarifai messages only */}
-                      {msg.role !== "user" && (
-                        <div className="flex justify-end mt-4 dark:text-gray-400 text-[#8c715f] text-sm">
-                          {/* Move Info icon and text to the left side */}
-                          <div className="flex items-center mr-auto">
-                            {msg.use_web_knowledge && (
-                              <>
-                                <Info className="h-3 w-3 mr-1" />
-                                {msg.general_chat_mode ||
-                                (msg.citations &&
-                                  msg.citations.length === 0) ? (
-                                  <span>
-                                    This response includes information from web
-                                    searches.
-                                  </span>
-                                ) : (
-                                  <span>
-                                    This response includes information from both
-                                    your documents and general knowledge.
-                                  </span>
-                                )}
-                              </>
+                        {msg.role === "user" ? (
+                          <EditableMessage
+                            message={msg}
+                            messageIndex={index}
+                            onUpdate={handleMessageUpdate}
+                            messageVersions={messageVersions}
+                            currentVersionIndex={currentVersionIndex}
+                            onRestoreVersion={handleRestoreVersion}
+                            onOpenHistoryModal={() => {
+                              setActiveHistoryMessageIndex(index);
+                              setIsHistoryModalOpen(true);
+                            }}
+                          />
+                        ) : (
+                          // Use SimpleCitationManager for assistant messages with citations
+                          <div className="overflow-x-auto max-w-full  custom-scrollbar">
+                            {msg.citations && msg.citations.length > 0 ? (
+                              <div
+                                className={`message-content ${getTextSizeClass(
+                                  textSize
+                                )}`}
+                              >
+                                <ImprovedCitationManager
+                                  content={msg.content}
+                                  citations={msg.citations || []}
+                                  textSizeClass={getTextSizeClass(textSize)}
+                                />
+                              </div>
+                            ) : (
+                              // Fallback to current HTML rendering for messages without citations
+                              <div
+                                className={`message-content ${getTextSizeClass(
+                                  textSize
+                                )}`}
+                                dangerouslySetInnerHTML={{
+                                  __html: DOMPurify.sanitize(
+                                    // If the content has HTML list, paragraph, or formatting tags, process it as HTML
+                                    msg.content.includes("<li>") ||
+                                      msg.content.includes("<p>") ||
+                                      msg.content.includes("<b>")
+                                      ? cleanAndFormatHTML(msg.content) // Clean and format the HTML
+                                      : marked.parse(msg.content) // Otherwise parse as markdown
+                                  )
+                                    // Remove code block markers
+                                    .replace(/```html/g, "")
+                                    .replace(/```/g, "")
+                                    .replace(/"""html/g, "")
+                                    .replace(/"""/g, "")
+                                    // Add proper spacing and styling
+                                    .replace(/<p>/g, '<p class="mb-4">')
+                                    .replace(/<b>/g, '<b class="font-bold">')
+                                    .replace(
+                                      /<strong>/g,
+                                      '<strong class="font-bold">'
+                                    )
+                                    .replace(
+                                      /<h3>/g,
+                                      '<h3 class="text-lg font-semibold mt-4 mb-2">'
+                                    )
+                                    .replace(
+                                      /<ul>/g,
+                                      '<ul class="list-disc pl-6 mb-4">'
+                                    )
+                                    .replace(
+                                      /<ol>/g,
+                                      '<ol class="list-decimal pl-6 mb-4">'
+                                    )
+                                    .replace(/<li>/g, '<li class="mb-2">')
+                                    // Add proper styling for tables
+                                    .replace(
+                                      /<table>/g,
+                                      '<table class="w-full border-collapse border border-gray-500 mt-4 mb-4">'
+                                    )
+                                    .replace(
+                                      /<th>/g,
+                                      '<th class="border border-gray-500 bg-gray-700 text-white p-2">'
+                                    )
+                                    .replace(
+                                      /<td>/g,
+                                      '<td class="border border-gray-500 p-2">'
+                                    )
+                                    // Ensure proper spacing for tables
+                                    .replace(
+                                      /<\/table>\s*<p>/g,
+                                      '</table><p class="mt-4">'
+                                    )
+                                    // Convert markdown symbols to HTML
+                                    .replace(
+                                      /\*\*(.*?)\*\*/g,
+                                      "<strong>$1</strong>"
+                                    )
+                                    .replace(/\*(.*?)\*/g, "<em>$1</em>")
+                                    // Link formatting
+                                    .replace(
+                                      /\[(.*?)\]\((.*?)\)/g,
+                                      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">$1</a>'
+                                    )
+                                    // Code formatting
+                                    .replace(
+                                      /`(.*?)`/g,
+                                      '<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">$1</code>'
+                                    )
+                                    // Remove excess newlines
+                                    .replace(/\n{3,}/g, "\n\n")
+                                    // Ensure one line break after headers
+                                    .replace(/<\/b>\s*\n+/g, "</b>\n")
+                                    .replace(
+                                      /<\/strong>\s*\n+/g,
+                                      "</strong>\n"
+                                    ),
+                                }}
+                              />
                             )}
                           </div>
+                        )}
+                        {/* NEW: Display web sources if available */}
+                        {msg.webSources &&
+                          msg.webSources.length > 0 &&
+                          propSelectedDocuments.length > 0 && (
+                            <WebSourcesDisplay sources={msg.webSources} />
+                          )}
+
+                        {/* Add Copy option for Klarifai messages only */}
+                        {msg.role !== "user" && (
+                          <div className="flex justify-end mt-4 dark:text-gray-400 text-[#8c715f] text-sm">
+                            {/* Move Info icon and text to the left side */}
+                            <div className="flex items-center mr-auto">
+                              {msg.use_web_knowledge && (
+                                <>
+                                  <Info className="h-3 w-3 mr-1" />
+                                  {msg.general_chat_mode ||
+                                  (msg.citations &&
+                                    msg.citations.length === 0) ? (
+                                    <span>
+                                      This response includes information from
+                                      web searches.
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      This response includes information from
+                                      both your documents and general knowledge.
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
 
                             {/* Right side - Response Regenerator and Copy button */}
                             <div className="flex items-center space-x-2 relative">
@@ -2999,6 +2899,17 @@ const WebSourcesDisplay = ({ sources }) => {
                 )}
                 <div ref={chatEndRef} />
               </div>
+
+              {/* Delete Confirmation Modal */}
+              <DeleteChatConfirmationModal
+                isOpen={deleteModalOpen}
+                onClose={() => {
+                  setDeleteModalOpen(false);
+                  setMessageToDelete(null);
+                }}
+                onConfirm={confirmDeleteMessage}
+                messageIndex={messageToDelete}
+              />
 
               {/* Add the Version History Modal */}
               {isHistoryModalOpen && activeHistoryMessageIndex !== null && (
@@ -3100,7 +3011,7 @@ const WebSourcesDisplay = ({ sources }) => {
                       !isFollowUpQuestionsMinimized &&
                       currentFollowUpQuestions.length > 0 && (
                         <div className="w-full px-2">
-                          <div className="flex gap-1 overflow-x-auto pb-1 custom-scrollbar">
+                          <div className="flex gap-1 overflow-x-auto pb-1">
                             {currentFollowUpQuestions.map((question, index) => (
                               <Card
                                 key={index}
@@ -3110,60 +3021,60 @@ const WebSourcesDisplay = ({ sources }) => {
                                     .trim();
                                   setMessage(cleanedQuestion);
                                 }}
-                                className="flex-shrink-0  py-1 px-1 text-xs
+                                className="flex-shrink-0 mt-1 py-1 px-2 text-xs
                     bg-[] dark:bg-gray-800/50
                     hover:bg-white dark:hover:bg-gray-700
                     text-[#0c393b] dark:text-white
                     border-[#e3d5c8] dark:border-blue-500/20
                     transition-all hover:-translate-y-0.5
                     cursor-pointer border rounded-lg"
-                >
-                  {question}
-                </Card>
-              ))}
-            </div>
-          </div>
-        )
-      )}
-    </div>
-    
-    {/* Input Area */}
-    <div className="bg-[#f0eee5] dark:bg-gray-700/20 backdrop-blur-sm rounded-b-2xl sm:rounded-b-3xl shadow-xl p-2 relative border-t border-[#e3d5c8] dark:border-blue-500/10">
-      <div className="flex flex-col w-full">
-        {/* Input field */}
-        <div className="w-full relative bg-white dark:bg-gray-900/20 rounded-xl transition-colors overflow-hidden mb-2 border border-[#d6cbbf] dark:border-blue-500/20 focus-within:border-[#887d4e] dark:focus-within:border-blue-400/40 shadow-sm">
-          {/* Textarea - Auto-resizing with reduced min-height */}
-          <textarea
-            value={message}
-            onChange={(e) => {
-              setMessage(e.target.value);
-              // Auto-resize logic
-              e.target.style.height = "inherit";
-              const scrollHeight = e.target.scrollHeight;
-              const maxHeight = 100; // Reduced maximum height in pixels
-              e.target.style.height = `${Math.min(
-                scrollHeight,
-                maxHeight
-              )}px`;
-            }}
-            onKeyPress={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(message);
-              }
-            }}
-            placeholder={
-              propSelectedDocuments.length === 0
-                ? "Ask me anything using web knowledge..."
-                : useWebKnowledge
-                ? "Ask me about your documents with web assistance..."
-                : "Ask me about your documents..."
-            }
-            onFocus={handleTextareaFocus}
-            className="w-full bg-transparent text-[#5e4636] dark:text-white font-medium py-2 px-3 text-sm focus:outline-none resize-none overflow-y-auto min-h-[36px] max-h-[100px] custom-scrollbar custom-textarea chat-input-area placeholder:text-[#8c715f]/80 placeholder:tracking-wider dark:placeholder:text-gray-400"
-            disabled={isLoading}
-            style={{ scrollbarWidth: "thin" }}
-          />
+                              >
+                                {question}
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {/* Input Area */}
+                  <div className="bg-[#f0eee5] dark:bg-gray-700/20 backdrop-blur-sm rounded-b-2xl sm:rounded-b-3xl shadow-xl p-2 relative border-t border-[#e3d5c8] dark:border-blue-500/10">
+                    <div className="flex flex-col w-full">
+                      {/* Input field */}
+                      <div className="w-full relative bg-white dark:bg-gray-900/20 rounded-xl transition-colors overflow-hidden mb-2 border border-[#d6cbbf] dark:border-blue-500/20 focus-within:border-[#887d4e] dark:focus-within:border-blue-400/40 shadow-sm">
+                        {/* Textarea - Auto-resizing with reduced min-height */}
+                        <textarea
+                          value={message}
+                          onChange={(e) => {
+                            setMessage(e.target.value);
+                            // Auto-resize logic
+                            e.target.style.height = "inherit";
+                            const scrollHeight = e.target.scrollHeight;
+                            const maxHeight = 100; // Reduced maximum height in pixels
+                            e.target.style.height = `${Math.min(
+                              scrollHeight,
+                              maxHeight
+                            )}px`;
+                          }}
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage(message);
+                            }
+                          }}
+                          placeholder={
+                            propSelectedDocuments.length === 0
+                              ? "Ask me anything using web knowledge..."
+                              : useWebKnowledge
+                              ? "Ask me about your documents with web assistance..."
+                              : "Ask me about your documents..."
+                          }
+                          onFocus={handleTextareaFocus}
+                          className="w-full bg-transparent text-[#5e4636] dark:text-white font-medium py-2 px-3 text-sm focus:outline-none resize-none overflow-y-auto min-h-[36px] max-h-[100px] custom-scrollbar custom-textarea chat-input-area placeholder:text-[#8c715f]/80 placeholder:tracking-wider dark:placeholder:text-gray-400"
+                          disabled={isLoading}
+                          style={{ scrollbarWidth: "thin" }}
+                        />
 
                         <input
                           type="file"
@@ -3215,46 +3126,46 @@ const WebSourcesDisplay = ({ sources }) => {
                                 }`}
                               />
 
-                {isRecording && (
-                  <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                  </span>
-                )}
-              </button>
-            )}
+                              {isRecording && (
+                                <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                </span>
+                              )}
+                            </button>
+                          )}
 
-            {/* View toggle button */}
-            <button
-              title={
-                currentView === "chat"
-                  ? "View Summary"
-                  : "View Chat"
-              }
-              onClick={() =>
-                toggleView(
-                  currentView === "chat" ? "summary" : "chat"
-                )
-              }
-              className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
-            >
-              {currentView === "chat" ? (
-                <ScrollText className="h-4 w-4" />
-              ) : (
-                <MessageCircle className="h-4 w-4" />
-              )}
-            </button>
-            
-            {/* Context/Web knowledge toggle */}
-            {propSelectedDocuments.length > 0 ? (
-              <button
-                onClick={toggleWebKnowledge}
-                title={
-                  useWebKnowledge
-                    ? "Answers from documents and web knowledge"
-                    : "Answers from documents only"
-                }
-                className={`
+                          {/* View toggle button */}
+                          <button
+                            title={
+                              currentView === "chat"
+                                ? "View Summary"
+                                : "View Chat"
+                            }
+                            onClick={() =>
+                              toggleView(
+                                currentView === "chat" ? "summary" : "chat"
+                              )
+                            }
+                            className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
+                          >
+                            {currentView === "chat" ? (
+                              <ScrollText className="h-4 w-4" />
+                            ) : (
+                              <MessageCircle className="h-4 w-4" />
+                            )}
+                          </button>
+
+                          {/* Context/Web knowledge toggle */}
+                          {propSelectedDocuments.length > 0 ? (
+                            <button
+                              onClick={toggleWebKnowledge}
+                              title={
+                                useWebKnowledge
+                                  ? "Answers from documents and web knowledge"
+                                  : "Answers from documents only"
+                              }
+                              className={`
                   flex items-center justify-center gap-1
                   px-2 py-1
                   rounded-lg 
@@ -3315,44 +3226,44 @@ const WebSourcesDisplay = ({ sources }) => {
             /> */}
                         </div>
 
-          {/* Send button */}
-          <button
-            onClick={() => handleSendMessage(message)}
-            disabled={isLoading}
-            className="bg-[#a55233] hover:bg-[#884325] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 dark:hover:from-blue-500/80 dark:hover:to-emerald-500/70 text-white p-2 rounded-lg transition-all disabled:opacity-50 disabled:bg-[#d6cbbf] disabled:dark:bg-gray-600 shadow-sm"
-            title="Send message"
-          >
-            <Send className="h-4 w-4" />
-          </button>
+                        {/* Send button */}
+                        <button
+                          onClick={() => handleSendMessage(message)}
+                          disabled={isLoading}
+                          className="bg-[#a55233] hover:bg-[#884325] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 dark:hover:from-blue-500/80 dark:hover:to-emerald-500/70 text-white p-2 rounded-lg transition-all disabled:opacity-50 disabled:bg-[#d6cbbf] disabled:dark:bg-gray-600 shadow-sm"
+                          title="Send message"
+                        >
+                          <Send className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            renderSummaryView()
+          )}
         </div>
-      </div>
-    </div>
-  </div>
-</div>
-          </div>
-        ) : (
-          renderSummaryView()
+        {/* Document Processing Loader - Add this at the top level */}
+        {isDocumentProcessing && (
+          <DocumentProcessingLoader
+            documents={filteredProcessingDocuments}
+            queuedFilenames={currentUploadFilenames}
+            showLoader={isDocumentProcessing}
+            onComplete={() => {
+              setIsDocumentProcessing(false);
+              setProcessingDocuments([]);
+              setCurrentUploadFilenames([]);
+            }}
+            onCancel={() => {
+              setIsDocumentProcessing(false);
+              setProcessingDocuments([]);
+              setCurrentUploadFilenames([]);
+              toast.info("Document processing cancelled");
+            }}
+          />
         )}
-      </div>
-      {/* Document Processing Loader - Add this at the top level */}
-   {isDocumentProcessing && (
-  <DocumentProcessingLoader
-    documents={filteredProcessingDocuments}
-    queuedFilenames={currentUploadFilenames}
-    showLoader={isDocumentProcessing}
-    onComplete={() => {
-      setIsDocumentProcessing(false);
-      setProcessingDocuments([]);
-      setCurrentUploadFilenames([]);
-    }}
-    onCancel={() => {
-      setIsDocumentProcessing(false);
-      setProcessingDocuments([]);
-      setCurrentUploadFilenames([]);
-      toast.info("Document processing cancelled");
-    }}
-  />
-)}
 
         {/* Custom Scrollbar Styles */}
         <style>{`
@@ -3601,6 +3512,6 @@ MainChat.propTypes = {
   isDocumentProcessing: PropTypes.bool,
   processingProgress: PropTypes.number,
 };
-MainChat.displayName = 'MainChat';
+MainChat.displayName = "MainChat";
 
 export default MainChat;

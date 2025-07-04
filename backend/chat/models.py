@@ -144,6 +144,7 @@ class ChatMessage(models.Model):
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     citations = models.JSONField(blank=True, null=True)
+    sources = models.TextField(blank=True, null=True)
     
     # New fields for message properties
     use_web_knowledge = models.BooleanField(default=False)

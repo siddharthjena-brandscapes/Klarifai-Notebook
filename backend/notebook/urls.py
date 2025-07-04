@@ -26,6 +26,7 @@ from .views import ( DocumentUploadView,
     GenerateIdeaContextView,
     CheckUploadPermissionsView,
     DocumentProcessingStatusView,
+    DeleteMessagePairView
 
 
 
@@ -81,4 +82,5 @@ urlpatterns = [
     # Add these to your existing urls.py file
 
     path('document-processing-status/', DocumentProcessingStatusView.as_view(), name='document-processing-status'),
+    path('delete-message-pair-NB/', DeleteMessagePairView.as_view(), name='delete_message_pair'),
 ]
