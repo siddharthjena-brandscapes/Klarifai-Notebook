@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
 import LoginSignup from '../pages/LoginSignup/LoginSignup';
 import Dashboard from '../pages/Dashboard/Dashboard';
@@ -18,7 +18,7 @@ import SignupForm from '../components/auth/SignupForm';
  
 const AppRoutes = () => {
   return (
-    <BrowserRouter>
+    
       <Routes>
         {/* Auth Routes */}
         <Route path="/auth" element={<LoginSignup />} />
@@ -86,7 +86,7 @@ const AppRoutes = () => {
         {/* Default Route */}
         <Route path="/" element={<Navigate to="/auth" replace />} />
       </Routes>
-    </BrowserRouter>
+   
   );
 };
  

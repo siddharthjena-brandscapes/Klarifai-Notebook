@@ -93,6 +93,20 @@ class Document(models.Model):
     class Meta:
         app_label = 'chat'
 
+
+class DocumentProcessingStatus(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='document_processing_statuses')
+    document_name = models.CharField(max_length=255)
+    document_id = models.IntegerField(null=True, blank=True)
+    status = models.CharField(max_length=50, default="waiting")  # waiting, uploading, uploaded, parsing, indexing, complete, error
+    progress = models.IntegerField(default=0)  # 0-100
+    message = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.document_name} - {self.status}"
+
 class UserUploadPermissions(models.Model):
     user = models.OneToOneField(User, related_name='upload_permissions', on_delete=models.CASCADE)
     can_upload = models.BooleanField(default=True)

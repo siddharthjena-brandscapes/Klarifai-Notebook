@@ -25,6 +25,7 @@ from .views import ( DocumentUploadView,
     AdminNotebookUserStatsView,
     GenerateIdeaContextView,
     CheckUploadPermissionsView,
+    DocumentProcessingStatusView,
 
 
 
@@ -79,5 +80,5 @@ urlpatterns = [
     path('check-upload-permissions-NB/', CheckUploadPermissionsView.as_view(), name='check_upload_permissions'),
     # Add these to your existing urls.py file
 
-
+    path('document-processing-status/', DocumentProcessingStatusView.as_view(), name='document-processing-status'),
 ]

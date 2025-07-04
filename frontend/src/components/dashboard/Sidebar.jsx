@@ -658,6 +658,9 @@ const handleGenerateIdeas = async () => {
       if (onSelectChat) {
         onSelectChat(fullChatData);
       }
+      if (setSelectedDocuments) {
+        setSelectedDocuments(fullChatData.selected_documents || []);
+      }
     }
   } catch (error) {
     console.error("Error fetching conversation details:", error);

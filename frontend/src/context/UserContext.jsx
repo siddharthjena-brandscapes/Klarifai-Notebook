@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { userService } from '../utils/axiosConfig';
+import { useLocation } from 'react-router-dom';
 
 const UserContext = createContext();
+
 
 export const UserProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -12,6 +14,7 @@ export const UserProvider = ({ children }) => {
     'notes-panel': false,
   });
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
 
   const fetchCurrentUserRightPanelPermissions = useCallback(async () => {
     try {
@@ -42,22 +45,29 @@ export const UserProvider = ({ children }) => {
     }
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
+    console.log('UserProvider effect running, path:', location.pathname, 'token:', localStorage.getItem('token'));
     const token = localStorage.getItem('token');
+    // Skip fetching permissions on login/signup/forgot/reset pages
+    if (
+      location.pathname.startsWith('/auth') ||
+      location.pathname === '/forgot-password' ||
+      location.pathname === '/reset-password' ||
+      location.pathname === '/sso-callback'
+    ) {
+      setLoading(false);
+      return;
+    }
     if (token) {
       fetchCurrentUserRightPanelPermissions();
-
-      // ✅ ADD: Periodic refresh every 30 seconds
       const intervalId = setInterval(() => {
         fetchCurrentUserRightPanelPermissions();
-      }, 30000); // 30 seconds
-
-      // ✅ ADD: Cleanup interval on unmount
+      }, 30000);
       return () => clearInterval(intervalId);
     } else {
       setLoading(false);
     }
-  }, [fetchCurrentUserRightPanelPermissions]);
+  }, [fetchCurrentUserRightPanelPermissions, location]);
 
   // ✅ ADD: Refresh on window focus (when user returns to tab)
   useEffect(() => {
@@ -94,6 +104,7 @@ export const UserProvider = ({ children }) => {
 
 export const useUser = () => {
   const context = useContext(UserContext);
+  console.log('useUser called from:', new Error().stack);
   if (!context) {
     throw new Error('useUser must be used within a UserProvider');
   }

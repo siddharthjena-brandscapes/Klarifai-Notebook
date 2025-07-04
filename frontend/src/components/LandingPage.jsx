@@ -17,13 +17,12 @@ import {
   Search,
   ChevronDown,
   Menu,
-  Star,
-  Edit,
+ 
   Trash,
   ArrowRight,
   FolderOpen,
   Edit2,
-  Check,
+  
   Paperclip,
   NotebookPen,
 } from "lucide-react";
@@ -425,33 +424,6 @@ useEffect(() => {
     }
   };
 
-  const formatTime = (dateString) => {
-    console.log("Formatting time:", dateString, typeof dateString);
-
-    if (!dateString) {
-      console.log("Time string is empty or null");
-      return "Time not available";
-    }
-
-    try {
-      const date = new Date(dateString);
-      console.log("Parsed time:", date, "Valid:", !isNaN(date.getTime()));
-
-      if (isNaN(date.getTime())) {
-        console.log("Invalid time object created");
-        return "Invalid time";
-      }
-
-      return new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true,
-      }).format(date);
-    } catch (error) {
-      console.error("Error formatting time:", error);
-      return "Invalid time";
-    }
-  };
 
 
 
@@ -606,18 +578,7 @@ const handleDocumentChange = (e) => {
     }
   };
 
-  const toggleDescription = (projectId, e) => {
-  e.stopPropagation(); // Prevent card click
-  setExpandedDescriptions(prev => {
-    const newSet = new Set(prev);
-    if (newSet.has(projectId)) {
-      newSet.delete(projectId);
-    } else {
-      newSet.add(projectId);
-    }
-    return newSet;
-  });
-};
+  
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -722,41 +683,7 @@ const handleDocumentChange = (e) => {
     setEditingProject(null);
   };
 
-  const handleProjectUpdate = async (projectId, updatedData) => {
-    try {
-      console.log(
-        "Updating project with ID:",
-        projectId,
-        "and data:",
-        updatedData
-      );
-      const updatedProject = await coreService.updateProject(
-        projectId,
-        updatedData
-      );
-
-      console.log("Successfully received updated project:", updatedProject);
-
-      // Update projects array
-      setProjects((prevProjects) =>
-        prevProjects.map((p) => (p.id === projectId ? updatedProject : p))
-      );
-
-      // Update current project if needed
-      if (currentProject && currentProject.id === projectId) {
-        setCurrentProject(updatedProject);
-      }
-
-      // Close edit form
-      setIsEditing(false);
-      setEditingProject(null);
-    } catch (error) {
-      console.error("Project update failed:", error);
-      setError(
-        "Failed to update project: " + (error.message || "Unknown error")
-      );
-    }
-  };
+  
 
   const handleProjectSelect = async (project) => {
     try {

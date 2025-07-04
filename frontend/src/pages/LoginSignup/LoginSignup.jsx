@@ -11,6 +11,7 @@ import FaqButton from '../../components/faq/FaqButton';
 import brandscapeLogo from '../../assets/brand-scarpes-logo.png';
 import { coreService } from '../../utils/axiosConfig';
 
+
 const LoginSignup = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -19,6 +20,8 @@ const LoginSignup = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState(location.state?.error || '');
+
+  
 
   useEffect(() => {
     const token = localStorage.getItem('token');

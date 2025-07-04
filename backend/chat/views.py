@@ -34,7 +34,8 @@ from .models import (
     ConversationTransaction,
     UserTransaction,
     DocumentTransaction,
-    TransactionType
+    TransactionType,
+    DocumentProcessingStatus
 )
 import uuid
 from rest_framework.authtoken.models import Token
@@ -641,6 +642,19 @@ class ManageConversationView(APIView):
 
     def patch(self, request, conversation_id):
         return self.update_conversation(request, conversation_id)
+
+
+def update_doc_status(user, doc_name, status, progress=0, message="", doc_id=None):
+    obj, _ = DocumentProcessingStatus.objects.get_or_create(
+        user=user, document_name=doc_name,
+        defaults={"status": status, "progress": progress, "message": message, "document_id": doc_id}
+    )
+    obj.status = status
+    obj.progress = progress
+    obj.message = message
+    if doc_id:
+        obj.document_id = doc_id
+    obj.save()
 
 class DocumentProcessingMixin:
 
@@ -1658,225 +1672,225 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         user = request.user
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
-       
+
         if target_user_id and request.user.username == 'admin':
-            # Admin uploading for another user
             try:
                 user = User.objects.get(id=target_user_id)
             except User.DoesNotExist:
-                return Response({
-                    'error': 'Target user not found'
-                }, status=status.HTTP_404_NOT_FOUND)
+                return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
         else:
-            # Regular upload
             user = request.user
- 
+
         try:
             permissions = UserModulePermissions.objects.get(user=user)
             if permissions.disabled_modules.get('document-upload', False):
-                return Response({
-                    'error': 'Document uploads are disabled for this user'
-                }, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
             pass
- 
+
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
             uploaded_docs = []
             last_processed_doc_id = None
-            processed_data = None  # Initialize processed_data outside the loop
- 
+            processed_data = None
+
             for file in files:
                 file_ext = os.path.splitext(file.name)[1].lower()
                 is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
                 is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
                 is_media_file = is_audio_file or is_video_file
-               
-                # Check for existing document with the same name
+
+                # --- Status: Uploading ---
+                update_doc_status(user, file.name, "uploading", 10, "Uploading file...")
+
                 existing_doc = Document.objects.filter(
                     user=user,
                     filename=file.name,
                     main_project=main_project
                 ).first()
- 
-                # If this is an audio/video file, handle it specially
-                if is_media_file:
-                    # Process the media file to get transcript
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
-                        for chunk in file.chunks():
-                            tmp_file.write(chunk)
-                        file_path = tmp_file.name
-                   
-                    try:
-                        # Extract text based on file type
-                        if is_video_file:
-                            print(f"Processing video file: {file.name}")
-                            extracted_text = self.extract_text_from_video(file_path, user=user)
-                        else:  # audio file
-                            print(f"Processing audio file: {file.name}")
-                            extracted_text = self.extract_text_from_audio(file_path, user=user)
-                       
-                        if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
-                            return Response({
-                                'error': f'Failed to extract text from media file: {file.name}'
-                            }, status=status.HTTP_400_BAD_REQUEST)
-                       
-                        # Create transcript filename based on original file
-                        base_name = os.path.splitext(file.name)[0]
-                        file_type = "video" if is_video_file else "audio"
-                        transcript_filename = f"{base_name}_{file_type}_transcript.txt"
-                       
-                        # Create a temporary file with the transcript
-                        transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
-                        with open(transcript_file_path, 'w', encoding='utf-8') as f:
-                            f.write(extracted_text)
-                       
-                        # Create a Django File object from the transcript
-                        with open(transcript_file_path, 'rb') as f:
-                            from django.core.files import File
-                            django_file = File(f, name=transcript_filename)
-                           
-                            # Now create or update document with transcript instead of media
-                            if existing_doc:
-                                # Update existing document
-                                existing_doc.file = django_file
-                                existing_doc.filename = transcript_filename
-                                existing_doc.save()
-                                document = existing_doc
-                            else:
-                                # Create new document with transcript
-                                document = Document.objects.create(
-                                    user=user,
-                                    file=django_file,
-                                    filename=transcript_filename,
-                                    main_project=main_project
-                                )
- 
-                                file_size = file.size if hasattr(file, 'size') else None
-                                upload_method = 'video_transcript' if is_video_file else 'audio_transcript' if is_audio_file else 'regular'
-                                print(f"##################Upload method: {upload_method}")
-                                print(f"### Inside post, about to call create_document_transaction for {file.name}")
-                                self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
-                                print(f"### Finished create_document_transaction for {file.name}")
-                       
-                        # Delete the temporary transcript file
-                        os.unlink(transcript_file_path)
-                       
-                        # Process the document for RAG
-                        processed_data = self.process_document_from_text(extracted_text, transcript_filename)
-                       
-                        # Create ProcessedIndex
-                        ProcessedIndex.objects.create(
-                            document=document,
-                            faiss_index=processed_data['index_path'],
-                            metadata=processed_data['metadata_path'],
-                            summary="",
-                            markdown_path=processed_data.get('markdown_path', '')
-                        )
-                       
-                        uploaded_docs.append({
-                            'id': document.id,
-                            'filename': transcript_filename,
-                            'original_media_type': file_type
-                        })
-                       
-                        last_processed_doc_id = document.id
-                   
-                    finally:
-                        # Clean up temporary file
-                        if os.path.exists(file_path):
-                            os.unlink(file_path)
-               
-                # Regular file processing (non-media)
-                else:
-                    if existing_doc:
+
+                # --- Status: Uploaded ---
+                update_doc_status(user, file.name, "uploaded", 20, "File uploaded, awaiting processing...")
+
+                try:
+                    if is_media_file:
+                        # --- Status: Processing Media ---
+                        update_doc_status(user, file.name, "processing", 30, "Processing media file...")
+
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
+                            for chunk in file.chunks():
+                                tmp_file.write(chunk)
+                            file_path = tmp_file.name
+
                         try:
-                            processed_index = ProcessedIndex.objects.get(document=existing_doc)
-                            uploaded_docs.append({
-                                'id': existing_doc.id,
-                                'filename': existing_doc.filename
-                            })
-                            last_processed_doc_id = existing_doc.id
-                           
-                        except ProcessedIndex.DoesNotExist:
-                            # Process the document if no existing index
-                            processed_data = self.process_document(file, user)
-                           
-                            # Create ProcessedIndex
+                            if is_video_file:
+                                update_doc_status(user, file.name, "processing", 35, "Extracting audio from video...")
+                                extracted_text = self.extract_text_from_video(file_path, user=user)
+                            else:
+                                update_doc_status(user, file.name, "processing", 35, "Transcribing audio file...")
+                                extracted_text = self.extract_text_from_audio(file_path, user=user)
+
+                            if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
+                                update_doc_status(user, file.name, "error", 100, "Failed to extract text from media file.")
+                                return Response({'error': f'Failed to extract text from media file: {file.name}'}, status=status.HTTP_400_BAD_REQUEST)
+
+                            base_name = os.path.splitext(file.name)[0]
+                            file_type = "video" if is_video_file else "audio"
+                            transcript_filename = f"{base_name}_{file_type}_transcript.txt"
+
+                            update_doc_status(user, file.name, "processing", 45, "Processing transcript...")
+
+                            processed_data = self.process_document_from_text(extracted_text, transcript_filename)
+
+                            transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
+                            with open(transcript_file_path, 'w', encoding='utf-8') as f:
+                                f.write(extracted_text)
+
+                            try:
+                                with open(transcript_file_path, 'rb') as f:
+                                    from django.core.files import File
+                                    django_file = File(f, name=transcript_filename)
+
+                                    if existing_doc:
+                                        existing_doc.file = django_file
+                                        existing_doc.filename = transcript_filename
+                                        existing_doc.save()
+                                        document = existing_doc
+                                    else:
+                                        document = Document.objects.create(
+                                            user=user,
+                                            file=django_file,
+                                            filename=transcript_filename,
+                                            main_project=main_project
+                                        )
+                                        file_size = file.size if hasattr(file, 'size') else None
+                                        upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
+                                        self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size)
+                            finally:
+                                if os.path.exists(transcript_file_path):
+                                    os.unlink(transcript_file_path)
+
+                            # --- Status: Indexing ---
+                            update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
+
                             ProcessedIndex.objects.create(
-                                document=existing_doc,
+                                document=document,
                                 faiss_index=processed_data['index_path'],
                                 metadata=processed_data['metadata_path'],
                                 summary="",
                                 markdown_path=processed_data.get('markdown_path', '')
                             )
-                           
+
                             uploaded_docs.append({
-                                'id': existing_doc.id,
-                                'filename': existing_doc.filename
+                                'id': document.id,
+                                'filename': transcript_filename,
+                                'original_media_type': file_type
                             })
-                            last_processed_doc_id = existing_doc.id
+                            last_processed_doc_id = document.id
+
+                            # --- Status: Complete ---
+                            update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
+
+                        finally:
+                            if os.path.exists(file_path):
+                                os.unlink(file_path)
+
                     else:
-                        # Create new document
-                        document = Document.objects.create(
-                            user=user,
-                            file=file,
-                            filename=file.name,
-                            main_project=main_project
-                        )
-                        file_size = file.size if hasattr(file, 'size') else None
-                        upload_method = 'video_transcript' if is_video_file else 'audio_transcript' if is_audio_file else 'regular'
-                        print(f"##################Upload method: {upload_method}")
-                        print(f"### Inside post, about to call create_document_transaction for {file.name}")
-                        self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
-                        print(f"### Finished create_document_transaction for {file.name}")
- 
-                        # Process it
-                        processed_data = self.process_document(file, user)
-                       
-                        # Create ProcessedIndex
-                        ProcessedIndex.objects.create(
-                            document=document,
-                            faiss_index=processed_data['index_path'],
-                            metadata=processed_data['metadata_path'],
-                            summary="",
-                            markdown_path=processed_data.get('markdown_path', '')
-                        )
-                       
-                        uploaded_docs.append({
-                            'id': document.id,
-                            'filename': document.filename
-                        })
-                        last_processed_doc_id = document.id
-                       
-                        print(f"Uploaded Document - ID: {document.id}")
-                        print(f"Filename: {document.filename}")
- 
-            # Store the last processed document ID in the session
+                        # --- Status: Processing Document ---
+                        update_doc_status(user, file.name, "processing", 30, "Processing document...")
+
+                        if existing_doc:
+                            try:
+                                processed_index = ProcessedIndex.objects.get(document=existing_doc)
+                                uploaded_docs.append({
+                                    'id': existing_doc.id,
+                                    'filename': existing_doc.filename
+                                })
+                                last_processed_doc_id = existing_doc.id
+                                update_doc_status(user, file.name, "complete", 100, "Already processed!", doc_id=existing_doc.id)
+                            except ProcessedIndex.DoesNotExist:
+                                processed_data = self.process_document(file, user)
+                                existing_doc.file = file
+                                existing_doc.save()
+
+                                # --- Status: Indexing ---
+                                update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
+
+                                ProcessedIndex.objects.create(
+                                    document=existing_doc,
+                                    faiss_index=processed_data['index_path'],
+                                    metadata=processed_data['metadata_path'],
+                                    summary="",
+                                    markdown_path=processed_data.get('markdown_path', '')
+                                )
+                                uploaded_docs.append({
+                                    'id': existing_doc.id,
+                                    'filename': existing_doc.filename
+                                })
+                                last_processed_doc_id = existing_doc.id
+
+                                # --- Status: Complete ---
+                                update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=existing_doc.id)
+                        else:
+                            processed_data = self.process_document(file, user)
+
+                            document = Document.objects.create(
+                                user=user,
+                                file=file,
+                                filename=file.name,
+                                main_project=main_project
+                            )
+                            file_size = file.size if hasattr(file, 'size') else None
+                            upload_method = 'regular'
+                            self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
+
+                            # --- Status: Indexing ---
+                            update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
+
+                            ProcessedIndex.objects.create(
+                                document=document,
+                                faiss_index=processed_data['index_path'],
+                                metadata=processed_data['metadata_path'],
+                                summary="",
+                                markdown_path=processed_data.get('markdown_path', '')
+                            )
+                            uploaded_docs.append({
+                                'id': document.id,
+                                'filename': document.filename
+                            })
+                            last_processed_doc_id = document.id
+
+                            # --- Status: Complete ---
+                            update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
+
+                except Exception as e:
+                    update_doc_status(user, file.name, "error", 100, f"Error: {str(e)}")
+                    print(f"Error processing document: {str(e)}")
+                    return Response({
+                        'error': str(e),
+                        'detail': 'An error occurred while processing the document'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             request.session['active_document_id'] = last_processed_doc_id
- 
-            # Ensure we have processed_data before using it
+
             if processed_data is None:
-                return Response({
-                    'error': 'No documents were successfully processed'
-                }, status=status.HTTP_400_BAD_REQUEST)
- 
-            # Update project timestamp to track activity
+                return Response({'error': 'No documents were successfully processed'}, status=status.HTTP_400_BAD_REQUEST)
+
             update_project_timestamp(main_project_id, user)
- 
+
             return Response({
                 'message': 'Documents uploaded successfully',
                 'documents': uploaded_docs,
                 'active_document_id': last_processed_doc_id
             }, status=status.HTTP_201_CREATED)
- 
+
         except Exception as e:
             print(f"Error processing document: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while processing the document'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
- 
+    
  
  
     def create_document_transaction(self, user, document, main_project, upload_method, file_size=None):
@@ -2303,7 +2317,21 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             raise
 
 
+class DocumentProcessingStatusView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        statuses = DocumentProcessingStatus.objects.filter(user=request.user)
+        return Response([
+            {
+                "filename": s.document_name,
+                "status": s.status,
+                "progress": s.progress,
+                "message": s.message,
+                "document_id": s.document_id,
+            }
+            for s in statuses.order_by("created_at")
+        ])
 
 class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
     def post(self, request):
@@ -3664,190 +3692,6 @@ class ChatView(APIView):
         # If no special formatting needed, just return the original table lines
         return table_lines
 
-    def reconstruct_flattened_table(flattened_text):
-        """
-        Attempt to reconstruct a flattened markdown table.
-        This handles cases where a table has been completely flattened into a single line.
-        """
-        try:
-            # Check for common patterns of flattened tables
-            header_pattern = r'\|\s*([^|]+)\s*\|'
-            separator_pattern = r'\|\s*[-:]+\s*\|'
-            
-            # Check if this text contains both header and separator patterns
-            if re.search(separator_pattern, flattened_text):
-                # Find all table parts - each table row is delimited by | at start and end
-                parts = re.findall(r'\|[^|]+\|', flattened_text)
-                
-                if parts:
-                    # Find headers (should be text before the separator row)
-                    header_parts = []
-                    separator_parts = []
-                    data_parts = []
-                    
-                    # Identify which parts are headers, separators, and data
-                    found_separator = False
-                    for part in parts:
-                        if re.match(separator_pattern, part):
-                            separator_parts.append(part)
-                            found_separator = True
-                        elif not found_separator:
-                            header_parts.append(part)
-                        else:
-                            data_parts.append(part)
-                    
-                    # If we have header and separator, attempt to reconstruct
-                    if header_parts and separator_parts:
-                        # Join headers into a row
-                        headers_row = ' '.join(header_parts)
-                        # Join separators into a row
-                        separator_row = ' '.join(separator_parts)
-                        
-                        # Build data rows - group data parts into rows based on column count
-                        data_rows = []
-                        if data_parts:
-                            # Estimate number of columns from header row
-                            est_columns = headers_row.count('|') - 1
-                            
-                            # Group data parts into rows
-                            current_row = []
-                            for part in data_parts:
-                                current_row.append(part)
-                                if len(current_row) == est_columns:
-                                    data_rows.append(' '.join(current_row))
-                                    current_row = []
-                            
-                            # Add any remaining parts as a final row
-                            if current_row:
-                                data_rows.append(' '.join(current_row))
-                        
-                        # Combine into table
-                        table_lines = [headers_row, separator_row] + data_rows
-                        return '\n'.join(table_lines)
-                
-                # If we couldn't reconstruct using parts, try a different approach
-                # Look for patterns like | header1 | header2 | | --- | --- | | data1 | data2 |
-                headers_match = re.search(r'(\|[^|]*\|[^|]*\|+)', flattened_text)
-                if headers_match:
-                    header_text = headers_match.group(1)
-                    rest_text = flattened_text[headers_match.end():]
-                    
-                    # Look for separator row
-                    separator_match = re.search(r'(\|[\s-:]*\|[\s-:]*\|+)', rest_text)
-                    if separator_match:
-                        separator_text = separator_match.group(1)
-                        data_text = rest_text[separator_match.end():]
-                        
-                        # Count columns based on header row
-                        column_count = header_text.count('|') - 1
-                        
-                        # Split data text into rows based on column count
-                        data_parts = re.findall(r'\|[^|]*', data_text)
-                        data_rows = []
-                        current_row = []
-                        
-                        for part in data_parts:
-                            current_row.append(part)
-                            if len(current_row) == column_count:
-                                data_rows.append(''.join(current_row) + '|')
-                                current_row = []
-                        
-                        # Add any remaining parts
-                        if current_row:
-                            data_rows.append(''.join(current_row) + '|')
-                        
-                        # Combine into table
-                        return '\n'.join([header_text, separator_text] + data_rows)
-            
-            # If all else fails, look for standard markdown table pattern
-            table_pattern = r'(\|\s*[^|]+\s*\|[^|]*\|.*?)(\|\s*[-:]+\s*\|[-:\s|]*\|.*?)(\|.*)'
-            table_match = re.match(table_pattern, flattened_text)
-            
-            if table_match:
-                header_row = table_match.group(1)
-                separator_row = table_match.group(2)
-                data_rows = table_match.group(3)
-                
-                # Count pipes to estimate column count
-                column_count = header_row.count('|') - 1
-                
-                # Split data rows based on column count
-                data_parts = []
-                remaining = data_rows
-                while remaining and '|' in remaining:
-                    # Extract one row worth of cells
-                    current_row = []
-                    for i in range(column_count):
-                        cell_match = re.match(r'\|([^|]*)', remaining)
-                        if cell_match:
-                            current_row.append('|' + cell_match.group(1))
-                            remaining = remaining[cell_match.end():]
-                        else:
-                            break
-                    
-                    if current_row:
-                        data_parts.append(''.join(current_row) + '|')
-                
-                # Combine into table
-                if data_parts:
-                    return '\n'.join([header_row, separator_row] + data_parts)
-        
-        except Exception as e:
-            print(f"Error reconstructing flattened table: {str(e)}")
-        
-        # If all reconstruction attempts fail, return the original text
-        return flattened_text
-    
-    def format_table_section(section):
-        """Format a specific section that contains a markdown table."""
-        try:
-            lines = section.split('\n')
-            
-            # Identify important table parts - look for the header row and separator row
-            header_idx = -1
-            separator_idx = -1
-            
-            for i, line in enumerate(lines):
-                if ('|---' in line or '| ---' in line or '|----' in line) and separator_idx == -1:
-                    separator_idx = i
-                    # Header is typically right before the separator
-                    header_idx = i - 1 if i > 0 else i
-                    break
-            
-            # If we couldn't identify the table structure, return as is
-            if separator_idx == -1 or header_idx < 0:
-                # This might be a single-line flattened table, try to reconstruct it
-                for i, line in enumerate(lines):
-                    if '|' in line and any(marker in line for marker in ['|---', '| ---', '|----']):
-                        # This line probably contains flattened table parts
-                        reconstructed = reconstruct_flattened_table(line)
-                        if reconstructed:
-                            # Replace the line with reconstructed table
-                            lines[i] = reconstructed
-                            break
-                
-                return '\n'.join(lines)
-            
-            # Get the header and separator rows
-            header_row = lines[header_idx]
-            separator_row = lines[separator_idx]
-            
-            # Check if this is a flattened table where header, separator and data are all in one line
-            if '|' in header_row and ('|---' in header_row or '|----' in header_row):
-                # Try to reconstruct a flattened table
-                reconstructed = reconstruct_flattened_table(header_row)
-                if reconstructed:
-                    # Replace the flattened table with the reconstructed one
-                    lines[header_idx] = reconstructed
-                    # Remove the separator row if it was part of the flattened table
-                    if separator_idx > header_idx:
-                        lines.pop(separator_idx)
-                
-            return '\n'.join(lines)
-        
-        except Exception as e:
-            print(f"Error formatting table section: {str(e)}")
-            return section
 
     
     def scrape_webpage(self, url):

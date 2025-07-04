@@ -166,20 +166,23 @@ const Header = () => {
   }, [mainProjectId]);
  
   const handleLogout = () => {
-    try {
-      localStorage.removeItem("token");
-      localStorage.removeItem("username");
-      localStorage.removeItem("profile_image");
-      localStorage.removeItem("disabled_modules");
-      localStorage.removeItem("project_modules");
- 
-      toast.success("Logged out successfully");
-      navigate("/auth");
-    } catch (error) {
-      console.error("Logout error:", error);
-      toast.error("Failed to log out. Please try again.");
-    }
-  };
+  try {
+    localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("profile_image");
+    localStorage.removeItem("disabled_modules");
+    localStorage.removeItem("project_modules");
+
+    toast.success("Logged out successfully");
+    navigate("/auth");
+    setTimeout(() => {
+      window.location.reload(); // Ensures all React state and effects are reset
+    }, 100); // Small delay to allow navigation
+  } catch (error) {
+    console.error("Logout error:", error);
+    toast.error("Failed to log out. Please try again.");
+  }
+};
  
   const handleNavigateHome = () => {
     navigate("/landing");

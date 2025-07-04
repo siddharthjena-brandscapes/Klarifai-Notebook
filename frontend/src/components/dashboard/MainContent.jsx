@@ -1,5 +1,3 @@
-
-
 // MainContent.jsx
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -82,9 +80,6 @@ const MainContent = ({
   const [isFollowUpQuestionsMinimized, setIsFollowUpQuestionsMinimized] =
     useState(true);
   const chatContainerRef = useRef(null);
-  const [localSelectedDocuments, setLocalSelectedDocuments] = useState(
-    propSelectedDocuments || [] // Initialize with prop value if provided
-  );
 
   // New state for persistent summary
   const [persistentSummary, setPersistentSummary] = useState("");
@@ -120,7 +115,7 @@ const MainContent = ({
 
   // Add this state variable inside MainContent component
   const [useWebKnowledge, setUseWebKnowledge] = useState(
-    localSelectedDocuments.length === 0 ? true : false
+    propSelectedDocuments.length === 0 ? true : false
   );
   const [isRecording, setIsRecording] = useState(false);
 
@@ -136,6 +131,7 @@ const MainContent = ({
   const [regeneratedResponses, setRegeneratedResponses] = useState({});
   const [currentResponseIndex, setCurrentResponseIndex] = useState({});
   const [textSize, setTextSize] = useState("medium");
+  const [currentUploadFilenames, setCurrentUploadFilenames] = useState([]);
 
   // Add this inside your MainContent component
   useEffect(() => {
@@ -163,6 +159,24 @@ const MainContent = ({
       setTextSize(savedTextSize);
     }
   }, []);
+
+  useEffect(() => {
+  let intervalId;
+  if (isDocumentProcessing) {
+    // Poll the backend every 2 seconds for document processing status
+    const fetchStatus = async () => {
+      try {
+        const res = await documentService.getProcessingStatus();
+        setProcessingDocuments(res.data); // [{filename, status, progress, message, document_id}]
+      } catch (e) {
+        // Optionally handle error
+      }
+    };
+    fetchStatus();
+    intervalId = setInterval(fetchStatus, 2000);
+  }
+  return () => clearInterval(intervalId);
+}, [isDocumentProcessing]);
 
 
   // Add this right after the imports and before the MainContent component definition
@@ -276,18 +290,18 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
     }
     
     // Force web mode when no documents are selected
-    const useWebMode = localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+    const useWebMode = propSelectedDocuments.length === 0 ? true : useWebKnowledge;
     
     // Prepare request data for the API
     const requestData = {
       message: userMessage,
       conversation_id: conversationId,
-      selected_documents: localSelectedDocuments,
+      selected_documents: propSelectedDocuments,
       main_project_id: mainProjectId,
       use_web_knowledge: useWebMode,
       response_length: length,
       response_format: responseFormat,
-      general_chat_mode: localSelectedDocuments.length === 0,
+      general_chat_mode: propSelectedDocuments.length === 0,
       regenerate: true
     };
     
@@ -411,13 +425,13 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
   }, []);
   useEffect(() => {
     // If no documents are selected, force web knowledge mode on
-    if (localSelectedDocuments.length === 0) {
+    if (propSelectedDocuments.length === 0) {
       setUseWebKnowledge(true);
     } else {
       // When documents are selected, default to context-only mode (web knowledge off)
       setUseWebKnowledge(false);
     }
-  }, [localSelectedDocuments]);
+  }, [propSelectedDocuments]);
 
   // Updated Response Length Toggle Component
   const ResponseLengthToggle = ({ responseLength, setResponseLength }) => {
@@ -688,7 +702,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
   // New method to toggle between chat and summary views
   // Updated toggleView method
   const toggleView = (view) => {
-    if (view === "summary" && localSelectedDocuments.length === 0) {
+    if (view === "summary" && propSelectedDocuments.length === 0) {
       toast.warning(
         "Please upload a document or select at least one document to view the summary."
       );
@@ -704,7 +718,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
   // Add this function to handle the toggle
   const toggleWebKnowledge = () => {
     // If no documents are selected, don't allow turning off web mode
-    if (localSelectedDocuments.length === 0) {
+    if (propSelectedDocuments.length === 0) {
       toast.info("Web mode is required when no documents are selected");
       return;
     }
@@ -733,7 +747,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
 
   // Add new method to handle summary generation
   const handleGenerateSummary = async () => {
-    if (!localSelectedDocuments.length) {
+    if (!propSelectedDocuments.length) {
       toast.warning("Please select documents to generate summary");
       return;
     }
@@ -741,7 +755,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
     setIsSummaryGenerating(true);
     try {
       const response = await documentService.generateSummary(
-        localSelectedDocuments,
+        propSelectedDocuments,
         mainProjectId
       );
 
@@ -782,7 +796,7 @@ const handleRegenerateResponse = async (messageIndex, length = responseLength) =
 
 const renderSummaryView = () => {
   // If no documents are selected, show a placeholder
-  if (!localSelectedDocuments || localSelectedDocuments.length === 0) {
+  if (!propSelectedDocuments || propSelectedDocuments.length === 0) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center text-[#5a544a] dark:text-gray-400">
         <p className="mb-4">No documents selected</p>
@@ -799,14 +813,14 @@ const renderSummaryView = () => {
   }
 
   // Get the currently active document for summary view
-  const currentDocId = activeDocumentForSummary || localSelectedDocuments[0];
+  const currentDocId = activeDocumentForSummary || propSelectedDocuments[0];
   const currentDocument = documents.find(
     (doc) => doc.id.toString() === currentDocId
   );
 
   // Check if all selected documents have summaries
   const selectedDocs = documents.filter((doc) =>
-    localSelectedDocuments.includes(doc.id.toString())
+    propSelectedDocuments.includes(doc.id.toString())
   );
   const allDocsHaveSummaries = selectedDocs.every(
     (doc) => doc.summary && doc.summary.trim() !== ""
@@ -837,9 +851,9 @@ const renderSummaryView = () => {
       // Move selected document to front of array
       const updatedDocs = [
         newDocId,
-        ...localSelectedDocuments.filter((id) => id !== newDocId),
+        ...propSelectedDocuments.filter((id) => id !== newDocId),
       ];
-      setLocalSelectedDocuments(updatedDocs);
+      setSelectedDocuments(updatedDocs);
 
       if (setSelectedDocuments) {
         setSelectedDocuments(updatedDocs);
@@ -899,17 +913,17 @@ const renderSummaryView = () => {
 
               {isConsolidatedView && (
                 <ConsolidatedViewBadge
-                  documentCount={localSelectedDocuments.length}
+                  documentCount={propSelectedDocuments.length}
                 />
               )}
             </div>
 
             <div className="flex items-center space-x-3">
               {/* Enhanced Document Selector */}
-              {localSelectedDocuments.length > 0 && (
+              {propSelectedDocuments.length > 0 && (
                 <DocumentSelector
                   documents={documents}
-                  selectedDocuments={localSelectedDocuments}
+                  selectedDocuments={propSelectedDocuments}
                   activeDocumentId={activeDocumentForSummary}
                   isConsolidatedView={isConsolidatedView}
                   onDocumentChange={handleDocumentChange}
@@ -1079,7 +1093,7 @@ const renderSummaryView = () => {
       const documentIds = selectedChat.selected_documents.map((doc) =>
         typeof doc === "object" ? doc.id.toString() : doc.toString()
       );
-      setLocalSelectedDocuments(documentIds);
+      setSelectedDocuments(documentIds);
       setActiveDocumentForSummary(documentIds[0]);
 
       // Important: Also update the parent's selectedDocuments
@@ -1125,20 +1139,20 @@ const renderSummaryView = () => {
   useEffect(() => {
     // Sync local state with prop when prop changes
     if (propSelectedDocuments) {
-      setLocalSelectedDocuments(propSelectedDocuments);
+      setSelectedDocuments(propSelectedDocuments);
     }
   }, [propSelectedDocuments]);
 
   useEffect(() => {
     // When local state changes, update the prop
     if (setSelectedDocuments) {
-      setSelectedDocuments(localSelectedDocuments);
+      setSelectedDocuments(propSelectedDocuments);
     }
-  }, [localSelectedDocuments, setSelectedDocuments]);
+  }, [propSelectedDocuments, setSelectedDocuments]);
 
   // 4. Add method to generate consolidated summary
   const handleGenerateConsolidatedSummary = async () => {
-    if (localSelectedDocuments.length <= 1) {
+    if (propSelectedDocuments.length <= 1) {
       toast.warning(
         "Please select at least two documents for a consolidated summary"
       );
@@ -1156,7 +1170,7 @@ const renderSummaryView = () => {
       });
 
       const response = await documentService.generateConsolidatedSummary(
-        localSelectedDocuments,
+        propSelectedDocuments,
         mainProjectId
       );
 
@@ -1210,181 +1224,7 @@ const renderSummaryView = () => {
     return () => clearInterval(intervalId);
   }, [fetchUserDocuments]);
 
-  // const handleFileChange = async (event) => {
-  //   if (!hasUploadPermissions) {
-  //     toast.error(
-  //       "You do not have permission to upload documents. Please contact your administrator."
-  //     );
-  //     event.target.value = ""; // Clear the file input
-  //     return;
-  //   }
-  //   const selectedFiles = Array.from(event.target.files);
-  //   if (!selectedFiles.length) return;
 
-  //   setIsDocumentProcessing(true);
-  //   setProcessingProgress(0);
-
-  //   // Track document names and statuses for display
-  //   const processingDocuments = selectedFiles.map((file) => ({
-  //     filename: file.name,
-  //     status: "waiting",
-  //     progress: 0,
-  //     message: "Waiting to upload",
-  //   }));
-  //   setProcessingDocuments(processingDocuments);
-
-  //   try {
-  //     const formData = new FormData();
-  //     selectedFiles.forEach((file) => {
-  //       formData.append("files", file);
-  //     });
-  //     formData.append("main_project_id", mainProjectId);
-
-  //     // Calculate total upload size for progress tracking
-  //     const totalUploadSize = selectedFiles.reduce(
-  //       (total, file) => total + file.size,
-  //       0
-  //     );
-
-  //     // Setup internal tracking variables
-  //     let uploadStage = 0; // 0: starting, 1: uploading, 2: processing, 3: completed
-
-  //     // Make the upload request with progress tracking
-  //     const response = await documentService.uploadDocument(
-  //       formData,
-  //       mainProjectId,
-  //       {
-  //         onUploadProgress: (progressEvent) => {
-  //           // Calculate upload progress (0-70%)
-  //           const uploadPercentage = Math.round(
-  //             (progressEvent.loaded * 100) / totalUploadSize
-  //           );
-  //           const scaledProgress = Math.floor(uploadPercentage * 0.7); // Scale to 0-70%
-
-  //           uploadStage = 1; // mark as uploading
-  //           setProcessingProgress(scaledProgress);
-
-  //           // Update document statuses
-  //           setProcessingDocuments((prevDocs) => {
-  //             return prevDocs.map((doc, index) => {
-  //               // Stagger the upload progress for multiple files
-  //               const fileProgress = Math.min(
-  //                 100,
-  //                 uploadPercentage - index * 10 // Stagger by 10% per file
-  //               );
-
-  //               return {
-  //                 ...doc,
-  //                 status: fileProgress > 0 ? "uploading" : "waiting",
-  //                 progress: Math.max(0, fileProgress),
-  //                 message:
-  //                   fileProgress > 0
-  //                     ? `Uploading: ${Math.min(100, fileProgress)}%`
-  //                     : "Waiting to upload",
-  //               };
-  //             });
-  //           });
-  //         },
-  //       }
-  //     );
-
-  //     // Upload is complete, now show processing stage (70-90%)
-  //     uploadStage = 2;
-  //     setProcessingProgress(75);
-
-  //     // Update document statuses to reflect the transition to processing
-  //     setProcessingDocuments((prevDocs) => {
-  //       return prevDocs.map((doc) => ({
-  //         ...doc,
-  //         status: "processing",
-  //         progress: 75,
-  //         message: "Processing document",
-  //       }));
-  //     });
-
-  //     // Process the response
-  //     const documents = response.data.documents || [];
-  //     const uploadResults = response.data.upload_results || [];
-
-  //     // Update document statuses with results from the server
-  //     if (uploadResults.length > 0) {
-  //       setProcessingDocuments((prevDocs) => {
-  //         const updatedDocs = [...prevDocs];
-
-  //         // Match results to documents by filename
-  //         uploadResults.forEach((result) => {
-  //           const docIndex = updatedDocs.findIndex(
-  //             (doc) => doc.filename === result.filename
-  //           );
-  //           if (docIndex !== -1) {
-  //             updatedDocs[docIndex] = {
-  //               ...updatedDocs[docIndex],
-  //               id: result.id,
-  //               status: result.status,
-  //               progress: result.progress,
-  //               message: result.message,
-  //             };
-  //           }
-  //         });
-
-  //         return updatedDocs;
-  //       });
-  //     }
-
-  //     // Gradually increase progress to 100% to show processing completion
-  //     for (let progress = 80; progress <= 100; progress += 5) {
-  //       setProcessingProgress(progress);
-  //       await new Promise((resolve) => setTimeout(resolve, 300)); // Short delay between updates
-  //     }
-
-  //     uploadStage = 3; // mark as completed
-
-  //     if (documents.length > 0) {
-  //       // Automatically select all uploaded documents
-  //       const newSelectedDocuments = documents.map((doc) => doc.id.toString());
-  //       setLocalSelectedDocuments(newSelectedDocuments);
-
-  //       if (setSelectedDocuments) {
-  //         setSelectedDocuments(newSelectedDocuments);
-  //       }
-
-  //       setCurrentView("chat");
-
-  //       // Update documents list
-  //       setDocuments((prevDocs) => {
-  //         const newDocs = documents.filter(
-  //           (newDoc) =>
-  //             !prevDocs.some((existingDoc) => existingDoc.id === newDoc.id)
-  //         );
-  //         return [...prevDocs, ...newDocs];
-  //       });
-
-  //       // Show success message and close dialog
-  //       setTimeout(() => {
-  //         toast.success(
-  //           `${documents.length} document${
-  //             documents.length > 1 ? "s" : ""
-  //           } uploaded successfully!`
-  //         );
-  //         setIsDocumentProcessing(false);
-  //       }, 1000);
-  //     }
-  //   } catch (error) {
-  //     console.error("Upload Error:", error);
-  //     toast.error("Upload failed. Please try again.");
-  //     setIsDocumentProcessing(false);
-
-  //     // Update document statuses to error
-  //     setProcessingDocuments((prevDocs) => {
-  //       return prevDocs.map((doc) => ({
-  //         ...doc,
-  //         status: "error",
-  //         progress: 0,
-  //         message: "Upload failed",
-  //       }));
-  //     });
-  //   }
-  // };
 
 const handleFileChange = async (event) => {
   if (!hasUploadPermissions) {
@@ -1397,6 +1237,7 @@ const handleFileChange = async (event) => {
   const selectedFiles = Array.from(event.target.files);
   if (!selectedFiles.length) return;
 
+  setCurrentUploadFilenames(selectedFiles.map(f => f.name));
   setIsDocumentProcessing(true);
   setProcessingProgress(0);
 
@@ -1507,7 +1348,7 @@ const handleFileChange = async (event) => {
 
     if (documents.length > 0) {
       const newSelectedDocuments = documents.map((doc) => doc.id.toString());
-      setLocalSelectedDocuments(newSelectedDocuments);
+      setSelectedDocuments(newSelectedDocuments);
 
       if (setSelectedDocuments) {
         setSelectedDocuments(newSelectedDocuments);
@@ -1564,6 +1405,10 @@ const handleFileChange = async (event) => {
   }
 };
 
+const filteredProcessingDocuments = processingDocuments.filter(doc =>
+  currentUploadFilenames.includes(doc.filename)
+);
+
 const handleSendMessage = async (message) => {
   if (!message.trim()) return;
 
@@ -1583,19 +1428,19 @@ const handleSendMessage = async (message) => {
   try {
     // Force useWebKnowledge to true if no documents are selected
     const useWebMode =
-      localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+      propSelectedDocuments.length === 0 ? true : useWebKnowledge;
 
     // Prepare request data
     const messageData = {
       message,
       conversation_id: conversationId,
-      selected_documents: localSelectedDocuments,
+      selected_documents: propSelectedDocuments,
       main_project_id: mainProjectId,
       messages: newConversation,
       use_web_knowledge: useWebMode,
       response_length: responseLength,
       response_format: responseFormat,
-      general_chat_mode: localSelectedDocuments.length === 0,
+      general_chat_mode: propSelectedDocuments.length === 0,
     };
 
     console.log("🚀 SENDING REQUEST TO BACKEND:", messageData);
@@ -1935,19 +1780,19 @@ const WebSourcesDisplay = ({ sources }) => {
 
     // Force web mode when no documents are selected
     const useWebMode =
-      localSelectedDocuments.length === 0 ? true : useWebKnowledge;
+      propSelectedDocuments.length === 0 ? true : useWebKnowledge;
 
     // Prepare request data for the API
     const requestData = {
       message: newContent,
       conversation_id: conversationId,
-      selected_documents: localSelectedDocuments,
+      selected_documents: propSelectedDocuments,
       main_project_id: mainProjectId,
       context: conversationUpToEdit,
       use_web_knowledge: useWebMode,
       response_length: currentResponseLength,
       response_format: currentResponseFormat,
-      general_chat_mode: localSelectedDocuments.length === 0,
+      general_chat_mode: propSelectedDocuments.length === 0,
     };
 
     // Send to API and get new response
@@ -1982,7 +1827,7 @@ const WebSourcesDisplay = ({ sources }) => {
       use_web_knowledge: response.data.use_web_knowledge || useWebMode,
       response_length: response.data.response_length || currentResponseLength,
       response_format: response.data.response_format || currentResponseFormat,
-      general_chat_mode: localSelectedDocuments.length === 0,
+      general_chat_mode: propSelectedDocuments.length === 0,
       webSources: webSources, // Add processed web sources
       sources_info: response.data.sources_info, // Store original sources_info
       extracted_urls: response.data.extracted_urls, // Store original extracted_urls
@@ -2215,12 +2060,12 @@ const WebSourcesDisplay = ({ sources }) => {
             >
               {/* Add welcome components based on document selection */}
 {conversation.length === 0 && (
-  localSelectedDocuments.length === 0 ? (
+  propSelectedDocuments.length === 0 ? (
     <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
   ) : (
     <DocumentModeWelcome 
       className="mt-4 mx-auto max-w-3xl" 
-      selectedDocuments={localSelectedDocuments}
+      selectedDocuments={propSelectedDocuments}
       documents={documents}
     />
   )
@@ -2447,9 +2292,9 @@ const WebSourcesDisplay = ({ sources }) => {
   )
 )}
 {/* NEW: Display web sources if available */}
-    {msg.webSources && msg.webSources.length > 0 && (
-      <WebSourcesDisplay sources={msg.webSources} />
-    )}
+   {msg.webSources && msg.webSources.length > 0 && propSelectedDocuments.length > 0 && (
+  <WebSourcesDisplay sources={msg.webSources} />
+)}
 
                       {/* Add Copy option for Klarifai messages only */}
                       {msg.role !== "user" && (
@@ -2680,7 +2525,7 @@ const WebSourcesDisplay = ({ sources }) => {
               }
             }}
             placeholder={
-              localSelectedDocuments.length === 0
+              propSelectedDocuments.length === 0
                 ? "Ask me anything using web knowledge..."
                 : useWebKnowledge
                 ? "Ask me about your documents with web assistance..."
@@ -2764,7 +2609,7 @@ const WebSourcesDisplay = ({ sources }) => {
             </button>
             
             {/* Context/Web knowledge toggle */}
-            {localSelectedDocuments.length > 0 ? (
+            {propSelectedDocuments.length > 0 ? (
               <button
                 onClick={toggleWebKnowledge}
                 title={
@@ -2853,21 +2698,24 @@ const WebSourcesDisplay = ({ sources }) => {
         )}
       </div>
       {/* Document Processing Loader - Add this at the top level */}
-      {isDocumentProcessing && (
-        <DocumentProcessingLoader
-          progress={processingProgress}
-          documents={processingDocuments}
-          onComplete={() => {
-            setIsDocumentProcessing(false);
-            setProcessingDocuments([]);
-          }}
-          onCancel={() => {
-            setIsDocumentProcessing(false);
-            setProcessingDocuments([]);
-            toast.info("Document processing cancelled");
-          }}
-        />
-      )}
+     {isDocumentProcessing && (
+  <DocumentProcessingLoader
+    documents={filteredProcessingDocuments}
+    queuedFilenames={currentUploadFilenames}
+    showLoader={isDocumentProcessing}
+    onComplete={() => {
+      setIsDocumentProcessing(false);
+      setProcessingDocuments([]);
+      setCurrentUploadFilenames([]);
+    }}
+    onCancel={() => {
+      setIsDocumentProcessing(false);
+      setProcessingDocuments([]);
+      setCurrentUploadFilenames([]);
+      toast.info("Document processing cancelled");
+    }}
+  />
+)}
 
       {/* Custom Scrollbar Styles */}
       <style>{`

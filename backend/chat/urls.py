@@ -25,7 +25,8 @@ from .views import (LoginView, SignupView, DocumentUploadView, GenerateIdeaConte
      ChatExportView,
      AdminUserStatsView,
      MicrosoftSSOCallbackView,
-     MicrosoftSSOView
+     MicrosoftSSOView,
+     DocumentProcessingStatusView
     
 )
 
@@ -78,6 +79,7 @@ urlpatterns = [
     path('api/admin/user-stats/', AdminUserStatsView.as_view(), name='admin-user-stats'),
     path('microsoft-sso/', MicrosoftSSOView.as_view(), name='microsoft_sso'),
     path('get_token/', MicrosoftSSOCallbackView.as_view(), name='microsoft_sso_callback'),
+    path('document-processing-status/', DocumentProcessingStatusView.as_view(), name='document-processing-status'),
     
    
     

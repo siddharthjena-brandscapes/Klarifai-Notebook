@@ -5,14 +5,13 @@ import React, { useState } from 'react';
 import { 
   Brain, 
   StickyNote, 
-  ChevronLeft, 
-  ChevronRight, 
+ 
   BookOpen, 
-  PanelLeftClose, 
+ 
   PanelLeft, 
   PanelRight,
   History,
-  Plus
+
 } from 'lucide-react';
 import PropTypes from 'prop-types';
 import MindMapHistory from './MindMapHistory';

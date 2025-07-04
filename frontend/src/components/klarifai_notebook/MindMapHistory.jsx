@@ -311,16 +311,16 @@ const MindMapHistory = ({
                   {/* Mindmap Header */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center space-x-2">
-                      <Brain className="w-5 h-5 text-purple-500" />
-                      <h3 className="font-medium text-sm">{mindmap.title}</h3>
+                      {/* <Brain className="w-5 h-5 text-purple-500" /> */}
+                      <p className="text-sm line-clamp-2">
+                      <h3 className="font-medium text-sm line-clamp-2"> {mindmap.preview}</h3>
+                    </p>
                     </div>
                   </div>
 
                   {/* Preview */}
                   <div className="mb-3">
-                    <p className="text-sm opacity-70 line-clamp-2">
-                      {mindmap.preview}
-                    </p>
+                   
                   </div>
 
                   {/* Stats */}

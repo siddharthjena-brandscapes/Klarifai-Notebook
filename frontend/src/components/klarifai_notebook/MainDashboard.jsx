@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
-import { Menu, ChevronRight, ChevronLeft, X, Brain } from 'lucide-react';
+// import { Menu, ChevronRight, ChevronLeft, X, Brain } from 'lucide-react';
 import Header from '../dashboard/Header';
 import MainChat from './MainChat';
 import backgroundImage from '../../assets/bg-main.jpg';
@@ -19,7 +19,7 @@ import MindMapViewer from "../klarifai_notebook/MindMapViewer";
 import RightPanel from "./RightPanel";
 import MindMapHistory from "../klarifai_notebook/MindMapHistory";
 import BrainLoadingAnimation from '../klarifai_notebook/BrainLoadingAnimation';
-import DocumentSelectionModal from "../klarifai_notebook/DocumentSelectionModal";
+// import DocumentSelectionModal from "../klarifai_notebook/DocumentSelectionModal";
 
 const MainDashboard = () => {
   const { mainProjectId } = useParams();
@@ -60,7 +60,7 @@ const MainDashboard = () => {
   const [currentDocumentSet, setCurrentDocumentSet] = useState([]);
   const [lastDocumentSignature, setLastDocumentSignature] = useState('');
 
-  const [isDocumentSelectionModalOpen, setIsDocumentSelectionModalOpen] = useState(false);
+  // const [isDocumentSelectionModalOpen, setIsDocumentSelectionModalOpen] = useState(false);
   const [documents, setDocuments] = useState([]);
 
   // NEW: Helper function to create document signature
@@ -424,11 +424,7 @@ const handleDocumentContextChange = useCallback((newDocuments, source = 'unknown
   }
 };
 
-  const handleCloseMindmapViewer = () => {
-    setIsMindmapViewerOpen(false);
-    setMindmapData(null);
-    setCurrentMindmapId(null);
-  };
+ 
 
   const handleOpenNoteViewer = (noteData) => {
     setModalViewerNoteData(noteData);

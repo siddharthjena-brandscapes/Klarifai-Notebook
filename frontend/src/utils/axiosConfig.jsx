@@ -501,6 +501,9 @@ export const documentService = {
       main_project_id: data.main_project_id,
     });
   },
+
+  getProcessingStatus: () => axiosInstance.get("/document-processing-status/"),
+
 };
 
 export const chatService = {
@@ -763,18 +766,36 @@ export const userService = {
   },
 
   
-   getCurrentUserRightPanelPermissions: () => {
-    return axiosInstance
-      .get("core/user/right-panel-permissions/")  // Added 'core/'
-      .then((response) => {
-        console.log("User service - get right panel permissions response:", response.data);
-        return response.data.data;
-      })
-      .catch((error) => {
-        console.error("User service - get right panel permissions error:", error);
-        throw error;
-      });
-  },
+  //  getCurrentUserRightPanelPermissions: () => {
+  //   console.log('Calling getCurrentUserRightPanelPermissions');
+  //   return axiosInstance
+  //     .get("core/user/right-panel-permissions/")  // Added 'core/'
+  //     .then((response) => {
+  //       console.log("User service - get right panel permissions response:", response.data);
+  //       return response.data.data;
+  //     })
+  //     .catch((error) => {
+  //       console.error("User service - get right panel permissions error:", error);
+  //       throw error;
+  //     });
+  // },
+  getCurrentUserRightPanelPermissions: () => {
+  console.log('Calling getCurrentUserRightPanelPermissions');
+  const token = localStorage.getItem('token');
+  if (!token) {
+    console.warn('No token, not calling right-panel-permissions API');
+    return Promise.resolve({});
+  }
+  return axiosInstance.get("core/user/right-panel-permissions/")
+    .then((response) => {
+      console.log("User service - get right panel permissions response:", response.data);
+      return response.data.data;
+    })
+    .catch((error) => {
+      console.error("User service - get right panel permissions error:", error);
+      throw error;
+    });
+},
 };
 
 export const coreService = {
@@ -1386,6 +1407,8 @@ export const documentServiceNB = {
     });
   },
 
+  getProcessingStatus: () => axiosInstance.get("notebook/document-processing-status/"),
+
   deleteDocument: (documentId, mainProjectId) =>
     axiosInstance.delete(`notebook/documents-NB/${documentId}/delete/`, {
       params: { main_project_id: mainProjectId },
@@ -1891,7 +1914,7 @@ export const mindmapServiceNB = {
   },
 
   // Check if mindmap exists for documents (useful for UI state)
-  checkMindmapExists: async (mainProjectId, selectedDocuments = [], targetUserId = null) => {
+  checkMindmapExists: async (mainProjectId = [], targetUserId = null) => {
     try {
       const response = await this.getUserMindmaps(mainProjectId, {}, targetUserId);
       
