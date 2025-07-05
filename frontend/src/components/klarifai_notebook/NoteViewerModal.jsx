@@ -112,7 +112,7 @@ const NoteViewerModal = ({
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#e3d5c8] dark:border-blue-500/20 bg-[#f0eee5] dark:bg-gray-800/80 rounded-t-xl">
+        <div className="flex items-center justify-between p-2 border-b border-[#e3d5c8] dark:border-blue-500/20 bg-[#f0eee5] dark:bg-gray-800/80 rounded-t-xl">
           <div className="flex items-center space-x-3">
             <Eye className="h-5 w-5 text-[#a55233] dark:text-blue-400" />
             <h2 className="text-lg font-semibold text-[#5e4636] dark:text-white">
@@ -155,22 +155,23 @@ const NoteViewerModal = ({
                 <Maximize2 className="h-4 w-4" />
               )}
             </button>
-{/* Edit Button - Only show if not a Document Source */}
-           {!note.is_converted_to_document && (
-  <button
-    onClick={() => {
-      onEdit();
-      onClose();
-    }}
-    className="px-4 py-2 bg-[#a55233] dark:bg-blue-600 hover:bg-[#8b4513] dark:hover:bg-blue-700
-               text-white rounded-lg transition-colors
-               flex items-center space-x-2"
-    title="Edit Note"
-  >
-    <Edit3 className="h-4 w-4" />
-    <span>Edit</span>
-  </button>
-)}
+
+            {/* Edit Button - Only show if not a Document Source */}
+            {!note.is_converted_to_document && (
+              <button
+                onClick={() => {
+                  onEdit();
+                  onClose();
+                }}
+                className="px-4 py-2 bg-[#a55233] dark:bg-blue-600 hover:bg-[#8b4513] dark:hover:bg-blue-700
+                           text-white rounded-lg transition-colors
+                           flex items-center space-x-2"
+                title="Edit Note"
+              >
+                <Edit3 className="h-4 w-4" />
+                <span>Edit</span>
+              </button>
+            )}
 
             {/* Close Button */}
             <button
@@ -189,7 +190,7 @@ const NoteViewerModal = ({
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col">
             {/* Title Section */}
-            <div className="p-4 border-b border-[#e3d5c8] dark:border-blue-500/20">
+            <div className="p-3 border-b border-[#e3d5c8] dark:border-blue-500/20">
               <div className="flex items-start space-x-3">
                 <Type className="h-6 w-6 text-[#a55233] dark:text-blue-400 flex-shrink-0 mt-1" />
                 <div className="flex-1 min-w-0">
@@ -218,18 +219,21 @@ const NoteViewerModal = ({
             </div>
 
             {/* Note Content */}
-            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+            <div className="flex-1 overflow-hidden">
               <div 
                 ref={contentRef}
                 tabIndex={0}
-                className="prose prose-lg max-w-none min-w-0
-                           text-[#5e4636] dark:text-white
-                           focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-blue-400
-                           rounded-lg p-6 -m-4"
+                className="h-full w-full p-4 overflow-y-auto focus:outline-none
+                           text-[#5e4636] dark:text-white text-base leading-relaxed
+                           prose prose-lg max-w-none custom-scrollbar"
+                style={{
+                  minHeight: '100%',
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word'
+                }}
               >
                 {note.content ? (
                   <div 
-                    className="ql-editor" 
                     dangerouslySetInnerHTML={createSanitizedHtml(note.content)}
                   />
                 ) : (
@@ -243,7 +247,7 @@ const NoteViewerModal = ({
             </div>
 
             {/* Footer Info */}
-            <div className="flex flex-wrap items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 p-6 pt-0 gap-2">
+            <div className="flex flex-wrap items-center justify-between text-xs text-[#8c715f] dark:text-gray-400 p-2 pt-3 gap-2">
               <span>
                 {note.content ? note.content.replace(/<[^>]*>/g, '').length : 0} characters • {getWordCount(note.content)} words
               </span>
@@ -252,96 +256,116 @@ const NoteViewerModal = ({
               </span>
             </div>
           </div>
-
-          {/* Sidebar with metadata (only in maximized mode) */}
-          {isMaximized && (
-            <div className="w-80 border-l border-[#e3d5c8] dark:border-blue-500/20 bg-[#f9f7f4] dark:bg-gray-800/50 p-4 overflow-y-auto custom-scrollbar">
-              <h3 className="text-sm font-semibold text-[#5e4636] dark:text-white mb-4">
-                Note Information
-              </h3>
-              
-              <div className="space-y-4">
-                {/* Creation Date */}
-                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
-                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-1">Created</h4>
-                  <p className="text-sm text-[#5e4636] dark:text-white break-words">
-                    {formatDate(note.created_at)}
-                  </p>
-                </div>
-
-                {/* Last Modified */}
-                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
-                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-1">Last Modified</h4>
-                  <p className="text-sm text-[#5e4636] dark:text-white break-words">
-                    {formatDate(note.updated_at)}
-                  </p>
-                </div>
-
-                {/* Statistics */}
-                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
-                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-2">Statistics</h4>
-                  <div className="space-y-2 text-sm text-[#5e4636] dark:text-white">
-                    <div className="flex justify-between">
-                      <span>Characters:</span>
-                      <span>{note.content ? note.content.replace(/<[^>]*>/g, '').length : 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Words:</span>
-                      <span>{getWordCount(note.content)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Lines:</span>
-                      <span>{note.content ? note.content.split('\n').length : 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Reading time:</span>
-                      <span>~{getReadingTime(note.content)} min</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Status */}
-                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
-                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-2">Status</h4>
-                  <div className="flex items-center space-x-2">
-                    {note.is_converted_to_document ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs
-                                     bg-green-100 dark:bg-green-900/30 
-                                     text-green-800 dark:text-green-400">
-                        Document Source
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs
-                                     bg-gray-100 dark:bg-gray-700 
-                                     text-gray-800 dark:text-gray-300">
-                        Note Only
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Keyboard Shortcuts */}
-                <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-[#e3d5c8] dark:border-blue-500/20">
-                  <h4 className="text-xs font-medium text-[#8c715f] dark:text-gray-400 mb-2">Shortcuts</h4>
-                  <div className="space-y-1 text-xs text-[#5e4636] dark:text-white">
-                    <div className="flex justify-between">
-                      <span>Close viewer:</span>
-                      <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-600 rounded text-xs">Esc</kbd>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Copy content:</span>
-                      <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-600 rounded text-xs">Ctrl+C</kbd>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Custom Scrollbar Styles */}
+      {/* Custom Styles */}
       <style>{`
+        [contenteditable] {
+          outline: none;
+        }
+
+        [contenteditable] h1,
+        [contenteditable] h2,
+        [contenteditable] h3,
+        [contenteditable] h4,
+        [contenteditable] h5,
+        [contenteditable] h6 {
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+          font-weight: bold;
+          line-height: 1.2;
+          color: inherit;
+        }
+
+        .dark [contenteditable] h1,
+        .dark [contenteditable] h2,
+        .dark [contenteditable] h3,
+        .dark [contenteditable] h4,
+        .dark [contenteditable] h5,
+        .dark [contenteditable] h6 {
+          color: #ffffff;
+        }
+
+        [contenteditable] h1 { font-size: 2em; }
+        [contenteditable] h2 { font-size: 1.5em; }
+        [contenteditable] h3 { font-size: 1.3em; }
+
+        [contenteditable] p {
+          margin-bottom: 1em;
+          line-height: 1.6;
+        }
+
+        [contenteditable] ul,
+        [contenteditable] ol {
+          margin-left: 2em;
+          margin-bottom: 1em;
+          padding-left: 0;
+        }
+
+        [contenteditable] li {
+          margin-bottom: 0.5em;
+          list-style-position: outside;
+        }
+
+        [contenteditable] ul li {
+          list-style-type: disc;
+        }
+
+        [contenteditable] ol li {
+          list-style-type: decimal;
+        }
+
+        [contenteditable] blockquote {
+          margin: 1em 0;
+          padding-left: 1em;
+          border-left: 4px solid #e3d5c8;
+          color: #8c715f;
+          font-style: italic;
+        }
+
+        .dark [contenteditable] blockquote {
+          border-left-color: rgba(59, 130, 246, 0.5);
+          color: rgba(156, 163, 175, 0.8);
+        }
+
+        [contenteditable] table {
+          border-collapse: collapse;
+          margin: 1em 0;
+          width: 100%;
+        }
+
+        [contenteditable] table td,
+        [contenteditable] table th {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+
+        [contenteditable] table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+
+        .dark [contenteditable] table td,
+        .dark [contenteditable] table th {
+          border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .dark [contenteditable] table th {
+          background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        [contenteditable] a {
+          color: #a55233;
+          text-decoration: underline;
+        }
+
+        .dark [contenteditable] a {
+          color: #3b82f6;
+        }
+
+        /* Custom scrollbar - exactly like NoteEditorModal */
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }
@@ -367,147 +391,143 @@ const NoteViewerModal = ({
           background: rgba(59, 130, 246, 0.3);
         }
 
-        /* Styles for rendered rich text content - FIXED LINE SPACING */
-        .ql-editor {
-          padding: 0;
-          font-family: inherit;
-          font-size: 1rem;
-          line-height: 1.5;
+        [contenteditable] {
+          outline: none;
+        }
+
+        /* Custom scrollbar for contenteditable (fallback) */
+        [contenteditable]::-webkit-scrollbar {
+          width: 6px;
+        }
+        [contenteditable]::-webkit-scrollbar-track {
+          background: rgba(214, 203, 191, 0.1);
+          border-radius: 10px;
+        }
+        [contenteditable]::-webkit-scrollbar-thumb {
+          background: rgba(165, 82, 51, 0.2);
+          border-radius: 10px;
+        }
+        [contenteditable]::-webkit-scrollbar-thumb:hover {
+          background: rgba(165, 82, 51, 0.3);
+        }
+        
+        .dark [contenteditable]::-webkit-scrollbar-track {
+          background: rgba(59, 130, 246, 0.1);
+        }
+        .dark [contenteditable]::-webkit-scrollbar-thumb {
+          background: rgba(59, 130, 246, 0.2);
+        }
+        .dark [contenteditable]::-webkit-scrollbar-thumb:hover {
+          background: rgba(59, 130, 246, 0.3);
+        }
+
+        /* Viewer-specific styles for content container */
+        .prose h1,
+        .prose h2,
+        .prose h3,
+        .prose h4,
+        .prose h5,
+        .prose h6 {
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+          font-weight: bold;
+          line-height: 1.2;
           color: inherit;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          min-width: 0;
-          width: 100%;
         }
 
-        .ql-editor * {
-          max-width: 100%;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
+        .dark .prose h1,
+        .dark .prose h2,
+        .dark .prose h3,
+        .dark .prose h4,
+        .dark .prose h5,
+        .dark .prose h6 {
+          color: #ffffff;
         }
 
-        .ql-editor h1,
-        .ql-editor h2,
-        .ql-editor h3 {
-          color: inherit;
-          margin-top: 1.2em;
-          margin-bottom: 0.4em;
-          word-wrap: break-word;
-          line-height: 1.3;
+        .prose h1 { font-size: 2em; }
+        .prose h2 { font-size: 1.5em; }
+        .prose h3 { font-size: 1.3em; }
+
+        .prose p {
+          margin-bottom: 1em;
+          line-height: 1.6;
         }
 
-        .ql-editor h1 {
-          font-size: 1.8em;
+        .prose ul,
+        .prose ol {
+          margin-left: 2em;
+          margin-bottom: 1em;
+          padding-left: 0;
         }
 
-        .ql-editor h2 {
-          font-size: 1.4em;
+        .prose li {
+          margin-bottom: 0.5em;
+          list-style-position: outside;
         }
 
-        .ql-editor h3 {
-          font-size: 1.2em;
+        .prose ul li {
+          list-style-type: disc;
         }
 
-        .ql-editor p {
-          margin-bottom: 0.8em;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          line-height: 1.5;
+        .prose ol li {
+          list-style-type: decimal;
         }
 
-        .ql-editor ul,
-        .ql-editor ol {
-          padding-left: 1.5em;
-          margin-bottom: 0.8em;
-        }
-
-        .ql-editor li {
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          margin-bottom: 0.2em;
-          line-height: 1.5;
-        }
-
-        .ql-editor blockquote {
-          border-left: 4px solid #e3d5c8;
+        .prose blockquote {
+          margin: 1em 0;
           padding-left: 1em;
-          margin-left: 0;
-          margin-right: 0;
-          margin-bottom: 0.8em;
+          border-left: 4px solid #e3d5c8;
           color: #8c715f;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          line-height: 1.5;
+          font-style: italic;
         }
 
-        .dark .ql-editor blockquote {
+        .dark .prose blockquote {
           border-left-color: rgba(59, 130, 246, 0.5);
           color: rgba(156, 163, 175, 0.8);
         }
 
-        .ql-editor a {
-          color: #a55233;
-          text-decoration: underline;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
+        .prose table {
+          border-collapse: collapse;
+          margin: 1em 0;
+          width: 100%;
         }
 
-        .dark .ql-editor a {
+        .prose table td,
+        .prose table th {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+
+        .prose table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+
+        .dark .prose table td,
+        .dark .prose table th {
+          border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .dark .prose table th {
+          background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .prose a {
+          color: #a55233;
+          text-decoration: underline;
+        }
+
+        .dark .prose a {
           color: #3b82f6;
         }
 
-        /* Fixed code block styling with proper line spacing */
-        .ql-editor pre {
-          background-color: #f5f5f5;
-          padding: 0.8em;
-          border-radius: 4px;
-          overflow-x: auto;
-          margin-bottom: 0.8em;
-          white-space: pre;
-          word-wrap: normal;
-          overflow-wrap: normal;
-          font-family: 'Courier New', monospace;
-          font-size: 0.9em;
-          line-height: 1.4;
-          color: #333;
-        }
-
-        .dark .ql-editor pre {
-          background-color: #2d3748;
-          color: #e2e8f0;
-        }
-
-        .ql-editor code {
-          font-family: 'Courier New', monospace;
-          background-color: #f5f5f5;
-          padding: 0.1em 0.3em;
-          border-radius: 3px;
-          font-size: 0.9em;
-          color: #333;
-        }
-
-        .dark .ql-editor code {
-          background-color: #2d3748;
-          color: #e2e8f0;
-        }
-
-        .prose {
-          line-height: 1.5;
-          max-width: none;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-        }
-
-        .prose * {
-          max-width: 100%;
-        }
-
-        /* Remove extra spacing from Quill editor */
-        .ql-editor > *:first-child {
+        /* Override default prose margins */
+        .prose > *:first-child {
           margin-top: 0;
         }
 
-        .ql-editor > *:last-child {
+        .prose > *:last-child {
           margin-bottom: 0;
         }
       `}</style>

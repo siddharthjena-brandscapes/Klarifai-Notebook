@@ -1,8 +1,5 @@
-
-// NotePad.jsx - Fixed version with proper dark mode, rich text, and deletion sync
+// NotePad.jsx - Updated version without React Quill + Custom Scrollbar
 import { useState, useEffect, useRef } from 'react';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
 import { 
   Plus, 
   Save, 
@@ -46,40 +43,23 @@ const NotePad = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
- 
   const [convertingNoteId, setConvertingNoteId] = useState(null);
-  const textareaRef = useRef(null);
+  const editorRef = useRef(null);
  
   const { rightPanelPermissions, loading: permissionsLoading } = useUser();
   const isNotesPanelDisabled = rightPanelPermissions?.['notes-panel'];
 
-  // ReactQuill modules with proper toolbar
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-     
-    ],
-  };
   const stripHtml = (html) => {
-  if (!html) return '';
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  return tmp.textContent || tmp.innerText || '';
-};
-const getFirstLine = (html) => {
-  const text = stripHtml(html || '');
-  return text.split('\n').find(line => line.trim()) || 'Untitled Note';
-};
+    if (!html) return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  };
 
-
-  const quillFormats = [
-    'header',
-    'bold', 'italic', 'underline', 'strike',
-    'list', 'bullet',
-    'color', 'background',
-    'link'
-  ];
+  const getFirstLine = (html) => {
+    const text = stripHtml(html || '');
+    return text.split('\n').find(line => line.trim()) || 'Untitled Note';
+  };
 
   // Fetch notes on component mount
   useEffect(() => {
@@ -88,12 +68,14 @@ const getFirstLine = (html) => {
     }
   }, [mainProjectId, isOpen]);
 
-  // Auto-resize textarea - disabled to maintain consistent height
+  // Initialize editor content when editing starts
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '200px';
+    if (isEditing && editorRef.current && noteContent !== undefined) {
+      if (editorRef.current.innerHTML !== noteContent) {
+        editorRef.current.innerHTML = noteContent || '';
+      }
     }
-  }, [noteContent]);
+  }, [isEditing, noteContent]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -206,6 +188,10 @@ const getFirstLine = (html) => {
     }
   };
 
+  const handleEditorInput = (e) => {
+    setNoteContent(e.target.innerHTML);
+  };
+
   const handleSaveNote = async () => {
     if (!noteContent.trim()) {
       toast.warning('Note content cannot be empty');
@@ -214,7 +200,7 @@ const getFirstLine = (html) => {
 
     setIsSaving(true);
     try {
-      const finalTitle =( noteTitle.trim() || getFirstLine(noteContent)).slice(0, 40);
+      const finalTitle = (noteTitle.trim() || getFirstLine(noteContent)).slice(0, 40);
       console.log('Saving note:', {
         title: noteTitle.trim() || 'Untitled Note',
         content: noteContent.trim(),
@@ -222,7 +208,7 @@ const getFirstLine = (html) => {
         noteId: selectedNote?.id
       });
 
-     const response = await noteServiceNB.saveNote(
+      const response = await noteServiceNB.saveNote(
         finalTitle,
         noteContent.trim(),
         mainProjectId,
@@ -297,12 +283,13 @@ const getFirstLine = (html) => {
       });
     }
   };
+
   const handleCloseNoteEditor = () => {
-  setSelectedNote(null);
-  setNoteTitle('');
-  setNoteContent('');
-  setIsEditing(false);
-};
+    setSelectedNote(null);
+    setNoteTitle('');
+    setNoteContent('');
+    setIsEditing(false);
+  };
 
   const filteredNotes = notes.filter(note => {
     if (!searchTerm.trim()) return true;
@@ -368,9 +355,9 @@ const getFirstLine = (html) => {
       )}
       
       {/* Header */}
-      <div className="p-4 border-b border-[#e3d5c8] dark:border-blue-500/20 
+      <div className="p-2 border-b border-[#e3d5c8] dark:border-blue-500/20 
                       bg-[#f0eee5] dark:bg-gray-800/80">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center space-x-2">
             <BookOpen className="h-5 w-5 text-[#a55233] dark:text-blue-400" />
             <h2 className="text-lg font-semibold text-[#5e4636] dark:text-white">
@@ -468,7 +455,7 @@ const getFirstLine = (html) => {
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {isLoading ? (
           <div className="p-4 text-center text-[#8c715f] dark:text-gray-400">
-            <Loader className="h-5 w-5 animate-spin mx-auto mb-2" />
+            <Loader className="h-5 w-5 animate-spin mx-auto mb-1" />
             Loading notes...
           </div>
         ) : filteredNotes.length === 0 ? (
@@ -494,9 +481,9 @@ const getFirstLine = (html) => {
                        {note.title?.trim() ? note.title : getFirstLine(note.content)}
                     </h3>
                     <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1 line-clamp-2">
-                  {note.content 
-            ? stripHtml(note.content).substring(0, 100) + (stripHtml(note.content).length > 100 ? '...' : '') 
-            : 'No content'}
+                      {note.content 
+                        ? stripHtml(note.content).substring(0, 100) + (stripHtml(note.content).length > 100 ? '...' : '') 
+                        : 'No content'}
                     </p>
                     <div className="flex items-center space-x-2 mt-2">
                       <Calendar className="h-3 w-3 text-[#8c715f] dark:text-gray-500" />
@@ -562,7 +549,7 @@ const getFirstLine = (html) => {
 
           {/* Editor Header */}
           <div className="p-2 border-b border-[#e3d5c8] dark:border-blue-500/20">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center space-x-2">
                 <Edit3 className="h-4 w-4 text-[#a55233] dark:text-blue-400" />
                 <span className="text-sm font-medium text-[#5e4636] dark:text-white">
@@ -570,47 +557,47 @@ const getFirstLine = (html) => {
                 </span>
               </div>
               <div className="flex space-x-1">
-               {isEditing && onOpenEditor && (
-  <button
-    onClick={() => {
-      onOpenEditor({
-        id: selectedNote?.id,
-        title: noteTitle,
-        content: noteContent
-      });
-      handleCloseNoteEditor(); 
-    }}
-    className="p-1.5 text-[#8c715f] dark:text-gray-400 
-               hover:text-[#a55233] dark:hover:text-blue-400
-               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
-               rounded transition-colors"
-    title="Expand Editor"
-  >
-    <Expand className="h-3 w-3" />
-  </button>
-)}
-
-
-{onOpenViewer && (
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      onOpenViewer(selectedNote);
-      handleCloseNoteEditor(); // Add this line
-    }}
-    className="p-1 text-[#8c715f] dark:text-gray-400 
-               hover:text-[#a55233] dark:hover:text-blue-400
-               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
-               rounded transition-colors"
-    title="View Note"
-  >
-    <Eye className="h-3 w-3" />
-  </button>
-)}
-{!isEditing && !selectedNote?.is_converted_to_document && (
+                {isEditing && onOpenEditor && (
                   <button
-                    onClick={() => {setIsEditing(true);
-                      
+                    onClick={() => {
+                      onOpenEditor({
+                        id: selectedNote?.id,
+                        title: noteTitle,
+                        content: noteContent
+                      });
+                      handleCloseNoteEditor(); 
+                    }}
+                    className="p-1.5 text-[#8c715f] dark:text-gray-400 
+                               hover:text-[#a55233] dark:hover:text-blue-400
+                               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
+                               rounded transition-colors"
+                    title="Expand Editor"
+                  >
+                    <Expand className="h-3 w-3" />
+                  </button>
+                )}
+
+                {onOpenViewer && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenViewer(selectedNote);
+                      handleCloseNoteEditor(); // Add this line
+                    }}
+                    className="p-1 text-[#8c715f] dark:text-gray-400 
+                               hover:text-[#a55233] dark:hover:text-blue-400
+                               hover:bg-[#f5e6d8] dark:hover:bg-gray-600/50 
+                               rounded transition-colors"
+                    title="View Note"
+                  >
+                    <Eye className="h-3 w-3" />
+                  </button>
+                )}
+
+                {!isEditing && !selectedNote?.is_converted_to_document && (
+                  <button
+                    onClick={() => {
+                      setIsEditing(true);
                     }}
                     className="p-1.5 text-[#8c715f] dark:text-gray-400 
                                hover:text-[#a55233] dark:hover:text-blue-400
@@ -622,18 +609,18 @@ const getFirstLine = (html) => {
                   </button>
                 )}
                 
-{!isEditing && (
-  <button
-    onClick={handleCloseNoteEditor}
-    className="p-1.5 text-[#8c715f] dark:text-gray-400 
-               hover:text-red-600 dark:hover:text-red-400
-               hover:bg-red-50 dark:hover:bg-red-900/20 
-               rounded transition-colors"
-    title="Close Note"
-  >
-    <X className="h-3 w-3" />
-  </button>
-)}
+                {!isEditing && (
+                  <button
+                    onClick={handleCloseNoteEditor}
+                    className="p-1.5 text-[#8c715f] dark:text-gray-400 
+                               hover:text-red-600 dark:hover:text-red-400
+                               hover:bg-red-50 dark:hover:bg-red-900/20 
+                               rounded transition-colors"
+                    title="Close Note"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
 
                 {isEditing && (
                   <>
@@ -698,61 +685,186 @@ const getFirstLine = (html) => {
               <div className="text-sm font-medium text-[#5e4636] dark:text-white 
                             p-2 bg-[#f9f7f4] dark:bg-gray-700/50
                             border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg">
-             {noteTitle?.trim() ? noteTitle : getFirstLine(noteContent)}
+                {noteTitle?.trim() ? noteTitle : getFirstLine(noteContent)}
               </div>
             )}
           </div>
 
           {/* Content Editor */}
           <div className="p-3 flex-1 overflow-hidden">
-  {isEditing ? (
-    <div className="notepad-quill-container">
-      <ReactQuill
-        value={noteContent}
-        onChange={setNoteContent}
-        modules={quillModules}
-        formats={quillFormats}
-        theme="snow"
-        className="notepad-quill-editor"
-        style={{ height: '200px' }}
-      />
-    </div>
-  ) : (
-    <div 
-      className="notepad-content-viewer custom-scrollbar overflow-y-auto max-h-64"
-      dangerouslySetInnerHTML={{ __html: noteContent || '<p style="color: #8c715f;">No content</p>' }}
-    />
-  )}
-</div>
+            {isEditing ? (
+              <div 
+                ref={editorRef}
+                contentEditable
+                className="w-full h-48 p-2 overflow-y-auto focus:outline-none
+                           text-[#5e4636] dark:text-white text-sm leading-relaxed
+                           bg-[#f9f7f4] dark:bg-gray-700/50
+                           border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg
+                           custom-scrollbar"
+                style={{
+                  minHeight: '200px',
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word'
+                }}
+                onInput={handleEditorInput}
+                placeholder="Start writing your note..."
+                suppressContentEditableWarning={true}
+              />
+            ) : (
+              <div 
+                className="notepad-content-viewer custom-scrollbar overflow-y-auto h-48 p-2
+                           text-[#5e4636] dark:text-white text-sm leading-relaxed
+                           bg-[#f9f7f4] dark:bg-gray-700/50
+                           border border-[#d6cbbf] dark:border-blue-500/20 rounded-lg"
+                dangerouslySetInnerHTML={{ __html: noteContent || '<p style="color: #8c715f; font-style: italic;">No content</p>' }}
+              />
+            )}
+          </div>
         </div>
       )}
 
-      {/* Custom Scrollbar Styles */}
+      {/* Custom Styles */}
       <style>{`
+        [contenteditable]:empty:before {
+          content: attr(placeholder);
+          color: #8c715f;
+          font-style: italic;
+          pointer-events: none;
+        }
+        
+        .dark [contenteditable]:empty:before {
+          color: rgba(156, 163, 175, 0.7);
+        }
+
+        [contenteditable] {
+          outline: none;
+        }
+
+        [contenteditable] h1,
+        [contenteditable] h2,
+        [contenteditable] h3,
+        [contenteditable] h4,
+        [contenteditable] h5,
+        [contenteditable] h6 {
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+          font-weight: bold;
+          line-height: 1.3;
+          color: inherit;
+        }
+
+        .dark [contenteditable] h1,
+        .dark [contenteditable] h2,
+        .dark [contenteditable] h3,
+        .dark [contenteditable] h4,
+        .dark [contenteditable] h5,
+        .dark [contenteditable] h6 {
+          color: #ffffff;
+        }
+
+        [contenteditable] h1 { font-size: 2em; }
+        [contenteditable] h2 { font-size: 1.5em; }
+        [contenteditable] h3 { font-size: 1.3em; }
+
+        [contenteditable] p {
+          margin-bottom: 1em;
+          line-height: 1.3;
+        }
+
+        [contenteditable] ul,
+        [contenteditable] ol {
+          margin-left: 2em;
+          margin-bottom: 1em;
+          padding-left: 0;
+        }
+
+        [contenteditable] li {
+          margin-bottom: 0.5em;
+          list-style-position: outside;
+        }
+
+        [contenteditable] ul li {
+          list-style-type: disc;
+        }
+
+        [contenteditable] ol li {
+          list-style-type: decimal;
+        }
+
+        [contenteditable] blockquote {
+          margin: 1em 0;
+          padding-left: 1em;
+          border-left: 4px solid #e3d5c8;
+          color: #8c715f;
+          font-style: italic;
+        }
+
+        .dark [contenteditable] blockquote {
+          border-left-color: rgba(59, 130, 246, 0.5);
+          color: rgba(156, 163, 175, 0.8);
+        }
+
+        [contenteditable] table {
+          border-collapse: collapse;
+          margin: 1em 0;
+          width: 100%;
+        }
+
+        [contenteditable] table td,
+        [contenteditable] table th {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+
+        [contenteditable] table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+
+        .dark [contenteditable] table td,
+        .dark [contenteditable] table th {
+          border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .dark [contenteditable] table th {
+          background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        [contenteditable] a {
+          color: #a55233;
+          text-decoration: underline;
+        }
+
+        .dark [contenteditable] a {
+          color: #3b82f6;
+        }
+
+        /* Custom scrollbar - matching NoteEditorModal style */
         .custom-scrollbar::-webkit-scrollbar {
-          width: 2px;
-          height: 2px;
+          width: 4px;
+           height: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
           background: rgba(214, 203, 191, 0.1);
           border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(165, 82, 51, 0.3);
+          background: rgba(165, 82, 51, 0.2);
           border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(165, 82, 51, 0.5);
+          background: rgba(165, 82, 51, 0.3);
         }
         
         .dark .custom-scrollbar::-webkit-scrollbar-track {
           background: rgba(59, 130, 246, 0.1);
         }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(59, 130, 246, 0.3);
+          background: rgba(59, 130, 246, 0.2);
         }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(59, 130, 246, 0.5);
+          background: rgba(59, 130, 246, 0.3);
         }
 
         .line-clamp-2 {
@@ -761,29 +873,116 @@ const getFirstLine = (html) => {
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
         }
-          .ql-editor {
-  padding: 8px;
-  font-size: 0.875rem;
-  color: #5e4636;
-  background-color: #f9f7f4;
-}
-.dark .ql-editor {
-  color: white;
-  background-color: rgba(31, 41, 55, 0.5);
-}
-.ql-container.ql-snow {
-  border: none !important;
-}
 
+        /* Ensure proper cursor positioning */
+        [contenteditable] * {
+          cursor: text;
+        }
 
-.ql-editor {
-  font-size: 0.875rem;
-  padding: 8px !important;
-  color: #5e4636;
-}
-.dark .ql-editor {
-  color: white;
-}
+        [contenteditable]:focus {
+          outline: none;
+        }
+
+        /* Viewer content styling to match editor */
+        .notepad-content-viewer h1,
+        .notepad-content-viewer h2,
+        .notepad-content-viewer h3,
+        .notepad-content-viewer h4,
+        .notepad-content-viewer h5,
+        .notepad-content-viewer h6 {
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+          font-weight: bold;
+          line-height: 1.3;
+          color: inherit;
+        }
+
+        .dark .notepad-content-viewer h1,
+        .dark .notepad-content-viewer h2,
+        .dark .notepad-content-viewer h3,
+        .dark .notepad-content-viewer h4,
+        .dark .notepad-content-viewer h5,
+        .dark .notepad-content-viewer h6 {
+          color: #ffffff;
+        }
+
+        .notepad-content-viewer h1 { font-size: 2em; }
+        .notepad-content-viewer h2 { font-size: 1.5em; }
+        .notepad-content-viewer h3 { font-size: 1.3em; }
+
+        .notepad-content-viewer p {
+          margin-bottom: 1em;
+          line-height: 1.3;
+        }
+
+        .notepad-content-viewer ul,
+        .notepad-content-viewer ol {
+          margin-left: 2em;
+          margin-bottom: 1em;
+          padding-left: 0;
+        }
+
+        .notepad-content-viewer li {
+          margin-bottom: 0.5em;
+          list-style-position: outside;
+        }
+
+        .notepad-content-viewer ul li {
+          list-style-type: disc;
+        }
+
+        .notepad-content-viewer ol li {
+          list-style-type: decimal;
+        }
+
+        .notepad-content-viewer blockquote {
+          margin: 1em 0;
+          padding-left: 1em;
+          border-left: 4px solid #e3d5c8;
+          color: #8c715f;
+          font-style: italic;
+        }
+
+        .dark .notepad-content-viewer blockquote {
+          border-left-color: rgba(59, 130, 246, 0.5);
+          color: rgba(156, 163, 175, 0.8);
+        }
+
+        .notepad-content-viewer table {
+          border-collapse: collapse;
+          margin: 1em 0;
+          width: 100%;
+        }
+
+        .notepad-content-viewer table td,
+        .notepad-content-viewer table th {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+
+        .notepad-content-viewer table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+
+        .dark .notepad-content-viewer table td,
+        .dark .notepad-content-viewer table th {
+          border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .dark .notepad-content-viewer table th {
+          background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .notepad-content-viewer a {
+          color: #a55233;
+          text-decoration: underline;
+        }
+
+        .dark .notepad-content-viewer a {
+          color: #3b82f6;
+        }
       `}</style>
     </div>
   );
@@ -799,7 +998,7 @@ NotePad.propTypes = {
   onGenerateMindmap: PropTypes.func,
   isMindmapGenerating: PropTypes.bool,
   selectedDocuments: PropTypes.array,
-   onViewMindmapHistory: PropTypes.func 
+  onViewMindmapHistory: PropTypes.func 
 };
 
 export default NotePad;
