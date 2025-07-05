@@ -2791,11 +2791,14 @@ const MainChat = forwardRef(
                           </div>
                         )}
                         {/* NEW: Display web sources if available */}
-                        {msg.webSources &&
-                          msg.webSources.length > 0 &&
-                          propSelectedDocuments.length > 0 && (
-                            <WebSourcesDisplay sources={msg.webSources} />
-                          )}
+                        {(() => {
+  const sources = msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls);
+  return sources && sources.length > 0 && propSelectedDocuments.length > 0;
+})() && (
+  <WebSourcesDisplay 
+    sources={msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)} 
+  />
+)}
 
                         {/* Add Copy option for Klarifai messages only */}
                         {msg.role !== "user" && (

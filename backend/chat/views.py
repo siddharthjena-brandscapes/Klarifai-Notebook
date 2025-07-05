@@ -3235,7 +3235,12 @@ class ChatView(APIView):
                     'role': message.role,
                     'content': message.content,
                     'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
-                    'citations': message.citations or []
+                    'citations': message.citations or [],
+                    'sources_info': getattr(message, 'sources', ''),  # Add this line
+                    'extracted_urls': getattr(message, 'extracted_urls', []),  # Add this line
+                   
+                
+
                 }
                 # Add badge properties for assistant messages
                 if message.role == 'assistant':
