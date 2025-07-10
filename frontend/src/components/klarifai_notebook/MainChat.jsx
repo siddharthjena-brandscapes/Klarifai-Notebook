@@ -896,11 +896,18 @@ const MainChat = forwardRef(
         toast.warning(
           "Please upload a document or select at least one document to view the summary."
         );
-        // Still allow the view change if switching to chat
         if (view === "chat") {
           setCurrentView(view);
         }
         return;
+      }
+      // Auto-select the first document if switching to summary and none is selected
+      if (
+        view === "summary" &&
+        propSelectedDocuments.length > 0 &&
+        !activeDocumentForSummary
+      ) {
+        setActiveDocumentForSummary(propSelectedDocuments[0]);
       }
       setCurrentView(view);
     };
@@ -939,15 +946,16 @@ const MainChat = forwardRef(
 
     // Add new method to handle summary generation
     const handleGenerateSummary = async () => {
-      if (!propSelectedDocuments.length) {
-        toast.warning("Please select documents to generate summary");
+      const docId = activeDocumentForSummary || propSelectedDocuments[0];
+      if (!docId) {
+        toast.warning("Please select a document to generate summary");
         return;
       }
 
       setIsSummaryGenerating(true);
       try {
         const response = await documentServiceNB.generateSummary(
-          propSelectedDocuments,
+          [docId],
           mainProjectId
         );
 
@@ -988,6 +996,22 @@ const MainChat = forwardRef(
             const activeSummary = response.data.summaries.find(
               (summary) => summary.document_id.toString() === activeDocId
             );
+
+            // After you find activeSummary:
+            if (activeSummary) {
+              const newSummary =
+                typeof activeSummary.summary === "string"
+                  ? activeSummary.summary
+                  : JSON.stringify(activeSummary.summary);
+
+              setDocuments((prevDocs) =>
+                prevDocs.map((doc) =>
+                  doc.id.toString() === activeDocId
+                    ? { ...doc, summary: newSummary }
+                    : doc
+                )
+              );
+            }
 
             if (
               activeSummary &&
@@ -1083,13 +1107,24 @@ const MainChat = forwardRef(
         (doc) => doc.summary && doc.summary.trim() !== ""
       );
 
-      // Determine which summary to show
-      const summaryToShow = isConsolidatedView
-        ? consolidatedSummary
-        : selectedChat?.summary ||
-          currentDocument?.summary ||
-          persistentSummary ||
-          "No summary available";
+      // Determine which summary to show for the selected document
+      let summaryToShow = "";
+      let hasSummary = false;
+      if (isConsolidatedView) {
+        summaryToShow = consolidatedSummary;
+        hasSummary = !!consolidatedSummary;
+      } else if (currentDocument) {
+        if (currentDocument.summary && currentDocument.summary.trim() !== "") {
+          summaryToShow = currentDocument.summary;
+          hasSummary = true;
+        } else {
+          summaryToShow = ""; // No summary for this doc
+          hasSummary = false;
+        }
+      } else {
+        summaryToShow = "";
+        hasSummary = false;
+      }
 
       // Handler for document selection change
       const handleDocumentChange = (event) => {
@@ -1161,16 +1196,14 @@ const MainChat = forwardRef(
               <div className="px-4 sm:px-6 py-3 sm:py-2 bg-[#556052] dark:bg-gradient-to-r dark:from-gray-900/80 dark:via-gray-800/80 dark:to-gray-900/80  border-b border-[#e3d5c8] dark:border-blue-900/90 flex justify-between items-center">
                 <div>
                   <h2 className="text-sm sm:text-xl font-normal font-serif text-white">
-                    {isConsolidatedView
-                      ? "Consolidated Document Summary"
-                      : "Document Summary"}
+                    Document Summary
                   </h2>
 
-                  {isConsolidatedView && (
-                    <ConsolidatedViewBadge
-                      documentCount={propSelectedDocuments.length}
-                    />
-                  )}
+                  <div className="text-xs text-white/80 mt-1">
+                    <span className="font-semibold">
+                      {currentDocument.filename}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center space-x-3">
@@ -1188,32 +1221,59 @@ const MainChat = forwardRef(
                       // }
                     />
                   )}
-                  {/* Generate Summary Button - Only show if summaries don't exist */}
-                  {!allDocsHaveSummaries && (
-                    <button
-                      onClick={handleGenerateSummary}
-                      disabled={isSummaryGenerating}
-                      className={`
-                    px-4 py-2 rounded-lg text-sm
+
+                  {/* Generate/Regenerate Summary Button */}
+                  {!isConsolidatedView && (
+                    <>
+                      {!hasSummary ? (
+                        <button
+                          onClick={handleGenerateSummary}
+                          disabled={isSummaryGenerating}
+                          className={`
+           px-4 py-2 rounded-lg text-sm
                     ${
                       isSummaryGenerating
                         ? "bg-[#d6cbbf] dark:bg-gray-600 cursor-not-allowed"
                         : "bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600 dark:to-green-500 dark:hover:from-blue-700 dark:hover:to-green-600"
                     }
                     text-white transition-all duration-300 flex items-center space-x-2
-                  `}
-                    >
-                      {isSummaryGenerating ? (
-                        <>
-                          <span>Generating...</span>
-                        </>
+        `}
+                        >
+                          {isSummaryGenerating ? (
+                            <span>Generating...</span>
+                          ) : (
+                            <>
+                              <Bot className="h-4 w-4" />
+                              <span>Generate Summary</span>
+                            </>
+                          )}
+                        </button>
                       ) : (
-                        <>
-                          <Bot className="h-4 w-4" />
-                          <span>Generate Summary</span>
-                        </>
+                        <button
+                          onClick={handleGenerateSummary}
+                          disabled={isSummaryGenerating}
+                          className={`
+           px-4 py-2 rounded-lg text-sm
+                    ${
+                      isSummaryGenerating
+                        ? "bg-[#d6cbbf] dark:bg-gray-600 cursor-not-allowed"
+                        : "bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600 dark:to-green-500 dark:hover:from-blue-700 dark:hover:to-green-600"
+                    }
+                    text-white transition-all duration-300 flex items-center space-x-2
+        `}
+                          title="Regenerate summary for this document"
+                        >
+                          {isSummaryGenerating ? (
+                            <span>Regenerating...</span>
+                          ) : (
+                            <>
+                              <Bot className="h-4 w-4" />
+                              <span>Regenerate Summary</span>
+                            </>
+                          )}
+                        </button>
                       )}
-                    </button>
+                    </>
                   )}
 
                   {/* Copy Button */}
@@ -1228,6 +1288,7 @@ const MainChat = forwardRef(
               </div>
 
               {/* Summary Content */}
+
               <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-gray-900/80 p-4">
                 {isConsolidatedView && !consolidatedSummary ? (
                   <div className="flex flex-col items-center justify-center h-full text-[#8c715f] dark:text-gray-400">
@@ -1238,16 +1299,15 @@ const MainChat = forwardRef(
                         : "Click 'Analyze Together' to create a unified summary across all documents"}
                     </p>
                   </div>
-                ) : (!persistentSummary &&
-                    !consolidatedSummary &&
-                    !summaryToShow) ||
-                  summaryToShow === "No summary available" ? (
+                ) : !hasSummary ? (
                   <div className="flex flex-col items-center justify-center h-full text-[#8c715f] dark:text-gray-400">
                     <ScrollText className="h-16 w-16 mb-4 text-[#a55233]/30 dark:text-gray-600" />
                     <p className="mb-4 text-center">
-                      {allDocsHaveSummaries
-                        ? "Loading summary..."
-                        : "Click 'Generate Summary' to analyze the selected documents"}
+                      Summary not generated for{" "}
+                      <span className="font-semibold">
+                        {currentDocument?.filename || "this document"}
+                      </span>
+                      . Click on Generate Summary to analyze this document.
                     </p>
                   </div>
                 ) : (
