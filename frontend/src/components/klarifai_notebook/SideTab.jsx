@@ -1,5 +1,3 @@
-
-
 // //sidebar.jsx with project management
 /* eslint-disable no-unused-vars */
 import React, {
@@ -33,7 +31,7 @@ import {
   ChevronRight,
   PanelLeft,
   HelpCircle,
-  Brain
+  Brain,
 } from "lucide-react";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
 import { toast } from "react-toastify";
@@ -41,7 +39,7 @@ import DeleteModal from "../dashboard/DeleteModal";
 import DeleteChatModal from "../dashboard/DeleteChatModal";
 import { ideaService, coreService } from "../../utils/axiosConfig";
 import DocumentSearchModal from "../dashboard/DocumentSearchModal";
-import ChatDownloadFeature from "../dashboard/ChatDownloadFeature";
+import ChatDownloadFeatureNB from "./ChatDownloadFeatureNB";
 import BulkDeleteModal from "../dashboard/BulkDeleteModal";
 import FaqButton from "../faq/FaqButton";
 import { ThemeContext } from "../../context/ThemeContext";
@@ -59,9 +57,9 @@ const SideTab = ({
   onNewChat,
   chatInputFocused,
   onToggle,
-   onDocumentSelectionChange,
-   onDocumentContextChange,
-    onDocumentsUpdate
+  onDocumentSelectionChange,
+  onDocumentContextChange,
+  onDocumentsUpdate,
 }) => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [chatHistory, setChatHistory] = useState([]);
@@ -133,9 +131,6 @@ const SideTab = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isFilterDropdownOpen]);
-
-
- 
 
   useEffect(() => {
     // Use setTimeout to ensure the DOM is fully loaded
@@ -289,26 +284,28 @@ const SideTab = ({
     fetchProjectModules();
   }, [mainProjectId, projectModules]);
 
-
   const processWebSources = (sourcesInfo, extractedUrls) => {
-  let webSources = [];
-  
-  if (sourcesInfo) {
-    if (typeof sourcesInfo === 'string') {
-      webSources = sourcesInfo
-        .split(',')
-        .map(source => source.trim())
-        .filter(source => source && source !== '*');
-    } else if (Array.isArray(sourcesInfo)) {
-      webSources = sourcesInfo;
-    }
-  } else if (extractedUrls && Array.isArray(extractedUrls) && extractedUrls.length > 0) {
-    webSources = extractedUrls;
-  }
-  
-  return webSources;
-};
+    let webSources = [];
 
+    if (sourcesInfo) {
+      if (typeof sourcesInfo === "string") {
+        webSources = sourcesInfo
+          .split(",")
+          .map((source) => source.trim())
+          .filter((source) => source && source !== "*");
+      } else if (Array.isArray(sourcesInfo)) {
+        webSources = sourcesInfo;
+      }
+    } else if (
+      extractedUrls &&
+      Array.isArray(extractedUrls) &&
+      extractedUrls.length > 0
+    ) {
+      webSources = extractedUrls;
+    }
+
+    return webSources;
+  };
 
   // Function to check if a module is disabled
   const isModuleDisabled = (moduleId) => {
@@ -335,125 +332,132 @@ const SideTab = ({
     }
   };
 
+  // Updated handleGenerateIdeas function with loading overlay that removes on navigation
+  const handleGenerateIdeas = async () => {
+    // Check if the idea-generator module is disabled or not included in project
+    if (!isModuleAvailable("idea-generator")) {
+      toast.error("Idea Generator is not available for this project");
+      return;
+    }
 
- // Updated handleGenerateIdeas function with loading overlay that removes on navigation
-const handleGenerateIdeas = async () => {
-  // Check if the idea-generator module is disabled or not included in project
-  if (!isModuleAvailable("idea-generator")) {
-    toast.error("Idea Generator is not available for this project");
-    return;
-  }
-  
-  if (!selectedDocuments || selectedDocuments.length === 0) {
-    toast.warning("Please select at least one document first");
-    return;
-  }
+    if (!selectedDocuments || selectedDocuments.length === 0) {
+      toast.warning("Please select at least one document first");
+      return;
+    }
 
-  // Check if more than one document is selected
-  if (selectedDocuments.length > 1) {
-    toast.warning("Please select only one document to generate ideas");
-    return;
-  }
+    // Check if more than one document is selected
+    if (selectedDocuments.length > 1) {
+      toast.warning("Please select only one document to generate ideas");
+      return;
+    }
 
-  // Create and show loading overlay
-  const loadingOverlay = document.createElement('div');
-  loadingOverlay.id = 'idea-generator-loading-overlay';
-  loadingOverlay.className = `fixed inset-0 flex items-center justify-center z-50 ${theme === "dark" ? 'bg-gray-900/80' : 'bg-white/80'} backdrop-blur-sm`;
-  
-  // Create the loader element
-  const loaderHTML = `
+    // Create and show loading overlay
+    const loadingOverlay = document.createElement("div");
+    loadingOverlay.id = "idea-generator-loading-overlay";
+    loadingOverlay.className = `fixed inset-0 flex items-center justify-center z-50 ${
+      theme === "dark" ? "bg-gray-900/80" : "bg-white/80"
+    } backdrop-blur-sm`;
+
+    // Create the loader element
+    const loaderHTML = `
     <div class="flex flex-col items-center">
       <span class="idea-generator-loader mb-4"></span>
-      <div class="${theme === "dark" ? 'text-white' : 'text-[#a55233]'} text-lg font-medium">
+      <div class="${
+        theme === "dark" ? "text-white" : "text-[#a55233]"
+      } text-lg font-medium">
         Analyzing document and preparing ideas...
       </div>
     </div>
   `;
-  
-  loadingOverlay.innerHTML = loaderHTML;
-  document.body.appendChild(loadingOverlay);
 
-  try {
-    // Show animation while processing
-    setIsGenerateIdeasAnimating(true);
+    loadingOverlay.innerHTML = loaderHTML;
+    document.body.appendChild(loadingOverlay);
 
-    // toast.info("Extracting idea parameters from document...", {
-    //   autoClose: 3000,
-    // });
+    try {
+      // Show animation while processing
+      setIsGenerateIdeasAnimating(true);
 
-    const mainProjectName = await getMainProjectName();
+      // toast.info("Extracting idea parameters from document...", {
+      //   autoClose: 3000,
+      // });
 
-    // Call the backend API to extract parameters from the first selected document
-    const response = await documentServiceNB.generateIdeaContext({
-      document_id: selectedDocuments[0],
-      main_project_id: mainProjectId,
-    });
+      const mainProjectName = await getMainProjectName();
 
-    // Find the selected document's name for project title
-    const selectedDoc = documents.find(
-      (doc) => doc.id.toString() === selectedDocuments[0]
-    );
-    const documentName = selectedDoc ? selectedDoc.filename : "Document";
+      // Call the backend API to extract parameters from the first selected document
+      const response = await documentServiceNB.generateIdeaContext({
+        document_id: selectedDocuments[0],
+        main_project_id: mainProjectId,
+      });
 
-    // Create a default project name from document
-    const projectName =
-      response.data.suggested_project_name ||
-      `Ideas from ${
-        response.data.document_name_no_ext || response.data.document_name
-      }`;
+      // Find the selected document's name for project title
+      const selectedDoc = documents.find(
+        (doc) => doc.id.toString() === selectedDocuments[0]
+      );
+      const documentName = selectedDoc ? selectedDoc.filename : "Document";
 
-    // Create a new project first
-    const projectResponse = await ideaService.createProject({
-      name: projectName,
-      main_project_id: mainProjectId,
-    });
+      // Create a default project name from document
+      const projectName =
+        response.data.suggested_project_name ||
+        `Ideas from ${
+          response.data.document_name_no_ext || response.data.document_name
+        }`;
 
-    if (projectResponse.data && projectResponse.data.success) {
-      // Now navigate to the regular IdeaForm route with the new project ID
-      const newProjectId = projectResponse.data.project.id;
+      // Create a new project first
+      const projectResponse = await ideaService.createProject({
+        name: projectName,
+        main_project_id: mainProjectId,
+      });
 
-      // Remove the loading overlay before navigation
-      const loadingElement = document.getElementById('idea-generator-loading-overlay');
+      if (projectResponse.data && projectResponse.data.success) {
+        // Now navigate to the regular IdeaForm route with the new project ID
+        const newProjectId = projectResponse.data.project.id;
+
+        // Remove the loading overlay before navigation
+        const loadingElement = document.getElementById(
+          "idea-generator-loading-overlay"
+        );
+        if (loadingElement) {
+          document.body.removeChild(loadingElement);
+        }
+
+        // Reset animation state
+        setIsGenerateIdeasAnimating(false);
+
+        // Navigate to the idea generator form
+        navigate(`/idea-generation/${mainProjectId}/form`, {
+          state: {
+            fromDocQA: true,
+            document_id: response.data.document_id,
+            document_name: response.data.document_name,
+            idea_parameters: response.data.idea_parameters,
+            main_project_id: mainProjectId,
+            newProject: {
+              id: newProjectId,
+              name: projectName,
+            },
+            projectName: mainProjectName,
+          },
+        });
+
+        toast.success("New project created!");
+      } else {
+        throw new Error("Failed to create a new project");
+      }
+    } catch (error) {
+      // Remove the loading overlay on error
+      const loadingElement = document.getElementById(
+        "idea-generator-loading-overlay"
+      );
       if (loadingElement) {
         document.body.removeChild(loadingElement);
       }
-      
-      // Reset animation state
+
+      // Stop animation on error
       setIsGenerateIdeasAnimating(false);
-
-      // Navigate to the idea generator form
-      navigate(`/idea-generation/${mainProjectId}/form`, {
-        state: {
-          fromDocQA: true,
-          document_id: response.data.document_id,
-          document_name: response.data.document_name,
-          idea_parameters: response.data.idea_parameters,
-          main_project_id: mainProjectId,
-          newProject: {
-            id: newProjectId,
-            name: projectName,
-          },
-          projectName: mainProjectName,
-        },
-      });
-
-      toast.success("New project created!");
-    } else {
-      throw new Error("Failed to create a new project");
+      console.error("Error generating idea context:", error);
+      toast.error("Failed to extract idea parameters. Please try again.");
     }
-  } catch (error) {
-    // Remove the loading overlay on error
-    const loadingElement = document.getElementById('idea-generator-loading-overlay');
-    if (loadingElement) {
-      document.body.removeChild(loadingElement);
-    }
-    
-    // Stop animation on error
-    setIsGenerateIdeasAnimating(false);
-    console.error("Error generating idea context:", error);
-    toast.error("Failed to extract idea parameters. Please try again.");
-  }
-};
+  };
 
   const handleResetSearch = () => {
     setDocumentSearchTerm("");
@@ -518,23 +522,24 @@ const handleGenerateIdeas = async () => {
     );
   }, [documents, documentSearchTerm]);
 
-   useEffect(() => {
-  // Handle external changes to selectedDocuments (like from mindmap history)
-  if (selectedDocuments.length > 0) {
-    // Update "Select All" checkbox state if needed
-    const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
-    setIsSelectAllChecked(
-      selectedDocuments.length === allDocumentIds.length && allDocumentIds.length > 0
-    );
-    
-    // Auto-scroll to first selected document for visual feedback
-    if (selectedDocuments.length > 0 && isDocumentsVisible) {
-      setTimeout(() => {
-        scrollToSelectedDocument(selectedDocuments[0]);
-      }, 300);
+  useEffect(() => {
+    // Handle external changes to selectedDocuments (like from mindmap history)
+    if (selectedDocuments.length > 0) {
+      // Update "Select All" checkbox state if needed
+      const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
+      setIsSelectAllChecked(
+        selectedDocuments.length === allDocumentIds.length &&
+          allDocumentIds.length > 0
+      );
+
+      // Auto-scroll to first selected document for visual feedback
+      if (selectedDocuments.length > 0 && isDocumentsVisible) {
+        setTimeout(() => {
+          scrollToSelectedDocument(selectedDocuments[0]);
+        }, 300);
+      }
     }
-  }
-}, [selectedDocuments, filteredDocuments, isDocumentsVisible]);
+  }, [selectedDocuments, filteredDocuments, isDocumentsVisible]);
 
   const generateChatTitle = (chat) => {
     // If there's a custom title already set, use it
@@ -639,147 +644,155 @@ const handleGenerateIdeas = async () => {
   }, [mainProjectId]);
 
   const handleMindmapDocumentSelection = (documentIds) => {
-  console.log('Documents auto-selected from mindmap:', documentIds);
-  
-  // Update selected documents
-  setSelectedDocuments(documentIds);
-  
-  // Switch to documents view to show the selection
-  setSidebarView("documents");
-  setIsDocumentsVisible(true);
-  
-  // Show user feedback
-  if (documentIds.length > 0) {
-    toast.success(`Auto-selected ${documentIds.length} document(s) from mindmap`, {
-      autoClose: 3000,
-      icon: () => <Brain className="text-purple-500" />
-    });
-  }
-};
+    console.log("Documents auto-selected from mindmap:", documentIds);
+
+    // Update selected documents
+    setSelectedDocuments(documentIds);
+
+    // Switch to documents view to show the selection
+    setSidebarView("documents");
+    setIsDocumentsVisible(true);
+
+    // Show user feedback
+    if (documentIds.length > 0) {
+      toast.success(
+        `Auto-selected ${documentIds.length} document(s) from mindmap`,
+        {
+          autoClose: 3000,
+          icon: () => <Brain className="text-purple-500" />,
+        }
+      );
+    }
+  };
 
   // Enhanced chat selection handler
-//   const handleChatSelection = async (selectedChat) => {
-//   try {
-//     setActiveConversationId(selectedChat.conversation_id);
-//     console.log("Fetching conversation details for:", selectedChat.conversation_id);
+  //   const handleChatSelection = async (selectedChat) => {
+  //   try {
+  //     setActiveConversationId(selectedChat.conversation_id);
+  //     console.log("Fetching conversation details for:", selectedChat.conversation_id);
 
-//     const response = await chatServiceNB.getConversationDetails(
-//       selectedChat.conversation_id,
-//       mainProjectId
-//     );
+  //     const response = await chatServiceNB.getConversationDetails(
+  //       selectedChat.conversation_id,
+  //       mainProjectId
+  //     );
 
-//     if (response && response.data) {
-//       console.log("Fetched conversation details:", response.data);
+  //     if (response && response.data) {
+  //       console.log("Fetched conversation details:", response.data);
 
-//       // Process messages to include webSources
-//       const processedMessages = (response.data.messages || []).map(msg => {
-//         if (msg.sources_info || msg.extracted_urls || msg.webSources) {
-//           return {
-//             ...msg,
-//             webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
-//           };
-//         }
-//         return msg;
-//       });
+  //       // Process messages to include webSources
+  //       const processedMessages = (response.data.messages || []).map(msg => {
+  //         if (msg.sources_info || msg.extracted_urls || msg.webSources) {
+  //           return {
+  //             ...msg,
+  //             webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
+  //           };
+  //         }
+  //         return msg;
+  //       });
 
-//       // Prepare the full chat data with processed messages
-//       const fullChatData = {
-//         ...response.data,
-//         conversation_id: selectedChat.conversation_id,
-//         messages: processedMessages, // ← Use processed messages instead
-//         selected_documents: response.data.selected_documents || [],
-//         title: response.data.title,
-//         follow_up_questions: response.data.follow_up_questions || [],
-//       };
+  //       // Prepare the full chat data with processed messages
+  //       const fullChatData = {
+  //         ...response.data,
+  //         conversation_id: selectedChat.conversation_id,
+  //         messages: processedMessages, // ← Use processed messages instead
+  //         selected_documents: response.data.selected_documents || [],
+  //         title: response.data.title,
+  //         follow_up_questions: response.data.follow_up_questions || [],
+  //       };
 
-//       const chatDocIds = fullChatData.selected_documents.map((doc) =>
-//         doc.toString ? doc.toString() : String(doc)
-//       );
+  //       const chatDocIds = fullChatData.selected_documents.map((doc) =>
+  //         doc.toString ? doc.toString() : String(doc)
+  //       );
 
-//       if (chatDocIds.length > 0) {
-//         scrollToSelectedDocument(chatDocIds[0]);
-//       }
+  //       if (chatDocIds.length > 0) {
+  //         scrollToSelectedDocument(chatDocIds[0]);
+  //       }
 
-//       if (onSelectChat) {
-//         onSelectChat(fullChatData);
-//       }
-//     }
-//   } catch (error) {
-//     console.error("Error fetching conversation details:", error);
-//     toast.error("Failed to load conversation history");
-//   }
-//   setSidebarView("chats");
-// };
-// Enhanced chat selection handler
-const handleChatSelection = async (selectedChat) => {
-  try {
-    setActiveConversationId(selectedChat.conversation_id);
-    console.log("Fetching conversation details for:", selectedChat.conversation_id);
-
-    const response = await chatServiceNB.getConversationDetails(
-      selectedChat.conversation_id,
-      mainProjectId
-    );
-
-    if (response && response.data) {
-      console.log("Fetched conversation details:", response.data);
-
-      // Process messages to include webSources
-      const processedMessages = (response.data.messages || []).map(msg => {
-        if (msg.sources_info || msg.extracted_urls || msg.webSources) {
-          return {
-            ...msg,
-            webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
-          };
-        }
-        return msg;
-      });
-
-      // Prepare the full chat data with processed messages
-      const fullChatData = {
-        ...response.data,
-        conversation_id: selectedChat.conversation_id,
-        messages: processedMessages,
-        selected_documents: response.data.selected_documents || [],
-        title: response.data.title,
-        follow_up_questions: response.data.follow_up_questions || [],
-      };
-
-      // FIXED: Update document context BEFORE setting the chat
-      const chatDocIds = fullChatData.selected_documents.map((doc) =>
-        doc.toString ? doc.toString() : String(doc)
+  //       if (onSelectChat) {
+  //         onSelectChat(fullChatData);
+  //       }
+  //     }
+  //   } catch (error) {
+  //     console.error("Error fetching conversation details:", error);
+  //     toast.error("Failed to load conversation history");
+  //   }
+  //   setSidebarView("chats");
+  // };
+  // Enhanced chat selection handler
+  const handleChatSelection = async (selectedChat) => {
+    try {
+      setActiveConversationId(selectedChat.conversation_id);
+      console.log(
+        "Fetching conversation details for:",
+        selectedChat.conversation_id
       );
 
-      // Use a small delay to ensure proper state sequencing
-      if (chatDocIds.length > 0) {
-        // Update document context with chat_selection source
-        if (onDocumentSelectionChange) {
-          onDocumentSelectionChange(chatDocIds);
-        }
-        
-        // Small delay to ensure document context is set before chat
-        setTimeout(() => {
+      const response = await chatServiceNB.getConversationDetails(
+        selectedChat.conversation_id,
+        mainProjectId
+      );
+
+      if (response && response.data) {
+        console.log("Fetched conversation details:", response.data);
+
+        // Process messages to include webSources
+        const processedMessages = (response.data.messages || []).map((msg) => {
+          if (msg.sources_info || msg.extracted_urls || msg.webSources) {
+            return {
+              ...msg,
+              webSources:
+                msg.webSources ||
+                processWebSources(msg.sources_info, msg.extracted_urls),
+            };
+          }
+          return msg;
+        });
+
+        // Prepare the full chat data with processed messages
+        const fullChatData = {
+          ...response.data,
+          conversation_id: selectedChat.conversation_id,
+          messages: processedMessages,
+          selected_documents: response.data.selected_documents || [],
+          title: response.data.title,
+          follow_up_questions: response.data.follow_up_questions || [],
+        };
+
+        // FIXED: Update document context BEFORE setting the chat
+        const chatDocIds = fullChatData.selected_documents.map((doc) =>
+          doc.toString ? doc.toString() : String(doc)
+        );
+
+        // Use a small delay to ensure proper state sequencing
+        if (chatDocIds.length > 0) {
+          // Update document context with chat_selection source
+          if (onDocumentSelectionChange) {
+            onDocumentSelectionChange(chatDocIds);
+          }
+
+          // Small delay to ensure document context is set before chat
+          setTimeout(() => {
+            if (onSelectChat) {
+              onSelectChat(fullChatData);
+            }
+            scrollToSelectedDocument(chatDocIds[0]);
+          }, 100);
+        } else {
+          // No documents, set chat immediately
           if (onSelectChat) {
             onSelectChat(fullChatData);
           }
-          scrollToSelectedDocument(chatDocIds[0]);
-        }, 100);
-      } else {
-        // No documents, set chat immediately
-        if (onSelectChat) {
-          onSelectChat(fullChatData);
+        }
+        if (setSelectedDocuments) {
+          setSelectedDocuments(fullChatData.selected_documents || []);
         }
       }
-      if (setSelectedDocuments) {
-        setSelectedDocuments(fullChatData.selected_documents || []);
-      }
+    } catch (error) {
+      console.error("Error fetching conversation details:", error);
+      toast.error("Failed to load conversation history");
     }
-  } catch (error) {
-    console.error("Error fetching conversation details:", error);
-    toast.error("Failed to load conversation history");
-  }
-  setSidebarView("chats");
-};
+    setSidebarView("chats");
+  };
   // New function to scroll to a selected document with visual feedback
   const scrollToSelectedDocument = (documentId) => {
     if (!documentId) return;
@@ -955,64 +968,72 @@ const handleChatSelection = async (selectedChat) => {
   };
 
   const handleNewChat = () => {
-    console.log("New Chat clicked in sidebar with documents:", selectedDocuments);
-    
+    console.log(
+      "New Chat clicked in sidebar with documents:",
+      selectedDocuments
+    );
+
     // First, reset the active conversation ID in the sidebar component itself
     setActiveConversationId(null);
-    
+
     // Call the parent component's onNewChat callback
     if (onNewChat) {
       onNewChat();
       // Show confirmation to user
       toast.success(
         selectedDocuments.length > 0
-          ? `Started new conversation with ${selectedDocuments.length} selected document${selectedDocuments.length !== 1 ? 's' : ''}`
+          ? `Started new conversation with ${
+              selectedDocuments.length
+            } selected document${selectedDocuments.length !== 1 ? "s" : ""}`
           : "Started new conversation"
       );
     }
   };
 
   const handleDocumentToggle = async (documentId) => {
-  const stringDocumentId = documentId.toString();
+    const stringDocumentId = documentId.toString();
 
-  console.log('🔄 handleDocumentToggle called:', {
-    documentId: stringDocumentId,
-    currentSelected: selectedDocuments,
-    isCurrentlySelected: selectedDocuments.includes(stringDocumentId)
-  });
+    console.log("🔄 handleDocumentToggle called:", {
+      documentId: stringDocumentId,
+      currentSelected: selectedDocuments,
+      isCurrentlySelected: selectedDocuments.includes(stringDocumentId),
+    });
 
-  // Create a new array based on the current selected documents
-  let newSelectedDocuments;
-  if (selectedDocuments.includes(stringDocumentId)) {
-    // Remove document
-    newSelectedDocuments = selectedDocuments.filter((id) => id !== stringDocumentId);
-    console.log('🗑️ Removing document, new array:', newSelectedDocuments);
-  } else {
-    // Add document
-    newSelectedDocuments = [...selectedDocuments, stringDocumentId];
-    console.log('✅ Adding document, new array:', newSelectedDocuments);
-  }
-
-  // FORCE the state update
-  console.log('🔄 Calling setSelectedDocuments with:', newSelectedDocuments);
-  setSelectedDocuments([...newSelectedDocuments]); // Force new array reference
-
-  // Update "Select All" checkbox state
-  const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
-  setIsSelectAllChecked(
-    newSelectedDocuments.length === allDocumentIds.length && allDocumentIds.length > 0
-  );
-
-  // Set the active document if it's being selected
-  if (!selectedDocuments.includes(stringDocumentId)) {
-    try {
-      await documentServiceNB.setActiveDocument(documentId);
-    } catch (error) {
-      console.error("Failed to set active document:", error);
-      toast.error("Failed to set active document");
+    // Create a new array based on the current selected documents
+    let newSelectedDocuments;
+    if (selectedDocuments.includes(stringDocumentId)) {
+      // Remove document
+      newSelectedDocuments = selectedDocuments.filter(
+        (id) => id !== stringDocumentId
+      );
+      console.log("🗑️ Removing document, new array:", newSelectedDocuments);
+    } else {
+      // Add document
+      newSelectedDocuments = [...selectedDocuments, stringDocumentId];
+      console.log("✅ Adding document, new array:", newSelectedDocuments);
     }
-  }
-};
+
+    // FORCE the state update
+    console.log("🔄 Calling setSelectedDocuments with:", newSelectedDocuments);
+    setSelectedDocuments([...newSelectedDocuments]); // Force new array reference
+
+    // Update "Select All" checkbox state
+    const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
+    setIsSelectAllChecked(
+      newSelectedDocuments.length === allDocumentIds.length &&
+        allDocumentIds.length > 0
+    );
+
+    // Set the active document if it's being selected
+    if (!selectedDocuments.includes(stringDocumentId)) {
+      try {
+        await documentServiceNB.setActiveDocument(documentId);
+      } catch (error) {
+        console.error("Failed to set active document:", error);
+        toast.error("Failed to set active document");
+      }
+    }
+  };
   // const handleDocumentToggle = async (documentId) => {
   //   const stringDocumentId = documentId.toString();
 
@@ -1045,15 +1066,15 @@ const handleChatSelection = async (selectedChat) => {
   const handleSelectAllDocuments = () => {
     if (isSelectAllChecked) {
       // Deselect all documents
-      console.log('🗑️ SideTab: Deselecting all documents');
+      console.log("🗑️ SideTab: Deselecting all documents");
       setSelectedDocuments([]);
       setIsSelectAllChecked(false);
 
-       // Notify MainChat
+      // Notify MainChat
       if (onDocumentSelectionChange) {
         onDocumentSelectionChange([]);
       }
-      
+
       toast.success("All documents deselected", {
         autoClose: 2000,
         hideProgressBar: false,
@@ -1167,49 +1188,49 @@ const handleChatSelection = async (selectedChat) => {
     }
   };
 
-const handleDeleteConversation = async (conversationId) => {
-  console.log("🗑️ DELETING CONVERSATION:", conversationId);
-  console.log("🗑️ Current activeConversationId:", activeConversationId);
-  
-  try {
-    await chatServiceNB.deleteConversation(conversationId);
+  const handleDeleteConversation = async (conversationId) => {
+    console.log("🗑️ DELETING CONVERSATION:", conversationId);
+    console.log("🗑️ Current activeConversationId:", activeConversationId);
 
-    // Remove from chat history state
-    setChatHistory((prevHistory) =>
-      prevHistory.filter((chat) => chat.conversation_id !== conversationId)
-    );
+    try {
+      await chatServiceNB.deleteConversation(conversationId);
 
-    // If the deleted chat was active, reset the view
-    if (activeConversationId === conversationId) {
-      console.log("🗑️ DELETED CHAT WAS ACTIVE - RESETTING");
-      
-      // Clear the active conversation ID
-      setActiveConversationId(null);
+      // Remove from chat history state
+      setChatHistory((prevHistory) =>
+        prevHistory.filter((chat) => chat.conversation_id !== conversationId)
+      );
 
-      // Clear the selected chat in MainDashboard
-      console.log("🗑️ CALLING onSelectChat(null)");
-      if (onSelectChat) {
-        onSelectChat(null);
+      // If the deleted chat was active, reset the view
+      if (activeConversationId === conversationId) {
+        console.log("🗑️ DELETED CHAT WAS ACTIVE - RESETTING");
+
+        // Clear the active conversation ID
+        setActiveConversationId(null);
+
+        // Clear the selected chat in MainDashboard
+        console.log("🗑️ CALLING onSelectChat(null)");
+        if (onSelectChat) {
+          onSelectChat(null);
+        }
+
+        // Call the onNewChat callback
+        console.log("🗑️ CALLING onNewChat()");
+        if (onNewChat) {
+          onNewChat();
+          toast.success("Started new conversation");
+        }
       }
 
-      // Call the onNewChat callback
-      console.log("🗑️ CALLING onNewChat()");
-      if (onNewChat) {
-        onNewChat();
-        toast.success("Started new conversation");
-      }
+      // Close the modal
+      setIsDeleteChatModalOpen(false);
+      setChatToDelete(null);
+
+      toast.success("Conversation deleted");
+    } catch (error) {
+      console.error("Failed to delete conversation", error);
+      toast.error("Failed to delete conversation");
     }
-
-    // Close the modal
-    setIsDeleteChatModalOpen(false);
-    setChatToDelete(null);
-
-    toast.success("Conversation deleted");
-  } catch (error) {
-    console.error("Failed to delete conversation", error);
-    toast.error("Failed to delete conversation");
-  }
-};
+  };
 
   // // Replace the existing handleDeleteConversation function with this updated version
   // const handleDeleteConversation = async (conversationId) => {
@@ -1225,8 +1246,6 @@ const handleDeleteConversation = async (conversationId) => {
   //     if (activeConversationId === conversationId) {
   //       // Clear the active conversation ID
   //       setActiveConversationId(null);
-
-        
 
   //       // Call the onNewChat callback properly
   //       if (onNewChat) {
@@ -1256,18 +1275,18 @@ const handleDeleteConversation = async (conversationId) => {
   // };
 
   const handleDeleteChatConfirmation = (chat) => {
-  // Select the chat before opening the delete modal
-  if (chat && chat.conversation_id) {
-    // Set as active in sidebar
-    setActiveConversationId(chat.conversation_id);
-    // Notify parent to set as selected in main area
-    if (onSelectChat) {
-      handleChatSelection(chat); // This will fetch and set the chat as selected
+    // Select the chat before opening the delete modal
+    if (chat && chat.conversation_id) {
+      // Set as active in sidebar
+      setActiveConversationId(chat.conversation_id);
+      // Notify parent to set as selected in main area
+      if (onSelectChat) {
+        handleChatSelection(chat); // This will fetch and set the chat as selected
+      }
     }
-  }
-  setChatToDelete(chat);
-  setIsDeleteChatModalOpen(true);
-};
+    setChatToDelete(chat);
+    setIsDeleteChatModalOpen(true);
+  };
 
   function formatRelativeDate(dateString) {
     const date = new Date(dateString);
@@ -1472,10 +1491,10 @@ const handleDeleteConversation = async (conversationId) => {
   );
 
   useEffect(() => {
-  if (onDocumentsUpdate) {
-    onDocumentsUpdate(documents);
-  }
-}, [documents, onDocumentsUpdate]);
+    if (onDocumentsUpdate) {
+      onDocumentsUpdate(documents);
+    }
+  }, [documents, onDocumentsUpdate]);
   // Modified documents list rendering with bulk delete option
   const renderDocumentsList = () => (
     <>
@@ -1599,28 +1618,35 @@ const handleDeleteConversation = async (conversationId) => {
           group relative
         `}
               onClick={() => {
-  const isCurrentlySelected = selectedDocuments.includes(doc.id.toString());
-  
-  if (isCurrentlySelected) {
-    // Deselecting
-    const newSelection = selectedDocuments.filter(id => id !== doc.id.toString());
-    console.log('🗑️ SideTab: Deselecting, new selection:', newSelection);
-    
-    // Update local state
-    setSelectedDocuments(newSelection);
-    setIsSelectAllChecked(false);
-    
-    // Notify MainChat directly
-    if (onDocumentSelectionChange) {
-      onDocumentSelectionChange(newSelection);
-    }
-    
-    toast.success(`Document "${doc.filename}" deselected`);
-  } else {
-    // Selecting
-    handleDocumentClick(doc.id);
-  }
-}}
+                const isCurrentlySelected = selectedDocuments.includes(
+                  doc.id.toString()
+                );
+
+                if (isCurrentlySelected) {
+                  // Deselecting
+                  const newSelection = selectedDocuments.filter(
+                    (id) => id !== doc.id.toString()
+                  );
+                  console.log(
+                    "🗑️ SideTab: Deselecting, new selection:",
+                    newSelection
+                  );
+
+                  // Update local state
+                  setSelectedDocuments(newSelection);
+                  setIsSelectAllChecked(false);
+
+                  // Notify MainChat directly
+                  if (onDocumentSelectionChange) {
+                    onDocumentSelectionChange(newSelection);
+                  }
+
+                  toast.success(`Document "${doc.filename}" deselected`);
+                } else {
+                  // Selecting
+                  handleDocumentClick(doc.id);
+                }
+              }}
             >
               <input
                 type="checkbox"
@@ -1751,8 +1777,6 @@ const handleDeleteConversation = async (conversationId) => {
       )}
     </>
   );
-
-  
 
   // Add this before the return statement in your Sidebar component
   const formattedActiveConversation = activeConversation
@@ -2405,7 +2429,7 @@ const handleDeleteConversation = async (conversationId) => {
             >
               <div className="flex items-center justify-between">
                 <div className="flex-grow">
-                  <ChatDownloadFeature
+                  <ChatDownloadFeatureNB
                     currentChatData={formattedActiveConversation}
                     mainProjectId={mainProjectId}
                     chatHistory={chatHistory}
@@ -2419,13 +2443,13 @@ const handleDeleteConversation = async (conversationId) => {
                 </div>
 
                 {/* Add FAQ button here */}
-                <FaqButton
+                {/* <FaqButton
                   className={`ml-2 ${
                     theme === "dark"
                       ? "hover:bg-gray-700/50"
                       : "hover:bg-[#f5e6d8]"
                   } rounded-lg`}
-                />
+                /> */}
               </div>
             </div>
           )}
@@ -3019,7 +3043,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
               />
             </button>
 
-            {/* FAQ button */}
+            {/* FAQ button
             <button
               onClick={() => window.open("/faq", "_blank")}
               className={`p-2 ${
@@ -3035,7 +3059,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
                   theme === "dark" ? "text-purple-400" : "text-[#7a5741]"
                 }
               />
-            </button>
+            </button> */}
           </div>
         </div>
       )}

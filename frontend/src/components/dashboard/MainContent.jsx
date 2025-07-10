@@ -83,7 +83,7 @@ const MainContent = ({
     useState(true);
   const chatContainerRef = useRef(null);
 
-  // New state for persistent summary
+  // New state for persistent summary<
   const [persistentSummary, setPersistentSummary] = useState("");
   const [isSummaryVisible, setIsSummaryVisible] = useState(true);
 

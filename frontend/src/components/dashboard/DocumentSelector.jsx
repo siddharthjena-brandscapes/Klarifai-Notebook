@@ -88,7 +88,7 @@ const DocumentSelector = ({
         ">
           <div className="p-1">
             {/* Consolidated option */}
-            {selectedDocuments.length > 1 && (
+            {/* {selectedDocuments.length > 1 && (
               <button
                 onClick={() => handleSelect('consolidated')}
                 className={`
@@ -106,8 +106,8 @@ const DocumentSelector = ({
                 </div>
               </button>
             )}
-            
-            <div className={selectedDocuments.length > 1 ? "border-t border-[#e3d5c8] dark:border-gray-700 pt-1 mt-1" : ""}>
+             */}
+            <div className={selectedDocuments.length > 1 ? " pt-1 mt-1" : ""}>
               {/* Individual documents */}
               {selectedDocuments.map(docId => {
                 const doc = documents.find(d => d.id.toString() === docId);

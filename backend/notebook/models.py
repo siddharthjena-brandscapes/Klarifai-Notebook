@@ -57,14 +57,7 @@ class DocumentProcessingStatus(models.Model):
     def __str__(self):
         return f"{self.document_name} - {self.status}"
 
-class UserUploadPermissions(models.Model):
-    user = models.OneToOneField(User, related_name='upload_permissions_NB', on_delete=models.CASCADE)
-    can_upload = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return f"{self.user.username} - Can Upload: {self.can_upload}"
+
 from django.db import models
 import json
 

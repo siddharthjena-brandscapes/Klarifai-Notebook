@@ -153,7 +153,7 @@ const MainChat = forwardRef(
 
     const [processingDocuments, setProcessingDocuments] = useState([]);
     //for response length
-    const [responseLength, setResponseLength] = useState("short");
+    const [responseLength, setResponseLength] = useState("comprehensive");
     const [responseFormat, setResponseFormat] = useState("auto-detect");
     const [hasUploadPermissions, setHasUploadPermissions] = useState(true);
 
@@ -1182,10 +1182,10 @@ const MainChat = forwardRef(
                       activeDocumentId={activeDocumentForSummary}
                       isConsolidatedView={isConsolidatedView}
                       onDocumentChange={handleDocumentChange}
-                      onConsolidatedView={handleGenerateConsolidatedSummary}
-                      isConsolidatedSummaryLoading={
-                        isConsolidatedSummaryLoading
-                      }
+                      // onConsolidatedView={handleGenerateConsolidatedSummary}
+                      // isConsolidatedSummaryLoading={
+                      //   isConsolidatedSummaryLoading
+                      // }
                     />
                   )}
                   {/* Generate Summary Button - Only show if summaries don't exist */}
@@ -1816,58 +1816,59 @@ const MainChat = forwardRef(
 
         console.log("📦 Full Response Object:", response);
 
-      if (response && response.data) {
-        // If backend returns the full conversation/messages array, use it:
-        if (response.data.messages && Array.isArray(response.data.messages)) {
-          setConversation(response.data.messages);
-        } else {
-          // Fallback: append assistant message as before
-          let responseContent = response.data.response || response.data.content;
-          let citations = response.data.citations || [];
+        if (response && response.data) {
+          // If backend returns the full conversation/messages array, use it:
+          if (response.data.messages && Array.isArray(response.data.messages)) {
+            setConversation(response.data.messages);
+          } else {
+            // Fallback: append assistant message as before
+            let responseContent =
+              response.data.response || response.data.content;
+            let citations = response.data.citations || [];
 
-          // Process web sources using the helper function
-          const webSources = processWebSources(
-            response.data.sources_info,
-            response.data.extracted_urls
-          );
+            // Process web sources using the helper function
+            const webSources = processWebSources(
+              response.data.sources_info,
+              response.data.extracted_urls
+            );
 
-          console.log("Processed web sources:", webSources);
+            console.log("Processed web sources:", webSources);
 
-          // If the response is a JSON string, parse it
-          if (
-            typeof responseContent === "string" &&
-            responseContent.startsWith("{")
-          ) {
-            try {
-              const parsedResponse = JSON.parse(responseContent);
-              responseContent = parsedResponse.content || responseContent;
-              // Update citations if they're in the JSON response
-              if (parsedResponse.citations) {
-                citations = parsedResponse.citations;
+            // If the response is a JSON string, parse it
+            if (
+              typeof responseContent === "string" &&
+              responseContent.startsWith("{")
+            ) {
+              try {
+                const parsedResponse = JSON.parse(responseContent);
+                responseContent = parsedResponse.content || responseContent;
+                // Update citations if they're in the JSON response
+                if (parsedResponse.citations) {
+                  citations = parsedResponse.citations;
+                }
+              } catch (jsonError) {
+                console.warn(
+                  "⚠️ Failed to parse JSON response, using as-is:",
+                  jsonError
+                );
               }
-            } catch (jsonError) {
-              console.warn(
-                "⚠️ Failed to parse JSON response, using as-is:",
-                jsonError
-              );
             }
+
+            const assistantMessage = {
+              role: "assistant",
+              content: responseContent,
+              citations: response.data.citations || [],
+              follow_up_questions: response.data.follow_up_questions || [],
+              use_web_knowledge: response.data.use_web_knowledge || useWebMode,
+              response_length: response.data.response_length || responseLength,
+              response_format: response.data.response_format || responseFormat,
+              webSources: webSources, // Use processed web sources
+              sources_info: response.data.sources_info, // Store original sources_info
+              extracted_urls: response.data.extracted_urls, // Store original extracted_urls
+            };
+
+            setConversation([...newConversation, assistantMessage]);
           }
-
-          const assistantMessage = {
-            role: "assistant",
-            content: responseContent,
-            citations: response.data.citations || [],
-            follow_up_questions: response.data.follow_up_questions || [],
-            use_web_knowledge: response.data.use_web_knowledge || useWebMode,
-            response_length: response.data.response_length || responseLength,
-            response_format: response.data.response_format || responseFormat,
-            webSources: webSources, // Use processed web sources
-            sources_info: response.data.sources_info, // Store original sources_info
-            extracted_urls: response.data.extracted_urls, // Store original extracted_urls
-          };
-
-          setConversation([...newConversation, assistantMessage]);
-        }
 
           // Update follow-up questions if available
           if (response.data.follow_up_questions) {
@@ -2792,13 +2793,28 @@ const MainChat = forwardRef(
                         )}
                         {/* NEW: Display web sources if available */}
                         {(() => {
-  const sources = msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls);
-  return sources && sources.length > 0 && propSelectedDocuments.length > 0;
-})() && (
-  <WebSourcesDisplay 
-    sources={msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)} 
-  />
-)}
+                          const sources =
+                            msg.webSources ||
+                            processWebSources(
+                              msg.sources_info,
+                              msg.extracted_urls
+                            );
+                          return (
+                            sources &&
+                            sources.length > 0 &&
+                            propSelectedDocuments.length > 0
+                          );
+                        })() && (
+                          <WebSourcesDisplay
+                            sources={
+                              msg.webSources ||
+                              processWebSources(
+                                msg.sources_info,
+                                msg.extracted_urls
+                              )
+                            }
+                          />
+                        )}
 
                         {/* Add Copy option for Klarifai messages only */}
                         {msg.role !== "user" && (

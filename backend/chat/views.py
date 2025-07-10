@@ -287,11 +287,11 @@ class MicrosoftSSOCallbackView(APIView):
         display_name = user_info.get('displayName', '')
         given_name = user_info.get('givenName', '')
         surname = user_info.get('surname', '')
-       
+ 
         if not email:
             logger.error("No email found in user info")
             return None
-       
+ 
         try:
             # Get existing user
             user = User.objects.get(email=email)
@@ -303,14 +303,14 @@ class MicrosoftSSOCallbackView(APIView):
         except User.DoesNotExist:
             # Create new user - Microsoft already validated them
             username = email.split('@')[0]
-           
+ 
             # Ensure unique username
             counter = 1
             original_username = username
             while User.objects.filter(username=username).exists():
                 username = f"{original_username}_{counter}"
                 counter += 1
-           
+ 
             user = User.objects.create_user(
                 username=username,
                 email=email,
@@ -319,17 +319,20 @@ class MicrosoftSSOCallbackView(APIView):
             )
             user.set_unusable_password()
             user.save()
-           
-            # Create empty API tokens record for SSO users
-            # UserAPITokens.objects.create(
-            #     user=user,
-            #     nebius_token='',
-            #     gemini_token='',
-            #     llama_token=''
-            # )
-           
+ 
             logger.info(f"Created new user: {email}")
-           
+ 
+            # 🔒 Disable all modules for the new user
+            try:
+                module_perm = user.module_permissions
+            except UserModulePermissions.DoesNotExist:
+                module_perm = UserModulePermissions.objects.create(user=user)
+ 
+            # Assuming these are your modules (customize as needed)
+            all_modules = ["document-qa", "idea-generator", "klarifai-notebook", "ad-campaign-generator"]
+            module_perm.disabled_modules = {module: True for module in all_modules}
+            module_perm.save()
+ 
         return user
    
     def get(self, request):
@@ -1686,6 +1689,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             if permissions.disabled_modules.get('document-upload', False):
                 return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
+            pass
+
+        try:
+            upload_permissions = UserUploadPermissions.objects.get(user=user)
+            if not upload_permissions.can_upload:
+                return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
+        except UserUploadPermissions.DoesNotExist:
             pass
 
         try:
@@ -7001,81 +7011,81 @@ class ChatView(APIView):
             
     # Keep general follow-up question generation as is
     def generate_general_follow_up_questions(self, question, answer, user=None):
-        prompt = f"""
+        system_message = "You are an expert at generating relevant follow-up questions. Always respond with valid JSON format."
+       
+        user_prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
         The questions should be short, interesting, and directly related to the topic.
-        
+       
         User Question: {question}
         Your Answer (abbreviated): {answer[:500]}...
-        
+       
         CRITICAL: Your response MUST be a valid JSON object with this structure:
         {{
             "questions": ["question1", "question2", "question3"],
             "topic": "main_topic_discussed"
         }}
         """
-        
-        try:
-            user_api_tokens = UserAPITokens.objects.get(user=user)
-            gemini_api_key = user_api_tokens.gemini_token
-            genai.configure(api_key=gemini_api_key)
-            
-            # For Gemini, we need to be more explicit about JSON format
-            model = genai.GenerativeModel(
-                "gemini-2.0-flash-exp",
-                generation_config={
-                    'temperature': 0.3,
-                    'response_mime_type': 'application/json'  # ✅ ADD THIS
-                }
+       
+        try:            
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=500
             )
-            response = model.generate_content(prompt)
-            
+           
             # Parse JSON response
-            json_response = json.loads(response.text)
+            json_response = json.loads(completion.choices[0].message.content)
             questions = json_response.get("questions", [])
             return questions[:3]
-            
+           
         except Exception as e:
             logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
                 "What else would you like to know about this topic?",
-                "Would you like me to elaborate on any specific point?", 
+                "Would you like me to elaborate on any specific point?",
                 "Do you have any other questions I can help with?"
             ]
-
+ 
     def generate_follow_up_questions(self, context, user=None):
         context_sample = "\n".join(context[:3]) if context else ""
-        prompt = f"""
+       
+        system_message = "You are an expert at generating relevant follow-up questions based on context. Always respond with valid JSON format."
+       
+        user_prompt = f"""
         Based on this context, suggest 3 relevant follow-up questions. The questions should be short and directly related to the content.
-        
+       
         Context: {context_sample}
-        
+       
         CRITICAL: Your response MUST be a valid JSON object with this structure:
         {{
             "questions": ["question1", "question2", "question3"],
             "context_topic": "main_topic_from_context"
         }}
         """
-        
+       
         try:
-            user_api_tokens = UserAPITokens.objects.get(user=user)
-            gemini_api_key = user_api_tokens.gemini_token
-            genai.configure(api_key=gemini_api_key)
-            
-            model = genai.GenerativeModel(
-                "gemini-2.0-flash-exp",
-                generation_config={
-                    'temperature': 0.3,
-                    'response_mime_type': 'application/json'  # ✅ ADD THIS
-                }
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=500
             )
-            response = model.generate_content(prompt)
-            
+           
             # Parse JSON response
-            json_response = json.loads(response.text)
+            json_response = json.loads(completion.choices[0].message.content)
             questions = json_response.get("questions", [])
             return questions[:3]
-            
+           
         except Exception as e:
             logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
@@ -7083,8 +7093,6 @@ class ChatView(APIView):
                 "Would you like me to elaborate on any specific point?",
                 "How can I help clarify this information further?"
             ]
-
-
 
 class DeleteMessagePairView(APIView):
     permission_classes = [IsAuthenticated]

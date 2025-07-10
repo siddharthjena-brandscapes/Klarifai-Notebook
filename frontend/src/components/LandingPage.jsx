@@ -31,7 +31,7 @@ import Header from "./dashboard/Header";
 import { coreService,  adminService } from "../utils/axiosConfig";
 import EditProject from "./EditProject";
 import DeleteProjectModal from "./DeleteProjectModal";
-import FaqButton from "./faq/FaqButton";
+// import FaqButton from "./faq/FaqButton";
 import ArchiveProjectModal from "./LandingPage/ArchiveProjectModal";
 import ArchivedProjects from "./LandingPage/ArchivedProjects";
 import MultiSelectDropdown from "./LandingPage/MultiSelectDropdown";
@@ -1091,7 +1091,7 @@ const handleModuleSelect = (moduleId) => {
       })}
     </div>
   </div>
-  <FaqButton />
+  {/* <FaqButton /> */}
 </div>
     );
   }
@@ -1108,16 +1108,21 @@ const handleModuleSelect = (moduleId) => {
 
     // Define filter and sort functions BEFORE using them
     const filteredProjects = projects.filter((project) => {
-      if (!searchQuery.trim()) return true;
+  if (!searchQuery.trim()) return true;
 
-      const query = searchQuery.toLowerCase();
-      return (
-        project.name.toLowerCase().includes(query) ||
-        (project.description &&
-          project.description.toLowerCase().includes(query)) ||
-        project.category.toLowerCase().includes(query)
-      );
-    });
+  const query = searchQuery.toLowerCase();
+  return (
+    project.name.toLowerCase().includes(query) ||
+    (project.description &&
+      project.description.toLowerCase().includes(query)) ||
+    (project.category
+      ? (Array.isArray(project.category)
+          ? project.category.join(', ').toLowerCase()
+          : project.category.toLowerCase()
+        ).includes(query)
+      : false)
+  );
+});
 
     console.log("Project data before sorting:", filteredProjects.map(p => ({
       id: p.id,
@@ -1457,7 +1462,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
             </div>
           )}
         </div>
-        <FaqButton />
+        {/* <FaqButton /> */}
       </div>
     );
   }
@@ -1670,23 +1675,28 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
   Enhance with AI
 </button>
       
-      <div className="relative">
-        <input
-          type="file"
-          id="documentUpload"
-          className="hidden"
-          onChange={handleDocumentChange}
-          accept=".pdf,.pptx,.txt"
-        />
-        <label
-          htmlFor="documentUpload"
-          title="Upload a project brief or proposal to auto-generate a description from its content."
-          className="cursor-pointer px-3 py-2 bg-[#a68a70] dark:bg-emerald-600/20 hover:bg-[#8c715f] dark:hover:bg-emerald-600/30 text-white dark:text-emerald-300 rounded-lg transition-colors text-sm font-medium flex items-center"
-        >
-          <Paperclip className="w-4 h-4 mr-1.5" />
-          Upload Files
-        </label>
-      </div>
+       <div className="relative">
+    {/* Hidden file input */}
+    <input
+      type="file"
+      id="documentUpload"
+      className="hidden"
+      onChange={handleDocumentChange}
+      accept=".pdf,.pptx,.txt"
+      disabled // Just in case someone tries to trigger it programmatically
+    />
+ 
+    {/* Disabled label */}
+    <div
+      // title="File uploads are currently disabled. Please contact admin."
+      className="px-3 py-2 bg-[#a68a70]/50 dark:bg-emerald-600/10 text-white dark:text-emerald-300
+                rounded-lg transition-colors text-sm font-medium flex items-center
+                opacity-50 cursor-not-allowed"
+    >
+      <Paperclip className="w-4 h-4 mr-1.5" />
+      Upload Files
+    </div>
+  </div>
       
       {documentFile && (
         <button
@@ -1776,46 +1786,54 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
   </div>
 </div>  
       {/* Module selection */}
-      <div>
-        <h3 className="text-xl font-semibold text-[#0a3b25] dark:text-white mb-4">
-          Available Modules
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {modules.map((module) => (
-            <div
-              key={module.id}
-              className={`p-4 rounded-lg border transition-all duration-300 ${
-                module.active
-                  ? "cursor-pointer " +
-                    (projectData.selected_modules.includes(module.id)
-                      ? "bg-[#556052]/10 border-[#556052] dark:bg-emerald-600/20 dark:border-emerald-500"
-                      : "bg-white/80 border-[#d6cbbf] dark:bg-white/5 dark:border-gray-300/20 hover:bg-[#f5e6d8] dark:hover:bg-white/10")
-                  : "opacity-50 cursor-not-allowed bg-gray-100 border-gray-300 dark:bg-gray-800 dark:border-gray-700"
-              }`}
-              onClick={() => handleModuleToggle(module.id)}
-            >
-              <div className="flex items-center space-x-4">
-                {module.active ? (
-                  <module.icon className="w-8 h-8 text-[#a55233] dark:text-purple-400 flex-shrink-0" />
-                ) : (
-                  <Lock className="w-8 h-8 text-gray-500 dark:text-gray-500 flex-shrink-0" />
-                )}
-                <div className="flex-1">
-                  <h4 className="font-medium text-[#5e4636] dark:text-white text-lg">
-                    {module.name}
-                  </h4>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                    {module.active
-                      ? module.description
-                      : "This module is currently locked. Coming soon!"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
+   
+<div>
+<h3 className="text-xl font-semibold text-[#0a3b25] dark:text-white mb-4">
+    Available Modules
+</h3>
+ 
+  {modules.some((module) => module.active) ? (
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {modules.map((module) => (
+<div
+          key={module.id}
+          className={`p-4 rounded-lg border transition-all duration-300 ${
+            module.active
+              ? "cursor-pointer " +
+                (projectData.selected_modules.includes(module.id)
+                  ? "bg-[#556052]/10 border-[#556052] dark:bg-emerald-600/20 dark:border-emerald-500"
+                  : "bg-white/80 border-[#d6cbbf] dark:bg-white/5 dark:border-gray-300/20 hover:bg-[#f5e6d8] dark:hover:bg-white/10")
+              : "opacity-50 cursor-not-allowed bg-gray-100 border-gray-300 dark:bg-gray-800 dark:border-gray-700"
+          }`}
+          onClick={() => module.active && handleModuleToggle(module.id)}
+>
+<div className="flex items-center space-x-4">
+            {module.active ? (
+<module.icon className="w-8 h-8 text-[#a55233] dark:text-purple-400 flex-shrink-0" />
+            ) : (
+<Lock className="w-8 h-8 text-gray-500 dark:text-gray-500 flex-shrink-0" />
+            )}
+<div className="flex-1">
+<h4 className="font-medium text-[#5e4636] dark:text-white text-lg">
+                {module.name}
+</h4>
+<p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                {module.active
+                  ? module.description
+                  : "This module is currently locked. Coming soon!"}
+</p>
+</div>
+</div>
+</div>
+      ))}
+</div>
+  ) : (
+<div className="text-center py-10 text-gray-600 dark:text-gray-300 text-lg">
+      🚫 No modules are currently available for your account.<br />
+      Please contact the administrator to enable access.
+</div>
+  )}
+</div>
       {/* Submit button */}
       <div className="flex justify-center">
         <button
@@ -1827,7 +1845,7 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
       </div>
     </form>
   </div>
-        <FaqButton />
+        {/* <FaqButton /> */}
       </div>
     </>
   );

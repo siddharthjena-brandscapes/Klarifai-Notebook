@@ -27,7 +27,6 @@ from .models import (
     ConversationMemoryBuffer,
     UserModulePermissions,
     Note,
-    UserUploadPermissions,
     ConversationTransaction,
     UserTransaction,
     DocumentTransaction,
@@ -90,6 +89,7 @@ import yt_dlp
 from django.db import transaction
 from PyPDF2 import PdfReader
 import fitz
+from chat.models import UserUploadPermissions
 
 logger = logging.getLogger(__name__)
 
@@ -283,57 +283,81 @@ class DocumentProcessingMixin:
             logger.error(f"Error initializing Gemini: {str(e)}")
             return None
 
-    def detect_document_structure(self, text: str, model) -> str:
+    def detect_document_structure(self, text: str, client) -> str:
         """Analyze document structure to determine if it has clear headings/titles"""
         try:
-            prompt = f"""
+            system_message = "You are an expert at analyzing document structure. Determine if documents have clear headings and sections."
+           
+            user_prompt = f"""
             Analyze this document text and determine if it has clear structure with headings, titles, or sections:
-            
+           
             Text: {text[:2000]}
-            
+           
             Look for:
             - Clear headings (numbered sections, bold titles, etc.)
             - Section breaks
             - Structured format
             - Table of contents references
-            
+           
             Respond with only: "STRUCTURED" or "UNSTRUCTURED"
             """
-            
-            response = model.generate_content(prompt)
-            return response.text.strip().upper()
+           
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=10
+            )
+           
+            response_text = completion.choices[0].message.content.strip().upper()
+            return response_text
         except Exception as e:
             logger.error(f"Error detecting document structure: {str(e)}")
             return "UNSTRUCTURED"  # Default to unstructured if analysis fails
-
-    def generate_topics_from_content(self, text: str, model) -> List[str]:
+ 
+    def generate_topics_from_content(self, text: str, client) -> List[str]:
         """Generate key topics from document content when no clear headings exist"""
         try:
-            prompt = f"""
+            system_message = "You are an expert at identifying main topics and themes from documents. Generate concise, specific topic phrases."
+           
+            user_prompt = f"""
             Analyze this document and identify 5-7 main topics or themes discussed:
-            
+           
             Text: {text[:6000]}
-            
+           
             Generate concise topic phrases (3-5 words each) that represent the main concepts, ideas, or subjects covered in this document.
-            
+           
             IMPORTANT:
             - Focus on the most important themes and concepts
             - Use clear, descriptive phrases
             - Make topics specific to the document content
             - Avoid generic terms
             - Each topic should be 3-5 words
-            
+           
             Format as a simple numbered list:
             1. Topic phrase
             2. Topic phrase
             ...
             """
-            
-            response = model.generate_content(prompt)
+           
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.4,
+                max_tokens=500
+            )
+           
+            response_text = completion.choices[0].message.content.strip()
             topics = []
-            
+           
             # Parse the numbered list
-            lines = response.text.strip().split('\n')
+            lines = response_text.split('\n')
             for line in lines:
                 line = line.strip()
                 if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
@@ -341,37 +365,49 @@ class DocumentProcessingMixin:
                     topic = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
                     if topic:
                         topics.append(topic)
-            
+           
             return topics[:7]  # Limit to 7 topics
         except Exception as e:
             logger.error(f"Error generating topics: {str(e)}")
             return []
-
-    def extract_headings_from_structured_doc(self, text: str, model) -> List[str]:
+ 
+    def extract_headings_from_structured_doc(self, text: str, client) -> List[str]:
         """Extract actual headings from structured documents"""
         try:
-            prompt = f"""
+            system_message = "You are an expert at extracting headings and section titles from structured documents. Extract only exact headings that appear in the document."
+           
+            user_prompt = f"""
             Extract the main headings and section titles from this structured document:
-            
+           
             Text: {text[:8000]}
-            
-            IMPORTANT: 
+           
+            IMPORTANT:
             - Extract ONLY actual headings, titles, or section names that appear in the document
             - Use exact words from the document (3-6 words per heading)
             - Look for numbered sections, bold text, capitalized headings
             - Do not create new phrases - use exact text from document
-            
+           
             Format as a simple numbered list:
             1. Exact heading from document
             2. Exact heading from document
             ...
             """
-            
-            response = model.generate_content(prompt)
+           
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.2,
+                max_tokens=800
+            )
+           
+            response_text = completion.choices[0].message.content.strip()
             headings = []
-            
+           
             # Parse the numbered list
-            lines = response.text.strip().split('\n')
+            lines = response_text.split('\n')
             for line in lines:
                 line = line.strip()
                 if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
@@ -379,37 +415,34 @@ class DocumentProcessingMixin:
                     heading = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
                     if heading:
                         headings.append(heading)
-            
+           
             return headings[:7]  # Limit to 7 headings
         except Exception as e:
             logger.error(f"Error extracting headings: {str(e)}")
             return []
-
+ 
     def generate_summary(self, text, file_name, user=None):
         """
-        REPLACED: Generate summary and key points using Gemini 2.0 Flash with smart topic detection
+        REPLACED: Generate summary and key points using GPT-4 with smart topic detection
         Returns: (summary_text, key_points_list)
         """
         if not text.strip():
             return "No extractable text found in the document.", []
-        
+       
         try:
-            # Initialize Gemini model
-            model = self.init_gemini(user)
-            if not model:
-                logger.error("Failed to initialize Gemini model")
-                return self.format_error_message(file_name), []
-            
+           
             # First, detect if document has structure
-            doc_structure = self.detect_document_structure(text, model)
-            
+            doc_structure = self.detect_document_structure(text, client)
+           
             # Generate summary
-            summary_prompt = f"""
+            summary_system_message = """You are an expert document analyzer. Provide comprehensive document summaries with proper HTML-like formatting."""
+           
+            summary_user_prompt = f"""
             Please analyze the following document '{file_name}' and provide a comprehensive quick summary (8-10 lines):
-            
+           
             Text: {text[:8000]}
-            
-            IMPORTANT FOR SUMMARY: 
+           
+            IMPORTANT FOR SUMMARY:
             - Must be 8-10 lines providing comprehensive coverage
             - FOCUS ON EXECUTION AND VALIDATION: Emphasize practical implementation steps, validation methods, testing approaches, and measurable outcomes
             - DESCRIBE MORE CLEARLY: Use specific language, avoid vague terms, provide clear explanations of processes and concepts
@@ -420,50 +453,71 @@ class DocumentProcessingMixin:
             - Cover methodology, results, conclusions, and recommendations if applicable
             - Explain the context, significance, and implications with specific examples
             - Make it thorough but still readable and well-structured
-            
+           
             ### Expected Response Format:
             <b>Summary Overview</b>
             <p>High-level introduction to the document's main theme</p>
-
+ 
             <b>Key Highlights</b>
             <ul>
                 <li>First major insight</li>
                 <li>Second major insight</li>
                 <li>Third major insight</li>
             </ul>
-
+ 
             <b>Detailed Insights</b>
             <p>Expanded explanation of the document's core content and significance</p>
             """
-            
-            summary_response = model.generate_content(summary_prompt)
-            summary = summary_response.text.strip()
-            
+           
+            summary_completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": summary_system_message},
+                    {"role": "user", "content": summary_user_prompt}
+                ],
+                temperature=0.4,
+                max_tokens=2000
+            )
+           
+            summary = summary_completion.choices[0].message.content.strip()
+           
             # Format the summary response to ensure proper HTML-like formatting
             summary = self.format_summary_response(summary)
-            
+           
             # Generate key points based on document structure
             if doc_structure == "STRUCTURED":
-                key_points = self.extract_headings_from_structured_doc(text, model)
+                key_points = self.extract_headings_from_structured_doc(text, client)
             else:
-                key_points = self.generate_topics_from_content(text, model)
-            
+                key_points = self.generate_topics_from_content(text, client)
+           
             # Fallback if no key points were generated
             if not key_points:
-                fallback_prompt = f"""
+                fallback_system_message = "You are an expert at identifying main topics and themes from documents."
+               
+                fallback_user_prompt = f"""
                 From this document, identify 5 main topics or themes:
-                
+               
                 Text: {text[:4000]}
-                
+               
                 Provide 5 short phrases (3-4 words each) that capture the main ideas.
                 Format as:
                 1. Topic phrase
                 2. Topic phrase
                 ...
                 """
-                
-                fallback_response = model.generate_content(fallback_prompt)
-                lines = fallback_response.text.strip().split('\n')
+               
+                fallback_completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": fallback_system_message},
+                        {"role": "user", "content": fallback_user_prompt}
+                    ],
+                    temperature=0.4,
+                    max_tokens=500
+                )
+               
+                fallback_response = fallback_completion.choices[0].message.content.strip()
+                lines = fallback_response.split('\n')
                 key_points = []
                 for line in lines:
                     line = line.strip()
@@ -471,15 +525,14 @@ class DocumentProcessingMixin:
                         topic = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
                         if topic:
                             key_points.append(topic)
-            
+           
             logger.info(f"Successfully generated summary and {len(key_points)} key points for {file_name}")
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", key_points)
             return summary, key_points
-            
+           
         except Exception as e:
-            logger.error(f"Error generating content with Gemini 2.0 Flash: {str(e)}")
+            logger.error(f"Error generating content with GPT-4: {str(e)}")
             return self.format_error_message(file_name), []
-
     def format_summary_response(self, response_text):
         """Ensures proper HTML-like formatting in the summary response."""
         import re
@@ -1308,6 +1361,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             if permissions.disabled_modules.get('document-upload', False):
                 return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
+            pass
+
+        try:
+            upload_permissions = UserUploadPermissions.objects.get(user=user)
+            if not upload_permissions.can_upload:
+                return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
+        except UserUploadPermissions.DoesNotExist:
             pass
 
         try:
@@ -6542,81 +6602,81 @@ class ChatView(APIView):
             
     # Keep general follow-up question generation as is
     def generate_general_follow_up_questions(self, question, answer, user=None):
-        prompt = f"""
+        system_message = "You are an expert at generating relevant follow-up questions. Always respond with valid JSON format."
+       
+        user_prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
         The questions should be short, interesting, and directly related to the topic.
-        
+       
         User Question: {question}
         Your Answer (abbreviated): {answer[:500]}...
-        
+       
         CRITICAL: Your response MUST be a valid JSON object with this structure:
         {{
             "questions": ["question1", "question2", "question3"],
             "topic": "main_topic_discussed"
         }}
         """
-        
-        try:
-            user_api_tokens = UserAPITokens.objects.get(user=user)
-            gemini_api_key = user_api_tokens.gemini_token
-            genai.configure(api_key=gemini_api_key)
-            
-            # For Gemini, we need to be more explicit about JSON format
-            model = genai.GenerativeModel(
-                "gemini-2.0-flash-exp",
-                generation_config={
-                    'temperature': 0.3,
-                    'response_mime_type': 'application/json'  # ✅ ADD THIS
-                }
+       
+        try:            
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=500
             )
-            response = model.generate_content(prompt)
-            
+           
             # Parse JSON response
-            json_response = json.loads(response.text)
+            json_response = json.loads(completion.choices[0].message.content)
             questions = json_response.get("questions", [])
             return questions[:3]
-            
+           
         except Exception as e:
             logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
                 "What else would you like to know about this topic?",
-                "Would you like me to elaborate on any specific point?", 
+                "Would you like me to elaborate on any specific point?",
                 "Do you have any other questions I can help with?"
             ]
-
+ 
     def generate_follow_up_questions(self, context, user=None):
         context_sample = "\n".join(context[:3]) if context else ""
-        prompt = f"""
+       
+        system_message = "You are an expert at generating relevant follow-up questions based on context. Always respond with valid JSON format."
+       
+        user_prompt = f"""
         Based on this context, suggest 3 relevant follow-up questions. The questions should be short and directly related to the content.
-        
+       
         Context: {context_sample}
-        
+       
         CRITICAL: Your response MUST be a valid JSON object with this structure:
         {{
             "questions": ["question1", "question2", "question3"],
             "context_topic": "main_topic_from_context"
         }}
         """
-        
+       
         try:
-            user_api_tokens = UserAPITokens.objects.get(user=user)
-            gemini_api_key = user_api_tokens.gemini_token
-            genai.configure(api_key=gemini_api_key)
-            
-            model = genai.GenerativeModel(
-                "gemini-2.0-flash-exp",
-                generation_config={
-                    'temperature': 0.3,
-                    'response_mime_type': 'application/json'  # ✅ ADD THIS
-                }
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=500
             )
-            response = model.generate_content(prompt)
-            
+           
             # Parse JSON response
-            json_response = json.loads(response.text)
+            json_response = json.loads(completion.choices[0].message.content)
             questions = json_response.get("questions", [])
             return questions[:3]
-            
+           
         except Exception as e:
             logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
@@ -6624,8 +6684,6 @@ class ChatView(APIView):
                 "Would you like me to elaborate on any specific point?",
                 "How can I help clarify this information further?"
             ]
-                
-
 
 class DeleteMessagePairView(APIView):
     permission_classes = [IsAuthenticated]

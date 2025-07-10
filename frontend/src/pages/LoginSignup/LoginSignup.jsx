@@ -7,7 +7,7 @@ import LoginForm from '../../components/auth/LoginForm';
 import SignupForm from '../../components/auth/SignupForm';
 import backgroundImage from '../../assets/woman_face_merging_into_the_AI.jpg';
 import logo from '../../assets/klarifi-logo-blue.png';
-import FaqButton from '../../components/faq/FaqButton';
+// import FaqButton from '../../components/faq/FaqButton';
 import brandscapeLogo from '../../assets/brand-scarpes-logo.png';
 import { coreService } from '../../utils/axiosConfig';
 
@@ -131,7 +131,7 @@ const LoginSignup = () => {
           </div>
         </div>
       </div>
-      <FaqButton />
+      {/* <FaqButton /> */}
     </div>
   );
 };

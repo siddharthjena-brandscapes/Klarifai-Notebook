@@ -3098,58 +3098,135 @@ const fetchNotebookUserStats = async () => {
                       </div>
                     </div>
                     {/* Show question stats if available */}
-                    {userStats.length > 0 && (
-                      <div className="mt-4">
-                        <p className="text-xs font-semibold text-[#a55233] dark:text-emerald-400 mb-1">
-                          Document Q&A Documents & Questions:
-                        </p>
-                        <ul className="text-xs bg-[#e9dcc9]/50 dark:bg-black/20 rounded-md p-2 space-y-1">
-                          {(userStats.find((u) => u.user_id === user.id)
-                            ?.documents || []
-                          ).map((doc) => (
-                            <li key={doc.document_id} className="flex justify-between">
-                              <span>{doc.filename}</span>
-                              <span className="font-mono">
-                                {doc.questions_asked} questions
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="text-xs mt-2 text-[#5e4636] dark:text-gray-400">
-                          Total uploads:{" "}
-                          <span className="font-bold">
-                            {
-                              userStats.find((u) => u.user_id === user.id)
-                                ?.document_upload_count || 0
-                            }
-                          </span>
-                        </p>
-                        
-                      </div>
-                    )}
-                    {notebookUserStats.length > 0 && (
-                      <div className="mt-4">
-                        <p className="text-xs font-semibold text-[#a55233] dark:text-emerald-400 mb-1">
-                          Notebook Documents & Questions:
-                        </p>
-                        <ul className="text-xs bg-[#e9dcc9]/50 dark:bg-black/20 rounded-md p-2 space-y-1">
-                          {(notebookUserStats.find((u) => u.user_id === user.id)?.documents || []).map((doc) => (
-                            <li key={doc.document_id} className="flex justify-between">
-                              <span>{doc.filename}</span>
-                              <span className="font-mono">
-                                {doc.questions_asked} questions
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="text-xs mt-2 text-[#5e4636] dark:text-gray-400">
-                          Total notebook uploads:{" "}
-                          <span className="font-bold">
-                            {notebookUserStats.find((u) => u.user_id === user.id)?.document_upload_count || 0}
-                          </span>
-                        </p>
-                      </div>
-                    )}
+                  {(userStats.length > 0 || notebookUserStats.length > 0) && (
+  <div className="mt-6 space-y-4">
+    {/* Document Q&A Stats */}
+    {userStats.length > 0 && (() => {
+      const userDocQAStats = userStats.find((u) => u.user_id === user.id);
+      const totalDocuments = userDocQAStats?.document_upload_count || 0;
+      const totalQuestions = userDocQAStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
+      const documents = userDocQAStats?.documents || [];
+      const [showDocQADetails, setShowDocQADetails] = useState(false);
+ 
+      return (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800/30">
+          <div className="flex items-center justify-between mb-3">
+            <h5 className="text-sm font-bold text-blue-700 dark:text-blue-300 flex items-center">
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              Document Q&A Statistics
+            </h5>
+            <div className="flex items-center space-x-4">
+              <div className="flex space-x-4">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{totalDocuments}</div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400">Documents</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{totalQuestions}</div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400">Questions</div>
+                </div>
+              </div>
+              {documents.length > 0 && (
+                <button
+                  onClick={() => setShowDocQADetails(!showDocQADetails)}
+                  className="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-800/30 dark:hover:bg-blue-700/30 text-blue-700 dark:text-blue-300 rounded-lg transition-all flex items-center"
+                >
+                  {showDocQADetails ? 'Hide Details' : 'View Details'}
+                  <svg className={`w-3 h-3 ml-1 transition-transform ${showDocQADetails ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+         
+          {documents.length > 0 && showDocQADetails && (
+            <div className="space-y-2 border-t border-blue-200 dark:border-blue-700/30 pt-3">
+              <div className="text-xs text-blue-600 dark:text-blue-400 mb-2">Document Activity:</div>
+              <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+                {documents.map((doc) => (
+                  <div key={doc.document_id} className="flex items-center justify-between bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
+                    <span className="text-xs text-blue-800 dark:text-blue-200 truncate flex-1 mr-2" title={doc.filename}>
+                      {doc.filename.length > 25 ? `${doc.filename.substring(0, 25)}...` : doc.filename}
+                    </span>
+                    <span className="text-xs font-mono bg-blue-100 dark:bg-blue-800/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                      {doc.questions_asked}Q
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    })()}
+                   {/* Notebook Stats */}
+    {notebookUserStats.length > 0 && (() => {
+      const userNotebookStats = notebookUserStats.find((u) => u.user_id === user.id);
+      const totalNotebookDocs = userNotebookStats?.document_upload_count || 0;
+      const totalNotebookQuestions = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
+      const notebookDocuments = userNotebookStats?.documents || [];
+      const [showNotebookDetails, setShowNotebookDetails] = useState(false);
+ 
+      return (
+        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg p-4 border border-emerald-200 dark:border-emerald-800/30">
+          <div className="flex items-center justify-between mb-3">
+            <h5 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center">
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
+              </svg>
+              Notebook Statistics
+            </h5>
+            <div className="flex items-center space-x-4">
+              <div className="flex space-x-4">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookDocs}</div>
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400">Documents</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookQuestions}</div>
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400">Questions</div>
+                </div>
+              </div>
+              {notebookDocuments.length > 0 && (
+                <button
+                  onClick={() => setShowNotebookDetails(!showNotebookDetails)}
+                  className="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-800/30 dark:hover:bg-emerald-700/30 text-emerald-700 dark:text-emerald-300 rounded-lg transition-all flex items-center"
+                >
+                  {showNotebookDetails ? 'Hide Details' : 'View Details'}
+                  <svg className={`w-3 h-3 ml-1 transition-transform ${showNotebookDetails ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+         
+          {notebookDocuments.length > 0 && showNotebookDetails && (
+            <div className="space-y-2 border-t border-emerald-200 dark:border-emerald-700/30 pt-3">
+              <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-2">Document Activity:</div>
+              <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+                {notebookDocuments.map((doc) => (
+                  <div key={doc.document_id} className="flex items-center justify-between bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
+                    <span className="text-xs text-emerald-800 dark:text-emerald-200 truncate flex-1 mr-2" title={doc.filename}>
+                      {doc.filename.length > 25 ? `${doc.filename.substring(0, 25)}...` : doc.filename}
+                    </span>
+                    <span className="text-xs font-mono bg-emerald-100 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">
+                      {doc.questions_asked}Q
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    })()}
+  </div>
+)}
                   </div>
                 ))}
               </div>
@@ -3924,7 +4001,7 @@ const CategoryManagementSection = () => {
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
-                    Hugging Face Token
+                    Nebius Token
                   </label>
                   <input
                     type="text"
@@ -4583,6 +4660,42 @@ const CategoryManagementSection = () => {
       <style>
         {`
         /* Add these custom transition styles */
+
+        /* Custom thin scrollbar styles */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+ 
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+ 
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+ 
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 2px;
+}
+ 
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.7);
+}
+ 
+/* Dark mode scrollbar */
+.dark .custom-scrollbar {
+  scrollbar-color: rgba(75, 85, 99, 0.6) transparent;
+}
+ 
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(75, 85, 99, 0.6);
+}
+ 
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(75, 85, 99, 0.8);
+}
 .fade-enter {
   opacity: 0;
   transform: translateY(20px);
