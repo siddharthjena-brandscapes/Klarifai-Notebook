@@ -67,6 +67,11 @@ const MainDashboard = () => {
   // const [isDocumentSelectionModalOpen, setIsDocumentSelectionModalOpen] = useState(false);
   const [documents, setDocuments] = useState([]);
 
+  const [message, setMessage] = useState("");
+  const [pastedImages, setPastedImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [hasImages, setHasImages] = useState(false);
+
   // NEW: Helper function to create document signature
   const createDocumentSignature = useCallback((documentIds) => {
     if (!documentIds || documentIds.length === 0) return "web_mode";
@@ -89,65 +94,6 @@ const MainDashboard = () => {
     },
     [createDocumentSignature, currentDocumentSet]
   );
-
-  // NEW: Function to handle document context changes
-  // const handleDocumentContextChange = useCallback((newDocuments, source = 'unknown') => {
-  //   console.log(`📋 Document context change from ${source}:`, {
-  //     previous: currentDocumentSet,
-  //     new: newDocuments,
-  //     source
-  //   });
-
-  //   const newSignature = createDocumentSignature(newDocuments);
-
-  //   if (shouldCreateNewChatSession(newDocuments)) {
-  //     console.log('🔄 Creating new chat session for document set:', newSignature);
-
-  //     // Save current session if it exists
-  //     if (selectedChat && currentDocumentSet.length > 0) {
-  //       const currentSignature = createDocumentSignature(currentDocumentSet);
-  //       setDocumentSessions(prev => new Map(prev).set(currentSignature, {
-  //         chat: selectedChat,
-  //         documents: [...currentDocumentSet],
-  //         lastUsed: Date.now()
-  //       }));
-  //       console.log('💾 Saved session for:', currentSignature);
-  //     }
-
-  //     // Check if we have an existing session for the new document set
-  //     const existingSession = documentSessions.get(newSignature);
-
-  //     if (existingSession) {
-  //       console.log('🔍 Found existing session for:', newSignature);
-  //       setSelectedChat(existingSession.chat);
-  //       setCurrentDocumentSet(newDocuments);
-  //       setLastDocumentSignature(newSignature);
-
-  //       // Update last used timestamp
-  //       setDocumentSessions(prev => {
-  //         const updated = new Map(prev);
-  //         updated.set(newSignature, {
-  //           ...existingSession,
-  //           lastUsed: Date.now()
-  //         });
-  //         return updated;
-  //       });
-  //     } else {
-  //       console.log('✨ Starting fresh session for:', newSignature);
-  //       // Start a new chat session
-  //       setSelectedChat(null);
-  //       setCurrentDocumentSet(newDocuments);
-  //       setLastDocumentSignature(newSignature);
-  //       setForceResetKey(prev => prev + 1);
-  //     }
-  //   } else {
-  //     console.log('📄 Same document context, keeping current session');
-  //     setCurrentDocumentSet(newDocuments);
-  //   }
-
-  //   // Always update selectedDocuments
-  //   setSelectedDocuments(newDocuments);
-  // }, [selectedChat, currentDocumentSet, documentSessions, createDocumentSignature, shouldCreateNewChatSession]);
 
   // NEW: Function to handle document context changes
   const handleDocumentContextChange = useCallback(
@@ -750,30 +696,6 @@ const MainDashboard = () => {
     }
   };
 
-  // UPDATE: Enhanced handleNewChat to preserve document context
-  // REPLACE the existing handleNewChat function with this corrected version:
-
-  // const handleNewChat = (e) => {
-  //   if (e && e.preventDefault) {
-  //     e.preventDefault();
-  //   }
-
-  //   // Update document context to match current selection
-  //   if (JSON.stringify(selectedDocuments.sort()) !== JSON.stringify(currentDocumentSet.sort())) {
-  //     console.log("📋 Document selection changed during session, updating context");
-  //     handleDocumentContextChange(selectedDocuments, 'new_chat_sync');
-  //   }
-
-  //   // Reset chat for current document selection
-  //   setSelectedChat(null);
-  //   setSelectedDocument(null);
-  //   setSummary('');
-  //   setFollowUpQuestions([]);
-  //   setForceResetKey(prev => prev + 1);
-
-  //   console.log("✅ New chat started with current document selection:", selectedDocuments);
-  // };
-
   const handleNewChat = (e) => {
     if (e && e.preventDefault) {
       e.preventDefault();
@@ -951,6 +873,14 @@ const MainDashboard = () => {
                 className="w-full max-w-full overflow-hidden"
                 onChatInputFocus={handleChatInputFocus}
                 onOpenYouTubeModal={() => setIsYouTubeModalOpen(true)}
+                message={message}
+                setMessage={setMessage}
+                pastedImages={pastedImages}
+                setPastedImages={setPastedImages}
+                imagePreviews={imagePreviews}
+                setImagePreviews={setImagePreviews}
+                hasImages={hasImages}
+                setHasImages={setHasImages}
               />
             </div>
           </div>

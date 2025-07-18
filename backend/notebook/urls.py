@@ -26,7 +26,8 @@ from .views import ( DocumentUploadView,
     GenerateIdeaContextView,
     CheckUploadPermissionsView,
     DocumentProcessingStatusView,
-    DeleteMessagePairView
+    DeleteMessagePairView,
+    GPTImageChatView
 
 
 
@@ -83,4 +84,5 @@ urlpatterns = [
 
     path('document-processing-status/', DocumentProcessingStatusView.as_view(), name='document-processing-status'),
     path('delete-message-pair-NB/', DeleteMessagePairView.as_view(), name='delete_message_pair'),
+    path('chat-image/', GPTImageChatView.as_view(), name='gpt_image_chat'),
 ]

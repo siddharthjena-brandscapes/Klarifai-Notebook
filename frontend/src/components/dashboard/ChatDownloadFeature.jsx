@@ -133,7 +133,8 @@ const ChatDownloadFeature = ({
           return {
             ...msg,
             // Only process assistant messages (keep user messages as-is)
-            content: msg.role === 'assistant' ? processChatContent(msg.content) : msg.content
+            content: msg.role === 'assistant' ? processChatContent(msg.content) : msg.content,
+            sources_info: msg.sources_info || ''
           };
         });
         

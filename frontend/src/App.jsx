@@ -6,6 +6,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { UserProvider } from './context/UserContext'; 
 import { BrowserRouter } from 'react-router-dom';
+import { DocumentProcessingProvider } from './components/klarifai_notebook/DocumentProcessingContext';
 
 
 const App = () => {
@@ -13,6 +14,7 @@ const App = () => {
     <>
      <BrowserRouter>
      <UserProvider>
+      <DocumentProcessingProvider>
       <AppRoutes />
       <ToastContainer 
           position="top-right"
@@ -25,6 +27,7 @@ const App = () => {
           draggable
           pauseOnHover
         />
+        </DocumentProcessingProvider>
         </UserProvider>
         </BrowserRouter>
     </>

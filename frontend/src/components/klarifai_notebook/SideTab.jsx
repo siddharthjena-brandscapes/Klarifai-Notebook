@@ -38,7 +38,7 @@ import { toast } from "react-toastify";
 import DeleteModal from "../dashboard/DeleteModal";
 import DeleteChatModal from "../dashboard/DeleteChatModal";
 import { ideaService, coreService } from "../../utils/axiosConfig";
-import DocumentSearchModal from "../dashboard/DocumentSearchModal";
+import DocumentSearchModalNB from "./DocumentContentSearchViewNB";
 import ChatDownloadFeatureNB from "./ChatDownloadFeatureNB";
 import BulkDeleteModal from "../dashboard/BulkDeleteModal";
 import FaqButton from "../faq/FaqButton";
@@ -2822,7 +2822,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
         onConfirm={handleConfirmDelete}
         documentName={documentToDelete?.filename || ""}
       />
-      <DocumentSearchModal
+      <DocumentSearchModalNB
         isOpen={isDocumentSearchModalOpen}
         onClose={() => setIsDocumentSearchModalOpen(false)}
         documents={documents}

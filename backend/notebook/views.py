@@ -2195,15 +2195,24 @@ class GetChatHistoryView(APIView):
             history = []
             for conversation in conversations:
                 messages = conversation.messages_NB.all().order_by('created_at')
-                message_list = [
-                    {
+                message_list = []
+                for message in messages:
+                    msg_data = {
                         'id': message.id,
                         'role': message.role,
                         'content': message.content,
                         'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
                         'citations': message.citations or []
-                    } for message in messages
-                ]
+                    }
+                    if message.role == 'assistant':
+                        msg_data['use_web_knowledge'] = getattr(message, 'use_web_knowledge', False)
+                        msg_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
+                        msg_data['response_format'] = getattr(message, 'response_format', 'natural')
+                        msg_data['sources_info'] = getattr(message, 'sources', "")
+                        # ADD THIS LOGIC:
+                        if getattr(message, 'sources', '') == "Image Analysis":
+                            msg_data['context_mode'] = "image"
+                    message_list.append(msg_data)
             
                 history.append({
                     'conversation_id': str(conversation.conversation_id),
@@ -2369,8 +2378,41 @@ class ChatView(APIView):
             )
 
     def normalize_citation_markers(self, text):
-        # Replace [Source n] or [source n] with [n]
-        return re.sub(r'\[(?:source|Source)\s*(\d+)\]', r'[\1]', text)
+        """
+        Convert all citation formats to consistent [n] format:
+        - [Source: 1, 2] -> [1][2]
+        - [Sources: 1, 2] -> [1][2]
+        - Source: 1, 2 -> [1][2]
+        - (Source 1, 2) -> [1][2]
+        """
+        if not text:
+            return text
+            
+        # Replace [Source: n] or [Sources: n] with [n]
+        text = re.sub(r'\[(?:Source|Sources?)\s*:?\s*(\d+)\]', r'[\1]', text, flags=re.IGNORECASE)
+        
+        # Replace [Source: n, m] or [Sources: n, m] with [n][m]
+        def bracketize(match):
+            nums = re.findall(r'\d+', match.group(0))
+            return ''.join([f'[{n}]' for n in nums])
+        text = re.sub(r'\[(?:Source|Sources?)\s*:?\s*[\d,\s]+\]', bracketize, text, flags=re.IGNORECASE)
+        
+        # Replace Source: n, m or Sources: n, m (not in brackets) with [n][m]
+        text = re.sub(r'(?:Source|Sources?)\s*:?\s*([\d,\s]+)', 
+                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]), 
+                    text, flags=re.IGNORECASE)
+        
+        # Replace (Source n, m) with [n][m]
+        text = re.sub(r'\((?:Source|Sources?)\s*:?\s*([\d,\s]+)\)', 
+                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]), 
+                    text, flags=re.IGNORECASE)
+        
+        # Handle grouped citations [1, 2, 3] -> [1][2][3]
+        text = re.sub(r'\[(\d+(?:\s*,\s*\d+)+)\]', 
+                    lambda m: ''.join([f'[{n.strip()}]' for n in m.group(1).split(',')]), 
+                    text)
+        
+        return text
  
     def post(self, request):
         user = request.user
@@ -4630,7 +4672,12 @@ class ChatView(APIView):
                 all_sources_str = ", ".join(all_sources) if all_sources else "Document context only"
 
             # Clean up and process citations in the final response
+            combined_response = self.normalize_citation_markers(combined_response)
             processed_response, processed_citation_sources = self._format_citations_for_response(combined_response, combined_citation_sources)
+            citations_list = [
+                processed_citation_sources[k]
+                for k in sorted(processed_citation_sources.keys())
+            ]
             
             # Return JSON structure instead of plain text
             print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ FINAL COMBINED RESPONSE", f"{processed_response}\n\n*Sources: {all_sources_str}*")
@@ -4638,6 +4685,7 @@ class ChatView(APIView):
                 "content": f"{processed_response}\n\n*Sources: {all_sources_str}*",
                 "sources": all_sources_str,
                 "citation_sources": processed_citation_sources,
+                "citations": citations_list,
                 "document_sources": all_doc_sources,
                 "web_sources": final_web_sources,
                 "combination_type": combined_json.get("combination_type", "standard"),
@@ -4734,6 +4782,7 @@ class ChatView(APIView):
             all_sources = all_doc_sources + list(set(final_web_sources))
             all_sources_str = ", ".join(all_sources) if all_sources else "Document and web sources"
             
+            fallback_content = self.normalize_citation_markers(fallback_content)
             return {
                 "content": f"{fallback_content}\n\n*Sources: {all_sources_str}*",
                 "sources": all_sources_str,
@@ -5609,7 +5658,9 @@ class ChatView(APIView):
 
         # Add source information
         source_list = list(set(selected_sources))
+
         source_info = ", ".join(source_list)
+        processed_answer = self.normalize_citation_markers(processed_answer)
         return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
 
     #  generate_short_response function with this fixed version:
@@ -5936,6 +5987,7 @@ class ChatView(APIView):
         # Add source information
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
+        processed_answer = self.normalize_citation_markers(processed_answer)  # ADD THIS LINE
         return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
         
     def _get_project_description(self, query):
@@ -6749,7 +6801,10 @@ class GetConversationView(APIView):
                             message_data['use_web_knowledge'] = getattr(message, 'use_web_knowledge', False)
                             message_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
                             message_data['response_format'] = getattr(message, 'response_format', 'natural')
-                            message_data['sources_info'] = getattr(message, 'sources', "")  # ✅ NEW LINE
+                            message_data['sources_info'] = getattr(message, 'sources', "")
+                            # ADD THIS LOGIC:
+                            if getattr(message, 'sources', '') == "Image Analysis":
+                                message_data['context_mode'] = "image"
                        
                         message_list.append(message_data)
  
@@ -7323,10 +7378,15 @@ class ChatExportView(APIView):
  
     def remove_citations_from_html(self, html):
         """
-        Remove all [n], [n][m], [n, m] style citations from HTML content.
+        Remove all [n], [n][m], [n, m], [Source: n], [Sources: n, m], and 'Sources: n, m' style citations from HTML/text content.
         """
         if not html:
             return html
+
+        # Remove [Source: n], [Sources: n, m], [Source: n, m], etc.
+        html = re.sub(r'\[Sources?:\s*[\d,\s]+\]', '', html, flags=re.IGNORECASE)
+        # Remove 'Sources: n, m' or 'Source: n' at the end of sentences or lines
+        html = re.sub(r'Sources?:\s*[\d,\s]+\.?', '', html, flags=re.IGNORECASE)
         # Remove [number] and [number][number] patterns
         html = re.sub(r'(\[\d+(?:,\s*\d+)*\])+', '', html)
         # Optionally, remove citations inside <sup> or <span> tags (if any)
@@ -7483,11 +7543,17 @@ class ChatExportView(APIView):
                         timestamp.add_run(f"{message['created_at']}")
                    
                     content = message['content']
+                   
                     if message['role'] == 'assistant':
                         content = self.remove_citations_from_html(content)
  
                     # Add the content (already processed by frontend)
                     self.add_html_to_docx(doc, content, format_code)
+
+                    if message['role'] == 'assistant' and 'sources_info' in message and message['sources_info']:
+                        source_para = doc.add_paragraph()
+                        source_para.style = 'Intense Reference'
+                        source_para.add_run("Sources: " + message['sources_info'])
                
                 # Add follow-up questions if requested
                 if include_follow_ups and chat.get('follow_up_questions'):
@@ -10715,3 +10781,323 @@ class GenerateIdeaContextView(APIView):
                 "Theme": "",
                 "Demographics": ""
             }
+
+import base64
+import uuid
+from datetime import datetime
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser
+from rest_framework import status
+from openai import OpenAI
+import logging
+ 
+# Assuming these are your existing imports and models
+from .models import ChatHistory, ChatMessage, ConversationMemoryBuffer, Document
+ 
+ 
+logger = logging.getLogger(__name__)
+ 
+class GPTImageChatView(APIView):
+    parser_classes = [MultiPartParser]
+ 
+ 
+ 
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+ 
+    if not OPENAI_API_KEY:
+        raise ValueError("Missing required API keys in environment variables")
+ 
+ 
+ 
+    client = OpenAI(api_key=OPENAI_API_KEY)
+ 
+   
+    def post(self, request):
+        user = request.user
+        try:
+            # Extract data from request
+            images = request.FILES.getlist("images")
+            question = request.data.get("message")
+            conversation_id = request.data.get('conversation_id')
+            main_project_id = request.data.get('main_project_id')
+            context_mode = request.data.get("context_mode", "image")
+ 
+            print(f"Main project ID: {main_project_id}")
+            print(f"Conversation ID: {conversation_id}")
+            print(f"Images: {images}")
+ 
+            # Validation
+            if not images or not question:
+                return Response({
+                    'error': 'Images and question are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+ 
+            if not main_project_id:
+                return Response({
+                    'error': 'Main project ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+ 
+            # Log the inputs for debugging
+            print(f"Image Chat request received")
+            print(f"Question: {question}")
+            print(f"Number of images: {len(images)}")
+ 
+            # Get conversation context if available
+            conversation_context = ""
+            if conversation_id:
+                try:
+                    conversation = ChatHistory.objects.get(
+                        conversation_id=conversation_id,
+                        user=user
+                    )
+ 
+                    recent_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('-created_at')[:10]
+ 
+                    if recent_messages:
+                        context_messages = []
+                        for msg in recent_messages:
+                            prefix = "User: " if msg.role == 'user' else "Assistant: "
+                            context_messages.append(f"{prefix}{msg.content[:400]}...")
+ 
+                        conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
+ 
+                    try:
+                        memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
+                        if memory_buffer.context_summary:
+                            conversation_context += f"\n\nConversation Summary: {memory_buffer.context_summary}"
+                    except ConversationMemoryBuffer.DoesNotExist:
+                        pass
+ 
+                except ChatHistory.DoesNotExist:
+                    pass
+ 
+            # Prepare message content for OpenAI API
+            message_content = [{"type": "text", "text": question}]
+ 
+            if conversation_context:
+                message_content[0]["text"] = f"{conversation_context}\n\nCurrent question: {question}"
+ 
+            # Process images and add to message content
+            for image in images:
+                img_bytes = image.read()
+                base64_image = base64.b64encode(img_bytes).decode("utf-8")
+                message_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}"
+                    }
+                })
+ 
+            # Set fixed max_tokens
+            max_tokens = 1000
+ 
+            # Generate response using OpenAI API
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{
+                        "role": "user",
+                        "content": message_content
+                    }],
+                    max_tokens=max_tokens,
+                )
+ 
+                clean_response = response.choices[0].message.content
+                print(f"Generated GPT response: {clean_response[:200]}...")
+ 
+            except Exception as e:
+                logger.error(f"OpenAI API error: {str(e)}")
+                return Response({
+                    'error': f'Error generating response: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+            # Generate follow-up questions based on image chat
+            follow_up_questions = self.generate_image_follow_up_questions(question, clean_response)
+ 
+            # Prepare conversation details
+            conversation_id = conversation_id or str(uuid.uuid4())
+            title = f"Image Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+ 
+            # Create or retrieve conversation
+            conversation, created = ChatHistory.objects.get_or_create(
+                user=user,
+                conversation_id=conversation_id,
+                main_project_id=main_project_id,
+                defaults={
+                    'title': title,
+                    'is_active': True,
+                    'follow_up_questions': follow_up_questions,
+                }
+            )
+ 
+            if created:
+                self.create_conversation_transaction(
+                    user, conversation, main_project_id,
+                    None, None, None  # Removed removed params
+                )
+            else:
+                self.update_conversation_transaction(conversation, None)
+ 
+            # Create user message
+            user_message = ChatMessage.objects.create(
+                chat_history=conversation,
+                role='user',
+                content=question
+            )
+ 
+            # Create AI response message
+            ai_message = ChatMessage.objects.create(
+                chat_history=conversation,
+                role='assistant',
+                content=clean_response,
+                sources="Image Analysis",
+                citations=[],
+            )
+ 
+            # Update or create memory buffer
+            memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
+                conversation=conversation
+            )
+ 
+            all_messages = ChatMessage.objects.filter(
+                chat_history=conversation
+            ).order_by('created_at')
+ 
+            memory_buffer.update_memory(all_messages)
+ 
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
+ 
+            conversation.title = title
+            conversation.follow_up_questions = follow_up_questions
+            conversation.save()
+ 
+            # Get all messages for response
+            message_list = []
+            for message in all_messages:
+                message_data = {
+                    'id': message.id,
+                    'role': message.role,
+                    'content': message.content,
+                    'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
+                    'citations': message.citations or [],
+                    'sources_info': getattr(message, 'sources', ''),
+                    'extracted_urls': getattr(message, 'extracted_urls', []),
+                    'context_mode': 'image' if message.role == 'assistant' else None,
+                }
+                message_list.append(message_data)
+ 
+            response_data = {
+                'response': clean_response,
+                'follow_up_questions': follow_up_questions,
+                'conversation_id': str(conversation.conversation_id),
+                'citations': [],
+                'active_document_id': None,
+                'sources_info': "Image Analysis",
+                'url_content_used': False,
+                'extracted_urls': [],
+                'messages': message_list,
+                'image_count': len(images),
+                'context_mode': context_mode,
+            }
+ 
+            print("\n--- Image Chat Interaction Logged ---")
+            print(f"User Question: {question}")
+            print(f"Number of images: {len(images)}")
+            print(f"Assistant Response: {clean_response[:500]}...")
+            print(f"Follow-up Questions: {len(follow_up_questions)}")
+            print("-----------------------------\n")
+ 
+            return Response(response_data, status=status.HTTP_200_OK)
+ 
+        except Exception as e:
+            logger.error(f"Unexpected error in GPTImageChatView: {str(e)}", exc_info=True)
+            return Response(
+                {'error': f'An unexpected error occurred: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+ 
+   
+    def generate_image_follow_up_questions(self, question, response):
+        """Generate follow-up questions specific to image analysis"""
+        base_questions = [
+            "Can you analyze any other aspects of the image?",
+            "What other details can you identify in the image?",
+            "Are there any specific elements you'd like me to focus on?"
+        ]
+       
+        # You can enhance this with more sophisticated logic
+        # based on the question and response content
+        try:
+            if "color" in question.lower():
+                base_questions.append("Can you describe the color scheme in more detail?")
+            if "text" in question.lower():
+                base_questions.append("Is there any other text visible in the image?")
+            if "object" in question.lower():
+                base_questions.append("What other objects can you identify?")
+        except:
+            pass
+       
+        return base_questions[:3]  # Return first 3 questions
+   
+    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
+        """Create transaction record for conversation"""
+        try:
+            # Get the project
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Create main transaction record
+            user_transaction = UserTransaction.objects.create(
+                user=user,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                conversation_title=conversation.title,
+                conversation_id=conversation.conversation_id,
+                main_project=main_project,
+                metadata={
+                    'creation_timestamp': timezone.now().isoformat(),
+                    'web_knowledge_used': use_web_knowledge,
+                    'response_format': response_format,
+                    'response_length': response_length
+                }
+            )
+           
+            # Create detailed conversation transaction
+            ConversationTransaction.objects.create(
+                user_transaction=user_transaction,
+                message_count=1,  # Initial message
+                web_knowledge_used=use_web_knowledge,
+                response_format=response_format,
+                response_length=response_length
+            )
+           
+            print(f"Transaction recorded for conversation: {conversation.title}")
+           
+        except Exception as e:
+            print(f"Error creating conversation transaction: {str(e)}")
+ 
+    def update_conversation_transaction(self, conversation, use_web_knowledge):
+        """Update existing conversation transaction when new messages are added"""
+        try:
+            # Find existing transaction for this conversation
+            user_transaction = UserTransaction.objects.filter(
+                conversation_id=conversation.conversation_id,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                is_active=True
+            ).first()
+           
+            if user_transaction and hasattr(user_transaction, 'conversation_details'):
+                # Update message count
+                user_transaction.conversation_details.message_count += 1
+                if use_web_knowledge:
+                    user_transaction.conversation_details.web_knowledge_used = True
+                user_transaction.conversation_details.save()
+               
+                # Update metadata
+                user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
+                user_transaction.save()
+               
+        except Exception as e:
+            print(f"Error updating conversation transaction: {str(e)}")

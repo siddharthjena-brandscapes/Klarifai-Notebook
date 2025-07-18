@@ -1650,6 +1650,25 @@ export const chatServiceNB = {
    exportChatAsDocx: (data, config = {}) => {
     return axiosInstance.post('notebook/export-chat-NB/', {...data, format: 'docx'}, config);
   },
+
+  sendImageMessage: (formData) => {
+    console.log("Sending image message with FormData");
+   
+    return axiosInstance
+      .post("notebook/chat-image/", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      })
+      .then((response) => {
+        console.log("Image chat service response:", response.data);
+        return response;
+      })
+      .catch((error) => {
+        console.error("Image chat error:", error);
+        throw error;
+      });
+  },
 };
 
 export const citationServiceNB = {

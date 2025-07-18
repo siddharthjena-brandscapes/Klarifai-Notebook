@@ -35,6 +35,7 @@ import {
   CircleEllipsis,
   FilePlus,
   Trash,
+  X,
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
@@ -67,6 +68,8 @@ import { ImprovedCitationManager } from "../dashboard/CitationManager";
 import DocumentModeWelcome from "../dashboard/DocumentModeWelcome";
 import { useUser } from "../../context/UserContext";
 import DeleteChatConfirmationModal from "../dashboard/DeleteChatConfirmationModal";
+import { useDocumentProcessing } from "./DocumentProcessingContext";
+import ChatInputArea from "./ChatInputArea";
 
 // Configure marked
 marked.setOptions({
@@ -91,11 +94,19 @@ const MainChat = forwardRef(
       setSelectedDocuments,
       onChatInputFocus,
       onOpenYouTubeModal,
+      message,
+      setMessage,
+      pastedImages,
+      setPastedImages,
+      imagePreviews,
+      setImagePreviews,
+      hasImages,
+      setHasImages,
     },
     ref
   ) => {
     const [file, setFile] = useState(null);
-    const [message, setMessage] = useState("");
+    // const [message, setMessage] = useState("");
     const [conversation, setConversation] = useState([]);
     const [conversationId, setConversationId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -118,7 +129,8 @@ const MainChat = forwardRef(
     const [currentView, setCurrentView] = useState("chat");
 
     //  new state for document processing
-    const [isDocumentProcessing, setIsDocumentProcessing] = useState(false);
+    const { isDocumentProcessing, setIsDocumentProcessing } =
+      useDocumentProcessing();
     const [processingProgress, setProcessingProgress] = useState(0);
 
     const [editingMessageId, setEditingMessageId] = useState(null);
@@ -170,6 +182,13 @@ const MainChat = forwardRef(
     const [currentUploadFilenames, setCurrentUploadFilenames] = useState([]);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [messageToDelete, setMessageToDelete] = useState(null);
+
+    // Add these new state variables to your existing component
+    // const [pastedImages, setPastedImages] = useState([]);
+    // const [imagePreviews, setImagePreviews] = useState([]);
+    // const [hasImages, setHasImages] = useState(false);
+
+    const [contextMode, setContextMode] = useState("chat");
 
     // Reset dismissal when document selection changes
     useEffect(() => {
@@ -263,6 +282,197 @@ const MainChat = forwardRef(
       return () => clearInterval(intervalId);
     }, [isDocumentProcessing]);
 
+    const handleImageMessage = async (message, images, mode) => {
+      if (!message.trim() && images.length === 0) return;
+
+      // Create previews for each image
+      const previews = await Promise.all(
+        images.map(
+          (img) =>
+            new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.readAsDataURL(img);
+            })
+        )
+      );
+
+      // Add user message to conversation with image indication
+      const userMessage = {
+        role: "user",
+        content: message || "Please analyze these images",
+        hasImages: images.length > 0,
+        imageCount: images.length,
+        imagePreviews: previews,
+      };
+
+      const newConversation = [...conversation, userMessage];
+      setConversation(newConversation);
+      setMessage("");
+      setPastedImages([]);
+      setImagePreviews([]);
+      setHasImages(false);
+      setIsLoading(true);
+
+      if (!isFollowUpQuestionsMinimized) {
+        setIsFollowUpQuestionsMinimized(true);
+      }
+
+      try {
+        // Prepare FormData for image upload
+        const formData = new FormData();
+        formData.append("message", message || "Please analyze these images");
+        formData.append("conversation_id", conversationId || "");
+        formData.append("main_project_id", mainProjectId || "");
+        formData.append("use_web_knowledge", useWebKnowledge);
+        formData.append("response_length", responseLength);
+        formData.append("response_format", responseFormat);
+        formData.append("general_chat_mode", "true"); // Image chat is always general
+
+        // Add images to FormData
+        images.forEach((img, index) => {
+          formData.append("images", img);
+        });
+
+        // Add conversation history
+        formData.append("messages", JSON.stringify(newConversation));
+
+        formData.append("context_mode", mode);
+
+        console.log("🚀 SENDING IMAGE REQUEST TO BACKEND");
+
+        const response = await chatServiceNB.sendImageMessage(formData);
+
+        console.log("📦 Image Response Object:", response);
+
+        if (response && response.data) {
+          let responseContent = response.data.response || response.data.content;
+
+          // Process web sources if available
+          const webSources = processWebSources(
+            response.data.sources_info,
+            response.data.extracted_urls
+          );
+
+          const assistantMessage = {
+            role: "assistant",
+            content: responseContent,
+            citations: response.data.citations || [],
+            follow_up_questions: response.data.follow_up_questions || [],
+            use_web_knowledge:
+              response.data.use_web_knowledge || useWebKnowledge,
+            response_length: response.data.response_length || responseLength,
+            response_format: response.data.response_format || responseFormat,
+            webSources: webSources,
+            sources_info: response.data.sources_info,
+            extracted_urls: response.data.extracted_urls,
+            isImageResponse: true,
+          };
+
+          setConversation([...newConversation, assistantMessage]);
+
+          // Update follow-up questions if available
+          if (response.data.follow_up_questions) {
+            let questions = response.data.follow_up_questions;
+
+            if (
+              typeof questions === "string" &&
+              questions.includes('"questions"')
+            ) {
+              try {
+                const parsed = JSON.parse(questions);
+                questions = parsed.questions || [];
+              } catch (e) {
+                console.error("Failed to parse follow-up questions:", e);
+                questions = [];
+              }
+            }
+
+            if (Array.isArray(questions) && questions.length > 0) {
+              setCurrentFollowUpQuestions(questions);
+              setFollowUpQuestions(questions);
+            }
+          }
+
+          // Set conversation ID if not already set
+          if (!conversationId && response.data.conversation_id) {
+            setConversationId(response.data.conversation_id);
+          }
+        }
+      } catch (error) {
+        console.error("\n❌ IMAGE CHAT ERROR OCCURRED:", error);
+        toast.error("Failed to send image message. Please try again.");
+        setConversation((prev) => prev.slice(0, -1));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Handle paste events for images
+    const handlePaste = (e) => {
+      const items = e.clipboardData.items;
+      const newImages = [];
+
+      for (let item of items) {
+        if (item.type.indexOf("image") !== -1) {
+          const blob = item.getAsFile();
+          const file = new File([blob], `pasted-${Date.now()}.png`, {
+            type: "image/png",
+          });
+          newImages.push(file);
+
+          // Create preview
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setImagePreviews((prev) => [...prev, reader.result]);
+          };
+          reader.readAsDataURL(file);
+
+          setConversation([]);
+          setConversationId(null);
+          setSelectedDocuments([]);
+          setContextMode("image");
+        }
+      }
+
+      if (newImages.length > 0) {
+        setPastedImages((prev) => [...prev, ...newImages]);
+        setHasImages(true);
+      }
+    };
+
+    // Remove image from preview
+    const removeImage = (index) => {
+      setPastedImages((prev) => prev.filter((_, i) => i !== index));
+      setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+
+      if (pastedImages.length === 1) {
+        setHasImages(false);
+      }
+    };
+
+    useEffect(() => {
+      if (propSelectedDocuments.length > 0 && contextMode === "image") {
+        setContextMode("chat"); // Switch back to chat/doc context if a document is selected
+      }
+    }, [propSelectedDocuments, contextMode]);
+
+    // Modified send handler to decide between regular and image message
+    const handleSendClick = () => {
+      if (hasImages && pastedImages.length > 0) {
+        handleImageMessage(message, pastedImages, contextMode);
+      } else {
+        handleSendMessage(message);
+      }
+    };
+
+    // Enhanced textarea with paste support
+    const handleTextareaKeyPress = (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSendClick();
+      }
+    };
     // In MainChat.jsx - Update the handlePinMessage function
 
     const handlePinMessage = async (message, messageIndex) => {
@@ -612,14 +822,15 @@ const MainChat = forwardRef(
       checkUploadPermissions();
     }, []);
     useEffect(() => {
-      // If no documents are selected, force web knowledge mode on
-      if (propSelectedDocuments.length === 0) {
-        setUseWebKnowledge(true);
-      } else {
-        // When documents are selected, default to context-only mode (web knowledge off)
-        setUseWebKnowledge(false);
+      // Only update useWebKnowledge if not in image mode
+      if (contextMode !== "image") {
+        if (propSelectedDocuments.length === 0) {
+          setUseWebKnowledge(true);
+        } else {
+          setUseWebKnowledge(false);
+        }
       }
-    }, [propSelectedDocuments]);
+    }, [propSelectedDocuments, contextMode]);
 
     // Updated Response Length Toggle Component
     const ResponseLengthToggle = ({ responseLength, setResponseLength }) => {
@@ -1601,6 +1812,17 @@ const MainChat = forwardRef(
       const selectedFiles = Array.from(event.target.files);
       if (!selectedFiles.length) return;
 
+      const fileCount = selectedFiles.length;
+      const uploadingMsg =
+        fileCount === 1
+          ? `Uploading "${selectedFiles[0].name}"...`
+          : `Uploading ${fileCount} documents...`;
+
+      toast.info(uploadingMsg, {
+        toastId: "upload-progress",
+        autoClose: false,
+      });
+
       setCurrentUploadFilenames(selectedFiles.map((f) => f.name));
       setIsDocumentProcessing(true);
       setProcessingProgress(0);
@@ -1712,16 +1934,16 @@ const MainChat = forwardRef(
         uploadStage = 3;
 
         if (documents.length > 0) {
-          const newSelectedDocuments = documents.map((doc) =>
-            doc.id.toString()
-          );
-          setSelectedDocuments(newSelectedDocuments);
+          // const newSelectedDocuments = documents.map((doc) =>
+          //   doc.id.toString()
+          // );
+          // setSelectedDocuments(newSelectedDocuments);
 
-          if (setSelectedDocuments) {
-            setSelectedDocuments(newSelectedDocuments);
-          }
+          // if (setSelectedDocuments) {
+          //   setSelectedDocuments(newSelectedDocuments);
+          // }
 
-          setCurrentView("chat");
+          // setCurrentView("chat");
 
           setDocuments((prevDocs) => {
             const newDocs = documents.filter(
@@ -1738,6 +1960,7 @@ const MainChat = forwardRef(
               } uploaded successfully!`
             );
             setIsDocumentProcessing(false);
+            toast.dismiss("upload-progress");
           }, 1000);
         }
       } catch (error) {
@@ -1759,6 +1982,7 @@ const MainChat = forwardRef(
           errorMessage = error.response.data.message;
         }
 
+        toast.dismiss("upload-progress");
         toast.error(errorMessage);
         setIsDocumentProcessing(false);
 
@@ -2583,7 +2807,7 @@ const MainChat = forwardRef(
               pb-[100px] flex flex-col space-y-4 transition-all duration-300 ease-in-out 
               ${!isFollowUpQuestionsMinimized ? "pb-[150px]" : "pb-4"}`}
               >
-                {conversation.length === 0 && (
+                {conversation.length === 0 && contextMode !== "image" && (
                   <div key={`welcome-${propSelectedDocuments.length}`}>
                     {propSelectedDocuments.length === 0 ? (
                       <WebModeWelcome className="mt-4 mx-auto max-w-3xl" />
@@ -2666,7 +2890,15 @@ const MainChat = forwardRef(
                           {msg.role === "assistant" && (
                             <div className="flex flex-wrap items-center ml-2 gap-1.5">
                               {/* Web Knowledge Badge */}
-                              {msg.use_web_knowledge ? (
+                              {/* Context Mode Badge */}
+                              {msg.context_mode === "image" ||
+                              msg.isImageResponse ||
+                              contextMode === "image" ? (
+                                <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700">
+                                  <Layers className="h-3 w-3 mr-0.5" />
+                                  <span>Image</span>
+                                </div>
+                              ) : msg.use_web_knowledge ? (
                                 <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  text-blue-400">
                                   <Globe className="h-3 w-3 mr-0.5" />
                                   <span>Web</span>
@@ -2737,18 +2969,33 @@ const MainChat = forwardRef(
                         </div>
 
                         {msg.role === "user" ? (
-                          <EditableMessage
-                            message={msg}
-                            messageIndex={index}
-                            onUpdate={handleMessageUpdate}
-                            messageVersions={messageVersions}
-                            currentVersionIndex={currentVersionIndex}
-                            onRestoreVersion={handleRestoreVersion}
-                            onOpenHistoryModal={() => {
-                              setActiveHistoryMessageIndex(index);
-                              setIsHistoryModalOpen(true);
-                            }}
-                          />
+                          <>
+                            {/* Show pasted images for user messages */}
+                            {msg.hasImages && msg.imagePreviews && (
+                              <div className="flex gap-2 mt-2">
+                                {msg.imagePreviews.map((src, idx) => (
+                                  <img
+                                    key={idx}
+                                    src={src}
+                                    alt={`user-pasted-${idx}`}
+                                    className="w-16 h-16 object-cover rounded-lg border"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            <EditableMessage
+                              message={msg}
+                              messageIndex={index}
+                              onUpdate={handleMessageUpdate}
+                              messageVersions={messageVersions}
+                              currentVersionIndex={currentVersionIndex}
+                              onRestoreVersion={handleRestoreVersion}
+                              onOpenHistoryModal={() => {
+                                setActiveHistoryMessageIndex(index);
+                                setIsHistoryModalOpen(true);
+                              }}
+                            />
+                          </>
                         ) : (
                           // Use SimpleCitationManager for assistant messages with citations
                           <div className="overflow-x-auto max-w-full  custom-scrollbar">
@@ -3118,205 +3365,38 @@ const MainChat = forwardRef(
                   </div>
 
                   {/* Input Area */}
-                  <div className="bg-[#f0eee5] dark:bg-gray-700/20 backdrop-blur-sm rounded-b-2xl sm:rounded-b-3xl shadow-xl p-2 relative border-t border-[#e3d5c8] dark:border-blue-500/10">
-                    <div className="flex flex-col w-full">
-                      {/* Input field */}
-                      <div className="w-full relative bg-white dark:bg-gray-900/20 rounded-xl transition-colors overflow-hidden mb-2 border border-[#d6cbbf] dark:border-blue-500/20 focus-within:border-[#887d4e] dark:focus-within:border-blue-400/40 shadow-sm">
-                        {/* Textarea - Auto-resizing with reduced min-height */}
-                        <textarea
-                          value={message}
-                          onChange={(e) => {
-                            setMessage(e.target.value);
-                            // Auto-resize logic
-                            e.target.style.height = "inherit";
-                            const scrollHeight = e.target.scrollHeight;
-                            const maxHeight = 100; // Reduced maximum height in pixels
-                            e.target.style.height = `${Math.min(
-                              scrollHeight,
-                              maxHeight
-                            )}px`;
-                          }}
-                          onKeyPress={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault();
-                              handleSendMessage(message);
-                            }
-                          }}
-                          placeholder={
-                            propSelectedDocuments.length === 0
-                              ? "Ask me anything using web knowledge..."
-                              : useWebKnowledge
-                              ? "Ask me about your documents with web assistance..."
-                              : "Ask me about your documents..."
-                          }
-                          onFocus={handleTextareaFocus}
-                          className="w-full bg-transparent text-[#5e4636] dark:text-white font-medium py-2 px-3 text-sm focus:outline-none resize-none overflow-y-auto min-h-[36px] max-h-[100px] custom-scrollbar custom-textarea chat-input-area placeholder:text-[#8c715f]/80 placeholder:tracking-wider dark:placeholder:text-gray-400"
-                          disabled={isLoading}
-                          style={{ scrollbarWidth: "thin" }}
-                        />
-
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleFileChange}
-                          multiple
-                          className="hidden"
-                          accept=".pdf,.docx,.txt,.pptx, .jpg, .jpeg, .bmp, .png, .mp3, .mp4, .wav, .mpeg"
-                        />
-                      </div>
-
-                      {/* Icons and buttons row below textarea - with reduced sizing */}
-                      <div className="flex items-center justify-between w-full">
-                        {/* Left-side actions */}
-                        <div className="flex items-center space-x-2">
-                          {hasUploadPermissions && (
-                            <button
-                              title="Upload documents"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
-                            >
-                              <Paperclip className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            title="Add sources from URL, YouTube, or Text"
-                            onClick={() =>
-                              onOpenYouTubeModal && onOpenYouTubeModal()
-                            }
-                            className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
-                          >
-                            <FilePlus className="h-4 w-4" />
-                          </button>
-
-                          {/* Mic button with recording indicator */}
-                          {!message && (
-                            <button
-                              onClick={handleMicInput}
-                              className={`relative text-[#5a544a] dark:text-gray-400 transition-colors p-1 rounded-full ${
-                                isRecording
-                                  ? "text-red-500 bg-red-500/10"
-                                  : "hover:text-[#a55233] dark:hover:text-white"
-                              }`}
-                              title="Voice input"
-                            >
-                              <Mic
-                                className={`h-4 w-4 ${
-                                  isRecording ? "animate-pulse" : ""
-                                }`}
-                              />
-
-                              {isRecording && (
-                                <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-2 w-2">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                                </span>
-                              )}
-                            </button>
-                          )}
-
-                          {/* View toggle button */}
-                          <button
-                            title={
-                              currentView === "chat"
-                                ? "View Summary"
-                                : "View Chat"
-                            }
-                            onClick={() =>
-                              toggleView(
-                                currentView === "chat" ? "summary" : "chat"
-                              )
-                            }
-                            className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
-                          >
-                            {currentView === "chat" ? (
-                              <ScrollText className="h-4 w-4" />
-                            ) : (
-                              <MessageCircle className="h-4 w-4" />
-                            )}
-                          </button>
-
-                          {/* Context/Web knowledge toggle */}
-                          {propSelectedDocuments.length > 0 ? (
-                            <button
-                              onClick={toggleWebKnowledge}
-                              title={
-                                useWebKnowledge
-                                  ? "Answers from documents and web knowledge"
-                                  : "Answers from documents only"
-                              }
-                              className={`
-                  flex items-center justify-center gap-1
-                  px-2 py-1
-                  rounded-lg 
-                  transition-all 
-                  duration-300
-                  text-xs
-                  ${
-                    useWebKnowledge
-                      ? "bg-[#caeaf9] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70  dark:text-white shadow-sm"
-                      : "appearance-none bg-white/80 dark:bg-gray-900 text-[#381c0f] dark:text-gray-300 dark:hover:bg-gray-800/90 hover:bg-[#ddd9c5]/10 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
-                  }
-                `}
-                            >
-                              {useWebKnowledge ? (
-                                <>
-                                  <Globe className="h-3 w-3" />
-                                  <span className="hidden sm:inline text-xs">
-                                    Web
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <Database className="h-3 w-3  dark:text-blue-400" />
-                                  <span className="hidden sm:inline text-xs">
-                                    Context-only
-                                  </span>
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            // When no documents are selected, show a disabled/locked web mode button
-                            <button
-                              title="Web mode active (no documents selected)"
-                              className="flex items-center justify-center gap-1 px-2 py-1 rounded-lg appearance-none bg-[#caeaf9] dark:bg-gray-900/80 text-[#5a544a] dark:text-gray-300 border border-[#d6cbbf] dark:border-blue-500/20 text-xs cursor-default shadow-sm"
-                              disabled
-                            >
-                              <Globe className="h-3 w-3  dark:text-blue-400" />
-                              <span className="hidden sm:inline text-xs">
-                                Web
-                              </span>
-                            </button>
-                          )}
-
-                          {/* Response Length Toggle */}
-                          <ResponseLengthToggle
-                            responseLength={responseLength}
-                            setResponseLength={setResponseLength}
-                            className="bg-white/80 dark:bg-gray-900/10 text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-800/90 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
-                            activeClassName="bg-[#556052] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70 text-white dark:text-white border-transparent shadow-sm"
-                          />
-
-                          {/* Response Format Toggle */}
-                          {/* <ResponseFormatToggle
-              responseFormat={responseFormat}
-              setResponseFormat={setResponseFormat}
-              className="bg-white/80 dark:bg-gray-900/10 text-[#5e4636] dark:text-gray-300 hover:bg-[#f5e6d8] dark:hover:bg-gray-800/90 border-[#d6cbbf] dark:border-blue-500/20 border shadow-sm"
-              activeClassName="bg-[#556052] dark:bg-gradient-to-r dark:from-purple-600/70 dark:to-blue-500/70 text-white dark:text-white border-transparent shadow-sm"
-            /> */}
-                        </div>
-
-                        {/* Send button */}
-                        <button
-                          onClick={() => handleSendMessage(message)}
-                          disabled={isLoading}
-                          className="bg-[#a55233] hover:bg-[#884325] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 dark:hover:from-blue-500/80 dark:hover:to-emerald-500/70 text-white p-2 rounded-lg transition-all disabled:opacity-50 disabled:bg-[#d6cbbf] disabled:dark:bg-gray-600 shadow-sm"
-                          title="Send message"
-                        >
-                          <Send className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <ChatInputArea
+                    message={message}
+                    setMessage={setMessage}
+                    pastedImages={pastedImages}
+                    setPastedImages={setPastedImages}
+                    imagePreviews={imagePreviews}
+                    setImagePreviews={setImagePreviews}
+                    hasImages={hasImages}
+                    setHasImages={setHasImages}
+                    fileInputRef={fileInputRef}
+                    isLoading={isLoading}
+                    onSendClick={handleSendClick}
+                    onPaste={handlePaste}
+                    onMicInput={handleMicInput}
+                    onOpenYouTubeModal={onOpenYouTubeModal}
+                    onChatInputFocus={handleTextareaFocus}
+                    handleFileChange={handleFileChange}
+                    contextMode={contextMode}
+                    propSelectedDocuments={propSelectedDocuments}
+                    useWebKnowledge={useWebKnowledge}
+                    toggleWebKnowledge={toggleWebKnowledge}
+                    responseLength={responseLength}
+                    setResponseLength={setResponseLength}
+                    ResponseLengthToggle={ResponseLengthToggle}
+                    isDocumentProcessing={isDocumentProcessing}
+                    hasUploadPermissions={hasUploadPermissions}
+                    removeImage={removeImage}
+                    textSize={textSize}
+                    isRecording={isRecording}
+                    currentView={currentView}
+                    toggleView={toggleView}
+                  />
                 </div>
               </div>
             </div>
@@ -3325,7 +3405,7 @@ const MainChat = forwardRef(
           )}
         </div>
         {/* Document Processing Loader - Add this at the top level */}
-        {isDocumentProcessing && (
+        {/* {isDocumentProcessing && (
           <DocumentProcessingLoader
             documents={filteredProcessingDocuments}
             queuedFilenames={currentUploadFilenames}
@@ -3342,7 +3422,7 @@ const MainChat = forwardRef(
               toast.info("Document processing cancelled");
             }}
           />
-        )}
+        )} */}
 
         {/* Custom Scrollbar Styles */}
         <style>{`
