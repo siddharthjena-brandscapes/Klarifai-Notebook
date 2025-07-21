@@ -1,4 +1,4 @@
-// MindMapViewer.jsx - Enhanced with responsive header
+// MindMapViewer.jsx - Enhanced with editable question textarea
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { 
   X, 
@@ -14,7 +14,9 @@ import {
   Clock,
   FileText,
   AlertCircle,
-  MoreVertical
+  MoreVertical,
+  Send,
+  Edit3
 } from 'lucide-react';
 import { ThemeContext } from '../../context/ThemeContext';
 
@@ -34,9 +36,13 @@ const MindMapViewer = ({
   const [selectedNode, setSelectedNode] = useState(null);
   const [isQuestionLoading, setIsQuestionLoading] = useState(false);
   const [questionResponse, setQuestionResponse] = useState(null);
+  const [generatedQuestion, setGeneratedQuestion] = useState('');
+  const [editableQuestion, setEditableQuestion] = useState('');
+  const [showQuestionEditor, setShowQuestionEditor] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const mindmapRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const [currentDocumentContext, setCurrentDocumentContext] = useState([]);
   const [lastMindmapId, setLastMindmapId] = useState(null);
@@ -57,6 +63,9 @@ const MindMapViewer = ({
       setCurrentDocumentContext(documentContext);
       setLastMindmapId(mindmapId);
       setQuestionResponse(null);
+      setGeneratedQuestion('');
+      setEditableQuestion('');
+      setShowQuestionEditor(false);
       
       console.log('✅ MindMapViewer: Updated document context to:', documentContext);
     }
@@ -80,6 +89,9 @@ const MindMapViewer = ({
       setQuestionResponse(null);
       setSelectedNode(null);
       setShowMobileMenu(false);
+      setGeneratedQuestion('');
+      setEditableQuestion('');
+      setShowQuestionEditor(false);
     }
   }, [isOpen]);
 
@@ -98,6 +110,26 @@ const MindMapViewer = ({
     }
   }, [isOpen, selectedDocuments, currentDocumentContext, mindmapId, isFromHistory, mindmapStats]);
 
+  // Auto-resize textarea with max height
+  useEffect(() => {
+    if (textareaRef.current && showQuestionEditor) {
+      const textarea = textareaRef.current;
+      const maxHeight = 200; // Maximum height in pixels
+      const minHeight = 80;   // Minimum height in pixels
+      
+      textarea.style.height = 'auto';
+      const newHeight = Math.max(textarea.scrollHeight, minHeight);
+      
+      if (newHeight <= maxHeight) {
+        textarea.style.height = newHeight + 'px';
+        textarea.style.overflowY = 'hidden';
+      } else {
+        textarea.style.height = maxHeight + 'px';
+        textarea.style.overflowY = 'auto';
+      }
+    }
+  }, [editableQuestion, showQuestionEditor]);
+
   const toggleNodeExpansion = (nodeId) => {
     const newExpanded = new Set(expandedNodes);
     if (newExpanded.has(nodeId)) {
@@ -111,6 +143,9 @@ const MindMapViewer = ({
   const handleNodeClick = (node, nodePath) => {
     setSelectedNode({ ...node, path: nodePath });
     setQuestionResponse(null);
+    setGeneratedQuestion('');
+    setEditableQuestion('');
+    setShowQuestionEditor(false);
   };
 
   useEffect(() => {
@@ -166,23 +201,14 @@ const MindMapViewer = ({
       );
 
       if (response.data && response.data.success) {
-        const generatedQuestion = response.data.question;
+        const questionText = response.data.question;
         
-        console.log('📤 MindMapViewer: Sending question to chat with document context:', {
-          question: generatedQuestion,
-          documentsUsed: documentsToUse,
-          mindmapId
-        });
+        console.log('📝 MindMapViewer: Generated question:', questionText);
         
-        if (onSendToChat && generatedQuestion) {
-          onClose();
-          
-          setTimeout(() => {
-            onSendToChat(generatedQuestion, 'mindmap');
-          }, 100);
-        } else {
-          setQuestionResponse(response.data);
-        }
+        setGeneratedQuestion(questionText);
+        setEditableQuestion(questionText);
+        setShowQuestionEditor(true);
+        setQuestionResponse(response.data);
       } else {
         console.error('❌ Failed to get question response:', response.data);
         setQuestionResponse({
@@ -199,6 +225,28 @@ const MindMapViewer = ({
     } finally {
       setIsQuestionLoading(false);
     }
+  };
+
+  const handleSendQuestionToChat = () => {
+    if (!editableQuestion.trim()) return;
+    
+    console.log('📤 MindMapViewer: Sending edited question to chat:', {
+      originalQuestion: generatedQuestion,
+      editedQuestion: editableQuestion,
+      mindmapId
+    });
+    
+    if (onSendToChat) {
+      onClose();
+      
+      setTimeout(() => {
+        onSendToChat(editableQuestion.trim(), 'mindmap');
+      }, 100);
+    }
+  };
+
+  const handleQuestionChange = (e) => {
+    setEditableQuestion(e.target.value);
   };
 
   const exportMindmap = () => {
@@ -375,6 +423,75 @@ const MindMapViewer = ({
             </div>
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderQuestionEditor = () => {
+    if (!showQuestionEditor) return null;
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-medium text-sm flex items-center">
+              <Edit3 className="w-4 h-4 mr-1" />
+              Edit Question
+            </h4>
+            <button
+              onClick={() => setEditableQuestion(generatedQuestion)}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                theme === 'dark' 
+                  ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' 
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+              }`}
+              title="Reset to original question"
+            >
+              Reset
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            <textarea
+              ref={textareaRef}
+              value={editableQuestion}
+              onChange={handleQuestionChange}
+              placeholder="Edit your question here..."
+              className={`custom-scrollbar
+                w-full p-3 rounded-lg border transition-all
+                ${theme === 'dark' 
+                  ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
+                }
+                focus:outline-none resize-none
+              `}
+              style={{ minHeight: '80px', maxHeight: '170px' }}
+            />
+            
+            <div className="flex items-center justify-between">
+              <span className="text-xs opacity-60">
+                {editableQuestion.length} characters
+              </span>
+              
+              <button
+                onClick={handleSendQuestionToChat}
+                disabled={!editableQuestion.trim()}
+                className={`
+                  px-4 py-2 rounded-lg font-medium transition-all flex items-center space-x-2
+                  ${editableQuestion.trim()
+                    ? (theme === 'dark' 
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-[1.02]' 
+                        : 'bg-blue-500 hover:bg-blue-600 text-white hover:scale-[1.02]')
+                    : 'opacity-50 cursor-not-allowed bg-gray-400 text-gray-200'
+                  }
+                `}
+              >
+                <Send className="w-4 h-4" />
+                <span>Send to Chat</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -624,103 +741,102 @@ const MindMapViewer = ({
 
                 {renderDocumentContextIndicator()}
 
-                <button
-                  onClick={askQuestionAboutNode}
-                  disabled={isQuestionLoading}
-                  className={`
-                    w-full py-3 px-4 rounded-lg font-medium transition-all
-                    ${isQuestionLoading 
-                      ? 'opacity-50 cursor-not-allowed' 
-                      : 'hover:scale-[1.02]'
-                    }
-                    ${theme === 'dark' 
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
-                    }
-                    flex items-center justify-center space-x-2
-                  `}
-                >
-                  {isQuestionLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Generating Question...</span>
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare className="w-4 h-4" />
-                      <span>Ask Question in Chat</span>
-                    </>
-                  )}
-                </button>
-
-                {questionResponse && (
-                  <div className="space-y-3">
-                    {questionResponse.success ? (
+                {/* Question Generation Button */}
+                {!showQuestionEditor && (
+                  <button
+                    onClick={askQuestionAboutNode}
+                    disabled={isQuestionLoading}
+                    className={`
+                      w-full py-3 px-4 rounded-lg font-medium transition-all
+                      ${isQuestionLoading 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:scale-[1.02]'
+                      }
+                      ${theme === 'dark' 
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                        : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      }
+                      flex items-center justify-center space-x-2
+                    `}
+                  >
+                    {isQuestionLoading ? (
                       <>
-                        <div>
-                          <h4 className="font-medium mb-2">Question Generated:</h4>
-                          <div className={`p-3 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-blue-50'} border-l-4 border-blue-500`}>
-                            <p className="text-sm font-medium">{questionResponse.question}</p>
-                          </div>
-                        </div>
-
-                        {questionResponse.answer && (
-                          <div>
-                            <h4 className="font-medium mb-2">Answer:</h4>
-                            <div className={`p-3 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-white'} max-h-64 overflow-auto`}>
-                              <p className="text-sm whitespace-pre-wrap">{questionResponse.answer}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {questionResponse.citations && questionResponse.citations.length > 0 && (
-                          <div>
-                            <h4 className="font-medium mb-2">Sources:</h4>
-                            <div className="space-y-1">
-                              {questionResponse.citations.map((citation, index) => (
-                                <div key={index} className={`text-xs p-2 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                                  {typeof citation === 'object' ? (
-                                    <div className="space-y-1">
-                                      {citation.source_file && (
-                                        <div><strong>File:</strong> {citation.source_file}</div>
-                                      )}
-                                      {citation.page_number && (
-                                        <div><strong>Page:</strong> {citation.page_number}</div>
-                                      )}
-                                      {citation.section_title && (
-                                        <div><strong>Section:</strong> {citation.section_title}</div>
-                                      )}
-                                      {citation.snippet && (
-                                        <div><strong>Content:</strong> {citation.snippet}</div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div>{citation}</div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {questionResponse.follow_up_questions && questionResponse.follow_up_questions.length > 0 && (
-                          <div>
-                            <h4 className="font-medium mb-2">Follow-up Questions:</h4>
-                            <div className="space-y-1">
-                              {questionResponse.follow_up_questions.map((question, index) => (
-                                <div key={index} className={`text-xs p-2 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                                  • {question}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Generating Question...</span>
                       </>
                     ) : (
-                      <div className={`p-3 rounded ${theme === 'dark' ? 'bg-red-900' : 'bg-red-50'} border-l-4 border-red-500`}>
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          Error: {questionResponse.error || 'Failed to generate question'}
-                        </p>
+                      <>
+                        <MessageSquare className="w-4 h-4" />
+                        <span>Generate Question</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Question Editor */}
+                {renderQuestionEditor()}
+
+                {/* Error Display */}
+                {questionResponse && !questionResponse.success && (
+                  <div className={`p-3 rounded ${theme === 'dark' ? 'bg-red-900' : 'bg-red-50'} border-l-4 border-red-500`}>
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      Error: {questionResponse.error || 'Failed to generate question'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Additional Response Data (if not using editor) */}
+                {questionResponse && questionResponse.success && !showQuestionEditor && (
+                  <div className="space-y-3">
+                    {questionResponse.answer && (
+                      <div>
+                        <h4 className="font-medium mb-2">Answer:</h4>
+                        <div className={`p-3 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-white'} max-h-64 overflow-auto`}>
+                          <p className="text-sm whitespace-pre-wrap">{questionResponse.answer}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {questionResponse.citations && questionResponse.citations.length > 0 && (
+                      <div>
+                        <h4 className="font-medium mb-2">Sources:</h4>
+                        <div className="space-y-1">
+                          {questionResponse.citations.map((citation, index) => (
+                            <div key={index} className={`text-xs p-2 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                              {typeof citation === 'object' ? (
+                                <div className="space-y-1">
+                                  {citation.source_file && (
+                                    <div><strong>File:</strong> {citation.source_file}</div>
+                                  )}
+                                  {citation.page_number && (
+                                    <div><strong>Page:</strong> {citation.page_number}</div>
+                                  )}
+                                  {citation.section_title && (
+                                    <div><strong>Section:</strong> {citation.section_title}</div>
+                                  )}
+                                  {citation.snippet && (
+                                    <div><strong>Content:</strong> {citation.snippet}</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div>{citation}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {questionResponse.follow_up_questions && questionResponse.follow_up_questions.length > 0 && (
+                      <div>
+                        <h4 className="font-medium mb-2">Follow-up Questions:</h4>
+                        <div className="space-y-1">
+                          {questionResponse.follow_up_questions.map((question, index) => (
+                            <div key={index} className={`text-xs p-2 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                              • {question}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
