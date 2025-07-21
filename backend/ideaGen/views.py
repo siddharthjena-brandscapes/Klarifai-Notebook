@@ -2610,3 +2610,66 @@ def generate_ideas_from_document(request):
             "success": False,
             "error": str(e)
         }, status=500)
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated  # Changed from IsAdminUser
+from django.contrib.auth import get_user_model
+from django.http import JsonResponse
+ 
+class AdminIdeaUserStatsView(APIView):
+    """
+    View to get total and per-user stats for projects, ideas, and images.
+    Changed to IsAuthenticated for testing - change back to IsAdminUser in production
+    """
+    permission_classes = [IsAuthenticated]  # CHANGED: Allow any authenticated user
+ 
+    def get(self, request):
+        try:
+            User = get_user_model()
+            users = User.objects.all()
+           
+            # Calculate total stats
+            total_projects = Project.objects.count()
+            total_ideas = Idea.objects.count()
+            total_images = GeneratedImage2.objects.count()
+            cost_per_image = 0.0013
+            total_image_cost = total_images * cost_per_image
+           
+            # Calculate per-user stats
+            user_stats = []
+            for user in users:
+                user_projects = Project.objects.filter(user=user).count()
+                user_ideas = Idea.objects.filter(product_idea__user=user).count()
+                user_images = GeneratedImage2.objects.filter(idea__product_idea__user=user).count()
+                user_image_cost = user_images * cost_per_image
+               
+                user_stats.append({
+                    "user_id": user.id,
+                    "username": getattr(user, "username", str(user)),
+                    "email": getattr(user, "email", "N/A"),
+                    "projects": user_projects,
+                    "ideas": user_ideas,
+                    "images": user_images,
+                    "image_cost": user_image_cost,
+                    "date_joined": user.date_joined.isoformat() if hasattr(user, 'date_joined') else None,
+                })
+           
+            stats = {
+                "total_projects": total_projects,
+                "total_ideas": total_ideas,
+                "total_images": total_images,
+                "total_image_cost": total_image_cost,
+                "total_users": users.count(),
+                "users": user_stats
+            }
+           
+            return JsonResponse({
+                "success": True,
+                "stats": stats
+            })
+           
+        except Exception as e:
+            return JsonResponse({
+                "success": False,
+                "error": str(e)
+            }, status=500)

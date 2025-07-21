@@ -24,6 +24,6 @@ urlpatterns = [
     path('generate-ideas-from-document/', 
          views.generate_ideas_from_document, 
          name='generate_ideas_from_document'),
-    
+    path('admin/user-stats/', views.AdminIdeaUserStatsView.as_view(), name='admin-user-stats'),
 
 ]

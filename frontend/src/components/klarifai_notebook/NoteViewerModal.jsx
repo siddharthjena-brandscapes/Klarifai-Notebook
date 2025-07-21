@@ -355,6 +355,7 @@ const NoteViewerModal = ({
         .dark [contenteditable] table th {
           background-color: rgba(59, 130, 246, 0.1);
         }
+ 
 
         [contenteditable] a {
           color: #a55233;
@@ -510,8 +511,9 @@ const NoteViewerModal = ({
         }
 
         .dark .prose table th {
-          background-color: rgba(59, 130, 246, 0.1);
-        }
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
 
         .prose a {
           color: #a55233;

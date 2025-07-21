@@ -2053,4 +2053,19 @@ export const adminNotebookServiceNB = {
   },
 };
 
+export const getAdminUserStats = () => {
+  return axiosInstance
+    .get("ideas/admin/user-stats/")  // FIXED: Removed leading /api/
+    .then((response) => {
+      console.log("Fetched admin user stats:", response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      console.error("Error fetching admin user stats:", error);
+      console.error("Error details:", error.response?.data);
+      console.error("Request URL:", error.config?.url);
+      throw error;
+    });
+};
+
 export default axiosInstance;

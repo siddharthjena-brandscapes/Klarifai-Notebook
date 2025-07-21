@@ -8475,11 +8475,16 @@ class NoteManagementView(YouTubeUploadView, APIView):
                     }
                 }, status=status.HTTP_400_BAD_REQUEST)
        
-            # Generate filename from note title
+            # Generate filename from note title (internal use with .txt extension)
             safe_title = self.sanitize_filename(note.title or f"Note_{note.id}")
             filename = f"{safe_title}.txt"
+            # Display filename without extension for user
+            display_filename = safe_title
        
-            # Create temporary file with note content
+            # Clean and convert the content
+            cleaned_content = self.clean_html_content(note.content)
+           
+            # Create temporary file with cleaned note content
             temp_file_path = os.path.join(tempfile.gettempdir(), filename)
        
             try:
@@ -8488,7 +8493,7 @@ class NoteManagementView(YouTubeUploadView, APIView):
                     if note.title:
                         f.write(f"Title: {note.title}\n")
                         f.write("=" * (len(note.title) + 7) + "\n\n")
-                    f.write(note.content)
+                    f.write(cleaned_content)
            
                 # Create Django File object
                 with open(temp_file_path, 'rb') as f:
@@ -8513,7 +8518,7 @@ class NoteManagementView(YouTubeUploadView, APIView):
                             if note.title:
                                 full_content += f"Title: {note.title}\n"
                                 full_content += "=" * (len(note.title) + 7) + "\n\n"
-                            full_content += note.content
+                            full_content += cleaned_content
                            
                             # Use the process_document_from_text method from YouTubeUploadView
                             processed_data = self.process_document_from_text(full_content, filename)
@@ -8566,8 +8571,9 @@ class NoteManagementView(YouTubeUploadView, APIView):
                     },
                     'document': {
                         'id': document.id,
-                        'filename': filename,
-                        'uploaded_at': document.uploaded_at
+                        'filename': display_filename,  # Show without .txt extension
+                        'uploaded_at': document.uploaded_at,
+                        'file_type': 'text'  # Added file type for frontend
                     },
                     'active_document_id': document.id
                 }, status=status.HTTP_201_CREATED)
@@ -8632,7 +8638,7 @@ class NoteManagementView(YouTubeUploadView, APIView):
                 if note.converted_document:
                     note_data['converted_document'] = {
                         'id': note.converted_document.id,
-                        'filename': note.converted_document.filename
+                        'filename': os.path.splitext(note.converted_document.filename)[0]  # Remove .txt extension
                     }
                
                 notes_data.append(note_data)
@@ -8692,14 +8698,131 @@ class NoteManagementView(YouTubeUploadView, APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
    
     # Helper methods
+    def clean_html_content(self, html_content):
+        """Clean HTML content and convert to readable text format"""
+        if not html_content:
+            return ""
+       
+        try:
+            # Parse HTML with BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+           
+            # Handle different HTML elements
+           
+            # Convert headings
+            for i in range(1, 7):
+                for heading in soup.find_all(f'h{i}'):
+                    heading_text = heading.get_text().strip()
+                    if heading_text:
+                        heading.replace_with(f"\n{heading_text.upper()}\n{'=' * len(heading_text)}\n\n")
+           
+            # Convert paragraphs
+            for p in soup.find_all('p'):
+                p_text = p.get_text().strip()
+                if p_text:
+                    p.replace_with(f"{p_text}\n\n")
+           
+            # Convert line breaks
+            for br in soup.find_all('br'):
+                br.replace_with('\n')
+           
+            # Convert bold and strong
+            for tag in soup.find_all(['b', 'strong']):
+                tag_text = tag.get_text().strip()
+                if tag_text:
+                    tag.replace_with(tag_text)
+           
+            # Convert italic and emphasis
+            for tag in soup.find_all(['i', 'em']):
+                tag_text = tag.get_text().strip()
+                if tag_text:
+                    code.replace_with(f"`{code_text}`")
+           
+            # Convert unordered lists
+            for ul in soup.find_all('ul'):
+                list_items = []
+                for li in ul.find_all('li'):
+                    li_text = li.get_text().strip()
+                    if li_text:
+                        list_items.append(f"• {li_text}")
+                if list_items:
+                    ul.replace_with('\n' + '\n'.join(list_items) + '\n\n')
+           
+            # Convert ordered lists
+            for ol in soup.find_all('ol'):
+                list_items = []
+                for idx, li in enumerate(ol.find_all('li'), 1):
+                    li_text = li.get_text().strip()
+                    if li_text:
+                        list_items.append(f"{idx}. {li_text}")
+                if list_items:
+                    ol.replace_with('\n' + '\n'.join(list_items) + '\n\n')
+           
+            # Convert links
+            for a in soup.find_all('a'):
+                href = a.get('href', '')
+                text = a.get_text().strip()
+                if href and text:
+                    a.replace_with(f"{text} ({href})")
+                elif text:
+                    a.replace_with(text)
+           
+            # Convert code blocks
+            for code in soup.find_all('code'):
+                code_text = code.get_text().strip()
+                if code_text:
+                    code.replace_with(f"`{code_text}`")
+           
+            # Convert pre blocks
+            for pre in soup.find_all('pre'):
+                pre_text = pre.get_text().strip()
+                if pre_text:
+                    pre.replace_with(f"\n{pre_text}\n\n")
+           
+            # Convert blockquotes
+            for blockquote in soup.find_all('blockquote'):
+                quote_text = blockquote.get_text().strip()
+                if quote_text:
+                    # Add > to each line
+                    quoted_lines = [f"    {line}" for line in quote_text.split('\n') if line.strip()]
+                    blockquote.replace_with('\n' + '\n'.join(quoted_lines) + '\n\n')
+           
+            # Convert tables (basic conversion)
+            for table in soup.find_all('table'):
+                table_text = []
+                for row in table.find_all('tr'):
+                    cells = [cell.get_text().strip() for cell in row.find_all(['td', 'th'])]
+                    if cells:
+                        table_text.append(' | '.join(cells))
+                if table_text:
+                    table.replace_with('\n' + '\n'.join(table_text) + '\n\n')
+           
+            # Get the final cleaned text
+            cleaned_text = soup.get_text()
+           
+            # Clean up extra whitespace
+            cleaned_text = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned_text)  # Multiple newlines to double
+            cleaned_text = re.sub(r'[ \t]+', ' ', cleaned_text)  # Multiple spaces to single
+            cleaned_text = cleaned_text.strip()
+           
+            return cleaned_text
+           
+        except Exception as e:
+            logger.warning(f"Error cleaning HTML content: {str(e)}")
+            # Fallback: just strip HTML tags
+            return re.sub(r'<[^>]+>', '', html_content).strip()
+   
     def generate_note_title(self, content):
         """Generate a title from note content"""
+        # First clean the content if it's HTML
+        cleaned_content = self.clean_html_content(content)
+       
         # Take first 50 characters and clean them up
-        title = content[:50].strip()
+        title = cleaned_content[:50].strip()
         # Remove newlines and extra spaces
         title = ' '.join(title.split())
         # Add ellipsis if truncated
-        if len(content) > 50:
+        if len(cleaned_content) > 50:
             title += "..."
         return title or "Untitled Note"
    
@@ -8719,8 +8842,7 @@ class NoteManagementView(YouTubeUploadView, APIView):
             filename = filename[:200]
        
         return filename
-
-
+ 
 
 import requests
 from bs4 import BeautifulSoup
@@ -10396,28 +10518,40 @@ class AdminNotebookUserStatsView(APIView):
  
         users = User.objects.all()
         stats = []
+        total_short = 0
+        total_comprehensive = 0
  
         for user in users:
-            # Get all active documents for this user
             docs = Document.objects.filter(user=user)
             doc_stats = []
             for doc in docs:
-                # Count user questions for this document
-                # Find all conversations (ChatHistory) that reference this doc
-                # (Assuming you have a ManyToMany from ChatHistory to Document as 'documents')
                 from .models import ChatHistory
                 conversations = ChatHistory.objects.filter(user=user, documents=doc)
                 question_count = ChatMessage.objects.filter(
                     chat_history__in=conversations,
                     role='user'
                 ).count()
+                # Count assistant messages by response_length
+                short_count = ChatMessage.objects.filter(
+                    chat_history__in=conversations,
+                    role='assistant',
+                    response_length='short'
+                ).count()
+                comprehensive_count = ChatMessage.objects.filter(
+                    chat_history__in=conversations,
+                    role='assistant',
+                    response_length='comprehensive'
+                ).count()
+                total_short += short_count
+                total_comprehensive += comprehensive_count
                 doc_stats.append({
                     'document_id': doc.id,
                     'filename': doc.filename,
                     'questions_asked': question_count,
+                    'short_responses': short_count,
+                    'comprehensive_responses': comprehensive_count,
                 })
  
-            # Count total document uploads
             doc_upload_count = docs.count()
  
             stats.append({
@@ -10427,8 +10561,11 @@ class AdminNotebookUserStatsView(APIView):
                 'documents': doc_stats,
             })
  
-        return Response({'user_stats': stats}, status=200)        
-
+        return Response({
+            'user_stats': stats,
+            'total_short_responses': total_short,
+            'total_comprehensive_responses': total_comprehensive
+        }, status=200)
 
 
 class GenerateIdeaContextView(APIView):
@@ -11101,3 +11238,4 @@ class GPTImageChatView(APIView):
                
         except Exception as e:
             print(f"Error updating conversation transaction: {str(e)}")
+            

@@ -713,18 +713,24 @@ const NoteEditorModal = ({
         }
 
         [contenteditable] table th {
-          background-color: #f5f5f5;
+          background-color: #000000;
           font-weight: bold;
         }
 
-        .dark [contenteditable] table td,
-        .dark [contenteditable] table th {
-          border-color: rgba(59, 130, 246, 0.2);
-        }
+      .dark [contenteditable] table th {
+  background-color: #000000 !important; /* Black background */
+  color: #ffffff !important;           /* White text */
+  font-weight: bold;
+}
 
-        .dark [contenteditable] table th {
-          background-color: rgba(59, 130, 246, 0.1);
-        }
+.dark [contenteditable] table td {
+  background-color: #0f172a; /* Slightly lighter than black for contrast */
+  color: #ffffff;
+}
+
+/*
+
+       
 
         [contenteditable] a {
           color: #a55233;

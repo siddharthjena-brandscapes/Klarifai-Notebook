@@ -1449,7 +1449,7 @@ const SideTab = ({
       />
       <div className="flex-grow flex items-center justify-between overflow-hidden">
         <div className="flex flex-col flex-grow overflow-hidden">
-          <span className="truncate text-xs">{doc.filename}</span>
+          <span className="truncate text-xs">{doc.filename.endsWith('.txt') ? doc.filename.replace(/\.txt$/i, '') : doc.filename}</span>
           <span className="text-[10px] text-gray-400">
             {formatRelativeDate(doc.created_at || doc.uploaded_at)}
           </span>
@@ -1689,7 +1689,7 @@ const SideTab = ({
                         : "text-[#1a535c] font-medium"
                     }`}
                   >
-                    {doc.filename}
+                   {doc.filename.endsWith('.txt') ? doc.filename.replace(/\.txt$/i, '') : doc.filename}
                   </span>
                   <span
                     className={`text-[10px] ${
