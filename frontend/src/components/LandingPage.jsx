@@ -389,12 +389,13 @@ useEffect(() => {
 
   // Welcome screen effect
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowWelcome(false);
-      setCurrentView(projects.length > 0 ? "projects" : "create");
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [projects.length]);
+  const timer = setTimeout(() => {
+    setShowWelcome(false);
+    // Always default to projects view after welcome screen
+    setCurrentView("projects");
+  }, 2000);
+  return () => clearTimeout(timer);
+}, []);
 
   const formatDate = (dateString) => {
     console.log("Formatting date:", dateString, typeof dateString);
@@ -1444,20 +1445,29 @@ console.log("Projects after sorting:", sortedProjects.map(p => ({
                 </>
               ) : (
                 <>
-                  <FolderOpen className="w-16 h-16 mx-auto dark:text-gray-600 text-gray-400 mb-4" />
-                  <p className="text-xl dark:text-white text-[#5e4636] mb-2">No projects yet</p>
-                  <p className="dark:text-gray-400 text-gray-600 mb-6 max-w-md mx-auto">
-                    Create your first project to get started with organizing
-                    your work
-                  </p>
-                  <button
-                    onClick={() => setCurrentView("create")}
-                    className="px-5 py-2.5 dark:bg-emerald-600 bg-[#a55233] dark:hover:bg-emerald-500 hover:bg-[#8b4513] text-white font-medium rounded-lg transition-colors flex items-center space-x-2 mx-auto"
-                  >
-                    <Plus className="w-5 h-5 mr-1" />
-                    <span>Create a project</span>
-                  </button>
-                </>
+  <FolderOpen className="w-16 h-16 mx-auto dark:text-gray-600 text-gray-400 mb-4" />
+  <p className="text-xl dark:text-white text-[#5e4636] mb-2">
+    {projects.length === 0 ? "You have archived all your projects" : "No projects yet"}
+  </p>
+  <p className="dark:text-gray-400 text-gray-600 mb-6 max-w-md mx-auto">
+    {projects.length === 0 
+      ? "All your projects have been archived. You can view them or create a new project."
+      : "Create your first project to get started with organizing your work"
+    }
+  </p>
+  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+   
+    {projects.length === 0 && (
+      <button
+        onClick={toggleArchivedView}
+        className="px-5 py-2.5 dark:bg-gray-700 bg-[#a68a70] dark:hover:bg-gray-600 hover:bg-[#8c715f] text-white font-medium rounded-lg transition-colors flex items-center space-x-2 mx-auto"
+      >
+        <Archive className="w-5 h-5 mr-1" />
+        <span>View archived projects</span>
+      </button>
+    )}
+  </div>
+</>
               )}
             </div>
           )}
