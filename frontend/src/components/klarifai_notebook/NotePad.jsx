@@ -477,9 +477,12 @@ const NotePad = ({
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-[#5e4636] dark:text-white truncate text-sm">
-                       {note.title?.trim() ? note.title : getFirstLine(note.content)}
-                    </h3>
+                    <h3
+  className="font-medium text-[#5e4636] dark:text-white truncate text-sm"
+  title={note.title?.trim() ? note.title : getFirstLine(note.content)}
+>
+  {note.title?.trim() ? note.title : getFirstLine(note.content)}
+</h3>
                     <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1 line-clamp-2">
                       {note.content 
                         ? stripHtml(note.content).substring(0, 100) + (stripHtml(note.content).length > 100 ? '...' : '') 
