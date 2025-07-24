@@ -38,7 +38,7 @@ import { toast } from "react-toastify";
 import DeleteModal from "../dashboard/DeleteModal";
 import DeleteChatModal from "../dashboard/DeleteChatModal";
 import { ideaService, coreService } from "../../utils/axiosConfig";
-import DocumentSearchModalNB from "./DocumentContentSearchViewNB";
+import DocumentSearchModalNB from "./DocumentSearchModalNB";
 import ChatDownloadFeatureNB from "./ChatDownloadFeatureNB";
 import BulkDeleteModal from "../dashboard/BulkDeleteModal";
 import FaqButton from "../faq/FaqButton";
