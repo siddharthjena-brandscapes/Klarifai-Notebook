@@ -37,6 +37,7 @@ from .models import (
     TransactionType,
     DocumentProcessingStatus
 )
+from notebook.models import Document as NotebookDocument, ProcessedIndex as NotebookProcessedIndex
 import uuid
 from rest_framework.authtoken.models import Token
 from django.utils.safestring import mark_safe
@@ -1676,27 +1677,32 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
 
+        # ...existing code...
         if target_user_id and request.user.username == 'admin':
             try:
                 user = User.objects.get(id=target_user_id)
             except User.DoesNotExist:
                 return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
+            skip_permission_checks = True
         else:
             user = request.user
+            skip_permission_checks = False
 
-        try:
-            permissions = UserModulePermissions.objects.get(user=user)
-            if permissions.disabled_modules.get('document-upload', False):
-                return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-        except UserModulePermissions.DoesNotExist:
-            pass
+        if not skip_permission_checks:
+            try:
+                permissions = UserModulePermissions.objects.get(user=user)
+                if permissions.disabled_modules.get('document-upload', False):
+                    return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
+            except UserModulePermissions.DoesNotExist:
+                pass
 
-        try:
-            upload_permissions = UserUploadPermissions.objects.get(user=user)
-            if not upload_permissions.can_upload:
-                return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-        except UserUploadPermissions.DoesNotExist:
-            pass
+            try:
+                upload_permissions = UserUploadPermissions.objects.get(user=user)
+                if not upload_permissions.can_upload:
+                    return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
+            except UserUploadPermissions.DoesNotExist:
+                pass
+        # ...existing code...
 
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
@@ -1791,6 +1797,22 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 markdown_path=processed_data.get('markdown_path', '')
                             )
 
+                            # Only for admin uploads
+                            if target_user_id and request.user.username == 'admin':
+                                notebook_doc = NotebookDocument.objects.create(
+                                    user=user,
+                                    file=document.file,
+                                    filename=document.filename,
+                                    main_project=main_project
+                                )
+                                NotebookProcessedIndex.objects.create(
+                                    document=notebook_doc,
+                                    faiss_index=processed_data['index_path'],
+                                    metadata=processed_data['metadata_path'],
+                                    summary="",
+                                    markdown_path=processed_data.get('markdown_path', '')
+                                )
+
                             uploaded_docs.append({
                                 'id': document.id,
                                 'filename': transcript_filename,
@@ -1833,6 +1855,21 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                     summary="",
                                     markdown_path=processed_data.get('markdown_path', '')
                                 )
+                                # Only for admin uploads
+                                if target_user_id and request.user.username == 'admin':
+                                    notebook_doc = NotebookDocument.objects.create(
+                                        user=user,
+                                        file=document.file,
+                                        filename=document.filename,
+                                        main_project=main_project
+                                    )
+                                    NotebookProcessedIndex.objects.create(
+                                        document=notebook_doc,
+                                        faiss_index=processed_data['index_path'],
+                                        metadata=processed_data['metadata_path'],
+                                        summary="",
+                                        markdown_path=processed_data.get('markdown_path', '')
+                                    )
                                 uploaded_docs.append({
                                     'id': existing_doc.id,
                                     'filename': existing_doc.filename
@@ -1864,6 +1901,21 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 summary="",
                                 markdown_path=processed_data.get('markdown_path', '')
                             )
+                            # Only for admin uploads
+                            if target_user_id and request.user.username == 'admin':
+                                notebook_doc = NotebookDocument.objects.create(
+                                    user=user,
+                                    file=document.file,
+                                    filename=document.filename,
+                                    main_project=main_project
+                                )
+                                NotebookProcessedIndex.objects.create(
+                                    document=notebook_doc,
+                                    faiss_index=processed_data['index_path'],
+                                    metadata=processed_data['metadata_path'],
+                                    summary="",
+                                    markdown_path=processed_data.get('markdown_path', '')
+                                )
                             uploaded_docs.append({
                                 'id': document.id,
                                 'filename': document.filename
