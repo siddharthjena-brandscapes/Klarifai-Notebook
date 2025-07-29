@@ -1326,16 +1326,18 @@ function App() {
                   New project
                 </span>
               </button>
-              <a
-                href="https://delightful-river-01fc0580f.1.azurestaticapps.net"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-2.5 bg-[#556052] hover:bg-[#a55233] text-white font-medium rounded-lg transition-colors flex items-center space-x-2 shadow-sm"
-                title="Share your files here"
-              >
-                <FolderOpen className="w-5 h-5 mr-0.5" />
-                <span className="text-sm font-medium pb-0.5">Share files</span>
-              </a>
+              {currentUser?.username === "jnjmedtech" && (
+                <a
+                  href="https://lemon-grass-0e72fc60f.1.azurestaticapps.net"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-2.5 bg-[#556052] hover:bg-[#a55233] text-white font-medium rounded-lg transition-colors flex items-center space-x-2 shadow-sm"
+                  title="Bulk upload files"
+                >
+                  <FolderOpen className="w-5 h-5 mr-0.5" />
+                  <span className="text-sm font-medium pb-0.5">Bulk Upload</span>
+                </a>
+              )}
             </div>
           </div>
 
