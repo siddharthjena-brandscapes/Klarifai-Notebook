@@ -115,11 +115,11 @@ AZURE_AD = {
     'CLIENT_ID': 'ea731533-1633-4bef-9cce-214cebf756ec',
     'CLIENT_SECRET': 'iv.8Q~bWSRQ34SSCW75liVGOY5V-nJX1aHwoldna',
     'AUTHORITY': 'https://login.microsoftonline.com/289e3141-3166-4730-9a0c-b9ba490d78cd',
-    'REDIRECT_URI': 'https://klarifai-bbsr-rg-app-c7g3hqh3fca7huat.centralindia-01.azurewebsites.net/api/get_token/', # Updated redirect URI
+    'REDIRECT_URI': 'https:///api/get_token/', # Updated redirect URI
     'SCOPE': ['User.Read'],
 }
  
-FRONTEND_URL = 'https://beta.klarifai.ai'  # Ensure this matches your frontend URL
+FRONTEND_URL = ''  # Ensure this matches your frontend URL
  
 # Session configuration for OAuth state management
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'

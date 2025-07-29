@@ -27,7 +27,7 @@ logger.info(f"Allowed hosts: {ALLOWED_HOSTS}")
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    'https://beta.klarifai.ai',
+    '',
 ]
 
 CSRF_TRUSTED_ORIGINS = [

@@ -18,7 +18,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
         setIsLoading(true);
 
         try {
-            const response = await axiosInstance.post('https://klarifai-bbsr-rg-app-c7g3hqh3fca7huat.centralindia-01.azurewebsites.net/api/login/', {
+            const response = await axiosInstance.post('https:///api/login/', {
                 username,
                 password,
             });
