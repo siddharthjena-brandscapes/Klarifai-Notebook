@@ -27,7 +27,7 @@ logger.info(f"Allowed hosts: {ALLOWED_HOSTS}")
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    '',
+    'https://lemon-plant-073b3600f.1.azurestaticapps.net',
 ]
 
 CSRF_TRUSTED_ORIGINS = [

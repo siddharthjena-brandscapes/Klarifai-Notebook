@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const axiosInstance = axios.create({
-  baseURL: 'https:///api', // Your Django backend URL
+  baseURL: 'https://docker-appserver-klarifai-bbsr-ddbjesd4fng3avgp.centralindia-01.azurewebsites.net/api', // Your Django backend URL
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -10,7 +10,7 @@ const axiosInstance = axios.create({
 });
 const generateIdeasStream = async (data, onProgress) => {
   // Use the full URL with the correct base URL
-  const response = await fetch('https:///api/ideas/generate_ideas_stream/', {
+  const response = await fetch('https://docker-appserver-klarifai-bbsr-ddbjesd4fng3avgp.centralindia-01.azurewebsites.net/api/ideas/generate_ideas_stream/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

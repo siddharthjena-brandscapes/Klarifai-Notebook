@@ -18,7 +18,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
         setIsLoading(true);
 
         try {
-            const response = await axiosInstance.post('https:///api/login/', {
+            const response = await axiosInstance.post('https://docker-appserver-klarifai-bbsr-ddbjesd4fng3avgp.centralindia-01.azurewebsites.net/api/login/', {
                 username,
                 password,
             });
@@ -36,7 +36,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
         setSsoLoading(true);
         // Direct redirect to the backend SSO route
         // The backend will handle everything and redirect back to frontend
-        window.location.href = 'https://klarifai-bbsr-rg-app-c7g3hqh3fca7huat.centralindia-01.azurewebsites.net/api/microsoft-sso/';
+        window.location.href = 'https://docker-appserver-klarifai-bbsr-ddbjesd4fng3avgp.centralindia-01.azurewebsites.net/api/microsoft-sso/';
     };
 
     return (
