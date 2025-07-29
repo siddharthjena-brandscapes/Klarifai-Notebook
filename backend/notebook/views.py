@@ -2515,8 +2515,65 @@ class ChatView(APIView):
             )
 
     def normalize_citation_markers(self, text):
-        # Replace [Source n] or [source n] with [n]
-        return re.sub(r'\[(?:source|Source)\s*(\d+)\]', r'[\1]', text)
+
+        """
+
+        Convert all citation formats to consistent [n] format:
+
+        - [Source: 1, 2] -> [1][2]
+
+        - [Sources: 1, 2] -> [1][2]
+
+        - Source: 1, 2 -> [1][2]
+
+        - (Source 1, 2) -> [1][2]
+
+        """
+
+        if not text:
+
+            return text
+
+        # Replace [Source: n] or [Sources: n] with [n]
+
+        text = re.sub(r'\[(?:Source|Sources?)\s*:?\s*(\d+)\]', r'[\1]', text, flags=re.IGNORECASE)
+
+        # Replace [Source: n, m] or [Sources: n, m] with [n][m]
+
+        def bracketize(match):
+
+            nums = re.findall(r'\d+', match.group(0))
+
+            return ''.join([f'[{n}]' for n in nums])
+
+        text = re.sub(r'\[(?:Source|Sources?)\s*:?\s*[\d,\s]+\]', bracketize, text, flags=re.IGNORECASE)
+
+        # Replace Source: n, m or Sources: n, m (not in brackets) with [n][m]
+
+        text = re.sub(r'(?:Source|Sources?)\s*:?\s*([\d,\s]+)', 
+
+                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]), 
+
+                    text, flags=re.IGNORECASE)
+
+        # Replace (Source n, m) with [n][m]
+
+        text = re.sub(r'\((?:Source|Sources?)\s*:?\s*([\d,\s]+)\)', 
+
+                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]), 
+
+                    text, flags=re.IGNORECASE)
+
+        # Handle grouped citations [1, 2, 3] -> [1][2][3]
+
+        text = re.sub(r'\[(\d+(?:\s*,\s*\d+)+)\]', 
+
+                    lambda m: ''.join([f'[{n.strip()}]' for n in m.group(1).split(',')]), 
+
+                    text)
+
+        return text
+ 
 
 
     def post(self, request):
@@ -2527,41 +2584,41 @@ class ChatView(APIView):
             conversation_id = request.data.get('conversation_id')
             main_project_id = request.data.get('main_project_id')
             selected_documents = request.data.get('selected_documents', [])
-            
+           
             # Extract web_mode flag from request
             use_web_knowledge = request.data.get('use_web_knowledge', False)
-            
+           
             # Extract general_chat_mode flag
             general_chat_mode = request.data.get('general_chat_mode', False)
-
+ 
             # Extract response_length preference
             response_length = request.data.get('response_length', 'comprehensive')
-            
+           
             # Extract response_format parameter or default to 'natural'
             response_format = request.data.get('response_format', 'natural')
-
+ 
             if not main_project_id:
                 return Response({
                     'error': 'Main project ID is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+           
             # Validate message
             if not message:
                 return Response(
-                    {'error': 'Message is required'}, 
+                    {'error': 'Message is required'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
+ 
             # Process URLs in the query - new feature
             modified_message, url_context, extracted_urls = self.process_urls_in_query(message)
             has_url_content = bool(url_context)
-            
+           
             # Log URL processing results
             if has_url_content:
                 print(f"URLs detected in query: {extracted_urls}")
                 print(f"Modified query: {modified_message}")
                 print(f"URL context size: {len(url_context)} characters")
-
+ 
             conversation_context = ""
             if conversation_id:
                 try:
@@ -2570,21 +2627,21 @@ class ChatView(APIView):
                         conversation_id=conversation_id,
                         user=user
                     )
-                    
+                   
                     # Get last 5 conversation messages (max 10 messages = 5 turns)
                     recent_messages = ChatMessage.objects.filter(
                         chat_history=conversation
                     ).order_by('-created_at')[:10]
-                    
+                   
                     # Format for context
                     if recent_messages:
                         context_messages = []
                         for msg in recent_messages:
                             prefix = "User: " if msg.role == 'user' else "Assistant: "
                             context_messages.append(f"{prefix}{msg.content[:400]}...")
-                        
+                       
                         conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
-                    
+                   
                     # Try to get memory buffer
                     try:
                         memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
@@ -2593,28 +2650,28 @@ class ChatView(APIView):
                     except ConversationMemoryBuffer.DoesNotExist:
                         # No memory buffer yet, that's fine
                         pass
-                        
+                       
                 except ChatHistory.DoesNotExist:
                     # No conversation yet, that's fine
                     pass
-            
+           
             # Skip document validation if in general chat mode or if URLs are present
             if not general_chat_mode and not has_url_content:
                 # First, check for active document in session
                 active_document_id = request.session.get('active_document_id')
-                
+               
                 if not selected_documents:
                     active_document_id = request.session.get('active_document_id')
                     if active_document_id:
                         selected_documents = [active_document_id]
-                
+               
                 # Validate document selection only when not in general chat mode and no URLs are provided
                 if not selected_documents:
                     return Response(
                         {'error': 'Please select at least one document or set an active document'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-
+ 
             # Log the inputs for debugging
             print(f"Chat request received")
             print(f"Message: {message}")
@@ -2625,34 +2682,37 @@ class ChatView(APIView):
             print(f"Response length: {response_length}")
             print(f"Has conversation context: {bool(conversation_context)}")
             print(f"Has URL content: {has_url_content}")
-
+ 
             # Process document search early to get context for format detection
             all_chunks = []
             content_sources = []
             similar_contents = []  # Store document content separately
             citation_sources = {}  # Initialize citation sources dict
-            
+           
             if not general_chat_mode:
                 try:
                     processed_docs = ProcessedIndex.objects.filter(
-                        document_id__in=selected_documents, 
+                        document_id__in=selected_documents,
                         document__user=user
                     )
-                    
+                   
                     if not processed_docs.exists() and not has_url_content:
                         return Response(
                             {'error': 'No valid documents found'},
                             status=status.HTTP_404_NOT_FOUND
                         )
-                        
+                       
                     # Log the processed docs for debugging
                     print(f"Found {processed_docs.count()} processed documents")
                     for doc in processed_docs:
                         print(f"Document: {doc.document.filename}")
-                        print(f"FAISS index path: {doc.faiss_index}")
-                        print(f"Metadata path: {doc.metadata}")
+                        print(f"Storage type: {doc.storage_type}")
+                        print(f"Chunks count: {doc.chunks_count}")
+                        if doc.storage_type == 'faiss':
+                            print(f"FAISS index path: {doc.faiss_index}")
+                            print(f"Metadata path: {doc.metadata}")
                         print(f"Markdown path: {doc.markdown_path}")
-                        
+                       
                 except Exception as e:
                     print(f"Error fetching documents: {str(e)}")
                     if not has_url_content:
@@ -2660,116 +2720,73 @@ class ChatView(APIView):
                             {'error': f'Document retrieval error: {str(e)}'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-
-                # Create a merged metadata store from all selected documents
+ 
+                # Updated document processing for pgvector compatibility
                 all_metadata_store = []
-                
-                # Load FAISS indices and chunks for all selected documents
+               
+                # Check storage types and process accordingly
+                pgvector_docs = []
+                faiss_docs = []
+               
                 for proc_doc in processed_docs:
-                    if not proc_doc.faiss_index or not proc_doc.metadata:
-                        print(f"Missing index or metadata for {proc_doc.document.filename}")
-                        continue
-                    
-                    # Check both local and blob storage for file existence
-                    faiss_exists = os.path.exists(proc_doc.faiss_index) if proc_doc.faiss_index else False
-                    metadata_exists = os.path.exists(proc_doc.metadata) if proc_doc.metadata else False
-                    
-                    # If files don't exist locally, they might be in blob storage
-                    if not faiss_exists or not metadata_exists:
-                        print(f"Index or metadata file does not exist locally for {proc_doc.document.filename}")
-                        print(f"FAISS exists locally: {faiss_exists}, Metadata exists locally: {metadata_exists}")
-                        # Files will be handled by blob storage in search_similar_content
-                    
-                    # Check if this is a LlamaParse document with direct markdown access
-                    if proc_doc.markdown_path:
-                        markdown_exists = os.path.exists(proc_doc.markdown_path) if proc_doc.markdown_path else False
-                        print(f"Document has markdown path: {proc_doc.markdown_path}")
-                        print(f"Markdown exists locally: {markdown_exists}")
-                        
-                        # Add dummy entry that will be handled by search_similar_content
-                        all_metadata_store.append({
-                            'is_llamaparse': True,
-                            'source_file': proc_doc.document.filename,
-                            'document_id': proc_doc.document.id
-                        })
-                    
-                    # Load metadata - this is needed for both LlamaParse and simple documents
-                    try:
-                        # Try to load from local file first
-                        if metadata_exists:
-                            print(f"Loading metadata from local file: {proc_doc.metadata}")
-                            with open(proc_doc.metadata, 'rb') as f:
-                                chunks = pickle.load(f)
+                    if proc_doc.storage_type == 'pgvector':
+                        # Check if embeddings exist in database
+                        embeddings_exist = DocumentEmbedding.objects.filter(document=proc_doc.document).exists()
+                        if embeddings_exist:
+                            pgvector_docs.append(proc_doc)
+                            print(f"Added pgvector document: {proc_doc.document.filename}")
                         else:
-                            print(f"Loading metadata from blob storage: {proc_doc.metadata}")
-                            # Get metadata content from blob storage
-                            from notebook.utils import get_blob_content
-                            metadata_content = get_blob_content(proc_doc.metadata)
-                            if metadata_content:
-                                chunks = pickle.loads(metadata_content)
-                                print(f"Successfully loaded {len(chunks) if isinstance(chunks, list) else 'unknown'} chunks from blob")
-                            else:
-                                print(f"Failed to retrieve metadata from blob storage")
-                                continue
-                        
-                        # Validate the chunks format
-                        if not isinstance(chunks, list):
-                            print(f"Warning: chunks is not a list for {proc_doc.document.filename}, type: {type(chunks)}")
-                            if chunks:  # If it's a non-empty object, try to adapt it
-                                chunks = [chunks]
-                            else:
-                                chunks = []
-                        
-                        # Add document source information to each chunk
-                        for chunk in chunks:
-                            if isinstance(chunk, dict):
-                                if 'source_file' not in chunk:
-                                    chunk['source_file'] = proc_doc.document.filename
-                                
-                                # Ensure 'text' key exists
-                                if 'text' not in chunk:
-                                    for key in ['content', 'document_content', 'chunk_text']:
-                                        if key in chunk:
-                                            chunk['text'] = chunk[key]
-                                            break
-                                            
-                        # Add to all metadata store
-                        print(f"Adding {len(chunks)} chunks from {proc_doc.document.filename}")
-                        all_metadata_store.extend(chunks)
-                        
-                    except Exception as e:
-                        print(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
-                        continue
-                
-                # Now search using the improved approach
-                if all_metadata_store:
-                    print(f"Searching in {len(all_metadata_store)} chunks across all documents")
-                    # Get relevant content based on query - use modified_message if URLs detected
-                    # Use updated search_similar_content that returns citation_sources
+                            print(f"Warning: pgvector document {proc_doc.document.filename} has no embeddings")
+                    else:
+                        # FAISS document - check for file existence
+                        if (proc_doc.faiss_index and proc_doc.metadata and
+                            os.path.exists(proc_doc.faiss_index) and os.path.exists(proc_doc.metadata)):
+                            faiss_docs.append(proc_doc)
+                            print(f"Added FAISS document: {proc_doc.document.filename}")
+                        else:
+                            print(f"Warning: FAISS files missing for {proc_doc.document.filename}")
+               
+                # Process search based on available storage types
+                if pgvector_docs or faiss_docs:
+                    print(f"Searching in {len(pgvector_docs)} pgvector docs and {len(faiss_docs)} FAISS docs")
+                   
+                    # Use the updated search function that handles both storage types
                     similar_contents, content_sources, chunk_citation_sources = self.search_similar_content(
-                        modified_message if has_url_content else message, 
-                        processed_docs,
-                        all_metadata_store
+                        modified_message if has_url_content else message,
+                        processed_docs,  # Pass all processed docs, function will handle different storage types
+                        None  # metadata_store not needed for pgvector
                     )
-                    
+                   
                     # Store citation sources
                     citation_sources = chunk_citation_sources
-                    
+                   
                     if similar_contents:
                         print(f"Found {len(similar_contents)} relevant content chunks")
                         all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
                     else:
                         print("No relevant content found in documents")
                         all_chunks = []
+                       
+                        # If pgvector search failed, try fallback text search
+                        if pgvector_docs:
+                            print("Attempting fallback text search in pgvector documents...")
+                            fallback_results = self.fallback_text_search_pgvector(
+                                modified_message if has_url_content else message,
+                                pgvector_docs
+                            )
+                            if fallback_results:
+                                similar_contents, content_sources, citation_sources = fallback_results
+                                all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
+                                print(f"Fallback search found {len(similar_contents)} results")
                 else:
-                    print("No metadata found for any document")
+                    print("No valid documents found for search")
                     all_chunks = []
-            
+           
             # Check if we should auto-detect the response format
             if response_format == 'auto_detect':
                 context_snippets = [chunk.get('text', '') for chunk in all_chunks[:5]] if all_chunks else []
                 detected_format, secondary_format, confidence = self.detect_question_format(modified_message if has_url_content else message, context_snippets)
-                
+               
                 # Use the detected format if confidence is reasonable, otherwise default to 'natural'
                 if confidence >= 5.0:
                     response_format = detected_format
@@ -2777,12 +2794,12 @@ class ChatView(APIView):
                 else:
                     response_format = 'natural'
                     print(f"Low confidence in format detection ({confidence}), defaulting to 'natural'")
-            
+           
             # Get answer based on mode
             web_knowledge_response = None
             web_sources = []
             doc_citation_sources = {}
-            
+           
             # Get answer based on mode
             if general_chat_mode:
                 # For general chat mode, consider URL content if available
@@ -2790,14 +2807,14 @@ class ChatView(APIView):
                     # Create a hybrid prompt that includes the URL content
                     augmented_query = f"""
                     Please answer this question: {modified_message}
-                    
+                   
                     The question references content from URLs, which is provided here:
-                    
+                   
                     {url_context}
-                    
+                   
                     Based on this URL content, answer the user's question.
                     """
-                    
+                   
                     # Use the existing general chat function but with our augmented query
                     answer = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format, user=user)
                     print("Generated response using general chat mode with URL content")
@@ -2808,17 +2825,17 @@ class ChatView(APIView):
             else:
                 # Document chat mode - now handles URL content too
                 document_content_exists = bool(all_chunks)
-                
+               
                 if document_content_exists or has_url_content:
                     # If we have URL content, add it to the context
                     if has_url_content:
                         # Add URL context to similar_contents and content_sources
                         combined_contents = similar_contents.copy() if similar_contents else []
                         combined_contents.append(url_context)
-                        
+                       
                         combined_sources = content_sources.copy() if content_sources else []
                         combined_sources.append("URL Content")
-                        
+                       
                         # Add URL to citation sources
                         if citation_sources:
                             url_citation_key = max(citation_sources.keys()) + 1 if citation_sources else 1
@@ -2829,51 +2846,51 @@ class ChatView(APIView):
                                 'score': 0.9,  # High score for URL content
                                 'display_num': url_citation_key
                             }
-                        
+                       
                         # Generate response using combined context with citation sources
                         if response_length == 'short':
                             document_answer, doc_citation_sources = self.generate_short_response(
-                                modified_message, 
-                                combined_contents, 
-                                combined_sources, 
-                                False, 
-                                response_format, 
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
                         else:  # Default to comprehensive
                             document_answer, doc_citation_sources = self.generate_response(
-                                modified_message, 
-                                combined_contents, 
-                                combined_sources, 
-                                False, 
-                                response_format, 
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
-                        
+                       
                         print(f"Generated document-based answer with URL content using {response_length} response length")
                     else:
                         # Standard document-based response without URL content
                         if response_length == 'short':
                             document_answer, doc_citation_sources = self.generate_short_response(
-                                message, 
-                                similar_contents, 
-                                content_sources, 
-                                False, 
-                                response_format, 
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
                         else:  # Default to comprehensive
                             document_answer, doc_citation_sources = self.generate_response(
-                                message, 
-                                similar_contents, 
-                                content_sources, 
-                                False, 
-                                response_format, 
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
                                 conversation_context
                             )
-                        
+                       
                         print(f"Generated document-based answer using {response_length} response length")
-                    
+                   
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
                         web_response_data = self.get_web_knowledge_response(
@@ -2881,7 +2898,7 @@ class ChatView(APIView):
                             user=user,
                             document_context=similar_contents  # Pass document context to enhance web search  
                         )
-
+ 
                         # Extract the components from the JSON response
                         if isinstance(web_response_data, dict):
                             web_knowledge_response = web_response_data.get("content", "No web response received")
@@ -2891,27 +2908,27 @@ class ChatView(APIView):
                             web_knowledge_response = str(web_response_data)
                             web_sources = []
                         print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
-                        
+                       
                         # Combine document and web responses
-                    
+                   
                         combined_response_data, combined_citation_sources = self.combine_document_and_web_responses(
-                            modified_message if has_url_content else message, 
-                            document_answer, 
-                            web_knowledge_response, 
-                            combined_sources if has_url_content else content_sources, 
+                            modified_message if has_url_content else message,
+                            document_answer,
+                            web_knowledge_response,
+                            combined_sources if has_url_content else content_sources,
                             web_sources,
                             response_format,
                             conversation_context,
                             original_doc_context=similar_contents,
                         )
-
+ 
                         # Extract the answer from the JSON response
                         if isinstance(combined_response_data, dict):
                             answer = combined_response_data.get("content", "Error combining responses")
                         else:
                             answer = str(combined_response_data)
                         print("Combined document and web responses")
-                        
+                       
                         # Update citation sources with combined sources
                         doc_citation_sources = combined_citation_sources
                     else:
@@ -2925,7 +2942,7 @@ class ChatView(APIView):
                             modified_message if has_url_content else message,
                             user=user
                         )
-
+ 
                         if isinstance(web_response_data, dict):
                             answer = web_response_data.get("content", "No web response received")
                             web_sources = web_response_data.get("web_sources", [])
@@ -2936,7 +2953,7 @@ class ChatView(APIView):
                     else:
                         print("No document content found and web knowledge not enabled")
                         answer = "I couldn't find any relevant information in the documents."
-            
+           
             # Extract main response and citation info (if any)
             if "\n\n*Sources:" in answer:
                 parts = answer.split("\n\n*Sources:")
@@ -2945,7 +2962,7 @@ class ChatView(APIView):
             else:
                 clean_response = answer
                 source_info = "Web search results" if use_web_knowledge else ""
-                
+               
                 # Add URL sources if applicable
                 if has_url_content:
                     urls_domains = [self.extract_domain(url) for url in extracted_urls]
@@ -2954,14 +2971,14 @@ class ChatView(APIView):
                         source_info += f", URLs: {url_sources}"
                     else:
                         source_info = f"URLs: {url_sources}"
-
+ 
             clean_response = self.normalize_citation_markers(clean_response)
-
+           
             # Generate follow-up questions (either from documents or general chat)
             if general_chat_mode:
                 follow_up_questions = self.generate_general_follow_up_questions(
-                    modified_message if has_url_content else message, 
-                    clean_response, 
+                    modified_message if has_url_content else message,
+                    clean_response,
                     user=user
                 )
             else:
@@ -2974,7 +2991,7 @@ class ChatView(APIView):
                         "Would you like me to elaborate on any specific point?",
                         "Do you have any other questions I can help with?"
                     ]
-            
+           
             # Create citations from chunks and citation sources
             citations = []
             if not general_chat_mode:
@@ -2989,7 +3006,7 @@ class ChatView(APIView):
                         'snippet': formatted_snippet,
                         'document_id': citation_info.get('document_id', 'Unknown')
                     })
-                
+               
                 # If no enhanced citations, fall back to chunk-based citations (original method)
                 if not citations:
                     for chunk in all_chunks:
@@ -3002,7 +3019,7 @@ class ChatView(APIView):
                             'snippet': formatted_snippet[:200] + "..." if len(formatted_snippet) > 200 else formatted_snippet,
                             'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
                         })
-                
+               
                 # Add URL citations if applicable
                 if has_url_content:
                     for idx, url in enumerate(extracted_urls):
@@ -3015,7 +3032,7 @@ class ChatView(APIView):
                             'document_id': f"url_{idx}",
                             'url': url
                         })
-                
+               
                 # Add web citations if applicable
                 if use_web_knowledge and web_sources:
                     for idx, source in enumerate(web_sources):
@@ -3027,11 +3044,11 @@ class ChatView(APIView):
                             'document_id': f"web_{idx}",
                             'url': source.get('url', '')
                         })
-
+ 
             # Prepare conversation details
             conversation_id = conversation_id or str(uuid.uuid4())
             title = f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-
+ 
             # Create or retrieve conversation
             if conversation_id:
                 conversation, created = ChatHistory.objects.get_or_create(
@@ -3061,7 +3078,7 @@ class ChatView(APIView):
                 role='user',
                 content=message
             )
-
+ 
             # Create AI response message
             ai_message = ChatMessage.objects.create(
                 chat_history=conversation,
@@ -3073,37 +3090,37 @@ class ChatView(APIView):
                 response_length=response_length,
                 response_format=response_format,
             )
-
+ 
             # Update or create memory buffer
             memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
                 conversation=conversation
             )
-            
+           
             # Get all messages for this conversation
             all_messages = ChatMessage.objects.filter(
                 chat_history=conversation
             ).order_by('created_at')
-            
+           
             # Update memory with all messages
             memory_buffer.update_memory(all_messages)
-
+ 
             # Add selected documents to the conversation (skip if general chat mode)
             if selected_documents and not general_chat_mode:
                 documents = Document.objects.filter(
-                    id__in=selected_documents, 
+                    id__in=selected_documents,
                     user=user
                 )
                 conversation.documents.set(documents)
-
+ 
             # Update project timestamp to track activity
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
-
+ 
             # Update conversation details
             conversation.title = title
             conversation.follow_up_questions = follow_up_questions
             conversation.save()
-
+ 
             # Use citation_sources in the response data if available
             response_data = {
                 'response': clean_response,
@@ -3117,9 +3134,10 @@ class ChatView(APIView):
                 'response_length': response_length,  # Include in response for tracking
                 'response_format': response_format,   # Include detected/used format in response
                 'url_content_used': has_url_content,  # Flag if URL content was used
-                'extracted_urls': extracted_urls if has_url_content else []  # List of extracted URLs
+                'extracted_urls': extracted_urls if has_url_content else [],  # List of extracted URLs
+                'storage_types_used': self.get_storage_types_used(processed_docs) if not general_chat_mode else []  # Debug info
             }
-
+ 
             # Print detailed chat response information
             print("\n--- Chat Interaction Logged ---")
             print(f"User Question: {message}")
@@ -3129,15 +3147,19 @@ class ChatView(APIView):
             print(f"URL content used: {has_url_content}")
             if has_url_content:
                 print(f"Extracted URLs: {extracted_urls}")
+            if not general_chat_mode:
+                storage_types = self.get_storage_types_used(processed_docs)
+                print(f"Storage types used: {storage_types}")
             print(f"Assistant Response: {clean_response[:500]}...")  # First 500 chars
             print(f"Citation count: {len(citations)}")
             print(f"Follow-up Questions: {len(follow_up_questions)}")
             print("-----------------------------\n")
-            
+ 
+            # Get all messages for this conversation (with IDs)
             all_messages = ChatMessage.objects.filter(
                 chat_history=conversation
             ).order_by('created_at')
-            
+ 
             message_list = []
             for message in all_messages:
                 message_data = {
@@ -3148,7 +3170,6 @@ class ChatView(APIView):
                     'citations': message.citations or [],
                     'sources_info': getattr(message, 'sources', ''),  # Add this line
                     'extracted_urls': getattr(message, 'extracted_urls', []),  # Add this line
-
                 }
                 # Add badge properties for assistant messages
                 if message.role == 'assistant':
@@ -3156,17 +3177,133 @@ class ChatView(APIView):
                     message_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
                     message_data['response_format'] = getattr(message, 'response_format', 'natural')
                 message_list.append(message_data)
-            
+ 
             response_data['messages'] = message_list
+ 
             return Response(response_data, status=status.HTTP_200_OK)
-
+ 
         except Exception as e:
             logger.error(f"Unexpected error in ChatView: {str(e)}", exc_info=True)
             return Response(
-                {'error': f'An unexpected error occurred: {str(e)}'}, 
+                {'error': f'An unexpected error occurred: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-       
+ 
+    # ===================================================================
+    # Helper methods for pgvector integration
+    # ===================================================================
+   
+    def get_storage_types_used(self, processed_docs):
+        """Get list of storage types used in the current query for debugging"""
+        storage_types = []
+        for doc in processed_docs:
+            if doc.storage_type not in storage_types:
+                storage_types.append(doc.storage_type)
+        return storage_types
+   
+    def fallback_text_search_pgvector(self, query, pgvector_docs, limit=10):
+        """
+        Fallback text search when pgvector similarity search fails
+        """
+        try:
+            from django.db.models import Q
+           
+            query_lower = query.lower()
+            all_results = []
+            all_sources = []
+            citation_sources = {}
+           
+            for proc_doc in pgvector_docs:
+                # Search for text matches in document embeddings
+                text_matches = DocumentEmbedding.objects.filter(
+                    document=proc_doc.document,
+                    content__icontains=query_lower
+                )[:limit]
+               
+                for idx, embedding_obj in enumerate(text_matches):
+                    citation_key = len(all_results) + 1
+                   
+                    citation_sources[citation_key] = {
+                        'source': proc_doc.document.filename,
+                        'text': embedding_obj.content,
+                        'relevance_score': 0.5,  # Default score for text match
+                        'document_id': proc_doc.document.id,
+                        'chunk_idx': embedding_obj.chunk_id,
+                        'display_num': citation_key
+                    }
+                   
+                    all_results.append(embedding_obj.content)
+                    all_sources.append(proc_doc.document.filename)
+           
+            if all_results:
+                print(f"Fallback text search found {len(all_results)} results")
+                return all_results, all_sources, citation_sources
+            else:
+                return None
+               
+        except Exception as e:
+            print(f"Error in fallback text search: {str(e)}")
+            return None
+    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
+        """Create transaction record for conversation"""
+        try:
+            # Get the project
+            main_project = Project.objects.get(id=main_project_id, user=user)
+           
+            # Create main transaction record
+            user_transaction = UserTransaction.objects.create(
+                user=user,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                conversation_title=conversation.title,
+                conversation_id=conversation.conversation_id,
+                main_project=main_project,
+                metadata={
+                    'creation_timestamp': timezone.now().isoformat(),
+                    'web_knowledge_used': use_web_knowledge,
+                    'response_format': response_format,
+                    'response_length': response_length
+                }
+            )
+           
+            # Create detailed conversation transaction
+            ConversationTransaction.objects.create(
+                user_transaction=user_transaction,
+                message_count=1,  # Initial message
+                web_knowledge_used=use_web_knowledge,
+                response_format=response_format,
+                response_length=response_length
+            )
+           
+            print(f"Transaction recorded for conversation: {conversation.title}")
+           
+        except Exception as e:
+            print(f"Error creating conversation transaction: {str(e)}")
+ 
+    def update_conversation_transaction(self, conversation, use_web_knowledge):
+        """Update existing conversation transaction when new messages are added"""
+        try:
+            # Find existing transaction for this conversation
+            user_transaction = UserTransaction.objects.filter(
+                conversation_id=conversation.conversation_id,
+                transaction_type=TransactionType.CONVERSATION_CREATE,
+                is_active=True
+            ).first()
+           
+            if user_transaction and hasattr(user_transaction, 'conversation_details'):
+                # Update message count
+                user_transaction.conversation_details.message_count += 1
+                if use_web_knowledge:
+                    user_transaction.conversation_details.web_knowledge_used = True
+                user_transaction.conversation_details.save()
+               
+                # Update metadata
+                user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
+                user_transaction.save()
+               
+        except Exception as e:
+            print(f"Error updating conversation transaction: {str(e)}")
+
+
     def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
         """Create transaction record for conversation"""
         try:
@@ -6582,271 +6719,202 @@ class ChatView(APIView):
             logger.error(f"❌ Error loading FAISS index from blob: {str(e)}", exc_info=True)
             return None, []
 
-    def search_similar_content(self, query, processed_docs, metadata_store, k=40):
-        """
-        Enhanced search function that handles both LlamaParse and local document parsing
-        with Azure Blob Storage integration and improved debugging
-        FIXED: Properly uses blob storage for FAISS index retrieval
-        """
-        from notebook.utils import download_blob_to_temp_file, get_blob_content
-        import numpy as np
-        import pickle
-        import faiss
-        import os
-        import logging
-        
-        logger = logging.getLogger(__name__)
-        logger.info(f"Starting search for query: '{query}'")
-        logger.info(f"Number of processed docs to search: {len(processed_docs) if processed_docs else 0}")
-        
-        # Get embeddings for the query
-        query_embedding = self.get_embeddings([query])
-        if not query_embedding:
-            logger.error("Failed to generate query embedding")
-            return [], [], {}
-        
-        logger.info(f"Generated query embedding with shape: {np.array(query_embedding).shape}")
-        
-        # Search each document's FAISS index separately
-        all_results = []
-        all_distances = []
-        all_sources = []
-        citation_mapping = {}
-        citation_count = 0
-        
-        # Track content to avoid duplicates
-        seen_content_hashes = set()
-        
-        # Check if we have any valid documents to search
-        valid_docs_found = False
-        
-        for proc_doc in processed_docs:
-            # Skip documents without FAISS indices
-            if not proc_doc.faiss_index or not proc_doc.metadata:
-                logger.warning(f"Missing index or metadata for document {proc_doc.document.id}: {proc_doc.document.filename}")
-                continue
-            
-            print(f"🔍 PROCESSING DOCUMENT: {proc_doc.document.filename}")
-            print(f"   Document ID: {proc_doc.document.id}")
-            print(f"   FAISS index path: {proc_doc.faiss_index}")
-            print(f"   Metadata path: {proc_doc.metadata}")
-            
-            # FIXED: Use blob storage method instead of local file method
-            try:
-                logger.info(f"Loading FAISS index from blob storage for {proc_doc.document.filename}")
-                index, chunks = self.load_faiss_index_from_blob(
-                    proc_doc.faiss_index,  # Full path: "faissindex/abc123_index.faiss"
-                    proc_doc.metadata      # Full path: "faissindex/abc123_chunks.pkl"
-                )
-                
-                if index is None:
-                    logger.error(f"Failed to load FAISS index from blob for {proc_doc.document.filename}")
+    def search_similar_content(self, query, processed_docs, metadata_store=None, k=80):
+            """
+            Enhanced search function using pgvector for similarity search
+            Maintains the same return structure as the original FAISS version
+            """
+            print(f"\n🔍 SEARCH DEBUG: Starting pgvector search for query: '{query}'")
+            print(f"🔍 SEARCH DEBUG: Number of processed docs: {len(processed_docs)}")
+       
+            # Get embeddings for the query
+            query_embedding = self.get_embeddings([query])
+            if not query_embedding:
+                print("❌ SEARCH DEBUG: Failed to get query embedding")
+                return [], [], {}
+       
+            print("✅ SEARCH DEBUG: Got query embedding")
+       
+            # Search results storage
+            all_results = []
+            all_distances = []
+            all_sources = []
+            citation_mapping = {}
+            citation_count = 0
+            seen_content_hashes = set()
+            valid_docs_found = False
+       
+            for i, proc_doc in enumerate(processed_docs):
+                print(f"\n🔍 SEARCH DEBUG: Processing document {i+1}: {proc_doc.document.filename}")
+           
+                # Skip if not using pgvector or no embeddings exist
+                if proc_doc.storage_type != 'pgvector':
+                    print(f"❌ SEARCH DEBUG: Document {proc_doc.document.filename} not using pgvector storage")
                     continue
-                    
-                if not chunks:
-                    logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
+           
+                # Check if embeddings exist for this document
+                embeddings_exist = DocumentEmbedding.objects.filter(document=proc_doc.document).exists()
+                if not embeddings_exist:
+                    print(f"❌ SEARCH DEBUG: No embeddings found for {proc_doc.document.filename}")
                     continue
-                    
-                # Validate chunks format
-                if not isinstance(chunks, list):
-                    logger.warning(f"Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
-                    chunks = []
-                
-                logger.info(f"Successfully loaded: index with {index.ntotal} vectors, {len(chunks)} chunks")
-                
-                # Debug: Print first few chunks
-                for idx, chunk in enumerate(chunks[:3]):
-                    if isinstance(chunk, dict):
-                        chunk_text = chunk.get('text', chunk.get('content', ''))
-                        print(f"   Chunk {idx}: {chunk_text[:100]}...")
-                    else:
-                        print(f"   Chunk {idx}: {str(chunk)[:100]}...")
-                
-                # Add document source information to each chunk if missing
-                for chunk in chunks:
-                    if isinstance(chunk, dict):
-                        if 'source_file' not in chunk:
-                            chunk['source_file'] = proc_doc.document.filename
-                        if not chunk.get('text'):
-                            # Try different field names for text content
-                            for field in ['content', 'document_content', 'chunk_text']:
-                                if field in chunk:
-                                    chunk['text'] = chunk[field]
-                                    break
-                
-                # Try vector search with FAISS index
+           
                 valid_docs_found = True
-                
-                # Check if index is empty
-                if index.ntotal == 0:
-                    logger.warning(f"FAISS index for {proc_doc.document.filename} is empty (ntotal=0)")
-                    continue
-                
-                # Check if embedding dimensions match
-                if index.d != len(query_embedding[0]):
-                    logger.error(f"Dimension mismatch: query={len(query_embedding[0])}, index={index.d}")
-                    continue
-                
-                # Search this index with increased k for better diversity
-                k_to_use = min(k, index.ntotal)
-                logger.info(f"Searching index with k={k_to_use}")
-                
-                distances, indices = index.search(
-                    np.array([query_embedding[0]]).astype('float32'), 
-                    k_to_use
-                )
-                
-                # Log search results
-                logger.info(f"FAISS search returned {len(indices[0])} results")
-                
-                # Log distance stats
-                if len(distances[0]) > 0:
-                    logger.info(f"Distance range: min={np.min(distances[0]):.4f}, max={np.max(distances[0]):.4f}, mean={np.mean(distances[0]):.4f}")
-                
-                # Extract results for this document
-                doc_results_count = 0
-                for i, idx in enumerate(indices[0]):
-                    if idx < len(chunks) and distances[0][i] < 2.0:  # Distance threshold
-                        chunk = chunks[idx]
-                        content = chunk.get('text', '') if isinstance(chunk, dict) else str(chunk)
-                        
-                        if content and content.strip():
-                            # Create content hash to check for duplicates
-                            content_hash = hash(content[:150])  # Use first 200 chars for hash
-                            
+           
+                try:
+                    # Perform pgvector similarity search
+                    from pgvector.django import CosineDistance
+               
+                    # Calculate search limit per document
+                    search_k = min(k // len(processed_docs) + 10, proc_doc.chunks_count or 50)
+               
+                    # Query embeddings using pgvector
+                    similar_embeddings = DocumentEmbedding.objects.filter(
+                        document=proc_doc.document
+                    ).annotate(
+                        distance=CosineDistance('embedding', query_embedding[0])
+                    ).order_by('distance')[:search_k]
+               
+                    print(f"✅ SEARCH DEBUG: pgvector search returned {len(similar_embeddings)} results")
+               
+                    # Process results
+                    doc_results_count = 0
+                    for embedding_obj in similar_embeddings:
+                        distance = float(embedding_obj.distance)
+                   
+                        # Filter by distance threshold
+                        if distance < 0.8:  # Cosine distance threshold (lower is better)
+                            content = embedding_obj.content
+                       
+                            if content and content.strip():
+                                # Duplicate detection
+                                content_hash = hash(content[:150])
+                           
+                                if content_hash not in seen_content_hashes:
+                                    seen_content_hashes.add(content_hash)
+                                    doc_results_count += 1
+                                    citation_count += 1
+                               
+                                    # Store citation mapping
+                                    citation_mapping[citation_count] = {
+                                        'source': proc_doc.document.filename,
+                                        'text': content,
+                                        'relevance_score': distance,
+                                        'document_id': proc_doc.document.id,
+                                        'chunk_idx': embedding_obj.chunk_id,
+                                        'display_num': citation_count
+                                    }
+                               
+                                    all_results.append(content)
+                                    all_distances.append(distance)
+                                    all_sources.append(proc_doc.document.filename)
+                               
+                                    print(f"   ✅ Added result {citation_count}: distance={distance:.4f}, content='{content[:100]}...'")
+               
+                    print(f"✅ SEARCH DEBUG: Added {doc_results_count} results from {proc_doc.document.filename}")
+               
+                except Exception as e:
+                    print(f"❌ SEARCH DEBUG: Error searching embeddings for {proc_doc.document.filename}: {str(e)}")
+               
+                    # Fallback to text search
+                    try:
+                        print(f"🔄 SEARCH DEBUG: Falling back to text search for {proc_doc.document.filename}")
+                        query_lower = query.lower()
+                   
+                        text_matches = DocumentEmbedding.objects.filter(
+                            document=proc_doc.document,
+                            content__icontains=query_lower
+                        )[:10]
+                   
+                        print(f"   Found {len(text_matches)} text matches")
+                   
+                        for embedding_obj in text_matches:
+                            content = embedding_obj.content
+                            content_hash = hash(content[:150])
+                       
                             if content_hash not in seen_content_hashes:
                                 seen_content_hashes.add(content_hash)
-                                doc_results_count += 1
-                                
-                                # Add numbered citation
                                 citation_count += 1
-                                citation_key = citation_count
-
-                                # Store citation mapping with metadata
-                                citation_mapping[citation_key] = {
-                                    'source_file': proc_doc.document.filename,
+                           
+                                citation_mapping[citation_count] = {
+                                    'source': proc_doc.document.filename,
                                     'text': content,
-                                    'relevance_score': float(distances[0][i]),
+                                    'relevance_score': 0.5,
                                     'document_id': proc_doc.document.id,
-                                    'chunk_idx': idx,
-                                    'display_num': citation_key
+                                    'chunk_idx': embedding_obj.chunk_id,
+                                    'display_num': citation_count
                                 }
-                                
+                           
                                 all_results.append(content)
-                                all_distances.append(distances[0][i])
+                                all_distances.append(0.5)
                                 all_sources.append(proc_doc.document.filename)
-                                
-                                print(f"   ✅ Added result {citation_count}: distance={distances[0][i]:.4f}, content='{content[:100]}...'")
-                
-                print(f"✅ SEARCH DEBUG: Added {doc_results_count} results from {proc_doc.document.filename}")
-                                
-            except Exception as e:
-                logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}", exc_info=True)
-                
-                # Fallback to basic text search if FAISS fails
-                if chunks:
-                    print(f"🔄 SEARCH DEBUG: Falling back to text search for {proc_doc.document.filename}")
-                    query_lower = query.lower()
-                    matched_chunks = []
-                    
-                    for chunk_idx, chunk in enumerate(chunks):
-                        if isinstance(chunk, dict):
-                            chunk_text = chunk.get('text', '')
-                        else:
-                            chunk_text = str(chunk)
-                            
-                        if chunk_text and query_lower in chunk_text.lower():
-                            matched_chunks.append((chunk_idx, chunk_text))
-                    
-                    print(f"   Found {len(matched_chunks)} text matches")
-                    
-                    # Add top 5 text matches
-                    for chunk_idx, chunk_text in matched_chunks[:10]:
-                        content_hash = hash(chunk_text[:150])
-                        if content_hash not in seen_content_hashes:
-                            seen_content_hashes.add(content_hash)
-                            citation_count += 1
-                            
-                            citation_mapping[citation_count] = {
-                                'source_file': proc_doc.document.filename,
-                                'text': chunk_text,
-                                'relevance_score': 0.5,  # Medium relevance for text matches
-                                'document_id': proc_doc.document.id,
-                                'chunk_idx': chunk_idx,
-                                'display_num': citation_count
-                            }
-                            
-                            all_results.append(chunk_text)
-                            all_distances.append(0.5)
-                            all_sources.append(proc_doc.document.filename)
-                            
-                            print(f"   ✅ Added text match {citation_count}: '{chunk_text[:100]}...'")
-        
-        print(f"\n🔍 SEARCH DEBUG: Search completed. Found {len(all_results)} total results")
-        
-        if not all_results:
-            if valid_docs_found:
-                print(f"⚠️ SEARCH DEBUG: No matching content found in documents for query: {query}")
-            else:
-                print(f"❌ SEARCH DEBUG: No valid documents found to search")
-            return [], [], {}
-        
-        # Simple sorting by FAISS distance (lower is better)
-        # Combine results with their metadata for sorting
-        combined_results = list(zip(all_results, all_sources, all_distances, range(1, len(all_results) + 1)))
-        
-        # Sort by distance (ascending - lower distance = more similar)
-        sorted_results = sorted(combined_results, key=lambda x: x[2])
-        
-        print(f"🔍 SEARCH DEBUG: Sorted results by distance")
-        for i, (content, source, distance, _) in enumerate(sorted_results[:5]):
-            print(f"   Result {i+1}: distance={distance:.4f}, source='{source}', content='{content[:100]}...'")
-        
-        # Extract sorted results
-        results = [res[0] for res in sorted_results]
-        sources = [res[1] for res in sorted_results]
-        
-        # Update citation mapping with new ranking
-        reordered_citation_mapping = {}
-        for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
-            if old_key in citation_mapping:
-                reordered_citation_mapping[new_idx] = citation_mapping[old_key].copy()
-                reordered_citation_mapping[new_idx]['display_num'] = new_idx
-        
-        citation_mapping = reordered_citation_mapping
-        
-        # Final deduplication while preserving order
-        seen_content = set()
-        filtered_results = []
-        filtered_sources = []
-        filtered_citation_mapping = {}
-        new_citation_count = 0
-        
-        for i, (content, source) in enumerate(zip(results, sources)):
-            content_hash = content[:80] if content else ""
-            if content_hash and content_hash not in seen_content:
-                seen_content.add(content_hash)
-                filtered_results.append(content)
-                filtered_sources.append(source)
-
-                new_citation_count += 1
-                old_idx = i + 1
-                if old_idx in citation_mapping:
-                    filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx].copy()
-                    filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
-        
-        # Return top matches (limit to 15 most relevant)
-        max_results = min(len(filtered_results), 15)
-        final_results = filtered_results[:max_results]
-        final_sources = filtered_sources[:max_results]
-        final_citations = {k: v for k, v in filtered_citation_mapping.items() if k <= max_results}
-        
-        print(f"\n✅ SEARCH DEBUG: Final results: {len(final_results)} items")
-        for i, (content, source) in enumerate(zip(final_results[:3], final_sources[:3])):
-            print(f"   Final {i+1}: source='{source}', content='{content[:100]}...'")
-        
-        return final_results, final_sources, final_citations
-
+                           
+                                print(f"   ✅ Added text match {citation_count}: '{content[:100]}...'")
+                           
+                    except Exception as fallback_error:
+                        print(f"❌ SEARCH DEBUG: Fallback search failed: {str(fallback_error)}")
+                        continue
+       
+            print(f"\n🔍 SEARCH DEBUG: Search completed. Found {len(all_results)} total results")
+       
+            if not all_results:
+                if valid_docs_found:
+                    print(f"⚠️ SEARCH DEBUG: No matching content found in documents for query: {query}")
+                else:
+                    print(f"❌ SEARCH DEBUG: No valid documents found to search")
+                return [], [], {}
+       
+            # Sort results by distance (lower is better for cosine distance)
+            combined_results = list(zip(all_results, all_sources, all_distances, range(1, len(all_results) + 1)))
+            sorted_results = sorted(combined_results, key=lambda x: x[2])
+       
+            print(f"🔍 SEARCH DEBUG: Sorted results by distance")
+            for i, (content, source, distance, _) in enumerate(sorted_results[:5]):
+                print(f"   Result {i+1}: distance={distance:.4f}, source='{source}', content='{content[:100]}...'")
+       
+            # Extract sorted results
+            results = [res[0] for res in sorted_results]
+            sources = [res[1] for res in sorted_results]
+       
+            # Update citation mapping with new ranking
+            reordered_citation_mapping = {}
+            for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+                if old_key in citation_mapping:
+                    reordered_citation_mapping[new_idx] = citation_mapping[old_key].copy()
+                    reordered_citation_mapping[new_idx]['display_num'] = new_idx
+       
+            citation_mapping = reordered_citation_mapping
+       
+            # Final deduplication and filtering
+            seen_content = set()
+            filtered_results = []
+            filtered_sources = []
+            filtered_citation_mapping = {}
+            new_citation_count = 0
+       
+            for i, (content, source) in enumerate(zip(results, sources)):
+                content_hash = content[:80] if content else ""
+                if content_hash and content_hash not in seen_content:
+                    seen_content.add(content_hash)
+                    filtered_results.append(content)
+                    filtered_sources.append(source)
+   
+                    new_citation_count += 1
+                    old_idx = i + 1
+                    if old_idx in citation_mapping:
+                        filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx].copy()
+                        filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
+       
+            # Return final results (limit to 30 for comprehensive responses)
+            max_results = min(len(filtered_results), 30)
+            final_results = filtered_results[:max_results]
+            final_sources = filtered_sources[:max_results]
+            final_citations = {k: v for k, v in filtered_citation_mapping.items() if k <= max_results}
+       
+            print(f"\n✅ SEARCH DEBUG: Final results: {len(final_results)} items")
+            for i, (content, source) in enumerate(zip(final_results[:5], final_sources[:5])):
+                print(f"   Final {i+1}: source='{source}', content='{content[:100]}...'")
+       
+            return final_results, final_sources, final_citations
     
     def _prepare_context_comprehensive(self, context, sources):
         """
