@@ -112,7 +112,7 @@ const ChatInputArea = ({
         onChange={handleFileChange}
         multiple
         className="hidden"
-        accept=".pdf,.docx,.txt,.pptx, .jpg, .jpeg, .bmp, .png, .mp3, .mp4, .wav, .mpeg"
+        accept=".pdf, .docx, .txt,  .mp3, .mp4"
       />
     </div>
     {/* Icons and buttons row */}

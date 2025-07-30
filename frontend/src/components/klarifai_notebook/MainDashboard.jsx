@@ -23,6 +23,7 @@ import MindMapViewer from "../klarifai_notebook/MindMapViewer";
 import RightPanel from "./RightPanel";
 import MindMapHistory from "../klarifai_notebook/MindMapHistory";
 import BrainLoadingAnimation from "../klarifai_notebook/BrainLoadingAnimation";
+import { toast } from "react-toastify";
 // import DocumentSelectionModal from "../klarifai_notebook/DocumentSelectionModal";
 
 const MainDashboard = () => {
@@ -71,6 +72,69 @@ const MainDashboard = () => {
   const [pastedImages, setPastedImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [hasImages, setHasImages] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const allowedExtensions = [".pdf", ".docx", ".txt", ".mp3", ".mp4"];
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    // Check upload permission from MainChat
+    if (
+      mainChatRef.current &&
+      mainChatRef.current.hasUploadPermissions === false
+    ) {
+      toast.warn("You do not have permission to upload documents.", {
+        position: "top-center",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "colored",
+      });
+      return;
+    }
+
+    let files = Array.from(e.dataTransfer.files);
+
+    // Filter files by allowed extensions
+    const validFiles = files.filter((file) => {
+      const ext = "." + file.name.split(".").pop().toLowerCase();
+      return allowedExtensions.includes(ext);
+    });
+
+    if (
+      validFiles.length > 0 &&
+      mainChatRef.current &&
+      mainChatRef.current.handleFileChange
+    ) {
+      mainChatRef.current.handleFileChange({ target: { files: validFiles } });
+    }
+
+    // Show toast if all dropped files are invalid
+    if (files.length > 0 && validFiles.length === 0) {
+      toast.warn("Only .pdf, .docx, .txt, .mp3, .mp4 files are allowed.", {
+        position: "top-center",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "colored",
+      });
+    }
+  };
 
   // NEW: Helper function to create document signature
   const createDocumentSignature = useCallback((documentIds) => {
@@ -761,7 +825,12 @@ const MainDashboard = () => {
     <div
       className={`flex flex-col min-h-screen ${
         theme === "dark" ? "dark:bg-black" : "bg-[#f0efea]/50"
-      } overflow-hidden`}
+      } overflow-hidden ${
+        isDragOver ? "border-2 border-blue-400 bg-blue-50" : ""
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {/* Background for dark theme */}
       {theme === "dark" && (

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useRef, useState } from 'react';
-import {  Calendar, Camera, Upload, X,  Settings, LogOut } from 'lucide-react';
+import {  Calendar, Camera, Upload, X,  Settings, LogOut, BarChart3, MessageSquare, FileText, File } from 'lucide-react';
 import { toast } from 'react-toastify';
 import axiosInstance from '../../utils/axiosConfig';
 // Import your navigation method - this example uses React Router, 
@@ -89,6 +89,16 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
     navigate('/admin'); // Change this path to match your application's routing path for the admin panel
   };
 
+  // Helper function to format large numbers
+  const formatNumber = (num) => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num?.toString() || '0';
+  };
+
   return (
     <div 
       onClick={handlePasswordFormClick}
@@ -143,6 +153,66 @@ const ProfileDropdown = ({ profileImage, username, userDetails, isOpen, onProfil
         <div className="flex items-center space-x-3 text-[#5e4636] dark:text-gray-200  rounded-lg hover:bg-[#f5e6d8] dark:hover:bg-gray-800 transition-colors">
           <Calendar className="w-4 h-4 text-[#a55233] dark:text-inherit" />
           <span className="text-sm">Joined: {userDetails.joinedDate}</span>
+        </div>
+      </div>
+
+      {/* Token Usage Statistics */}
+      <div className="pt-3 border-t border-[#e3d5c8] dark:border-gray-700">
+        <h4 className="text-[#0a3b25] dark:text-white text-sm font-medium mb-3 flex items-center">
+          <BarChart3 className="w-4 h-4 mr-2 text-[#a55233] dark:text-blue-400" />
+          Usage Statistics
+        </h4>
+        
+        {/* First Row - Main Stats */}
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          {/* Total Questions */}
+          <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <MessageSquare className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
+              <span className="text-xs text-[#5a544a] dark:text-gray-400">Questions</span>
+            </div>
+            <p className="text-lg font-semibold text-[#0a3b25] dark:text-white mt-1">
+              {formatNumber(userDetails.total_questions_asked)}
+            </p>
+          </div>
+
+          {/* Total Tokens */}
+          <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <BarChart3 className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
+              <span className="text-xs text-[#5a544a] dark:text-gray-400">Total Tokens</span>
+            </div>
+            <p className="text-lg font-semibold text-[#0a3b25] dark:text-white mt-1">
+              {formatNumber(userDetails.total_tokens_used)}
+            </p>
+          </div>
+        </div>
+
+       
+
+        {/* second Row - Document Stats */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Total Documents */}
+          <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <File className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
+              <span className="text-xs text-[#5a544a] dark:text-gray-400">Documents</span>
+            </div>
+            <p className="text-lg font-semibold text-[#0a3b25] dark:text-white mt-1">
+              {formatNumber(userDetails.total_documents_uploaded)}
+            </p>
+          </div>
+
+          {/* Total Pages */}
+          <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <FileText className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
+              <span className="text-xs text-[#5a544a] dark:text-gray-400">Pages</span>
+            </div>
+            <p className="text-lg font-semibold text-[#0a3b25] dark:text-white mt-1">
+              {formatNumber(userDetails.total_pages_processed)}
+            </p>
+          </div>
         </div>
       </div>
   

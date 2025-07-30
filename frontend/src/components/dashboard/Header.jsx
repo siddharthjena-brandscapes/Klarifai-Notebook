@@ -1,3 +1,4 @@
+
 // Header.jsx
 import { useState, useEffect, useRef, useContext } from "react";
 import { User, Ellipsis, X, FolderOpen, FileText, Lightbulb } from "lucide-react";
@@ -25,10 +26,16 @@ const Header = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [userDetails, setUserDetails] = useState({
-    email: "",
-    joinedDate: "",
-  });
+ const [userDetails, setUserDetails] = useState({
+  email: "",
+  joinedDate: "",
+  total_tokens_used: 0,
+  total_input_tokens: 0,
+  total_output_tokens: 0,
+  total_questions_asked: 0,
+  total_pages_processed: 0,
+  total_documents_uploaded: 0,
+});
   // Add state for user module permissions
   const [disabledModules, setDisabledModules] = useState({});
   // Add state for project's selected modules
@@ -64,20 +71,20 @@ const Header = () => {
       setShowModuleDropdown(false);
     }
 
-      // Close mobile menu when clicking outside
-      if (
-        mobileMenuOpen &&
-        mobileMenuRef.current &&
-        !mobileMenuRef.current.contains(event.target) &&
-        !event.target.closest(".mobile-menu-button")
-      ) {
-        setMobileMenuOpen(false);
-      }
-    };
- 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [mobileMenuOpen]);
+    // Close mobile menu when clicking outside
+    if (
+      mobileMenuOpen &&
+      mobileMenuRef.current &&
+      !mobileMenuRef.current.contains(event.target) &&
+      !event.target.closest(".mobile-menu-button")
+    ) {
+      setMobileMenuOpen(false);
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutside);
+  return () => document.removeEventListener("mousedown", handleClickOutside);
+}, [mobileMenuOpen]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -118,12 +125,19 @@ const Header = () => {
         }
  
         // Update user details and store disabled modules
-        setUserDetails({
-          email: response.data.email || "Not available",
-          joinedDate: response.data.date_joined ?
-            new Date(response.data.date_joined).toLocaleDateString() :
-            "Not available"
-        });
+        // Update user details and store disabled modules
+setUserDetails({
+  email: response.data.email || "Not available",
+  joinedDate: response.data.date_joined ?
+    new Date(response.data.date_joined).toLocaleDateString() :
+    "Not available",
+  total_tokens_used: response.data.total_tokens_used || 0,
+  total_input_tokens: response.data.total_input_tokens || 0,
+  total_output_tokens: response.data.total_output_tokens || 0,
+  total_questions_asked: response.data.total_questions_asked || 0,
+  total_pages_processed: response.data.total_pages_processed || 0,
+  total_documents_uploaded: response.data.total_documents_uploaded || 0,
+});
 
         // Set disabled modules from user profile
         if (response.data.disabled_modules) {
@@ -164,6 +178,11 @@ const Header = () => {
     fetchProjectModules();
   }, [mainProjectId]);
  
+// Add this useEffect for automatic stats refresh
+
+
+  
+
   const handleLogout = () => {
   try {
     localStorage.removeItem("token");
@@ -191,6 +210,7 @@ const Header = () => {
     setProfileImage(newProfileImage);
     localStorage.setItem('profile_image', newProfileImage);
   };
+ 
  
   // Function to check if a module is disabled
   const isModuleDisabled = (moduleId) => {
@@ -355,15 +375,19 @@ const showModuleDropdowns = showProjectContext && mainProjectId && availableModu
     <header className="fixed top-0 left-0 right-0 dark:bg-black bg-[#f7f3ea] z-50 shadow-md transition-colors duration-300 dark:border-gray-900 border-b border-gray-400">
       <div className="flex flex-wrap justify-between items-center px-2 sm:px-4 py-2">
         {/* Left Section: Logo */}
-        <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
-          <Link to="/landing" title="Go to Projects" className="focus:outline-none" style={{ background: "none", border: "none", padding: 0, margin: 0 }}>
-            <img
-              src={theme === 'dark' ? logo : logoLight}
-              alt="Logo"
-              className="h-5 w-auto sm:h-7 md:h-9"
-            />
-          </Link>
-        </div>
+        
+ 
+  <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
+  <Link to="/landing" title="Go to Projects" className="focus:outline-none" style={{ background: "none", border: "none", padding: 0, margin: 0 }}>
+    <img
+      src={theme === 'dark' ? logo : logoLight}
+      alt="Logo"
+      className="h-5 w-auto sm:h-7 md:h-9"
+    />
+  </Link>
+</div>
+ 
+
         {/* Desktop Navigation - Hidden on mobile */}
         <div className="hidden md:flex items-center justify-center flex-grow mx-4 space-x-8">
           {renderNavigationItems()}
@@ -401,15 +425,15 @@ const showModuleDropdowns = showProjectContext && mainProjectId && availableModu
               </div>
             )}
             <span className="absolute bottom-0 right-0 h-2 w-2 sm:h-3 sm:w-3 bg-green-500 rounded-full border-2 border-gray-800" />
- 
-            <ProfileDropdown
-              profileImage={profileImage}
-              username={username}
-              userDetails={userDetails}
-              isOpen={showDropdown}
-              onProfileUpdate={handleProfileUpdate}
-              onLogout={handleLogout}
-            />
+ <ProfileDropdown
+  profileImage={profileImage}
+  username={username}
+  userDetails={userDetails}
+  isOpen={showDropdown}
+  onProfileUpdate={handleProfileUpdate}
+  onLogout={handleLogout}
+    
+/>
           </div>
         </div>
       </div>

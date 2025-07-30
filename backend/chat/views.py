@@ -451,6 +451,17 @@ class ChangePasswordView(APIView):
 
 #new
 
+ 
+#new
+from django.db.models import Sum,Count
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
+import os
+import uuid
+ 
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -460,8 +471,7 @@ class UserProfileView(APIView):
         try:
             profile = UserProfile.objects.get(user=user)
             if profile.profile_picture:
-                # Get the full URL for the profile picture
-                profile_picture = profile.get_profile_picture_url()
+                profile_picture = request.build_absolute_uri(profile.profile_picture.url)
             else:
                 profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
         except UserProfile.DoesNotExist:
@@ -475,6 +485,15 @@ class UserProfileView(APIView):
             module_permissions = {}
             UserModulePermissions.objects.create(user=user, disabled_modules={})
  
+        # Get token usage and question count statistics
+        token_stats = self.get_user_token_stats(user)
+       
+        # Get document statistics
+        document_stats = self.get_user_document_stats(user)
+       
+        print(token_stats)
+        print(document_stats)
+       
         return Response({
             'username': user.username,
             'email': user.email,
@@ -482,70 +501,117 @@ class UserProfileView(APIView):
             'last_name': user.last_name,
             'profile_picture': profile_picture,
             'date_joined': user.date_joined,
-            'disabled_modules': module_permissions
+            'disabled_modules': module_permissions,
+            'total_tokens_used': token_stats['total_tokens'],
+            'total_input_tokens': token_stats['total_input_tokens'],
+            'total_output_tokens': token_stats['total_output_tokens'],
+            'total_questions_asked': token_stats['total_questions'],
+            'total_pages_processed': document_stats['total_pages'],
+            'total_documents_uploaded': document_stats['total_documents'],
         }, status=status.HTTP_200_OK)
+ 
+    def get_user_token_stats(self, user):
+        """
+        Calculate total token usage and question count for the user
+        """
+        from notebook.models import ConversationTransaction
+        # Get all ConversationTransaction records for this user
+        # We need to filter through UserTransaction to get to ConversationTransaction
+        conversation_stats = ConversationTransaction.objects.filter(
+            user_transaction__user=user
+        ).aggregate(
+            total_tokens=Sum('total_tokens_used') or 0,
+            total_input_tokens=Sum('input_api_tokens') or 0,
+            total_output_tokens=Sum('output_api_tokens') or 0,
+            total_questions=Sum('question_count') or 0,
+        )
+        print(conversation_stats)
+       
+        return {
+            'total_tokens': conversation_stats['total_tokens'],
+            'total_input_tokens': conversation_stats['total_input_tokens'],
+            'total_output_tokens': conversation_stats['total_output_tokens'],
+            'total_questions': conversation_stats['total_questions'],
+        }
+ 
+    def get_user_document_stats(self, user):
+        """
+        Calculate total document pages and document count for the user
+        """
+        from notebook.models import DocumentTransaction
+        # Get all DocumentTransaction records for this user
+        # We need to filter through UserTransaction to get to DocumentTransaction
+        document_stats = DocumentTransaction.objects.filter(
+            user_transaction__user=user
+        ).aggregate(
+            total_pages=Sum('no_pages') or 0,
+            total_documents=Count('id'),
+        )
+       
+        return {
+            'total_pages': document_stats['total_pages'],
+            'total_documents': document_stats['total_documents'],
+        }
  
     def post(self, request):
         try:
             user = request.user
             profile_picture = request.FILES.get('profile_picture')
-
+           
             if not profile_picture:
                 return Response({
                     'error': 'No profile picture provided'
                 }, status=status.HTTP_400_BAD_REQUEST)
-
+           
             # Validate file type
             allowed_types = ['image/jpeg', 'image/png', 'image/gif']
             if profile_picture.content_type not in allowed_types:
                 return Response({
                     'error': 'Invalid file type. Only JPG, PNG, and GIF are allowed.'
                 }, status=status.HTTP_400_BAD_REQUEST)
-
+           
             # Validate file size (2MB limit)
             if profile_picture.size > 2 * 1024 * 1024:
                 return Response({
                     'error': 'File size too large. Maximum size is 2MB.'
                 }, status=status.HTTP_400_BAD_REQUEST)
-
+           
             # Get or create profile
             profile, created = UserProfile.objects.get_or_create(user=user)
-
-            # Delete old profile picture from blob storage if it exists
-            if profile.profile_picture and not created:
+           
+            # Delete old profile picture if it exists
+            if profile.profile_picture:
                 try:
-                    profile.delete_old_profile_picture()
-                    logger.info(f"Deleted old profile picture for user {user.username}")
+                    old_file_path = profile.profile_picture.path
+                    if os.path.exists(old_file_path):
+                        os.remove(old_file_path)
                 except Exception as e:
-                    logger.warning(f"Failed to delete old profile picture for user {user.username}: {str(e)}")
-
-            # Upload new profile picture to Azure Blob Storage
-            from chat.utils import upload_profile_picture_to_blob
-            upload_result = upload_profile_picture_to_blob(profile_picture, user.username)
-
-            if not upload_result:
-                return Response({
-                    'error': 'Failed to upload profile picture to cloud storage'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            # Save the blob path to the profile
-            profile.profile_picture = upload_result['filename']  # Store the blob path
-            profile.save()
-
-            # Return the full URL for the frontend
-            profile_picture_url = upload_result['url']
-
+                    print(f"Error deleting old profile picture: {e}")
+           
+            # Generate unique filename
+            file_extension = os.path.splitext(profile_picture.name)[1]
+            unique_filename = f"{user.username}_{uuid.uuid4().hex[:8]}{file_extension}"
+           
+            # Save the new profile picture
+            profile.profile_picture.save(
+                unique_filename,
+                profile_picture,
+                save=True
+            )
+           
+            # Build the full URL
+            profile_picture_url = request.build_absolute_uri(profile.profile_picture.url)
+           
             return Response({
                 'message': 'Profile picture updated successfully',
                 'profile_picture': profile_picture_url
             }, status=status.HTTP_200_OK)
-
+           
         except Exception as e:
-            logger.error(f"Error updating profile picture for user {user.username}: {str(e)}", exc_info=True)
             return Response({
-                'error': f'Failed to update profile picture: {str(e)}'
+                'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+ 
 class GetUserDocumentsView(APIView):
     def get(self, request):
         try:

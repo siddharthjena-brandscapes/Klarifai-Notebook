@@ -384,6 +384,7 @@ class DocumentTransaction(models.Model):
     file_type = models.CharField(max_length=50, null=True, blank=True)
     processing_status = models.CharField(max_length=50, default='completed')
     upload_method = models.CharField(max_length=50, default='regular')  # 'regular', 'audio_transcript', 'video_transcript'
+    no_pages = models.IntegerField(null=True, blank=True)  # Number of pages in the document
    
     class Meta:
         app_label = 'notebook'
@@ -392,6 +393,7 @@ class ConversationTransaction(models.Model):
     """Specific tracking for conversation operations"""
     user_transaction = models.OneToOneField(UserTransaction, on_delete=models.CASCADE, related_name='notebook_conversation_details')
     message_count = models.PositiveIntegerField(default=0)
+    question_count = models.PositiveIntegerField(default=0)  # NEW: Track total questions
    
     input_api_tokens = models.PositiveIntegerField(default=0)
     output_api_tokens = models.PositiveIntegerField(default=0)

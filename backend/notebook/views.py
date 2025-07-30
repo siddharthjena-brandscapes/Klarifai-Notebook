@@ -1502,7 +1502,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 )
                                 file_size = file.size if hasattr(file, 'size') else None
                                 upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
-                                self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size)
+                                self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size, page_count=1)
 
                             # Process document with pgvector
                             processed_data = self.process_document_from_text_pgvector(extracted_text, transcript_filename, document)
@@ -1575,6 +1575,29 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                             # Clear old embeddings and reprocess
                             DocumentEmbedding.objects.filter(document=existing_doc).delete()
                             processed_data = self.process_document_pgvector_with_blob(file, user, existing_doc)
+                            existing_doc.file = file
+                            existing_doc.save()
+ 
+                            # Get page count from processed data
+                            page_count = processed_data.get('page_count', 1)
+                            file_size = file.size if hasattr(file, 'size') else None
+                           
+                            # Update transaction if it exists or create new one
+                            try:
+                                # Try to find existing transaction
+                                existing_transaction = DocumentTransaction.objects.filter(
+                                    user_transaction__document_id=existing_doc.id
+                                ).first()
+                               
+                                if existing_transaction:
+                                    existing_transaction.no_pages = page_count
+                                    existing_transaction.file_size = file_size
+                                    existing_transaction.save()
+                                else:
+                                    # Create new transaction if none exists
+                                    self.create_document_transaction(user, existing_doc, main_project, upload_method='regular', file_size=file_size, page_count=page_count)
+                            except Exception as e:
+                                print(f"Error updating transaction: {str(e)}")
  
                             # --- Status: Indexing ---
                             update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
@@ -1617,8 +1640,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 main_project=main_project
                             )
                             file_size = file.size if hasattr(file, 'size') else None
+                            page_count = processed_data.get('page_count', 1)  # Get page count from processed data
                             upload_method = 'regular'
-                            self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
+                            self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size, page_count=page_count)
                             
                             # Process the document with pgvector
                             processed_data = self.process_document_pgvector_with_blob(file, user, document)
@@ -1673,7 +1697,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
        
  
-    def create_document_transaction(self, user, document, main_project, upload_method, file_size=None):
+    def create_document_transaction(self, user, document, main_project, upload_method, file_size=None, page_count=None):
         """Create transaction record for document upload"""
         try:
             print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
@@ -1687,20 +1711,22 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 metadata={
                     'upload_timestamp': timezone.now().isoformat(),
                     'upload_method': upload_method,
-                    'file_size': file_size or getattr(document.file, 'size', None)
+                    'file_size': file_size or getattr(document.file, 'size', None),
+                    'page_count': page_count  # Add page count to metadata as well
                 }
             )
            
-            # Create detailed document transaction
+            # Create detailed document transaction with page count
             DocumentTransaction.objects.create(
                 user_transaction=user_transaction,
                 original_filename=document.filename,
                 file_size=file_size or getattr(document.file, 'size', None),
                 file_type=os.path.splitext(document.filename)[1].lower(),
-                upload_method=upload_method
+                upload_method=upload_method,
+                no_pages=page_count  # Store page count in the new field
             )
            
-            print(f"Transaction recorded for document: {document.filename}")
+            print(f"Transaction recorded for document: {document.filename} with {page_count} pages")
            
         except Exception as e:
             print(f"Error creating document transaction: {str(e)}")
@@ -1922,20 +1948,30 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
  
             try:
                 file_ext = os.path.splitext(file_path)[1].lower()
+               
+                # Count pages based on file type
+                page_count = self.count_document_pages(file_path, file_ext)
+                print(f"Detected {page_count} pages in {file.name}")
  
                 # Handle different file types
                 if file_ext == '.pptx':
-                    return self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result['page_count'] = page_count
+                    return result
  
                 if file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
-                    return self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result['page_count'] = page_count
+                    return result
  
                 # Check document complexity
                 is_complex = self.detect_document_complexity(file_path)
  
                 if is_complex:
                     print(f"Complex document detected: {file.name}. Using LlamaParse...")
-                    return self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result['page_count'] = page_count
+                    return result
                 else:
                     # Simple document processing
                     extracted_text = self.extract_text_from_file(file_path, user=user)
@@ -1943,7 +1979,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 if not extracted_text:
                     raise ValueError("No content could be extracted from the document")
                
-                return self.process_document_from_text_pgvector(extracted_text, file.name, document)
+                result = self.process_document_from_text_pgvector(extracted_text, file.name, document)
+                result['page_count'] = page_count
+                return result
                
             finally:
                 if os.path.exists(file_path):
@@ -1952,6 +1990,75 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error in process_document_pgvector_with_blob: {str(e)}")
             raise
+	    
+    def count_document_pages(self, file_path, file_ext):
+        """
+        Count the number of pages in a document based on file type
+        """
+        try:
+            if file_ext == '.pdf':
+                # PDF files
+                import fitz
+                pdf_doc = fitz.open(file_path)
+                total_pages = len(pdf_doc)
+                pdf_doc.close()
+                return total_pages
+               
+            elif file_ext in ['.docx', '.doc']:
+                # Word documents
+                try:
+                    import docx
+                    doc = docx.Document(file_path)
+                    # For Word docs, we'll count sections or estimate based on content
+                    # This is an approximation as Word doesn't have explicit page numbers
+                    total_paragraphs = len(doc.paragraphs)
+                    # Rough estimation: ~25-30 paragraphs per page (adjustable)
+                    estimated_pages = max(1, total_paragraphs // 25)
+                    return estimated_pages
+                except:
+                    return 1  # Default to 1 if we can't determine
+                   
+            elif file_ext == '.pptx':
+                # PowerPoint presentations
+                try:
+                    from pptx import Presentation
+                    prs = Presentation(file_path)
+                    return len(prs.slides)
+                except:
+                    return 1
+                   
+            elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']:
+                # Image files - always 1 page
+                return 1
+               
+            elif file_ext == '.txt':
+                # Text files - estimate based on content
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        # Rough estimation: ~3000 characters per page
+                        estimated_pages = max(1, len(content) // 3000)
+                        return estimated_pages
+                except:
+                    return 1
+                   
+            elif file_ext in ['.xlsx', '.xls']:
+                # Excel files - count worksheets
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(file_path)
+                    return len(wb.worksheets)
+                except:
+                    return 1
+                   
+            else:
+                # For other file types, default to 1
+                return 1
+               
+        except Exception as e:
+            print(f"Error counting pages for {file_path}: {str(e)}")
+            return 1  # Default to 1 page if there's an error
+ 
  
     def process_document_from_text_pgvector(self, extracted_text, filename, document):
         """
@@ -2825,6 +2932,7 @@ class ChatView(APIView):
             else:
                 # Document chat mode - now handles URL content too
                 document_content_exists = bool(all_chunks)
+                token_usage = {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0}
                
                 if document_content_exists or has_url_content:
                     # If we have URL content, add it to the context
@@ -2871,7 +2979,7 @@ class ChatView(APIView):
                     else:
                         # Standard document-based response without URL content
                         if response_length == 'short':
-                            document_answer, doc_citation_sources = self.generate_short_response(
+                            document_answer, doc_citation_sources, token_usage = self.generate_short_response(
                                 message,
                                 similar_contents,
                                 content_sources,
@@ -2880,7 +2988,7 @@ class ChatView(APIView):
                                 conversation_context
                             )
                         else:  # Default to comprehensive
-                            document_answer, doc_citation_sources = self.generate_response(
+                            document_answer, doc_citation_sources, token_usage = self.generate_response(
                                 message,
                                 similar_contents,
                                 content_sources,
@@ -2890,6 +2998,7 @@ class ChatView(APIView):
                             )
                        
                         print(f"Generated document-based answer using {response_length} response length")
+                        print(f"Token usage - Input: {token_usage.get('input_tokens', 0)}, Output: {token_usage.get('output_tokens', 0)}")
                    
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
@@ -3066,11 +3175,13 @@ class ChatView(APIView):
                 # Create conversation transaction
                 self.create_conversation_transaction(
                     user, conversation, main_project_id,
-                    use_web_knowledge, response_format, response_length
+                    use_web_knowledge, response_format, response_length,
+                    token_usage  # Pass token usage
                 )
             else:
                 # Update existing conversation transaction
-                self.update_conversation_transaction(conversation, use_web_knowledge)
+                self.update_conversation_transaction(conversation, use_web_knowledge, token_usage)
+ 
  
             # Create user message
             user_message = ChatMessage.objects.create(
@@ -3244,7 +3355,8 @@ class ChatView(APIView):
         except Exception as e:
             print(f"Error in fallback text search: {str(e)}")
             return None
-    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
+        
+    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length, token_usage=None):
         """Create transaction record for conversation"""
         try:
             # Get the project
@@ -3261,25 +3373,34 @@ class ChatView(APIView):
                     'creation_timestamp': timezone.now().isoformat(),
                     'web_knowledge_used': use_web_knowledge,
                     'response_format': response_format,
-                    'response_length': response_length
+                    'response_length': response_length,
+                    'token_usage': token_usage or {}  # Store token usage in metadata
                 }
             )
+           
+            # Extract token information if available
+            input_tokens = token_usage.get('input_tokens', 0) if token_usage else 0
+            output_tokens = token_usage.get('output_tokens', 0) if token_usage else 0
            
             # Create detailed conversation transaction
             ConversationTransaction.objects.create(
                 user_transaction=user_transaction,
                 message_count=1,  # Initial message
+                question_count=1,  # First question
+                input_api_tokens=input_tokens,
+                output_api_tokens=output_tokens,
                 web_knowledge_used=use_web_knowledge,
                 response_format=response_format,
                 response_length=response_length
             )
            
             print(f"Transaction recorded for conversation: {conversation.title}")
+            print(f"Token usage - Input: {input_tokens}, Output: {output_tokens}, Total: {input_tokens + output_tokens}")
            
         except Exception as e:
             print(f"Error creating conversation transaction: {str(e)}")
  
-    def update_conversation_transaction(self, conversation, use_web_knowledge):
+    def update_conversation_transaction(self, conversation, use_web_knowledge, token_usage=None):
         """Update existing conversation transaction when new messages are added"""
         try:
             # Find existing transaction for this conversation
@@ -3289,21 +3410,43 @@ class ChatView(APIView):
                 is_active=True
             ).first()
            
-            if user_transaction and hasattr(user_transaction, 'conversation_details'):
-                # Update message count
-                user_transaction.conversation_details.message_count += 1
-                if use_web_knowledge:
-                    user_transaction.conversation_details.web_knowledge_used = True
-                user_transaction.conversation_details.save()
+            if user_transaction and hasattr(user_transaction, 'notebook_conversation_details'):
+                # Get the conversation details
+                conv_details = user_transaction.notebook_conversation_details
                
-                # Update metadata
+                # Update message count and question count
+                conv_details.message_count += 1
+                conv_details.question_count += 1  # Each update represents a new question
+               
+                # Update token usage if provided
+                if token_usage:
+                    conv_details.input_api_tokens += token_usage.get('input_tokens', 0)
+                    conv_details.output_api_tokens += token_usage.get('output_tokens', 0)
+               
+                if use_web_knowledge:
+                    conv_details.web_knowledge_used = True
+                   
+                conv_details.save()
+               
+                # Update metadata with token usage
+                if token_usage:
+                    if 'token_history' not in user_transaction.metadata:
+                        user_transaction.metadata['token_history'] = []
+                    user_transaction.metadata['token_history'].append({
+                        'timestamp': timezone.now().isoformat(),
+                        'input_tokens': token_usage.get('input_tokens', 0),
+                        'output_tokens': token_usage.get('output_tokens', 0),
+                        'total_tokens': token_usage.get('total_tokens', 0)
+                    })
+               
                 user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
                 user_transaction.save()
                
+                print(f"Updated conversation transaction - Questions: {conv_details.question_count}, Total tokens: {conv_details.total_tokens_used}")
+               
         except Exception as e:
             print(f"Error updating conversation transaction: {str(e)}")
-
-
+    
     def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
         """Create transaction record for conversation"""
         try:
@@ -5779,6 +5922,12 @@ class ChatView(APIView):
              
                
             )
+
+            token_usage = {
+            'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
+            'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
+            'total_tokens': completion.usage.total_tokens if completion.usage else 0
+            }
            
              # ===== LOG RAW LLM RESPONSE =====
             raw_llm_response = completion.choices[0].message.content
@@ -5831,6 +5980,12 @@ class ChatView(APIView):
                    
                    
                 )
+
+                token_usage = {
+                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
+                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
+                'total_tokens': completion.usage.total_tokens if completion.usage else 0
+                }
                
                 # Parse the enhanced JSON response
                 json_response = self._parse_json_response(completion.choices[0].message.content)
@@ -5875,7 +6030,13 @@ class ChatView(APIView):
                    
                  
                 )
-               
+
+                token_usage = {
+                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
+                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
+                'total_tokens': completion.usage.total_tokens if completion.usage else 0
+                }
+                
                 json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
                 answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
@@ -5890,7 +6051,7 @@ class ChatView(APIView):
         # Add source information
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
-        return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
+        return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations, token_usage
     
     #  generate_short_response function with this fixed version:
 
@@ -6133,6 +6294,13 @@ class ChatView(APIView):
                 temperature=0.4,
                 max_tokens=2000
             )
+
+            token_usage = {
+            'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
+            'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
+            'total_tokens': completion.usage.total_tokens if completion.usage else 0
+            }
+
                 # ===== LOG RAW LLM RESPONSE =====
             raw_llm_response = completion.choices[0].message.content
             print("\n" + "="*100)
@@ -6182,6 +6350,12 @@ class ChatView(APIView):
                     temperature=0.4,
                     max_tokens=1024
                 )
+
+                token_usage = {
+                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
+                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
+                'total_tokens': completion.usage.total_tokens if completion.usage else 0
+                }
                
                 json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
                 answer = json_response.get("content", "An error occurred while generating the response.")
@@ -6197,7 +6371,7 @@ class ChatView(APIView):
         # Add source information
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
-        return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
+        return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations, token_usage
     
     def _get_project_description(self, query):
         """
@@ -6402,6 +6576,12 @@ class ChatView(APIView):
                     max_tokens=max_tokens
                 )
 
+                token_usage = {
+                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
+                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
+                'total_tokens': completion.usage.total_tokens if completion.usage else 0
+                }
+
                 # Parse the JSON response
                 json_response = self._parse_json_response(response.choices[0].message.content)
                 formatted_web_response = json_response.get("content", "No response content found.")
@@ -6558,6 +6738,12 @@ class ChatView(APIView):
                     temperature=0.5,
                     max_tokens=2000 if response_length == 'comprehensive' else 800
                 )
+
+                token_usage = {
+                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
+                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
+                'total_tokens': completion.usage.total_tokens if completion.usage else 0
+                }
                 
                 # Parse the JSON response
                 json_response = self._parse_json_response(completion.choices[0].message.content)
@@ -8965,7 +9151,7 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
             raise
 
 
-class NoteManagementView(YouTubeUploadView, APIView):
+class NoteManagementView(DocumentUploadView, APIView):
     parser_classes = (JSONParser,)
    
     def post(self, request):
@@ -9121,112 +9307,108 @@ class NoteManagementView(YouTubeUploadView, APIView):
                     }
                 }, status=status.HTTP_400_BAD_REQUEST)
        
-            # Generate filename from note title (internal use with .txt extension)
+            # Generate filename from note title
             safe_title = self.sanitize_filename(note.title or f"Note_{note.id}")
             filename = f"{safe_title}.txt"
-            # Display filename without extension for user
-            display_filename = safe_title
        
-            # Clean and convert the content
-            cleaned_content = self.clean_html_content(note.content)
-            
-            # Prepare the content with title
-            full_content = ""
-            if note.title:
-                full_content += f"Title: {note.title}\n"
-                full_content += "=" * (len(note.title) + 7) + "\n\n"
-            full_content += cleaned_content
+            # Create temporary file with note content
+            temp_file_path = os.path.join(tempfile.gettempdir(), filename)
        
-            # BLOB INTEGRATION: Upload note content to Azure Blob Storage
-            from notebook.utils import upload_bytes_to_azure_blob
-            
-            # Convert content to bytes
-            content_bytes = full_content.encode('utf-8')
-            
-            # Upload to blob storage
-            blob_info = upload_bytes_to_azure_blob(
-                content_bytes,
-                filename,
-                folder_path=f'media/documents/{note.main_project.id}',
-                content_type='text/plain',
-                container_name='uploadfiles'
-            )
-            
-            if not blob_info:
-                return Response({
-                    'error': 'Failed to upload note content to blob storage'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-       
-            # Use transaction to ensure data consistency
-            with transaction.atomic():
-                # Create document with blob path instead of Django file
-                document = Document.objects.create(
-                    user=user,
-                    file=blob_info['filename'],  # Store blob path
-                    filename=filename,
-                    main_project=note.main_project
-                )
+            try:
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    # Add title as header if available
+                    if note.title:
+                        f.write(f"Title: {note.title}\n")
+                        f.write("=" * (len(note.title) + 7) + "\n\n")
+                    f.write(note.content)
            
-                logger.info(f"Created document from note: {document.id}")
-           
-                # Process the document for RAG using the inherited method
-                try:
-                    # Use the process_document_from_text method from YouTubeUploadView
-                    processed_data = self.process_document_from_text(full_content, filename, user)
-                    logger.info(f"Note processed successfully for RAG")
+                # Create Django File object
+                with open(temp_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+               
+                    # Use transaction to ensure data consistency
+                    with transaction.atomic():
+                        # Create document
+                        document = Document.objects.create(
+                            user=user,
+                            file=django_file,
+                            filename=filename,
+                            main_project=note.main_project
+                        )
+                   
+                        logger.info(f"Created document from note: {document.id}")
+                   
+                        # Process the document for RAG using pgvector
+                        try:
+                            # # Prepare the content with title
+                            # full_content = ""
+                            # if note.title:
+                            #     full_content += f"Title: {note.title}\n"
+                            #     full_content += "=" * (len(note.title) + 7) + "\n\n"
+                            # full_content += note.content
                            
-                except Exception as processing_error:
-                    logger.error(f"Error processing note for RAG: {str(processing_error)}")
-                    # If processing fails, still create the document but without processing
-                    processed_data = {
-                        'index_path': '',
-                        'metadata_path': '',
-                        'full_text': full_content
-                    }
+                            # Use the updated process_document_from_text method with pgvector
+                            # Make sure to pass the document object for pgvector saving
+                            processed_data = self.process_document_pgvector(django_file, user, document)
+                           
+                            logger.info(f"Note processed successfully for RAG using pgvector")
+                           
+                        except Exception as processing_error:
+                            logger.error(f"Error processing note for RAG: {str(processing_error)}")
+                            # If processing fails, delete the document and return error
+                            document.delete()
+                            return Response({
+                                'error': 'Failed to process note content for search functionality'
+                            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                   
+                        # Create ProcessedIndex with pgvector metadata
+                        processed_index = ProcessedIndex.objects.create(
+                            document=document,
+                            storage_type='pgvector',
+                            chunks_count=processed_data.get('chunks_count', 0),
+                            summary="",
+                            markdown_path=processed_data.get('markdown_path', '')
+                        )
+                        logger.info(f"Created ProcessedIndex for document: {document.id} with pgvector storage")
+                   
+                        # Update note to mark as converted
+                        note.is_converted_to_document = True
+                        note.converted_document = document
+                        note.save()
+                   
+                        # Store the document ID in the session
+                        request.session['active_document_id'] = document.id
+                   
+                        # Update project timestamp
+                        update_project_timestamp(note.main_project.id, user)
            
-                # Create ProcessedIndex only if we have valid processing data
-                if processed_data.get('index_path') and processed_data.get('metadata_path'):
-                    processed_index = ProcessedIndex.objects.create(
-                        document=document,
-                        faiss_index=processed_data['index_path'],
-                        metadata=processed_data['metadata_path'],
-                        summary="",
-                        markdown_path=processed_data.get('markdown_path', '')
-                    )
-                    logger.info(f"Created ProcessedIndex for document: {document.id}")
-                else:
-                    logger.warning(f"Created document without ProcessedIndex due to processing error")
-                    return Response({
-                        'error': 'Failed to process note content for search functionality'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({
+                    'message': 'Note converted to document successfully',
+                    'note': {
+                        'id': note.id,
+                        'title': note.title,
+                        'is_converted_to_document': True
+                    },
+                    'document': {
+                        'id': document.id,
+                        'filename': filename,
+                        'uploaded_at': document.uploaded_at
+                    },
+                    'processed_data': {
+                        'storage_type': 'pgvector',
+                        'chunks_count': processed_data.get('chunks_count', 0)
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
            
-                # Update note to mark as converted
-                note.is_converted_to_document = True
-                note.converted_document = document
-                note.save()
-           
-                # Store the document ID in the session
-                request.session['active_document_id'] = document.id
-           
-                # Update project timestamp
-                update_project_timestamp(note.main_project.id, user)
-       
-            return Response({
-                'message': 'Note converted to document successfully',
-                'note': {
-                    'id': note.id,
-                    'title': note.title,
-                    'is_converted_to_document': True
-                },
-                'document': {
-                    'id': document.id,
-                    'filename': display_filename,  # Show without .txt extension
-                    'uploaded_at': document.uploaded_at,
-                    'file_type': 'text',  # Added file type for frontend
-                    'blob_path': blob_info['filename']  # Include blob path info
-                },
-                'active_document_id': document.id
-            }, status=status.HTTP_201_CREATED)
+            finally:
+                # Clean up temporary file
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+                        logger.info(f"Cleaned up temporary file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
        
         except Note.DoesNotExist:
             return Response({
@@ -9238,7 +9420,6 @@ class NoteManagementView(YouTubeUploadView, APIView):
                 'error': str(e),
                 'detail': 'An error occurred while converting the note to document'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-       
    
     def get(self, request):
         """Get notes for a user and project"""
@@ -10215,6 +10396,24 @@ class MindMapView(APIView):
     """Generate mindmap for selected documents - matches your 'generate-mindmap/' endpoint"""
     permission_classes = [IsAuthenticated]
 
+    def init_gemini(self, user=None):
+        """Initialize Gemini 2.0 Flash client"""
+            # Get the user's Gemini API token
+        gemini_api_key = None
+        if user:
+            from .models import UserAPITokens  # Adjust import based on your models location
+            user_api_tokens = UserAPITokens.objects.get(user=user)
+            gemini_api_key = user_api_tokens.gemini_token
+           
+            if not gemini_api_key:
+                logger.warning(f"No Gemini API token found for user {user.username}")
+                # Fallback to environment variable
+                gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+                if not gemini_api_key:
+                    raise ValueError("Gemini API token is required for processing")
+       
+        self.gemini_api_key = gemini_api_key
+
 
     def post(self, request):
         try:
@@ -10222,33 +10421,26 @@ class MindMapView(APIView):
             main_project_id = request.data.get('main_project_id')
             if not main_project_id:
                 return Response({'error': 'Main project ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-
+ 
             target_user_id = request.data.get('target_user_id')
             force_regenerate = request.data.get('force_regenerate', False)
             selected_documents = request.data.get('selected_documents', [])
+           
             if not isinstance(selected_documents, list):
                 selected_documents = [selected_documents]
+           
             try:
                 selected_documents = [int(doc_id) for doc_id in selected_documents]
             except (ValueError, TypeError):
                 return Response({'error': 'Invalid document ID format'}, status=status.HTTP_400_BAD_REQUEST)
-
-            processed_docs = ProcessedIndex.objects.filter(
-                document_id__in=selected_documents,
-                document__user=user
-            )
-            logger.info(f"Found {processed_docs.count()} processed docs for mindmap generation")
-
+ 
             # Handle admin uploading for another user
             if target_user_id and request.user.username == 'admin':
                 try:
                     user = User.objects.get(id=target_user_id)
                 except User.DoesNotExist:
                     return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
-
-            if not main_project_id:
-                return Response({'error': 'Main project ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-
+ 
             if not selected_documents:
                 # Try to get active document from session
                 active_document_id = request.session.get('active_document_id')
@@ -10256,13 +10448,13 @@ class MindMapView(APIView):
                     selected_documents = [active_document_id]
                 else:
                     return Response({'error': 'Please select at least one document'}, status=status.HTTP_400_BAD_REQUEST)
-
+ 
             # Verify project access
             try:
                 main_project = Project.objects.get(id=main_project_id, user=user)
             except Project.DoesNotExist:
                 return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
-
+ 
             # Check if mindmap already exists for these documents (unless force regenerate)
             if not force_regenerate:
                 existing_mindmap = self.find_existing_mindmap(user, main_project_id, selected_documents)
@@ -10282,128 +10474,86 @@ class MindMapView(APIView):
                             'created_at': existing_mindmap.created_at.isoformat()
                         }
                     }, status=status.HTTP_200_OK)
-
-            if not processed_docs.exists():
-                return Response({'error': 'No valid processed documents found'}, status=status.HTTP_404_NOT_FOUND)
-
-            # UPDATED: Import Azure utilities for blob storage access
-            from notebook.utils import get_blob_content
-
-            # Step 1: Load chunks directly from ProcessedIndex.metadata stored in Azure Blob
+ 
+            # Get documents that belong to the user
+            user_documents = Document.objects.filter(
+                id__in=selected_documents,
+                user=user
+            )
+ 
+            if not user_documents.exists():
+                return Response({'error': 'No valid documents found'}, status=status.HTTP_404_NOT_FOUND)
+ 
+            logger.info(f"Found {user_documents.count()} documents for mindmap generation")
+ 
+            # Step 1: Load chunks from pgvector DocumentEmbedding
             per_doc_chunks = []
             document_info = []
-
-            for proc_doc in processed_docs:
+ 
+            for document in user_documents:
                 try:
-                    chunk_texts = []
-                    
-                    # UPDATED: Load chunks from metadata stored in Azure Blob Storage
-                    if proc_doc.metadata:
-                        logger.info(f"Attempting to read metadata from blob: {proc_doc.metadata}")
-                        # Get metadata content from Azure Blob Storage
-                        blob_content = get_blob_content(proc_doc.metadata, container_name='uploadfiles')
-                        if blob_content:
-                            try:
-                                chunks = pickle.loads(blob_content)  # Use pickle.loads for bytes
-                                logger.info(f"Successfully loaded {len(chunks)} chunks from metadata blob")
-                                
-                                for chunk in chunks:
-                                    if isinstance(chunk, dict):
-                                        chunk_text = chunk.get('text') or chunk.get('content', '')
-                                        if chunk_text:
-                                            chunk_texts.append(chunk_text)
-                                    elif isinstance(chunk, str):
-                                        if chunk.strip():
-                                            chunk_texts.append(chunk)
-                            except pickle.PickleError as e:
-                                logger.error(f"Error unpickling metadata from blob: {str(e)}")
-                            except Exception as e:
-                                logger.error(f"Error processing chunks from metadata blob: {str(e)}")
-                        else:
-                            logger.warning(f"Failed to read metadata blob: {proc_doc.metadata}")
-                    
-                    # UPDATED: Fallback to markdown content from Azure Blob Storage
-                    elif proc_doc.markdown_path:
-                        logger.info(f"Attempting to read markdown from blob: {proc_doc.markdown_path}")
-                        # Get markdown content from Azure Blob Storage
-                        blob_content = get_blob_content(proc_doc.markdown_path, container_name='uploadfiles')
-                        if blob_content:
-                            try:
-                                markdown_text = blob_content.decode('utf-8')
-                                if markdown_text.strip():
-                                    chunk_texts.append(markdown_text)
-                                    logger.info(f"Successfully read {len(markdown_text)} characters from markdown blob")
-                            except UnicodeDecodeError as e:
-                                logger.error(f"Error decoding markdown from blob: {str(e)}")
-                        else:
-                            logger.warning(f"Failed to read markdown blob: {proc_doc.markdown_path}")
-                    
-                    # UPDATED: Additional fallback - try to get content from original document
-                    if not chunk_texts and proc_doc.document:
-                        logger.info(f"Trying to get content from original document: {proc_doc.document.filename}")
-                        # Try to get content from the original document file if available
-                        if hasattr(proc_doc.document, 'file_path') and proc_doc.document.file_path:
-                            blob_content = get_blob_content(proc_doc.document.file_path, container_name='uploadfiles')
-                            if blob_content:
-                                try:
-                                    # Basic text extraction - you might want to improve this based on file type
-                                    text_content = blob_content.decode('utf-8', errors='ignore')
-                                    if text_content.strip():
-                                        chunk_texts.append(text_content)
-                                        logger.info(f"Successfully read {len(text_content)} characters from original document blob")
-                                except Exception as e:
-                                    logger.error(f"Error processing original document blob: {str(e)}")
-                    
+                    # Get all embeddings/chunks for this document from pgvector
+                    document_embeddings = DocumentEmbedding.objects.filter(
+                        document=document
+                    ).order_by('chunk_id')
+ 
+                    if not document_embeddings.exists():
+                        logger.warning(f"No embeddings found for document {document.filename}")
+                        continue
+ 
+                    # Extract text chunks from embeddings
+                    chunk_texts = [embedding.content for embedding in document_embeddings]
+                   
                     # Only add if we have meaningful content
                     chunk_texts = [t for t in chunk_texts if t and len(t.strip()) > 0]
-                    
+                   
                     if chunk_texts:
                         per_doc_chunks.append({
-                            'document_id': proc_doc.document.id,
-                            'filename': proc_doc.document.filename,
+                            'document_id': document.id,
+                            'filename': document.filename,
                             'chunks': chunk_texts
                         })
                         document_info.append({
-                            'filename': proc_doc.document.filename,
+                            'filename': document.filename,
                             'text_length': sum(len(t) for t in chunk_texts),
                             'chunks': len(chunk_texts),
-                            'document_id': proc_doc.document.id
+                            'document_id': document.id
                         })
-                        logger.info(f"Successfully processed document {proc_doc.document.filename}: {len(chunk_texts)} chunks, {sum(len(t) for t in chunk_texts)} characters")
-                    else:
-                        logger.warning(f"No meaningful content found for document {proc_doc.document.filename}")
-                        
+                       
+                    logger.info(f"Loaded {len(chunk_texts)} chunks from document {document.filename}")
+                   
                 except Exception as e:
-                    logger.error(f"Error extracting content from {proc_doc.document.filename}: {str(e)}")
-                    import traceback
-                    logger.error(traceback.format_exc())
+                    logger.error(f"Error extracting content from {document.filename}: {str(e)}")
                     continue
-
+ 
+            if not per_doc_chunks:
+                return Response({'error': 'No valid processed documents found with embeddings'}, status=status.HTTP_404_NOT_FOUND)
+ 
             # Interleave chunks from all documents for balanced mindmap context
             interleaved_chunks = []
             max_len = max(len(doc['chunks']) for doc in per_doc_chunks) if per_doc_chunks else 0
+           
             for i in range(max_len):
                 for doc in per_doc_chunks:
                     if i < len(doc['chunks']):
                         interleaved_chunks.append(doc['chunks'][i])
+           
             all_text_chunks = interleaved_chunks
-
-            logger.info(f"Total chunks for mindmap generation: {len(all_text_chunks)}")
-            logger.info(f"Total documents processed: {len(document_info)}")
-
+ 
             if not all_text_chunks:
-                logger.warning("No readable content found in selected documents")
                 return Response({
-                    'success': True, 
-                    'message': 'No readable content found in selected documents for mindmap generation'
+                    'success': True,
+                    'message': 'No content found in selected documents'
                 }, status=status.HTTP_200_OK)
-
+ 
             # Generate mindmap from combined content
             mindmap_data = self.generate_comprehensive_mindmap(all_text_chunks)
             if not mindmap_data or 'name' not in mindmap_data:
-                logger.error("Failed to generate mindmap data")
-                return Response({'error': 'Failed to generate mindmap'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+                return Response({
+                    'error': 'Failed to generate mindmap'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+            # Generate heading for the mindmap
             combined_text = "\n\n".join(all_text_chunks)
             heading = self.generate_mindmap_heading(combined_text)
             if heading:
@@ -10412,9 +10562,9 @@ class MindMapView(APIView):
                 # Fallback to filenames if LLM fails
                 combined_filenames = " + ".join([doc['filename'] for doc in document_info])
                 mindmap_data['name'] = f"Mindmap: {combined_filenames}"
-
+ 
             node_count = self.count_mindmap_nodes(mindmap_data)
-
+ 
             # Save MindMap record
             mindmap_record = MindMap.objects.create(
                 user=user,
@@ -10423,10 +10573,10 @@ class MindMapView(APIView):
                 document_sources=[doc['filename'] for doc in document_info],
                 total_nodes=node_count
             )
+           
+            # Update project timestamp
             update_project_timestamp(main_project_id, user)
-
-            logger.info(f"Successfully created mindmap with {node_count} nodes for {len(document_info)} documents")
-
+ 
             response_data = {
                 'success': True,
                 'mindmap': mindmap_data,
@@ -10443,15 +10593,14 @@ class MindMapView(APIView):
                 }
             }
             return Response(response_data, status=status.HTTP_200_OK)
-
+ 
         except Exception as e:
             logger.error(f"Error in MindMapView: {str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())
             return Response({
-                'error': f'Internal server error: {str(e)}', 
+                'error': f'Internal server error: {str(e)}',
                 'success': False
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
  
     def generate_mindmap_heading(self, combined_text, api_key=None):
         """
@@ -10462,7 +10611,7 @@ class MindMapView(APIView):
             if api_key:
                 genai.configure(api_key=api_key)
             else:
-                genai.configure(api_key=GEMINI_API_KEY)
+                genai.configure(api_key=self.gemini_api_key)
             model = genai.GenerativeModel(GEMINI_MODEL)
             prompt = (
                 "Given the following combined document content, generate a concise, descriptive title "
@@ -10479,7 +10628,9 @@ class MindMapView(APIView):
         except Exception as e:
             logger.error(f"Error generating mindmap heading: {e}")
             return None
-    
+ 
+
+
     def find_existing_mindmap(self, user, main_project_id, selected_documents):
         try:
             document_filenames = set()
@@ -11318,10 +11469,9 @@ class AdminNotebookUserStatsView(APIView):
 class GenerateIdeaContextView(APIView):
     """
     API endpoint to extract structured idea generation parameters
-    from documents or query results.
-    FIXED: Now properly handles both PDF and DOCX files with blob storage
+    from documents or query results using pgvector.
     """
-   
+ 
     def post(self, request):
         user = request.user
         document_id = request.data.get('document_id')
@@ -11338,10 +11488,10 @@ class GenerateIdeaContextView(APIView):
             # Case 1: Using Document ID - fetch existing parameters or extract new ones
             if document_id:
                 document = get_object_or_404(Document, id=document_id, user=user)
-                
+               
                 # Get document name without extension
                 document_name_no_ext = self.remove_file_extension(document.filename)
-                
+               
                 # Generate a unique project name - handle the case when main_project_id is None
                 suggested_project_name = f"Ideas from {document_name_no_ext}"
                 if main_project_id:
@@ -11365,66 +11515,53 @@ class GenerateIdeaContextView(APIView):
                             'suggested_project_name': suggested_project_name
                         })
                    
-                    # If no parameters yet, extract them from the document
-                    # FIXED: Get index and metadata paths from processed_index
-                    index_file = processed_index.faiss_index
-                    metadata_file = processed_index.metadata
-                    markdown_path = processed_index.markdown_path
-                    
+                    # If no parameters yet, extract them from the document using pgvector
                     # First check if the document has a markdown path (LlamaParse document)
-                    if markdown_path:
+                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                        # This is a LlamaParse document, read the markdown content directly
                         try:
-                            # FIXED: Handle blob storage for markdown files
-                            if os.path.exists(markdown_path):
-                                # Local file
-                                with open(markdown_path, 'r', encoding='utf-8') as f:
-                                    full_text = f.read()
-                            else:
-                                # Try blob storage
-                                from chat.utils import get_blob_content
-                                markdown_content_bytes = get_blob_content(markdown_path)
-                                if markdown_content_bytes:
-                                    full_text = markdown_content_bytes.decode('utf-8')
-                                    logger.info(f"Successfully retrieved markdown from blob ({len(full_text)} chars)")
-                                    
-                            if full_text:
-                                # Extract parameters from markdown content
-                                idea_params = self.extract_idea_parameters(full_text)
-                                
-                                # Save the parameters for future use
-                                processed_index.idea_parameters = idea_params
-                                processed_index.save()
-                                
-                                return Response({
-                                    'document_id': document_id,
-                                    'document_name': document.filename,
-                                    'document_name_no_ext': document_name_no_ext,
-                                    'idea_parameters': idea_params,
-                                    'suggested_project_name': suggested_project_name
-                                })
+                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                                full_text = f.read()
+                               
+                            # Extract parameters from markdown content
+                            idea_params = self.extract_idea_parameters(full_text)
+                           
+                            # Save the parameters for future use
+                            processed_index.idea_parameters = idea_params
+                            processed_index.save()
+                           
+                            return Response({
+                                'document_id': document_id,
+                                'document_name': document.filename,
+                                'document_name_no_ext': document_name_no_ext,
+                                'idea_parameters': idea_params,
+                                'suggested_project_name': suggested_project_name
+                            })
                         except Exception as e:
-                            logger.error(f"Error reading markdown file: {str(e)}")
-                            # Continue with FAISS approach as fallback
+                            print(f"Error reading markdown file: {str(e)}")
+                            # Continue with pgvector approach as fallback
                    
-                    # FIXED: Load index and metadata with proper blob storage handling
-                    index, chunks = self.load_faiss_index_from_paths_with_blob_support(index_file, metadata_file)
-                    
-                    if not chunks:
+                    # Load document content from pgvector embeddings
+                    document_embeddings = DocumentEmbedding.objects.filter(
+                        document=document
+                    ).order_by('chunk_id')
+                   
+                    if not document_embeddings.exists():
                         return Response({
-                            'error': 'No content found in the document'
+                            'error': 'No content found in the document. Document may not be processed yet.'
                         }, status=status.HTTP_400_BAD_REQUEST)
                    
                     # Extract parameters from document content
-                    full_text = " ".join([chunk.get('text', '') for chunk in chunks])
-                    idea_params = self.extract_idea_parameters(full_text, chunks)
+                    full_text = " ".join([embedding.content for embedding in document_embeddings])
+                    idea_params = self.extract_idea_parameters(full_text)
                    
                     # Save the parameters for future use
                     processed_index.idea_parameters = idea_params
                     processed_index.save()
-
+ 
                     if main_project_id:
                         update_project_timestamp(main_project_id, user)
-            
+                   
                     return Response({
                         'document_id': document_id,
                         'document_name': document.filename,
@@ -11449,10 +11586,10 @@ class GenerateIdeaContextView(APIView):
                
                 document = get_object_or_404(Document, id=active_doc_id, user=user)
                 processed_index = get_object_or_404(ProcessedIndex, document=document)
-                
+               
                 # Get document name without extension
                 document_name_no_ext = self.remove_file_extension(document.filename)
-                
+               
                 # Generate a unique project name - handle the case when main_project_id is None
                 suggested_project_name = f"Ideas from {document_name_no_ext}"
                 if main_project_id:
@@ -11461,54 +11598,43 @@ class GenerateIdeaContextView(APIView):
                     except Exception as e:
                         # Log the error but continue with the default name
                         print(f"Error generating unique project name: {str(e)}")
-                
-                # FIXED: Handle markdown path with blob storage
-                full_text = None
-                if processed_index.markdown_path:
+               
+                # First check if the document has a markdown path (LlamaParse document)
+                if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                    # This is a LlamaParse document, read the markdown content directly
                     try:
-                        if os.path.exists(processed_index.markdown_path):
-                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
-                                full_text = f.read()
-                        else:
-                            # Try blob storage
-                            from chat.utils import get_blob_content
-                            markdown_content_bytes = get_blob_content(processed_index.markdown_path)
-                            if markdown_content_bytes:
-                                full_text = markdown_content_bytes.decode('utf-8')
-                                
-                        if full_text:
-                            # Extract parameters from markdown content
-                            idea_params = self.extract_idea_parameters(query, None, full_text)
-                            
-                            return Response({
-                                'document_id': active_doc_id,
-                                'document_name': document.filename,
-                                'document_name_no_ext': document_name_no_ext,
-                                'query': query,
-                                'idea_parameters': idea_params,
-                                'suggested_project_name': suggested_project_name
-                            })
+                        with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                            full_text = f.read()
+                           
+                        # Extract parameters from markdown content with query context
+                        idea_params = self.extract_idea_parameters(query, None, full_text)
+                       
+                        return Response({
+                            'document_id': active_doc_id,
+                            'document_name': document.filename,
+                            'document_name_no_ext': document_name_no_ext,
+                            'query': query,
+                            'idea_parameters': idea_params,
+                            'suggested_project_name': suggested_project_name
+                        })
                     except Exception as e:
-                        logger.error(f"Error reading markdown file: {str(e)}")
-                        # Continue with FAISS approach as fallback
+                        print(f"Error reading markdown file: {str(e)}")
+                        # Continue with pgvector approach as fallback
                
-                # FIXED: Load index and metadata for FAISS approach with blob support
-                index_file = processed_index.faiss_index
-                metadata_file = processed_index.metadata
-                index, chunks = self.load_faiss_index_from_paths_with_blob_support(index_file, metadata_file)
+                # Use pgvector similarity search to find relevant chunks
+                relevant_chunks = self.search_pgvector_similarity(document, query, k=5)
                
-                # Get embedding for query
-                query_embedding = self.get_query_embedding(query)
-               
-                # Search for relevant chunks
-                relevant_chunks = self.search_faiss_index(index, chunks, query_embedding, k=5)
+                if not relevant_chunks:
+                    return Response({
+                        'error': 'No relevant content found for the query'
+                    }, status=status.HTTP_400_BAD_REQUEST)
                
                 # Extract parameters from relevant chunks
                 idea_params = self.extract_idea_parameters(query, relevant_chunks)
-
+ 
                 if main_project_id:
                     update_project_timestamp(main_project_id, user)
-            
+               
                 return Response({
                     'document_id': active_doc_id,
                     'document_name': document.filename,
@@ -11519,30 +11645,30 @@ class GenerateIdeaContextView(APIView):
                 })
                
         except Exception as e:
-            logger.error(f"Error generating idea context: {str(e)}", exc_info=True)
+            print(f"Error generating idea context: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while generating idea context'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+   
     def remove_file_extension(self, filename):
         """
         Remove file extension from filename
         """
         import os
         return os.path.splitext(filename)[0]
-    
+   
     def generate_unique_project_name(self, document_name, main_project_id):
         """
         Generate a unique project name based on document name,
         adding (1), (2), etc. if needed to avoid duplicates
         """
         from ideaGen.models import Project
-        
+       
         base_name = f"Ideas from {document_name}"
         project_name = base_name
         counter = 1
-        
+       
         # Check for existing projects with this name in the main project
         while Project.objects.filter(
             name=project_name,
@@ -11551,73 +11677,38 @@ class GenerateIdeaContextView(APIView):
             # Increment counter and update name
             project_name = f"{base_name} ({counter})"
             counter += 1
-            
+           
         return project_name
    
-    def load_faiss_index_from_paths_with_blob_support(self, index_file, metadata_file):
+    def get_embeddings(self, texts):
         """
-        FIXED: Load FAISS index and metadata from file paths with Azure Blob Storage support
+        Get embeddings for a list of texts using OpenAI
+        This method should match the one used in your document processing
         """
-        import faiss
-        import pickle
-        import tempfile
-        import os
-        from chat.utils import download_blob_to_temp_file, get_blob_content
-        
-        logger.info(f"Loading FAISS index: {index_file}, metadata: {metadata_file}")
+        from openai import OpenAI
+        client = OpenAI()
        
         try:
-            index = None
-            chunks = []
-            
-            # Load FAISS index
-            if index_file:
-                if os.path.exists(index_file):
-                    # Local file
-                    logger.info(f"Loading index from local file: {index_file}")
-                    index = faiss.read_index(index_file)
-                else:
-                    # Try blob storage
-                    logger.info(f"Attempting to load index from blob storage: {index_file}")
-                    temp_index_file = download_blob_to_temp_file(index_file, 'uploadfiles')
-                    if temp_index_file:
-                        index = faiss.read_index(temp_index_file)
-                        os.unlink(temp_index_file)  # Clean up
-                        logger.info(f"Successfully loaded index from blob storage")
-                    else:
-                        logger.warning(f"Could not load index from blob storage: {index_file}")
-            
-            # Load metadata
-            if metadata_file:
-                if os.path.exists(metadata_file):
-                    # Local file
-                    logger.info(f"Loading metadata from local file: {metadata_file}")
-                    with open(metadata_file, "rb") as f:
-                        chunks = pickle.load(f)
-                else:
-                    # Try blob storage
-                    logger.info(f"Attempting to load metadata from blob storage: {metadata_file}")
-                    metadata_content = get_blob_content(metadata_file, 'uploadfiles')
-                    if metadata_content:
-                        chunks = pickle.loads(metadata_content)
-                        logger.info(f"Successfully loaded {len(chunks) if isinstance(chunks, list) else 'unknown'} chunks from blob")
-                    else:
-                        logger.warning(f"Could not load metadata from blob storage: {metadata_file}")
-            
-            # Ensure chunks is a list
-            if not isinstance(chunks, list):
-                logger.warning(f"Chunks is not a list, converting: {type(chunks)}")
-                chunks = [chunks] if chunks else []
-                
-            logger.info(f"Loaded index: {index is not None}, chunks: {len(chunks)}")
-            return index, chunks
-            
+            if not texts:
+                return []
+           
+            # Ensure texts is a list
+            if isinstance(texts, str):
+                texts = [texts]
+           
+            response = client.embeddings.create(
+                input=texts,
+                model="text-embedding-3-small"
+            )
+           
+            return [data.embedding for data in response.data]
+           
         except Exception as e:
-            logger.error(f"Error loading FAISS index: {str(e)}", exc_info=True)
-            return None, []
+            print(f"Error getting embeddings: {str(e)}")
+            return []
    
     def get_query_embedding(self, query):
-        """Get embedding for the query"""
+        """Get embedding for the query using OpenAI"""
         from openai import OpenAI
         client = OpenAI()  # Initialize the client
        
@@ -11628,37 +11719,146 @@ class GenerateIdeaContextView(APIView):
             )
             return response.data[0].embedding
         except Exception as e:
-            logger.error(f"Error getting embedding for query: {str(e)}")
+            print(f"Error getting embedding for query: {str(e)}")
             raise
    
-    def search_faiss_index(self, index, chunks, query_embedding, k=5):
-        """Search FAISS index for relevant chunks"""
-        import numpy as np
+    def search_pgvector_similarity(self, document, query, k=10):
+        """
+        Enhanced search function using pgvector for similarity search
+        Based on the QnA search_similar_content implementation
        
-        # Check if index is None
-        if index is None:
-            logger.warning("FAISS index is None, returning empty results")
+        Args:
+            document: The document object to search within
+            query: The search query
+            k: Number of top results to return
+           
+        Returns:
+            list: List of relevant chunks with their content
+        """
+        print(f"\n🔍 IDEA SEARCH DEBUG: Starting pgvector search for query: '{query}'")
+        print(f"🔍 IDEA SEARCH DEBUG: Document: {document.filename}")
+ 
+        # Get embeddings for the query
+        query_embedding = self.get_embeddings([query])
+        if not query_embedding:
+            print("❌ IDEA SEARCH DEBUG: Failed to get query embedding")
             return []
-            
+ 
+        print("✅ IDEA SEARCH DEBUG: Got query embedding")
+ 
         try:
-            # Convert embedding to numpy array
-            query_vector = np.array([query_embedding]).astype('float32')
+            # Check if embeddings exist for this document
+            embeddings_exist = DocumentEmbedding.objects.filter(document=document).exists()
+            if not embeddings_exist:
+                print(f"❌ IDEA SEARCH DEBUG: No embeddings found for {document.filename}")
+                return []
+ 
+            # Perform pgvector similarity search
+            from pgvector.django import CosineDistance
+ 
+            # Query embeddings using pgvector
+            similar_embeddings = DocumentEmbedding.objects.filter(
+                document=document
+            ).annotate(
+                distance=CosineDistance('embedding', query_embedding[0])
+            ).order_by('distance')[:k]
+ 
+            print(f"✅ IDEA SEARCH DEBUG: pgvector search returned {len(similar_embeddings)} results")
+ 
+            # Process results
+            relevant_chunks = []
+            seen_content_hashes = set()
            
-            # Search index
-            distances, indices = index.search(query_vector, k=k)
-           
-            # Get relevant chunks
-            results = []
-            for i in indices[0]:
-                if i < len(chunks) and i >= 0:
-                    results.append(chunks[i])
-            
-            logger.info(f"Found {len(results)} relevant chunks from FAISS search")
-            return results
-            
+            for embedding_obj in similar_embeddings:
+                distance = float(embedding_obj.distance)
+               
+                # Filter by distance threshold (cosine distance, lower is better)
+                if distance < 0.8:
+                    content = embedding_obj.content
+                   
+                    if content and content.strip():
+                        # Duplicate detection
+                        content_hash = hash(content[:150])
+                       
+                        if content_hash not in seen_content_hashes:
+                            seen_content_hashes.add(content_hash)
+                           
+                            relevant_chunks.append({
+                                'text': content,
+                                'chunk_id': embedding_obj.chunk_id,
+                                'source': embedding_obj.source or document.filename,
+                                'source_file': embedding_obj.source_file or document.filename,
+                                'distance': distance,
+                                'document_id': document.id
+                            })
+                           
+                            print(f"   ✅ Added result: distance={distance:.4f}, content='{content[:100]}...'")
+ 
+            print(f"✅ IDEA SEARCH DEBUG: Added {len(relevant_chunks)} relevant chunks")
+ 
+            # If no results with similarity search, try text search fallback
+            if not relevant_chunks:
+                print(f"🔄 IDEA SEARCH DEBUG: No similarity results, trying text search fallback")
+                try:
+                    query_lower = query.lower()
+                   
+                    text_matches = DocumentEmbedding.objects.filter(
+                        document=document,
+                        content__icontains=query_lower
+                    )[:k]
+                   
+                    print(f"   Found {len(text_matches)} text matches")
+                   
+                    for embedding_obj in text_matches:
+                        content = embedding_obj.content
+                        content_hash = hash(content[:150])
+                       
+                        if content_hash not in seen_content_hashes:
+                            seen_content_hashes.add(content_hash)
+                           
+                            relevant_chunks.append({
+                                'text': content,
+                                'chunk_id': embedding_obj.chunk_id,
+                                'source': embedding_obj.source or document.filename,
+                                'source_file': embedding_obj.source_file or document.filename,
+                                'distance': 0.5,  # Default relevance score for text matches
+                                'document_id': document.id
+                            })
+                           
+                            print(f"   ✅ Added text match: '{content[:100]}...'")
+                           
+                except Exception as fallback_error:
+                    print(f"❌ IDEA SEARCH DEBUG: Fallback search failed: {str(fallback_error)}")
+ 
+            return relevant_chunks
+ 
         except Exception as e:
-            logger.error(f"Error searching FAISS index: {str(e)}", exc_info=True)
-            return []
+            print(f"❌ IDEA SEARCH DEBUG: Error in pgvector similarity search: {str(e)}")
+           
+            # Final fallback: return first k chunks
+            try:
+                print(f"🔄 IDEA SEARCH DEBUG: Using final fallback - first {k} chunks")
+                all_embeddings = DocumentEmbedding.objects.filter(
+                    document=document
+                ).order_by('chunk_id')[:k]
+               
+                fallback_chunks = []
+                for emb in all_embeddings:
+                    fallback_chunks.append({
+                        'text': emb.content,
+                        'chunk_id': emb.chunk_id,
+                        'source': emb.source or document.filename,
+                        'source_file': emb.source_file or document.filename,
+                        'distance': 1.0,  # High distance indicates low relevance
+                        'document_id': document.id
+                    })
+               
+                print(f"✅ IDEA SEARCH DEBUG: Fallback returned {len(fallback_chunks)} chunks")
+                return fallback_chunks
+               
+            except Exception as fallback_error:
+                print(f"❌ IDEA SEARCH DEBUG: Final fallback also failed: {str(fallback_error)}")
+                return []
    
     def extract_idea_parameters(self, context, relevant_chunks=None, full_text=None):
         """
@@ -11722,12 +11922,11 @@ class GenerateIdeaContextView(APIView):
            
             # Parse JSON response
             extracted_params = json.loads(response.choices[0].message.content)
-            
-            logger.info(f"Successfully extracted idea parameters: {extracted_params}")
+           
             return extracted_params
        
         except Exception as e:
-            logger.error(f"Error extracting idea parameters: {str(e)}", exc_info=True)
+            print(f"Error extracting idea parameters: {str(e)}")
             # Return empty structure if extraction fails
             return {
                 "Brand_Name": "",
@@ -11740,7 +11939,8 @@ class GenerateIdeaContextView(APIView):
                 "Theme": "",
                 "Demographics": ""
             }
-
+ 
+ 
 
 import base64
 import uuid

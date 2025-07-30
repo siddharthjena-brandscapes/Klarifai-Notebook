@@ -2214,8 +2214,10 @@ const MainChat = forwardRef(
             setSelectedDocuments([...newSelection]);
           }
         },
+        handleFileChange,
+        hasUploadPermissions,
       }),
-      [handleSendMessage, setSelectedDocuments]
+      [handleSendMessage, setSelectedDocuments, handleFileChange, hasUploadPermissions]
     );
 
     const WebSourcesDisplay = ({ sources }) => {

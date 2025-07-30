@@ -1683,20 +1683,17 @@ const SideTab = ({
               <div className="flex-grow flex items-center justify-between overflow-hidden">
                 <div className="flex flex-col flex-grow overflow-hidden">
    
-<span
-  className={`truncate text-sm relative group ${
-    theme === "dark"
-      ? "text-gray-300"
-      : "text-[#1a535c] font-medium"
-  }`}
-  style={{ maxWidth: "100%", minWidth: "150px", display: "inline-block" }}
-  title={doc.filename} // Add this as fallback
->
-  {doc.filename.endsWith('.txt') ? doc.filename.replace(/\.txt$/i, '') : doc.filename}
-  <span>
-    {doc.filename}
-  </span>
-</span>
+                <span
+                  className={`truncate text-sm relative group ${
+                    theme === "dark"
+                      ? "text-gray-300"
+                      : "text-[#1a535c] font-medium"
+                  }`}
+                  style={{ maxWidth: "100%", minWidth: "150px", display: "inline-block" }}
+                  title={doc.filename}
+                >
+                  {doc.filename.endsWith('.txt') ? doc.filename.replace(/\.txt$/i, '') : doc.filename}
+                </span>
                   <span
                     className={`text-[10px] ${
                       theme === "dark" ? "text-gray-400" : "text-[#5a544a]"
