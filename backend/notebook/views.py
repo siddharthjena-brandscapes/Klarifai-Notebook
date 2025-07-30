@@ -1082,8 +1082,6 @@ def generate_question_from_topic(request):
     except Exception as e:
         logger.error(f"Error generating question from topic: {str(e)}")
         return Response({'error': str(e)}, status=500)
-
-
 class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
 
@@ -12052,6 +12050,8 @@ class GPTImageChatView(APIView):
             print(f"Error creating conversation transaction: {str(e)}")
  
     def update_conversation_transaction(self, conversation, use_web_knowledge):
+
+
         """Update existing conversation transaction when new messages are added"""
         try:
             # Find existing transaction for this conversation

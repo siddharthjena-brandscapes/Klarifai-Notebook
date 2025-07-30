@@ -1257,29 +1257,32 @@ const MainChat = forwardRef(
       }
     };
 
-    const handleTopicClick = (topic) => {
+    const handleTopicClick = async (topic) => {
       console.log("Topic clicked:", topic);
-
-      // Create the message with "Discuss " prefix
-      const discussMessage = `Discuss ${topic}`;
-
-      // Set the message in the input field (optional - for user to see what's being sent)
-      setMessage(discussMessage);
-
-      // Automatically send the message
-      handleSendMessage(discussMessage);
-
-      // Optional: Show a toast notification to indicate the action
-      // toast.info(`Discussing: ${topic}`);
-
-      // Optional: Switch to chat view if currently in summary view
-      if (currentView === "summary") {
-        setCurrentView("chat");
-      }
-
-      // Optional: Minimize follow-up questions to focus on the new discussion
-      if (!isFollowUpQuestionsMinimized) {
-        setIsFollowUpQuestionsMinimized(true);
+ 
+      try {
+        // Call backend to generate a question from the topic
+        const res = await chatServiceNB.generateQuestionFromTopic({ topic });
+        const generatedQuestion = res?.data?.question || `Discuss ${topic}`;
+ 
+        // Set the generated question in the input field
+        setMessage(generatedQuestion);
+ 
+        // Send the generated question as a message
+        handleSendMessage(generatedQuestion);
+ 
+        // Switch to chat view if currently in summary view
+        if (currentView === "summary") {
+          setCurrentView("chat");
+        }
+ 
+        // Minimize follow-up questions to focus on the new discussion
+        if (!isFollowUpQuestionsMinimized) {
+          setIsFollowUpQuestionsMinimized(true);
+        }
+      } catch (error) {
+        console.error("Failed to generate question from topic:", error);
+        toast.error("Could not generate a question for this topic. Please try again.");
       }
     };
 

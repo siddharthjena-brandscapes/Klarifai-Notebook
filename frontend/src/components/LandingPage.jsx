@@ -1806,19 +1806,20 @@ function App() {
                     Enhance with AI
                   </button>
 
-                  <div className="relative">
+                  {/* <div className="relative"> */}
                     {/* Hidden file input */}
-                    <input
+                    {/* <input
                       type="file"
                       id="documentUpload"
                       className="hidden"
                       onChange={handleDocumentChange}
                       accept=".pdf,.pptx,.txt"
                       disabled // Just in case someone tries to trigger it programmatically
-                    />
+                    /> */}
+                    
 
                     {/* Disabled label */}
-                    <div
+                    {/* <div
                       // title="File uploads are currently disabled. Please contact admin."
                       className="px-3 py-2 bg-[#a68a70]/50 dark:bg-emerald-600/10 text-white dark:text-emerald-300
                 rounded-lg transition-colors text-sm font-medium flex items-center
@@ -1827,7 +1828,7 @@ function App() {
                       <Paperclip className="w-4 h-4 mr-1.5" />
                       Upload Files
                     </div>
-                  </div>
+                  </div> */}
 
                   {documentFile && (
                     <button

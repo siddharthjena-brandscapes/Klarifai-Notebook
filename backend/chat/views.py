@@ -471,7 +471,8 @@ class UserProfileView(APIView):
         try:
             profile = UserProfile.objects.get(user=user)
             if profile.profile_picture:
-                profile_picture = request.build_absolute_uri(profile.profile_picture.url)
+                # Get the full URL for the profile picture
+                profile_picture = profile.get_profile_picture_url()
             else:
                 profile_picture = f'https://ui-avatars.com/api/?name={user.username}&background=random'
         except UserProfile.DoesNotExist:
@@ -578,39 +579,42 @@ class UserProfileView(APIView):
            
             # Get or create profile
             profile, created = UserProfile.objects.get_or_create(user=user)
-           
-            # Delete old profile picture if it exists
-            if profile.profile_picture:
+
+            # Delete old profile picture from blob storage if it exists
+            if profile.profile_picture and not created:
                 try:
-                    old_file_path = profile.profile_picture.path
-                    if os.path.exists(old_file_path):
-                        os.remove(old_file_path)
+                    profile.delete_old_profile_picture()
+                    logger.info(f"Deleted old profile picture for user {user.username}")
                 except Exception as e:
-                    print(f"Error deleting old profile picture: {e}")
-           
-            # Generate unique filename
-            file_extension = os.path.splitext(profile_picture.name)[1]
-            unique_filename = f"{user.username}_{uuid.uuid4().hex[:8]}{file_extension}"
-           
-            # Save the new profile picture
-            profile.profile_picture.save(
-                unique_filename,
-                profile_picture,
-                save=True
-            )
-           
-            # Build the full URL
-            profile_picture_url = request.build_absolute_uri(profile.profile_picture.url)
-           
+                    logger.warning(f"Failed to delete old profile picture for user {user.username}: {str(e)}")
+
+            # Upload new profile picture to Azure Blob Storage
+            from chat.utils import upload_profile_picture_to_blob
+            upload_result = upload_profile_picture_to_blob(profile_picture, user.username)
+
+            if not upload_result:
+                return Response({
+                    'error': 'Failed to upload profile picture to cloud storage'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Save the blob path to the profile
+            profile.profile_picture = upload_result['filename']  # Store the blob path
+            profile.save()
+
+            # Return the full URL for the frontend
+            profile_picture_url = upload_result['url']
+
             return Response({
                 'message': 'Profile picture updated successfully',
                 'profile_picture': profile_picture_url
             }, status=status.HTTP_200_OK)
            
         except Exception as e:
+            logger.error(f"Error updating profile picture for user {user.username}: {str(e)}", exc_info=True)
             return Response({
-                'error': str(e)
+                'error': f'Failed to update profile picture: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
  
 class GetUserDocumentsView(APIView):
     def get(self, request):

@@ -140,13 +140,13 @@ const ChatInputArea = ({
             )}
           </button>
         )}
-        <button
+        {/* <button
           title="Add sources from URL, YouTube, or Text"
           onClick={onOpenYouTubeModal}
           className="text-[#5a544a] dark:text-gray-400 hover:text-[#a55233] dark:hover:text-white transition-colors p-1 rounded-full"
         >
           <FilePlus className="h-4 w-4" />
-        </button>
+        </button> */}
         {!message && !hasImages && (
           <button
             onClick={onMicInput}
