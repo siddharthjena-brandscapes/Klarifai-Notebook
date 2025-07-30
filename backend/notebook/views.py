@@ -1639,6 +1639,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 filename=file.name,
                                 main_project=main_project
                             )
+                            processed_data = self.process_document_pgvector_with_blob(file, user, document)
                             file_size = file.size if hasattr(file, 'size') else None
                             page_count = processed_data.get('page_count', 1)  # Get page count from processed data
                             upload_method = 'regular'
@@ -9349,7 +9350,7 @@ class NoteManagementView(DocumentUploadView, APIView):
                            
                             # Use the updated process_document_from_text method with pgvector
                             # Make sure to pass the document object for pgvector saving
-                            processed_data = self.process_document_pgvector(django_file, user, document)
+                            processed_data = self.process_document_pgvector_with_blob(django_file, user, document)
                            
                             logger.info(f"Note processed successfully for RAG using pgvector")
                            
@@ -11939,9 +11940,6 @@ class GenerateIdeaContextView(APIView):
                 "Theme": "",
                 "Demographics": ""
             }
- 
- 
-
 import base64
 import uuid
 from datetime import datetime
