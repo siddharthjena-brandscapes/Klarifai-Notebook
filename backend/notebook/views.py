@@ -2608,6 +2608,7 @@ logger = logging.getLogger(__name__)
 
 class ChatView(APIView):
     permission_classes = [IsAuthenticated]
+ 
     def __init__(self, post_process_func=post_process_response):
         self.post_process_func = post_process_func
         self.agent = Agent(
@@ -2621,69 +2622,37 @@ class ChatView(APIView):
                 show_tool_calls=True,
                 markdown=True
             )
-
     def normalize_citation_markers(self, text):
-
         """
-
         Convert all citation formats to consistent [n] format:
-
         - [Source: 1, 2] -> [1][2]
-
         - [Sources: 1, 2] -> [1][2]
-
         - Source: 1, 2 -> [1][2]
-
         - (Source 1, 2) -> [1][2]
-
         """
-
         if not text:
-
             return text
-
         # Replace [Source: n] or [Sources: n] with [n]
-
         text = re.sub(r'\[(?:Source|Sources?)\s*:?\s*(\d+)\]', r'[\1]', text, flags=re.IGNORECASE)
-
         # Replace [Source: n, m] or [Sources: n, m] with [n][m]
-
         def bracketize(match):
-
             nums = re.findall(r'\d+', match.group(0))
-
             return ''.join([f'[{n}]' for n in nums])
-
         text = re.sub(r'\[(?:Source|Sources?)\s*:?\s*[\d,\s]+\]', bracketize, text, flags=re.IGNORECASE)
-
         # Replace Source: n, m or Sources: n, m (not in brackets) with [n][m]
-
-        text = re.sub(r'(?:Source|Sources?)\s*:?\s*([\d,\s]+)', 
-
-                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]), 
-
+        text = re.sub(r'(?:Source|Sources?)\s*:?\s*([\d,\s]+)',
+                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]),
                     text, flags=re.IGNORECASE)
-
         # Replace (Source n, m) with [n][m]
-
-        text = re.sub(r'\((?:Source|Sources?)\s*:?\s*([\d,\s]+)\)', 
-
-                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]), 
-
+        text = re.sub(r'\((?:Source|Sources?)\s*:?\s*([\d,\s]+)\)',
+                    lambda m: ''.join([f'[{n}]' for n in re.findall(r'\d+', m.group(1))]),
                     text, flags=re.IGNORECASE)
-
         # Handle grouped citations [1, 2, 3] -> [1][2][3]
-
-        text = re.sub(r'\[(\d+(?:\s*,\s*\d+)+)\]', 
-
-                    lambda m: ''.join([f'[{n.strip()}]' for n in m.group(1).split(',')]), 
-
+        text = re.sub(r'\[(\d+(?:\s*,\s*\d+)+)\]',
+                    lambda m: ''.join([f'[{n.strip()}]' for n in m.group(1).split(',')]),
                     text)
-
         return text
  
-
-
     def post(self, request):
         user = request.user
         try:
@@ -2933,6 +2902,8 @@ class ChatView(APIView):
             else:
                 # Document chat mode - now handles URL content too
                 document_content_exists = bool(all_chunks)
+
+                # Initialize token usage tracking
                 token_usage = {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0}
                
                 if document_content_exists or has_url_content:
@@ -3000,7 +2971,7 @@ class ChatView(APIView):
                        
                         print(f"Generated document-based answer using {response_length} response length")
                         print(f"Token usage - Input: {token_usage.get('input_tokens', 0)}, Output: {token_usage.get('output_tokens', 0)}")
-                   
+                                    
                     # If web knowledge is requested, get web response using document context to enhance the query
                     if use_web_knowledge:
                         web_response_data = self.get_web_knowledge_response(
@@ -3094,7 +3065,9 @@ class ChatView(APIView):
             else:
                 if all_chunks:
                     context_texts = [chunk.get('text', '') for chunk in all_chunks[:3]]
+                    print("Generating follow-up questions...")
                     follow_up_questions = self.generate_follow_up_questions(context_texts, user=user)
+                    print("Follow-up questions generated:", follow_up_questions)
                 else:
                     follow_up_questions = [
                         "What else would you like to know about this content?",
@@ -3182,7 +3155,6 @@ class ChatView(APIView):
             else:
                 # Update existing conversation transaction
                 self.update_conversation_transaction(conversation, use_web_knowledge, token_usage)
- 
  
             # Create user message
             user_message = ChatMessage.objects.create(
@@ -3356,13 +3328,12 @@ class ChatView(APIView):
         except Exception as e:
             print(f"Error in fallback text search: {str(e)}")
             return None
-        
     def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length, token_usage=None):
         """Create transaction record for conversation"""
         try:
             # Get the project
             main_project = Project.objects.get(id=main_project_id, user=user)
-           
+            
             # Create main transaction record
             user_transaction = UserTransaction.objects.create(
                 user=user,
@@ -3378,11 +3349,11 @@ class ChatView(APIView):
                     'token_usage': token_usage or {}  # Store token usage in metadata
                 }
             )
-           
+            
             # Extract token information if available
             input_tokens = token_usage.get('input_tokens', 0) if token_usage else 0
             output_tokens = token_usage.get('output_tokens', 0) if token_usage else 0
-           
+            
             # Create detailed conversation transaction
             ConversationTransaction.objects.create(
                 user_transaction=user_transaction,
@@ -3394,10 +3365,10 @@ class ChatView(APIView):
                 response_format=response_format,
                 response_length=response_length
             )
-           
+            
             print(f"Transaction recorded for conversation: {conversation.title}")
             print(f"Token usage - Input: {input_tokens}, Output: {output_tokens}, Total: {input_tokens + output_tokens}")
-           
+            
         except Exception as e:
             print(f"Error creating conversation transaction: {str(e)}")
  
@@ -3410,25 +3381,25 @@ class ChatView(APIView):
                 transaction_type=TransactionType.CONVERSATION_CREATE,
                 is_active=True
             ).first()
-           
+            
             if user_transaction and hasattr(user_transaction, 'notebook_conversation_details'):
                 # Get the conversation details
                 conv_details = user_transaction.notebook_conversation_details
-               
+                
                 # Update message count and question count
                 conv_details.message_count += 1
                 conv_details.question_count += 1  # Each update represents a new question
-               
+                
                 # Update token usage if provided
                 if token_usage:
                     conv_details.input_api_tokens += token_usage.get('input_tokens', 0)
                     conv_details.output_api_tokens += token_usage.get('output_tokens', 0)
-               
+                
                 if use_web_knowledge:
                     conv_details.web_knowledge_used = True
-                   
+                    
                 conv_details.save()
-               
+                
                 # Update metadata with token usage
                 if token_usage:
                     if 'token_history' not in user_transaction.metadata:
@@ -3439,75 +3410,15 @@ class ChatView(APIView):
                         'output_tokens': token_usage.get('output_tokens', 0),
                         'total_tokens': token_usage.get('total_tokens', 0)
                     })
-               
+                
                 user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
                 user_transaction.save()
-               
+                
                 print(f"Updated conversation transaction - Questions: {conv_details.question_count}, Total tokens: {conv_details.total_tokens_used}")
-               
+                
         except Exception as e:
             print(f"Error updating conversation transaction: {str(e)}")
-    
-    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
-        """Create transaction record for conversation"""
-        try:
-            # Get the project
-            main_project = Project.objects.get(id=main_project_id, user=user)
-           
-            # Create main transaction record
-            user_transaction = UserTransaction.objects.create(
-                user=user,
-                transaction_type=TransactionType.CONVERSATION_CREATE,
-                conversation_title=conversation.title,
-                conversation_id=conversation.conversation_id,
-                main_project=main_project,
-                metadata={
-                    'creation_timestamp': timezone.now().isoformat(),
-                    'web_knowledge_used': use_web_knowledge,
-                    'response_format': response_format,
-                    'response_length': response_length
-                }
-            )
-           
-            # Create detailed conversation transaction
-            ConversationTransaction.objects.create(
-                user_transaction=user_transaction,
-                message_count=1,  # Initial message
-                web_knowledge_used=use_web_knowledge,
-                response_format=response_format,
-                response_length=response_length
-            )
-           
-            print(f"Transaction recorded for conversation: {conversation.title}")
-           
-        except Exception as e:
-            print(f"Error creating conversation transaction: {str(e)}")
- 
-    def update_conversation_transaction(self, conversation, use_web_knowledge):
-        """Update existing conversation transaction when new messages are added"""
-        try:
-            # Find existing transaction for this conversation
-            user_transaction = UserTransaction.objects.filter(
-                conversation_id=conversation.conversation_id,
-                transaction_type=TransactionType.CONVERSATION_CREATE,
-                is_active=True
-            ).first()
-           
-            if user_transaction and hasattr(user_transaction, 'conversation_details'):
-                # Update message count
-                user_transaction.conversation_details.message_count += 1
-                if use_web_knowledge:
-                    user_transaction.conversation_details.web_knowledge_used = True
-                user_transaction.conversation_details.save()
-               
-                # Update metadata
-                user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
-                user_transaction.save()
-               
-        except Exception as e:
-            print(f"Error updating conversation transaction: {str(e)}")
-   
-   
+
     def _parse_json_response(self, response_content, fallback_message="Error processing response"):
         """Helper method to safely parse JSON responses from LLM"""
         try:
@@ -3909,7 +3820,7 @@ class ChatView(APIView):
         # If no special formatting needed, just return the original table lines
         return table_lines
 
-
+    
     def scrape_webpage(self, url):
         """Scrape content from a webpage"""
         try:
@@ -5081,7 +4992,12 @@ class ChatView(APIView):
                 all_sources_str = ", ".join(all_sources) if all_sources else "Document context only"
 
             # Clean up and process citations in the final response
+            combined_response = self.normalize_citation_markers(combined_response)
             processed_response, processed_citation_sources = self._format_citations_for_response(combined_response, combined_citation_sources)
+            citations_list = [
+                processed_citation_sources[k]
+                for k in sorted(processed_citation_sources.keys())
+            ]
             
             # Return JSON structure instead of plain text
             print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ FINAL COMBINED RESPONSE", f"{processed_response}\n\n*Sources: {all_sources_str}*")
@@ -5089,6 +5005,7 @@ class ChatView(APIView):
                 "content": f"{processed_response}\n\n*Sources: {all_sources_str}*",
                 "sources": all_sources_str,
                 "citation_sources": processed_citation_sources,
+                "citations": citations_list,
                 "document_sources": all_doc_sources,
                 "web_sources": final_web_sources,
                 "combination_type": combined_json.get("combination_type", "standard"),
@@ -5185,6 +5102,7 @@ class ChatView(APIView):
             all_sources = all_doc_sources + list(set(final_web_sources))
             all_sources_str = ", ".join(all_sources) if all_sources else "Document and web sources"
             
+            fallback_content = self.normalize_citation_markers(fallback_content)
             return {
                 "content": f"{fallback_content}\n\n*Sources: {all_sources_str}*",
                 "sources": all_sources_str,
@@ -5610,12 +5528,13 @@ class ChatView(APIView):
     def _is_likely_citation(self, num, citation_sources):
         """Check if a number is likely to be a citation based on available sources."""
         return num in citation_sources and 1 <= num <= len(citation_sources)
-
+    
     def _format_citations_for_response(self, response_text, citation_sources):
         """Format the citations for response and ensure sequential numbering"""
         # First extract ALL citations from the text
         citation_pattern = r'\[(\d+)\]'
         all_citations = re.findall(citation_pattern, response_text)
+        
         # Get unique citations while preserving order of first appearance
         unique_citations = []
         seen = set()
@@ -5623,15 +5542,19 @@ class ChatView(APIView):
             if cite.isdigit() and int(cite) in citation_sources and cite not in seen:
                 seen.add(cite)
                 unique_citations.append(cite)
+        
         # Create mapping from original to sequential numbers (1,2,3...)
         citation_mapping = {int(old): new for new, old in enumerate(unique_citations, 1)}
+        
         # Replace ALL citations in the text with sequential numbers
         def replace_citation(match):
             old_num = match.group(1)
             if old_num.isdigit() and int(old_num) in citation_mapping:
                 return f'[{citation_mapping[int(old_num)]}]'
             return match.group(0)
+        
         processed_text = re.sub(citation_pattern, replace_citation, response_text)
+        
         # Create new citation sources with sequential numbers
         display_citation_sources = {}
         for display_num, original_num in enumerate(unique_citations, 1):
@@ -5647,7 +5570,50 @@ class ChatView(APIView):
                     'snippet': snippet[:snippet_length] + "..." if len(snippet) > snippet_length else snippet,
                     'document_id': source_info.get('document_id', 'Unknown')
                 }
+        
         return processed_text, display_citation_sources
+
+    # def _format_citations_for_response(self, response_text, citation_sources):
+    #     """Format the citations for response and remove duplicates."""
+    #     # Extract all citations from the text
+    #     response_text = self._ensure_separate_citation_brackets(response_text)
+    #     citation_pattern = r'\[(\d+)\]'
+    #     citations = re.findall(citation_pattern, response_text)
+        
+    #     # Use set to get unique citations, then convert back to sorted list
+    #     unique_citations = sorted(set([int(c) for c in citations if c.isdigit()]))
+        
+    #     # Create mapping from original citation numbers to sequential display numbers
+    #     citation_mapping = {original_num: display_num for display_num, original_num in enumerate(unique_citations, 1)}
+        
+    #     # Replace original citation numbers with sequential display numbers
+    #     # Process in reverse order to avoid issues with overlapping replacements
+    #     processed_text = response_text
+    #     for original_num in sorted(citation_mapping.keys(), reverse=True):
+    #         # Use word boundaries to avoid partial matches
+    #         pattern = r'\[' + str(original_num) + r'\]'
+    #         replacement = f'[{citation_mapping[original_num]}]'
+    #         processed_text = re.sub(pattern, replacement, processed_text)
+        
+    #     # Remove duplicate citations that appear consecutively
+    #     processed_text = self._remove_consecutive_duplicate_citations(processed_text)
+        
+    #     # Create new citation sources dictionary with display numbers
+    #     display_citation_sources = {}
+    #     for display_num, original_num in enumerate(unique_citations, 1):
+    #         if original_num in citation_sources:
+    #             source_info = citation_sources[original_num]
+    #             snippet = source_info.get('text', '')
+    #             snippet_length = 1500 
+    #             display_citation_sources[display_num] = {
+    #                 'source_file': source_info.get('source_file', 'Unknown'),
+    #                 'page_number': 'Unknown',
+    #                 'section_title': 'Unknown',
+    #                 'snippet': snippet[:snippet_length] + "..." if len(snippet) > snippet_length else snippet,
+    #                 'document_id': source_info.get('document_id', 'Unknown')
+    #             }
+        
+    #     return processed_text, display_citation_sources
 
     def _remove_consecutive_duplicate_citations(self, text):
         """Remove consecutive duplicate citations and ensure proper bracket separation."""
@@ -5981,7 +5947,6 @@ class ChatView(APIView):
                    
                    
                 )
-
                 token_usage = {
                 'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
                 'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
@@ -6031,13 +5996,12 @@ class ChatView(APIView):
                    
                  
                 )
-
                 token_usage = {
-                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
-                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
-                'total_tokens': completion.usage.total_tokens if completion.usage else 0
+                'input_tokens': fallback_completion.usage.prompt_tokens if fallback_completion.usage else 0,
+                'output_tokens': fallback_completion.usage.completion_tokens if fallback_completion.usage else 0,
+                'total_tokens': fallback_completion.usage.total_tokens if fallback_completion.usage else 0
                 }
-                
+               
                 json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
                 answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
@@ -6295,13 +6259,11 @@ class ChatView(APIView):
                 temperature=0.4,
                 max_tokens=2000
             )
-
             token_usage = {
             'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
             'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
             'total_tokens': completion.usage.total_tokens if completion.usage else 0
             }
-
                 # ===== LOG RAW LLM RESPONSE =====
             raw_llm_response = completion.choices[0].message.content
             print("\n" + "="*100)
@@ -6351,13 +6313,12 @@ class ChatView(APIView):
                     temperature=0.4,
                     max_tokens=1024
                 )
-
                 token_usage = {
-                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
-                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
-                'total_tokens': completion.usage.total_tokens if completion.usage else 0
+                'input_tokens': fallback_completion.usage.prompt_tokens if fallback_completion.usage else 0,
+                'output_tokens': fallback_completion.usage.completion_tokens if fallback_completion.usage else 0,
+                'total_tokens': fallback_completion.usage.total_tokens if fallback_completion.usage else 0
                 }
-               
+
                 json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
                 answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
@@ -6373,7 +6334,8 @@ class ChatView(APIView):
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations, token_usage
-    
+
+
     def _get_project_description(self, query):
         """
         Get the project description for the current main project
@@ -6577,12 +6539,6 @@ class ChatView(APIView):
                     max_tokens=max_tokens
                 )
 
-                token_usage = {
-                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
-                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
-                'total_tokens': completion.usage.total_tokens if completion.usage else 0
-                }
-
                 # Parse the JSON response
                 json_response = self._parse_json_response(response.choices[0].message.content)
                 formatted_web_response = json_response.get("content", "No response content found.")
@@ -6739,12 +6695,6 @@ class ChatView(APIView):
                     temperature=0.5,
                     max_tokens=2000 if response_length == 'comprehensive' else 800
                 )
-
-                token_usage = {
-                'input_tokens': completion.usage.prompt_tokens if completion.usage else 0,
-                'output_tokens': completion.usage.completion_tokens if completion.usage else 0,
-                'total_tokens': completion.usage.total_tokens if completion.usage else 0
-                }
                 
                 # Parse the JSON response
                 json_response = self._parse_json_response(completion.choices[0].message.content)
@@ -6769,143 +6719,7 @@ class ChatView(APIView):
             logger.error(f"Error getting embeddings: {str(e)}")
             return []
     
-    def load_faiss_index_from_blob(self, index_path, metadata_path):
-        """
-        Load FAISS index and metadata from Azure Blob Storage
-        FIXED: Better error handling and path resolution for notes and other documents
-        
-        Args:
-            index_path: Path to the index file in blob storage (e.g., "faissindex/abc123_index.faiss")
-            metadata_path: Path to the metadata file in blob storage (e.g., "faissindex/abc123_chunks.pkl")
-            
-        Returns:
-            tuple: (index, chunks)
-        """
-        import faiss
-        import pickle
-        import tempfile
-        import os
-        import logging
-        from notebook.utils import download_blob_to_temp_file, get_blob_content
-        
-        logger = logging.getLogger(__name__)
-        logger.info(f"🔄 Loading FAISS index from blob - Index: {index_path}, Metadata: {metadata_path}")
-        
-        try:
-            container_name = 'uploadfiles'
-            
-            # Step 1: Download and load the FAISS index
-            logger.info(f"📥 Downloading index file: {index_path}")
-            index_temp = download_blob_to_temp_file(index_path, container_name)
-            
-            if not index_temp:
-                logger.error(f"❌ Failed to download index file: {index_path}")
-                
-                # Try alternative paths for debugging
-                alternative_paths = [
-                    f"faissindex/{os.path.basename(index_path)}",
-                    os.path.basename(index_path),
-                    index_path.replace('faissindex/', '')
-                ]
-                
-                for alt_path in alternative_paths:
-                    logger.info(f"🔄 Trying alternative path: {alt_path}")
-                    index_temp = download_blob_to_temp_file(alt_path, container_name)
-                    if index_temp:
-                        logger.info(f"✅ Success with alternative path: {alt_path}")
-                        break
-                
-                if not index_temp:
-                    logger.error(f"❌ All attempts to download index file failed")
-                    return None, []
-            
-            # Load FAISS index
-            try:
-                logger.info(f"📖 Loading FAISS index from: {index_temp}")
-                index = faiss.read_index(index_temp)
-                logger.info(f"✅ Successfully loaded FAISS index: {index.ntotal} vectors, dim={index.d}")
-                
-                # Validate index
-                if index.ntotal == 0:
-                    logger.warning(f"⚠️ FAISS index is empty (0 vectors)")
-                elif index.d == 0:
-                    logger.warning(f"⚠️ FAISS index has 0 dimensions")
-                    
-            except Exception as index_error:
-                logger.error(f"❌ Error loading FAISS index: {str(index_error)}")
-                return None, []
-            finally:
-                # Clean up index temp file
-                if os.path.exists(index_temp):
-                    os.unlink(index_temp)
-                    logger.info(f"🧹 Cleaned up temp index file: {index_temp}")
-            
-            # Step 2: Download and load the metadata
-            logger.info(f"📥 Getting metadata content: {metadata_path}")
-            metadata_content = get_blob_content(metadata_path, container_name)
-            
-            if not metadata_content:
-                logger.error(f"❌ Failed to get metadata content: {metadata_path}")
-                
-                # Try alternative paths for debugging
-                alternative_paths = [
-                    f"faissindex/{os.path.basename(metadata_path)}",
-                    os.path.basename(metadata_path),
-                    metadata_path.replace('faissindex/', '')
-                ]
-                
-                for alt_path in alternative_paths:
-                    logger.info(f"🔄 Trying alternative metadata path: {alt_path}")
-                    metadata_content = get_blob_content(alt_path, container_name)
-                    if metadata_content:
-                        logger.info(f"✅ Success with alternative metadata path: {alt_path}")
-                        break
-                
-                if not metadata_content:
-                    logger.error(f"❌ All attempts to get metadata content failed")
-                    return index, []  # Return index even if metadata fails
-            
-            # Load and validate metadata
-            try:
-                chunks = pickle.loads(metadata_content)
-                logger.info(f"✅ Successfully loaded metadata: {len(chunks) if isinstance(chunks, list) else 'unknown format'} chunks")
-                
-                # Validate chunks format
-                if not isinstance(chunks, list):
-                    logger.warning(f"⚠️ Chunks is not a list, type: {type(chunks)}")
-                    if chunks:
-                        chunks = [chunks]  # Convert single item to list
-                    else:
-                        chunks = []
-                
-                # Validate chunk content
-                valid_chunks = 0
-                for i, chunk in enumerate(chunks):
-                    if isinstance(chunk, dict) and chunk.get('text'):
-                        valid_chunks += 1
-                    elif isinstance(chunk, dict):
-                        # Try to find text in other fields
-                        for field in ['content', 'document_content', 'chunk_text']:
-                            if field in chunk and chunk[field]:
-                                chunk['text'] = chunk[field]
-                                valid_chunks += 1
-                                break
-                
-                logger.info(f"📊 Metadata validation: {valid_chunks}/{len(chunks)} chunks have valid text content")
-                
-                if valid_chunks == 0:
-                    logger.warning(f"⚠️ No chunks with valid text content found")
-                
-                return index, chunks
-                
-            except Exception as metadata_error:
-                logger.error(f"❌ Error loading metadata: {str(metadata_error)}")
-                return index, []  # Return index even if metadata fails
-            
-        except Exception as e:
-            logger.error(f"❌ Error loading FAISS index from blob: {str(e)}", exc_info=True)
-            return None, []
-
+    
     def search_similar_content(self, query, processed_docs, metadata_store=None, k=80):
             """
             Enhanced search function using pgvector for similarity search
@@ -7102,7 +6916,8 @@ class ChatView(APIView):
                 print(f"   Final {i+1}: source='{source}', content='{content[:100]}...'")
        
             return final_results, final_sources, final_citations
-    
+
+
     def _prepare_context_comprehensive(self, context, sources):
         """
         Enhanced context preparation for comprehensive responses
@@ -7138,25 +6953,25 @@ class ChatView(APIView):
         
         print(f"🔍 CONTEXT DEBUG: Selected {len(selected_context)} context chunks for comprehensive response")
         return selected_context, selected_sources
-             
+            
     # Keep general follow-up question generation as is
     def generate_general_follow_up_questions(self, question, answer, user=None):
         system_message = "You are an expert at generating relevant follow-up questions. Always respond with valid JSON format."
-    
+       
         user_prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
         The questions should be short, interesting, and directly related to the topic.
-    
+       
         User Question: {question}
         Your Answer (abbreviated): {answer[:500]}...
-    
+       
         CRITICAL: Your response MUST be a valid JSON object with this structure:
         {{
             "questions": ["question1", "question2", "question3"],
             "topic": "main_topic_discussed"
         }}
         """
-    
+       
         try:            
             completion = client.chat.completions.create(
                 model="gpt-4o",
@@ -7168,12 +6983,12 @@ class ChatView(APIView):
                 temperature=0.3,
                 max_tokens=500
             )
-        
+           
             # Parse JSON response
             json_response = json.loads(completion.choices[0].message.content)
             questions = json_response.get("questions", [])
             return questions[:3]
-        
+           
         except Exception as e:
             logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
@@ -7223,7 +7038,7 @@ class ChatView(APIView):
                 "Would you like me to elaborate on any specific point?",
                 "How can I help clarify this information further?"
             ]
- 
+
 class DeleteMessagePairView(APIView):
     permission_classes = [IsAuthenticated]
  
