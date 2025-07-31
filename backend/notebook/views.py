@@ -2138,7 +2138,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         import tempfile
         
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1], dir='/tmp') as tmp_file:
                 for chunk in file.chunks():
                     tmp_file.write(chunk)
                 file_path = tmp_file.name

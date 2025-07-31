@@ -1629,898 +1629,710 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     'detail': 'An error occurred while processing the document'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    # def post(self, request):
-    # files = request.FILES.getlist('files')
-    # user = request.user
-    # main_project_id = request.data.get('main_project_id')
-    # target_user_id = request.data.get('target_user_id')
-
-    # if target_user_id and request.user.username == 'admin':
-    #     try:
-    #         user = User.objects.get(id=target_user_id)
-    #     except User.DoesNotExist:
-    #         return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
-    # else:
-    #     user = request.user
-
-    # try:
-    #     permissions = UserModulePermissions.objects.get(user=user)
-    #     if permissions.disabled_modules.get('document-upload', False):
-    #         return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-    # except UserModulePermissions.DoesNotExist:
-    #     pass
-
-    # try:
-    #     upload_permissions = UserUploadPermissions.objects.get(user=user)
-    #     if not upload_permissions.can_upload:
-    #         return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-    # except UserUploadPermissions.DoesNotExist:
-    #     pass
-
-    # try:
-    #     main_project = Project.objects.get(id=main_project_id, user=user)
-    #     uploaded_docs = []
-    #     last_processed_doc_id = None
-    #     processed_data = None
-
-    #     for file in files:
-    #         file_ext = os.path.splitext(file.name)[1].lower()
-    #         is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
-    #         is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
-    #         is_media_file = is_audio_file or is_video_file
-
-    #         # --- Status: Uploading ---
-    #         update_doc_status(user, file.name, "uploading", 10, "Uploading file...")
-
-    #         existing_doc = Document.objects.filter(
-    #             user=user,
-    #             filename=file.name,
-    #             main_project=main_project
-    #         ).first()
-
-    #         # --- Status: Uploaded ---
-    #         update_doc_status(user, file.name, "uploaded", 20, "File uploaded, awaiting processing...")
-
-    #         try:
-    #             if is_media_file:
-    #                 # --- Status: Processing Media ---
-    #                 update_doc_status(user, file.name, "processing", 30, "Processing media file...")
-
-    #                 with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
-    #                     for chunk in file.chunks():
-    #                         tmp_file.write(chunk)
-    #                     file_path = tmp_file.name
-
-    #                 try:
-    #                     if is_video_file:
-    #                         update_doc_status(user, file.name, "processing", 35, "Extracting audio from video...")
-    #                         extracted_text = self.extract_text_from_video(file_path, user=user)
-    #                     else:
-    #                         update_doc_status(user, file.name, "processing", 35, "Transcribing audio file...")
-    #                         extracted_text = self.extract_text_from_audio(file_path, user=user)
-
-    #                     if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
-    #                         update_doc_status(user, file.name, "error", 100, "Failed to extract text from media file.")
-    #                         return Response({'error': f'Failed to extract text from media file: {file.name}'}, status=status.HTTP_400_BAD_REQUEST)
-
-    #                     base_name = os.path.splitext(file.name)[0]
-    #                     file_type = "video" if is_video_file else "audio"
-    #                     transcript_filename = f"{base_name}_{file_type}_transcript.txt"
-
-    #                     update_doc_status(user, file.name, "processing", 45, "Processing transcript...")
-
-    #                     # Upload transcript to blob storage
-    #                     import uuid
-    #                     unique_id = uuid.uuid4().hex[:8]
-    #                     blob_transcript_filename = f"{base_name}_{file_type}_transcript_{unique_id}.txt"
-                        
-    #                     from notebook.utils import upload_transcript_to_blob
-    #                     blob_info = upload_transcript_to_blob(
-    #                         extracted_text, 
-    #                         blob_transcript_filename,
-    #                         is_video=is_video_file
-    #                     )
-                        
-    #                     if not blob_info:
-    #                         update_doc_status(user, file.name, "error", 100, "Failed to upload transcript to blob storage.")
-    #                         return Response({
-    #                             'error': f'Failed to upload transcript to blob storage: {transcript_filename}'
-    #                         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    #                     # Create or update document record with transcript details
-    #                     if existing_doc:
-    #                         existing_doc.filename = transcript_filename
-    #                         existing_doc.file = blob_info['filename']  # Store the blob path
-    #                         existing_doc.save()
-    #                         document = existing_doc
-    #                         # Clear old embeddings
-    #                         DocumentEmbedding.objects.filter(document=document).delete()
-    #                     else:
-    #                         document = Document.objects.create(
-    #                             user=user,
-    #                             file=blob_info['filename'],  # Store the blob path
-    #                             filename=transcript_filename,
-    #                             main_project=main_project
-    #                         )
-
-    #                     # Process document with pgvector
-    #                     processed_data = self.process_document_from_text_pgvector(extracted_text, transcript_filename, document)
-
-    #                     # Create transaction record with page count
-    #                     file_size = file.size if hasattr(file, 'size') else None
-    #                     upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
-    #                     page_count = 1  # Transcripts are always single page
-    #                     self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size, page_count=page_count)
-
-    #                     # --- Status: Indexing ---
-    #                     update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
-
-    #                     # Create or update ProcessedIndex with pgvector
-    #                     ProcessedIndex.objects.update_or_create(
-    #                         document=document,
-    #                         defaults={
-    #                             'storage_type': 'pgvector',
-    #                             'chunks_count': processed_data['chunks_count'],
-    #                             'summary': "",
-    #                             'markdown_path': processed_data.get('markdown_path', '')
-    #                         }
-    #                     )
-
-    #                     uploaded_docs.append({
-    #                         'id': document.id,
-    #                         'filename': transcript_filename,
-    #                         'original_media_type': file_type,
-    #                         'transcript_blob_path': blob_info['filename']
-    #                     })
-    #                     last_processed_doc_id = document.id
-
-    #                     # --- Status: Complete ---
-    #                     update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
-
-    #                 finally:
-    #                     if os.path.exists(file_path):
-    #                         os.unlink(file_path)
-
-    #             else:
-    #                 # --- Status: Processing Document ---
-    #                 update_doc_status(user, file.name, "processing", 30, "Processing document...")
-
-    #                 if existing_doc:
-    #                     try:
-    #                         processed_index = ProcessedIndex.objects.get(document=existing_doc)
-                            
-    #                         # If it's already processed with pgvector, just return it
-    #                         if processed_index.storage_type == 'pgvector' and \
-    #                            DocumentEmbedding.objects.filter(document=existing_doc).exists():
-    #                             uploaded_docs.append({
-    #                                 'id': existing_doc.id,
-    #                                 'filename': existing_doc.filename
-    #                             })
-    #                             last_processed_doc_id = existing_doc.id
-    #                             update_doc_status(user, file.name, "complete", 100, "Already processed!", doc_id=existing_doc.id)
-    #                             continue
-                                
-    #                     except ProcessedIndex.DoesNotExist:
-    #                         pass
-                            
-    #                     # Upload file to Azure Blob Storage FIRST
-    #                     from notebook.utils import upload_document_to_blob
-    #                     blob_info = upload_document_to_blob(file, main_project_id)
-                        
-    #                     if not blob_info:
-    #                         update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-    #                         return Response({
-    #                             'error': f'Failed to upload file to blob storage: {file.name}'
-    #                         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                        
-    #                     # Update existing document with blob path
-    #                     existing_doc.file = blob_info['filename']
-    #                     existing_doc.save()
-                        
-    #                     # Clear old embeddings and reprocess with optimized processing
-    #                     DocumentEmbedding.objects.filter(document=existing_doc).delete()
-    #                     processed_data = self.process_document_pgvector_optimized(file, user, existing_doc)
-
-    #                     # Get page count from processed data
-    #                     page_count = processed_data.get('page_count', 1)
-    #                     file_size = file.size if hasattr(file, 'size') else None
-                        
-    #                     # Update transaction if it exists or create new one
-    #                     try:
-    #                         # Try to find existing transaction
-    #                         existing_transaction = DocumentTransaction.objects.filter(
-    #                             user_transaction__document_id=existing_doc.id
-    #                         ).first()
-                            
-    #                         if existing_transaction:
-    #                             existing_transaction.no_pages = page_count
-    #                             existing_transaction.file_size = file_size
-    #                             existing_transaction.save()
-    #                         else:
-    #                             # Create new transaction if none exists
-    #                             self.create_document_transaction(user, existing_doc, main_project, upload_method='regular', file_size=file_size, page_count=page_count)
-    #                     except Exception as e:
-    #                         print(f"Error updating transaction: {str(e)}")
-
-    #                     # --- Status: Indexing ---
-    #                     update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
-
-    #                     # Update ProcessedIndex with pgvector
-    #                     ProcessedIndex.objects.update_or_create(
-    #                         document=existing_doc,
-    #                         defaults={
-    #                             'storage_type': 'pgvector',
-    #                             'chunks_count': processed_data['chunks_count'],
-    #                             'summary': "",
-    #                             'markdown_path': processed_data.get('markdown_path', '')
-    #                         }
-    #                     )
-                        
-    #                     uploaded_docs.append({
-    #                         'id': existing_doc.id,
-    #                         'filename': existing_doc.filename
-    #                     })
-    #                     last_processed_doc_id = existing_doc.id
-
-    #                     # --- Status: Complete ---
-    #                     update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=existing_doc.id)
-    #                 else:
-    #                     # Upload file to Azure Blob Storage FIRST - CRITICAL FOR VIEWING
-    #                     from notebook.utils import upload_document_to_blob
-    #                     blob_info = upload_document_to_blob(file, main_project_id)
-                        
-    #                     if not blob_info:
-    #                         update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-    #                         return Response({
-    #                             'error': f'Failed to upload file to blob storage: {file.name}'
-    #                         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                        
-    #                     # Create new document with blob path for ORIGINAL FILE
-    #                     document = Document.objects.create(
-    #                         user=user,
-    #                         file=blob_info['filename'],  # Store the ORIGINAL document blob path 
-    #                         filename=file.name,
-    #                         main_project=main_project
-    #                     )
-                        
-    #                     # Process the document with optimized pgvector processing
-    #                     processed_data = self.process_document_pgvector_optimized(file, user, document)
-                        
-    #                     file_size = file.size if hasattr(file, 'size') else None
-    #                     page_count = processed_data.get('page_count', 1)  # Get page count from processed data
-    #                     upload_method = 'regular'
-    #                     self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size, page_count=page_count)
-
-    #                     # --- Status: Indexing ---
-    #                     update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
-
-    #                     # Create ProcessedIndex with pgvector
-    #                     ProcessedIndex.objects.create(
-    #                         document=document,
-    #                         storage_type='pgvector',
-    #                         chunks_count=processed_data['chunks_count'],
-    #                         summary="",
-    #                         markdown_path=processed_data.get('markdown_path', '')
-    #                     )
-                        
-    #                     uploaded_docs.append({
-    #                         'id': document.id,
-    #                         'filename': document.filename
-    #                     })
-    #                     last_processed_doc_id = document.id
-
-    #                     # --- Status: Complete ---
-    #                     update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
-
-    #         except Exception as e:
-    #             update_doc_status(user, file.name, "error", 100, f"Error: {str(e)}")
-    #             print(f"Error processing document: {str(e)}")
-    #             return Response({
-    #                 'error': str(e),
-    #                 'detail': 'An error occurred while processing the document'
-    #             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    #     request.session['active_document_id'] = last_processed_doc_id
-
-    #     if processed_data is None:
-    #         return Response({'error': 'No documents were successfully processed'}, status=status.HTTP_400_BAD_REQUEST)
-
-    #     update_project_timestamp(main_project_id, user)
-
-    #     return Response({
-    #         'message': 'Documents uploaded successfully',
-    #         'documents': uploaded_docs,
-    #         'active_document_id': last_processed_doc_id
-    #     }, status=status.HTTP_201_CREATED)
-
-    # except Exception as e:
-    #     print(f"Error processing document: {str(e)}")
-    #     return Response({
-    #         'error': str(e),
-    #         'detail': 'An error occurred while processing the document'
-    #     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    # def create_document_transaction(self, user, document, main_project, upload_method, file_size=None, page_count=None):
-    #     """Create transaction record for document upload"""
-    #     try:
-    #         print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
-    #         # Create main transaction record
-    #         user_transaction = UserTransaction.objects.create(
-    #             user=user,
-    #             transaction_type=TransactionType.DOCUMENT_UPLOAD,
-    #             document_name=document.filename,
-    #             document_id=document.id,
-    #             main_project=main_project,
-    #             metadata={
-    #                 'upload_timestamp': timezone.now().isoformat(),
-    #                 'upload_method': upload_method,
-    #                 'file_size': file_size or getattr(document.file, 'size', None),
-    #                 'page_count': page_count  # Add page count to metadata as well
-    #             }
-    #         )
-           
-    #         # Create detailed document transaction with page count
-    #         DocumentTransaction.objects.create(
-    #             user_transaction=user_transaction,
-    #             original_filename=document.filename,
-    #             file_size=file_size or getattr(document.file, 'size', None),
-    #             file_type=os.path.splitext(document.filename)[1].lower(),
-    #             upload_method=upload_method,
-    #             no_pages=page_count  # Store page count in the new field
-    #         )
-           
-    #         print(f"Transaction recorded for document: {document.filename} with {page_count} pages")
-           
-    #     except Exception as e:
-    #         print(f"Error creating document transaction: {str(e)}")
-    # # Keep the complexity detection from original code
-    # # -------------------------------
-    # def detect_document_complexity(self, file_path):
-    #     """Detect if PDF contains images."""
-    #     import fitz
-    #     try:
-    #         doc = fitz.open(file_path)
-    #         for page in doc:
-    #             images = page.get_images()
-    #             if images:
-    #                 return True
-    #         return False
-    #     except Exception as e:
-    #         print(f"Error detecting images in PDF: {e}")
-    #         return False
    
-    # # Add LlamaParse integration from Streamlit code
-    # def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
-    #     """
-    #     Splits text into chunks while attempting to preserve sentence and paragraph structure.
-    #     If the text is very short, a single chunk is returned.
-    #     """
-    #     if len(text) <= chunk_size:
-    #         return [text]
-    #     chunks = []
-    #     start = 0
-    #     text_length = len(text)
-    #     while start < text_length:
-    #         end = min(start + chunk_size, text_length)
-    #         # Try to find a paragraph break to end the chunk
-    #         if end < text_length:
-    #             break_point = text.rfind("\n\n", start, end)
-    #             if break_point != -1 and break_point > start + chunk_size // 2:
-    #                 end = break_point + 2
-    #             else:
-    #                 # Fallback to sentence break
-    #                 sentence_break = text.rfind(". ", start, end)
-    #                 if sentence_break != -1 and sentence_break > start + chunk_size // 2:
-    #                     end = sentence_break + 2
-    #                 else:
-    #                     # Fallback to space
-    #                     space_break = text.rfind(" ", start, end)
-    #                     if space_break != -1 and space_break > start + chunk_size // 2:
-    #                         end = space_break + 1
-    #         chunks.append(text[start:end])
-    #         start = end - chunk_overlap if end < text_length else text_length
-    #     return chunks
+
+    def create_document_transaction(self, user, document, main_project, upload_method, file_size=None, page_count=None):
+        """Create transaction record for document upload"""
+        try:
+            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+            # Create main transaction record
+            user_transaction = UserTransaction.objects.create(
+                user=user,
+                transaction_type=TransactionType.DOCUMENT_UPLOAD,
+                document_name=document.filename,
+                document_id=document.id,
+                main_project=main_project,
+                metadata={
+                    'upload_timestamp': timezone.now().isoformat(),
+                    'upload_method': upload_method,
+                    'file_size': file_size or getattr(document.file, 'size', None),
+                    'page_count': page_count  # Add page count to metadata as well
+                }
+            )
+           
+            # Create detailed document transaction with page count
+            DocumentTransaction.objects.create(
+                user_transaction=user_transaction,
+                original_filename=document.filename,
+                file_size=file_size or getattr(document.file, 'size', None),
+                file_type=os.path.splitext(document.filename)[1].lower(),
+                upload_method=upload_method,
+                no_pages=page_count  # Store page count in the new field
+            )
+           
+            print(f"Transaction recorded for document: {document.filename} with {page_count} pages")
+           
+        except Exception as e:
+            print(f"Error creating document transaction: {str(e)}")
+    # Keep the complexity detection from original code
+    # -------------------------------
+    def detect_document_complexity(self, file_path):
+        """Detect if PDF contains images."""
+        import fitz
+        try:
+            doc = fitz.open(file_path)
+            for page in doc:
+                images = page.get_images()
+                if images:
+                    return True
+            return False
+        except Exception as e:
+            print(f"Error detecting images in PDF: {e}")
+            return False
+   
+    # Add LlamaParse integration from Streamlit code
+    def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
+        """
+        Splits text into chunks while attempting to preserve sentence and paragraph structure.
+        If the text is very short, a single chunk is returned.
+        """
+        if len(text) <= chunk_size:
+            return [text]
+        chunks = []
+        start = 0
+        text_length = len(text)
+        while start < text_length:
+            end = min(start + chunk_size, text_length)
+            # Try to find a paragraph break to end the chunk
+            if end < text_length:
+                break_point = text.rfind("\n\n", start, end)
+                if break_point != -1 and break_point > start + chunk_size // 2:
+                    end = break_point + 2
+                else:
+                    # Fallback to sentence break
+                    sentence_break = text.rfind(". ", start, end)
+                    if sentence_break != -1 and sentence_break > start + chunk_size // 2:
+                        end = sentence_break + 2
+                    else:
+                        # Fallback to space
+                        space_break = text.rfind(" ", start, end)
+                        if space_break != -1 and space_break > start + chunk_size // 2:
+                            end = space_break + 1
+            chunks.append(text[start:end])
+            start = end - chunk_overlap if end < text_length else text_length
+        return chunks
     
     
-    # # Clean text function (from Streamlit)
-    # def clean_text(self, text):
-    #     """Clean extracted text by removing extra whitespace and special characters."""
-    #     # Remove extra whitespace
-    #     cleaned = re.sub(r'\s+', ' ', text)
-    #     # Remove special characters that might cause issues
-    #     cleaned = re.sub(r'[^\w\s.,;:!?"\'\-()]', ' ', cleaned)
-    #     return cleaned.strip()
+    # Clean text function (from Streamlit)
+    def clean_text(self, text):
+        """Clean extracted text by removing extra whitespace and special characters."""
+        # Remove extra whitespace
+        cleaned = re.sub(r'\s+', ' ', text)
+        # Remove special characters that might cause issues
+        cleaned = re.sub(r'[^\w\s.,;:!?"\'\-()]', ' ', cleaned)
+        return cleaned.strip()
    
-    # def get_embeddings(self, texts):
-    #     """
-    #     Gets embeddings using OpenAI's text-embedding-3-small model.
-    #     """
-    #     try:
-    #         response = client.embeddings.create(
-    #             input=texts,
-    #             model="text-embedding-3-small"
-    #         )
-    #         return [data.embedding for data in response.data]
-    #     except Exception as e:
-    #         print(f"Error getting embeddings: {str(e)}")
-    #         return []
+    def get_embeddings(self, texts):
+        """
+        Gets embeddings using OpenAI's text-embedding-3-small model.
+        """
+        try:
+            response = client.embeddings.create(
+                input=texts,
+                model="text-embedding-3-small"
+            )
+            return [data.embedding for data in response.data]
+        except Exception as e:
+            print(f"Error getting embeddings: {str(e)}")
+            return []
 
-    # # -------------------------------
-    # # Process documents function that integrates with Django database
-    # import tempfile
-    # import uuid
-    # import numpy as np
-    # import fitz  # PyMuPDF
-    # import os
-    # from pathlib import Path
-    # from concurrent.futures import ThreadPoolExecutor, as_completed
-    # import threading
-    # # -------------------------------
-    # # Replace process_pdf_document_optimized() with:
-    # def process_pdf_document_optimized_pgvector(self, file, user, document):
-    #         """
-    #         Optimized PDF processing with pgvector storage instead of FAISS
-    #         """
-    #         try:
-    #             # Save uploaded file to temporary location
-    #             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-    #                 for chunk in file.chunks():
-    #                     tmp_file.write(chunk)
-    #                 pdf_path = tmp_file.name
+    # -------------------------------
+    # Process documents function that integrates with Django database
+    import tempfile
+    import uuid
+    import numpy as np
+    import fitz  # PyMuPDF
+    import os
+    from pathlib import Path
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+    # -------------------------------
+    # Replace process_pdf_document_optimized() with:
+    def process_pdf_document_optimized_pgvector(self, file, user, document):
+            """
+            Optimized PDF processing with pgvector storage instead of FAISS
+            """
+            try:
+                # Save uploaded file to temporary location
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                    for chunk in file.chunks():
+                        tmp_file.write(chunk)
+                    pdf_path = tmp_file.name
                 
-    #             try:
-    #                 # ... Keep all your existing optimization logic ...
-    #                 pdf_doc = fitz.open(pdf_path)
-    #                 total_pages = len(pdf_doc)
-    #                 print(f"Processing PDF with {total_pages} pages: {file.name}")
+                try:
+                    # ... Keep all your existing optimization logic ...
+                    pdf_doc = fitz.open(pdf_path)
+                    total_pages = len(pdf_doc)
+                    print(f"Processing PDF with {total_pages} pages: {file.name}")
                     
-    #                 # Keep all your parallel processing logic
-    #                 pages_with_images, pages_without_images = self._bulk_analyze_pages_for_images(pdf_doc)
+                    # Keep all your parallel processing logic
+                    pages_with_images, pages_without_images = self._bulk_analyze_pages_for_images(pdf_doc)
                     
-    #                 combined_markdown = ""
-    #                 page_results = {}
+                    combined_markdown = ""
+                    page_results = {}
                     
-    #                 # Process pages without images in parallel (fast)
-    #                 if pages_without_images:
-    #                     print("Processing text-only pages in parallel...")
-    #                     text_results = self._process_text_pages_parallel(pdf_doc, pages_without_images)
-    #                     page_results.update(text_results)
+                    # Process pages without images in parallel (fast)
+                    if pages_without_images:
+                        print("Processing text-only pages in parallel...")
+                        text_results = self._process_text_pages_parallel(pdf_doc, pages_without_images)
+                        page_results.update(text_results)
                     
-    #                 # OPTIMIZATION 3: Batch process image pages if there are many
-    #                 if pages_with_images:
-    #                     if len(pages_with_images) > 5:  # If many image pages, use batch processing
-    #                         print(f"Batch processing {len(pages_with_images)} image pages...")
-    #                         image_results = self._batch_process_image_pages_pgvector(pdf_doc, pages_with_images, file.name, user, document)
-    #                     else:
-    #                         print(f"Processing {len(pages_with_images)} image pages individually...")
-    #                         image_results = self._process_image_pages_parallel_pgvector(pdf_doc, pages_with_images, file.name, user, document)
-    #                     page_results.update(image_results)
+                    # OPTIMIZATION 3: Batch process image pages if there are many
+                    if pages_with_images:
+                        if len(pages_with_images) > 5:  # If many image pages, use batch processing
+                            print(f"Batch processing {len(pages_with_images)} image pages...")
+                            image_results = self._batch_process_image_pages_pgvector(pdf_doc, pages_with_images, file.name, user, document)
+                        else:
+                            print(f"Processing {len(pages_with_images)} image pages individually...")
+                            image_results = self._process_image_pages_parallel_pgvector(pdf_doc, pages_with_images, file.name, user, document)
+                        page_results.update(image_results)
                     
-    #                 pdf_doc.close()
+                    pdf_doc.close()
                     
-    #                 # Combine results in page order
-    #                 for page_num in range(total_pages):
-    #                     page_text = page_results.get(page_num, "[No extractable content]")
-    #                     combined_markdown += f"\n\n## Page {page_num + 1}\n\n{page_text.strip()}\n"
+                    # Combine results in page order
+                    for page_num in range(total_pages):
+                        page_text = page_results.get(page_num, "[No extractable content]")
+                        combined_markdown += f"\n\n## Page {page_num + 1}\n\n{page_text.strip()}\n"
                     
-    #                 if not combined_markdown.strip():
-    #                     raise ValueError("No content could be extracted from any page of the PDF")
+                    if not combined_markdown.strip():
+                        raise ValueError("No content could be extracted from any page of the PDF")
                     
-    #                 # Save markdown file locally instead of blob storage
-    #                 import uuid
-    #                 session_id = uuid.uuid4().hex
-    #                 markdown_filename = f"document_{session_id}.md"
-    #                 markdown_path = os.path.join(tempfile.gettempdir(), markdown_filename)
+                    # Save markdown file locally instead of blob storage
+                    import uuid
+                    session_id = uuid.uuid4().hex
+                    markdown_filename = f"document_{session_id}.md"
+                    markdown_path = os.path.join(tempfile.gettempdir(), markdown_filename)
                     
-    #                 with open(markdown_path, 'w', encoding='utf-8') as f:
-    #                     f.write(combined_markdown)
+                    with open(markdown_path, 'w', encoding='utf-8') as f:
+                        f.write(combined_markdown)
                     
-    #                 print(f"Complete markdown saved to: {markdown_path}")
+                    print(f"Complete markdown saved to: {markdown_path}")
                     
-    #                 # Process with pgvector instead of FAISS
-    #                 cleaned_text = self.clean_text(combined_markdown)
-    #                 chunks = self._smart_chunk_text(cleaned_text, target_chunk_size=2000)
+                    # Process with pgvector instead of FAISS
+                    cleaned_text = self.clean_text(combined_markdown)
+                    chunks = self._smart_chunk_text(cleaned_text, target_chunk_size=2000)
                     
-    #                 all_chunks = []
-    #                 for i, chunk in enumerate(chunks):
-    #                     all_chunks.append({
-    #                         'text': chunk,
-    #                         'source': file.name,
-    #                         'source_file': file.name,
-    #                         'chunk_id': i
-    #                     })
+                    all_chunks = []
+                    for i, chunk in enumerate(chunks):
+                        all_chunks.append({
+                            'text': chunk,
+                            'source': file.name,
+                            'source_file': file.name,
+                            'chunk_id': i
+                        })
                     
-    #                 # Batch embeddings
-    #                 text_chunks = [chunk['text'] for chunk in all_chunks]
-    #                 print(f"Getting embeddings for {len(text_chunks)} optimized chunks")
-    #                 embeddings = self._get_embeddings_batch(text_chunks, batch_size=50)
+                    # Batch embeddings
+                    text_chunks = [chunk['text'] for chunk in all_chunks]
+                    print(f"Getting embeddings for {len(text_chunks)} optimized chunks")
+                    embeddings = self._get_embeddings_batch(text_chunks, batch_size=50)
                     
-    #                 if not embeddings:
-    #                     raise ValueError("Failed to generate embeddings for document chunks")
+                    if not embeddings:
+                        raise ValueError("Failed to generate embeddings for document chunks")
                     
-    #                 # Save to pgvector instead of FAISS
-    #                 self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
+                    # Save to pgvector instead of FAISS
+                    self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
                     
-    #                 print(f"PDF processed successfully: {len(all_chunks)} chunks saved to pgvector from {total_pages} pages")
+                    print(f"PDF processed successfully: {len(all_chunks)} chunks saved to pgvector from {total_pages} pages")
                     
-    #                 return {
-    #                     'storage_type': 'pgvector',
-    #                     'chunks_count': len(all_chunks),
-    #                     'full_text': cleaned_text,
-    #                     'markdown_path': markdown_path,
-    #                     'page_count': total_pages
-    #                 }
+                    return {
+                        'storage_type': 'pgvector',
+                        'chunks_count': len(all_chunks),
+                        'full_text': cleaned_text,
+                        'markdown_path': markdown_path,
+                        'page_count': total_pages
+                    }
                     
-    #             finally:
-    #                 if os.path.exists(pdf_path):
-    #                     os.unlink(pdf_path)
+                finally:
+                    if os.path.exists(pdf_path):
+                        os.unlink(pdf_path)
                         
-    #         except Exception as e:
-    #             print(f"Error in process_pdf_document_optimized_pgvector: {str(e)}")
-    #             raise
+            except Exception as e:
+                print(f"Error in process_pdf_document_optimized_pgvector: {str(e)}")
+                raise
 
-    # def _bulk_analyze_pages_for_images(self, pdf_doc):
-    #     """
-    #     OPTIMIZATION: Analyze all pages for images in one pass
-    #     """
-    #     pages_with_images = []
-    #     pages_without_images = []
+    def _bulk_analyze_pages_for_images(self, pdf_doc):
+        """
+        OPTIMIZATION: Analyze all pages for images in one pass
+        """
+        pages_with_images = []
+        pages_without_images = []
         
-    #     for page_num in range(len(pdf_doc)):
-    #         try:
-    #             page = pdf_doc.load_page(page_num)
-    #             image_list = page.get_images()
-    #             if len(image_list) > 0:
-    #                 pages_with_images.append(page_num)
-    #             else:
-    #                 pages_without_images.append(page_num)
-    #         except Exception as e:
-    #             print(f"Error analyzing page {page_num}: {str(e)}")
-    #             pages_without_images.append(page_num)  # Default to text extraction
+        for page_num in range(len(pdf_doc)):
+            try:
+                page = pdf_doc.load_page(page_num)
+                image_list = page.get_images()
+                if len(image_list) > 0:
+                    pages_with_images.append(page_num)
+                else:
+                    pages_without_images.append(page_num)
+            except Exception as e:
+                print(f"Error analyzing page {page_num}: {str(e)}")
+                pages_without_images.append(page_num)  # Default to text extraction
         
-    #     return pages_with_images, pages_without_images
+        return pages_with_images, pages_without_images
 
 
 
-    # def _process_text_pages_parallel(self, pdf_doc, page_numbers):
-    #     """
-    #     OPTIMIZATION: Process text-only pages in parallel
-    #     """
-    #     from concurrent.futures import ThreadPoolExecutor, as_completed
-    #     import threading
-    #     def extract_text_from_page(page_num):
-    #         try:
-    #             page = pdf_doc.load_page(page_num)
-    #             text = page.get_text()
-    #             print(f"Extracted text from page {page_num}: {text}")
-    #             return page_num, text if text and text.strip() else ""
+    def _process_text_pages_parallel(self, pdf_doc, page_numbers):
+        """
+        OPTIMIZATION: Process text-only pages in parallel
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        def extract_text_from_page(page_num):
+            try:
+                page = pdf_doc.load_page(page_num)
+                text = page.get_text()
+                print(f"Extracted text from page {page_num}: {text}")
+                return page_num, text if text and text.strip() else ""
             
-    #         except Exception as e:
-    #             print(f"Error extracting text from page {page_num}: {str(e)}")
-    #             return page_num, ""
+            except Exception as e:
+                print(f"Error extracting text from page {page_num}: {str(e)}")
+                return page_num, ""
         
-    #     results = {}
-    #     # Use ThreadPoolExecutor for I/O bound operations
-    #     with ThreadPoolExecutor(max_workers=min(8, len(page_numbers))) as executor:
-    #         future_to_page = {executor.submit(extract_text_from_page, page_num): page_num 
-    #                         for page_num in page_numbers}
+        results = {}
+        # Use ThreadPoolExecutor for I/O bound operations
+        with ThreadPoolExecutor(max_workers=min(8, len(page_numbers))) as executor:
+            future_to_page = {executor.submit(extract_text_from_page, page_num): page_num 
+                            for page_num in page_numbers}
             
-    #         for future in as_completed(future_to_page):
-    #             page_num, text = future.result()
-    #             results[page_num] = text
+            for future in as_completed(future_to_page):
+                page_num, text = future.result()
+                results[page_num] = text
         
-    #     return results
+        return results
 
-    # def _batch_process_image_pages_pgvector(self, pdf_doc, page_numbers, original_filename, user, document):
-    #     """
-    #     OPTIMIZATION: Process multiple image pages together using LlamaParse
-    #     """
-    #     import tempfile
+    def _batch_process_image_pages_pgvector(self, pdf_doc, page_numbers, original_filename, user, document):
+        """
+        OPTIMIZATION: Process multiple image pages together using LlamaParse
+        """
+        import tempfile
         
-    #     try:
-    #         # Create a single PDF with all image pages
-    #         batch_pdf = fitz.open()
-    #         page_mapping = {}  # Maps batch page index to original page number
+        try:
+            # Create a single PDF with all image pages
+            batch_pdf = fitz.open()
+            page_mapping = {}  # Maps batch page index to original page number
             
-    #         for i, original_page_num in enumerate(page_numbers):
-    #             batch_pdf.insert_pdf(pdf_doc, from_page=original_page_num, to_page=original_page_num)
-    #             page_mapping[i] = original_page_num
+            for i, original_page_num in enumerate(page_numbers):
+                batch_pdf.insert_pdf(pdf_doc, from_page=original_page_num, to_page=original_page_num)
+                page_mapping[i] = original_page_num
             
-    #         # Save batch PDF
-    #         batch_filename = f"batch_{uuid.uuid4().hex[:8]}.pdf"
-    #         batch_path = os.path.join(tempfile.gettempdir(), batch_filename)
-    #         batch_pdf.save(batch_path)
-    #         batch_pdf.close()
+            # Save batch PDF
+            batch_filename = f"batch_{uuid.uuid4().hex[:8]}.pdf"
+            batch_path = os.path.join(tempfile.gettempdir(), batch_filename)
+            batch_pdf.save(batch_path)
+            batch_pdf.close()
             
-    #         # Process with LlamaParse
-    #         try:
-    #             batch_result = self.process_complex_document_with_llamaparse_pgvector_blob(
-    #                 batch_path, f"{original_filename}_batch", user, document
-    #             )
+            # Process with LlamaParse
+            try:
+                batch_result = self.process_complex_document_with_llamaparse_pgvector_blob(
+                    batch_path, f"{original_filename}_batch", user, document
+                )
                 
-    #             # Extract text and try to split by pages
-    #             if isinstance(batch_result, dict) and 'full_text' in batch_result:
-    #                 full_text = batch_result['full_text']
-    #             else:
-    #                 full_text = str(batch_result)
+                # Extract text and try to split by pages
+                if isinstance(batch_result, dict) and 'full_text' in batch_result:
+                    full_text = batch_result['full_text']
+                else:
+                    full_text = str(batch_result)
                 
-    #             # Try to split the result back to individual pages
-    #             # This is approximate since LlamaParse may not preserve exact page boundaries
-    #             results = self._split_batch_result_to_pages(full_text, page_mapping)
-    #             print(f"Batch LlamaParse processed successfully: {len(results)} chunks saved to pgvector from {len(page_numbers)} pages")
+                # Try to split the result back to individual pages
+                # This is approximate since LlamaParse may not preserve exact page boundaries
+                results = self._split_batch_result_to_pages(full_text, page_mapping)
+                print(f"Batch LlamaParse processed successfully: {len(results)} chunks saved to pgvector from {len(page_numbers)} pages")
                 
-    #         except Exception as e:
-    #             print(f"Batch LlamaParse failed, falling back to individual processing: {str(e)}")
-    #             # Fallback to individual processing
-    #             results = self._process_image_pages_parallel_pgvector(pdf_doc, page_numbers, original_filename, user, document)
+            except Exception as e:
+                print(f"Batch LlamaParse failed, falling back to individual processing: {str(e)}")
+                # Fallback to individual processing
+                results = self._process_image_pages_parallel_pgvector(pdf_doc, page_numbers, original_filename, user, document)
             
-    #         finally:
-    #             # Cleanup
-    #             if os.path.exists(batch_path):
-    #                 os.unlink(batch_path)
+            finally:
+                # Cleanup
+                if os.path.exists(batch_path):
+                    os.unlink(batch_path)
             
-    #         return results
+            return results
             
-    #     except Exception as e:
-    #         print(f"Error in batch processing: {str(e)}")
-    #         # Fallback to individual processing
-    #         return self._process_image_pages_parallel_pgvector(pdf_doc, page_numbers, original_filename, user, document)
+        except Exception as e:
+            print(f"Error in batch processing: {str(e)}")
+            # Fallback to individual processing
+            return self._process_image_pages_parallel_pgvector(pdf_doc, page_numbers, original_filename, user, document)
 
-    # def _process_image_pages_parallel_pgvector(self, pdf_doc, page_numbers, original_filename, user, document):
-    #     """
-    #     Process image pages individually but in parallel
-    #     """
-    #     import tempfile
-    #     from concurrent.futures import ThreadPoolExecutor, as_completed
-    #     def process_single_image_page(page_num):
+    def _process_image_pages_parallel_pgvector(self, pdf_doc, page_numbers, original_filename, user, document):
+        """
+        Process image pages individually but in parallel
+        """
+        import tempfile
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        def process_single_image_page(page_num):
 
             
-    #         try:
-    #             # Extract single page
-    #             single_pdf = fitz.open()
-    #             single_pdf.insert_pdf(pdf_doc, from_page=page_num, to_page=page_num)
+            try:
+                # Extract single page
+                single_pdf = fitz.open()
+                single_pdf.insert_pdf(pdf_doc, from_page=page_num, to_page=page_num)
                 
-    #             temp_filename = f"page_{page_num}_{uuid.uuid4().hex[:8]}.pdf"
-    #             temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
-    #             single_pdf.save(temp_path)
-    #             single_pdf.close()
+                temp_filename = f"page_{page_num}_{uuid.uuid4().hex[:8]}.pdf"
+                temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
+                single_pdf.save(temp_path)
+                single_pdf.close()
                 
-    #             try:
-    #                 # Process with LlamaParse
-    #                 result = self.process_complex_document_with_llamaparse_pgvector_blob(
-    #                     temp_path, f"{original_filename}_page_{page_num}", user, document
-    #                 )
+                try:
+                    # Process with LlamaParse
+                    result = self.process_complex_document_with_llamaparse_pgvector_blob(
+                        temp_path, f"{original_filename}_page_{page_num}", user, document
+                    )
                     
-    #                 if isinstance(result, dict) and 'full_text' in result:
-    #                     text = result['full_text']
-    #                 else:
-    #                     text = str(result)
+                    if isinstance(result, dict) and 'full_text' in result:
+                        text = result['full_text']
+                    else:
+                        text = str(result)
                     
-    #                 return page_num, text
+                    return page_num, text
                     
-    #             finally:
-    #                 if os.path.exists(temp_path):
-    #                     os.unlink(temp_path)
+                finally:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
                         
-    #         except Exception as e:
-    #             print(f"Error processing image page {page_num}: {str(e)}")
-    #             # Fallback to text extraction
-    #             try:
-    #                 page = pdf_doc.load_page(page_num)
-    #                 text = page.get_text()
-    #                 return page_num, text if text and text.strip() else ""
-    #             except:
-    #                 return page_num, ""
+            except Exception as e:
+                print(f"Error processing image page {page_num}: {str(e)}")
+                # Fallback to text extraction
+                try:
+                    page = pdf_doc.load_page(page_num)
+                    text = page.get_text()
+                    return page_num, text if text and text.strip() else ""
+                except:
+                    return page_num, ""
         
-    #     results = {}
-    #     # Limit concurrent LlamaParse calls to avoid rate limiting
-    #     with ThreadPoolExecutor(max_workers=min(3, len(page_numbers))) as executor:
-    #         future_to_page = {executor.submit(process_single_image_page, page_num): page_num 
-    #                         for page_num in page_numbers}
+        results = {}
+        # Limit concurrent LlamaParse calls to avoid rate limiting
+        with ThreadPoolExecutor(max_workers=min(3, len(page_numbers))) as executor:
+            future_to_page = {executor.submit(process_single_image_page, page_num): page_num 
+                            for page_num in page_numbers}
             
-    #         for future in as_completed(future_to_page):
-    #             page_num, text = future.result()
-    #             results[page_num] = text
+            for future in as_completed(future_to_page):
+                page_num, text = future.result()
+                results[page_num] = text
         
-    #     return results
+        return results
 
-    # def _split_batch_result_to_pages(self, full_text, page_mapping):
-    #     """
-    #     Try to split batch LlamaParse result back to individual pages
-    #     """
-    #     results = {}
+    def _split_batch_result_to_pages(self, full_text, page_mapping):
+        """
+        Try to split batch LlamaParse result back to individual pages
+        """
+        results = {}
         
-    #     # Simple heuristic: split text roughly equally among pages
-    #     lines = full_text.split('\n')
-    #     lines_per_page = max(1, len(lines) // len(page_mapping))
+        # Simple heuristic: split text roughly equally among pages
+        lines = full_text.split('\n')
+        lines_per_page = max(1, len(lines) // len(page_mapping))
         
-    #     for i, original_page_num in page_mapping.items():
-    #         start_line = i * lines_per_page
-    #         end_line = start_line + lines_per_page if i < len(page_mapping) - 1 else len(lines)
-    #         page_text = '\n'.join(lines[start_line:end_line]).strip()
-    #         results[original_page_num] = page_text if page_text else "[Content from batch processing]"
+        for i, original_page_num in page_mapping.items():
+            start_line = i * lines_per_page
+            end_line = start_line + lines_per_page if i < len(page_mapping) - 1 else len(lines)
+            page_text = '\n'.join(lines[start_line:end_line]).strip()
+            results[original_page_num] = page_text if page_text else "[Content from batch processing]"
         
-    #     return results
+        return results
 
-    # def _smart_chunk_text(self, text, target_chunk_size=2000):
-    #     """
-    #     OPTIMIZATION: Create larger, smarter chunks to reduce embedding calls
-    #     """
-    #     # Use existing chunking but with larger target size
-    #     return self.split_text_into_chunks(text)
+    def _smart_chunk_text(self, text, target_chunk_size=2000):
+        """
+        OPTIMIZATION: Create larger, smarter chunks to reduce embedding calls
+        """
+        # Use existing chunking but with larger target size
+        return self.split_text_into_chunks(text)
 
-    # def _get_embeddings_batch(self, text_chunks, batch_size=50):
-    #     """
-    #     OPTIMIZATION: Process embeddings in batches for better performance
-    #     """
-    #     all_embeddings = []
+    def _get_embeddings_batch(self, text_chunks, batch_size=50):
+        """
+        OPTIMIZATION: Process embeddings in batches for better performance
+        """
+        all_embeddings = []
         
-    #     for i in range(0, len(text_chunks), batch_size):
-    #         batch = text_chunks[i:i + batch_size]
-    #         print(f"Processing embedding batch {i//batch_size + 1}/{(len(text_chunks) + batch_size - 1)//batch_size}")
+        for i in range(0, len(text_chunks), batch_size):
+            batch = text_chunks[i:i + batch_size]
+            print(f"Processing embedding batch {i//batch_size + 1}/{(len(text_chunks) + batch_size - 1)//batch_size}")
             
-    #         try:
-    #             batch_embeddings = self.get_embeddings(batch)
-    #             if batch_embeddings:
-    #                 all_embeddings.extend(batch_embeddings)
-    #             else:
-    #                 print(f"Warning: Failed to get embeddings for batch starting at index {i}")
-    #         except Exception as e:
-    #             print(f"Error processing embedding batch {i}: {str(e)}")
-    #             continue
+            try:
+                batch_embeddings = self.get_embeddings(batch)
+                if batch_embeddings:
+                    all_embeddings.extend(batch_embeddings)
+                else:
+                    print(f"Warning: Failed to get embeddings for batch starting at index {i}")
+            except Exception as e:
+                print(f"Error processing embedding batch {i}: {str(e)}")
+                continue
         
-    #     return all_embeddings if all_embeddings else None
+        return all_embeddings if all_embeddings else None
 
-    # # Replace this function name:
-    # # process_document() -> process_document_pgvector_optimized()
+    # Replace this function name:
+    # process_document() -> process_document_pgvector_optimized()
 
-    # def process_document_pgvector_optimized(self, file, user, document):
-    #     """
-    #     Enhanced process_document that routes to optimized PDF processing with pgvector
-    #     """
-    #     import tempfile
+    def process_document_pgvector_optimized(self, file, user, document):
+        """
+        Enhanced process_document that routes to optimized PDF processing with pgvector
+        """
+        import tempfile
         
-    #     try:
-    #         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
-    #             for chunk in file.chunks():
-    #                 tmp_file.write(chunk)
-    #             file_path = tmp_file.name
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
+                for chunk in file.chunks():
+                    tmp_file.write(chunk)
+                file_path = tmp_file.name
 
-    #         try:
-    #             file_ext = os.path.splitext(file_path)[1].lower()
+            try:
+                file_ext = os.path.splitext(file_path)[1].lower()
                 
-    #             # Count pages based on file type
-    #             page_count = self.count_document_pages(file_path, file_ext)
-    #             print(f"Detected {page_count} pages in {file.name}")
+                # Count pages based on file type
+                page_count = self.count_document_pages(file_path, file_ext)
+                print(f"Detected {page_count} pages in {file.name}")
                 
-    #             # Route PDF files to optimized page-by-page processing
-    #             if file_ext == '.pdf':
-    #                 print(f"PDF detected: {file.name}. Using optimized page-by-page processing...")
-    #                 result = self.process_pdf_document_optimized_pgvector(file, user, document)
-    #                 result['page_count'] = page_count
-    #                 return result
+                # Route PDF files to optimized page-by-page processing
+                if file_ext == '.pdf':
+                    print(f"PDF detected: {file.name}. Using optimized page-by-page processing...")
+                    result = self.process_pdf_document_optimized_pgvector(file, user, document)
+                    result['page_count'] = page_count
+                    return result
 
-    #             # Keep existing logic for other file types but update to pgvector
-    #             if file_ext == '.pptx':
-    #                 result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
-    #                 result['page_count'] = page_count
-    #                 return result
+                # Keep existing logic for other file types but update to pgvector
+                if file_ext == '.pptx':
+                    result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result['page_count'] = page_count
+                    return result
 
-    #             if file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
-    #                 result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
-    #                 result['page_count'] = page_count
-    #                 return result
+                if file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
+                    result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result['page_count'] = page_count
+                    return result
                 
-    #             # Check document complexity for other file types
-    #             is_complex = self.detect_document_complexity(file_path)
+                # Check document complexity for other file types
+                is_complex = self.detect_document_complexity(file_path)
 
-    #             if is_complex:
-    #                 print(f"Complex document detected: {file.name}. Using LlamaParse...")
-    #                 result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
-    #                 result['page_count'] = page_count
-    #                 return result
-    #             else:
-    #                 # Simple document processing
-    #                 extracted_text = self.extract_text_from_file(file_path, user=user)
+                if is_complex:
+                    print(f"Complex document detected: {file.name}. Using LlamaParse...")
+                    result = self.process_complex_document_with_llamaparse_pgvector_blob(file_path, file.name, user, document)
+                    result['page_count'] = page_count
+                    return result
+                else:
+                    # Simple document processing
+                    extracted_text = self.extract_text_from_file(file_path, user=user)
                 
-    #             if not extracted_text:
-    #                 raise ValueError("No content could be extracted from the document")
+                if not extracted_text:
+                    raise ValueError("No content could be extracted from the document")
                 
-    #             result = self.process_document_from_text_pgvector(extracted_text, file.name, document)
-    #             result['page_count'] = page_count
-    #             return result
+                result = self.process_document_from_text_pgvector(extracted_text, file.name, document)
+                result['page_count'] = page_count
+                return result
                 
-    #         finally:
-    #             if os.path.exists(file_path):
-    #                 os.unlink(file_path)
+            finally:
+                if os.path.exists(file_path):
+                    os.unlink(file_path)
                     
-    #     except Exception as e:
-    #         print(f"Error in process_document_pgvector_optimized: {str(e)}")
-    #         raise
+        except Exception as e:
+            print(f"Error in process_document_pgvector_optimized: {str(e)}")
+            raise
 
-    # def save_embeddings_to_pgvector(self, chunks_with_metadata, embeddings, document):
-    #     """
-    #     Save chunks and their embeddings to PostgreSQL using pgvector
-    #     """
-    #     try:
-    #         # Clear existing embeddings for this document
-    #         DocumentEmbedding.objects.filter(document=document).delete()
+    def save_embeddings_to_pgvector(self, chunks_with_metadata, embeddings, document):
+        """
+        Save chunks and their embeddings to PostgreSQL using pgvector
+        """
+        try:
+            # Clear existing embeddings for this document
+            DocumentEmbedding.objects.filter(document=document).delete()
             
-    #         # Create new embeddings
-    #         embedding_objects = []
-    #         for i, (chunk_data, embedding) in enumerate(zip(chunks_with_metadata, embeddings)):
-    #             embedding_obj = DocumentEmbedding(
-    #                 document=document,
-    #                 content=chunk_data['text'],
-    #                 embedding=embedding,
-    #                 chunk_id=chunk_data['chunk_id'],
-    #                 source=chunk_data.get('source', ''),
-    #                 source_file=chunk_data.get('source_file', '')
-    #             )
-    #             embedding_objects.append(embedding_obj)
+            # Create new embeddings
+            embedding_objects = []
+            for i, (chunk_data, embedding) in enumerate(zip(chunks_with_metadata, embeddings)):
+                embedding_obj = DocumentEmbedding(
+                    document=document,
+                    content=chunk_data['text'],
+                    embedding=embedding,
+                    chunk_id=chunk_data['chunk_id'],
+                    source=chunk_data.get('source', ''),
+                    source_file=chunk_data.get('source_file', '')
+                )
+                embedding_objects.append(embedding_obj)
             
-    #         # Bulk create for efficiency
-    #         DocumentEmbedding.objects.bulk_create(embedding_objects, batch_size=100)
+            # Bulk create for efficiency
+            DocumentEmbedding.objects.bulk_create(embedding_objects, batch_size=100)
             
-    #         print(f"Saved {len(embedding_objects)} embeddings to pgvector database")
+            print(f"Saved {len(embedding_objects)} embeddings to pgvector database")
             
-    #     except Exception as e:
-    #         print(f"Error saving embeddings to pgvector: {str(e)}")
-    #         raise
+        except Exception as e:
+            print(f"Error saving embeddings to pgvector: {str(e)}")
+            raise
 
-    # def process_document_from_text_pgvector(self, extracted_text, filename, document):
-    #     """
-    #     Process extracted text and save to pgvector
-    #     """
-    #     try:
-    #         # Clean the text
-    #         cleaned_text = self.clean_text(extracted_text)
+    def process_document_from_text_pgvector(self, extracted_text, filename, document):
+        """
+        Process extracted text and save to pgvector
+        """
+        try:
+            # Clean the text
+            cleaned_text = self.clean_text(extracted_text)
             
-    #         # Split text into chunks
-    #         chunks = self.split_text_into_chunks(cleaned_text)
-    #         print(f"Created {len(chunks)} chunks from {filename}")
+            # Split text into chunks
+            chunks = self.split_text_into_chunks(cleaned_text)
+            print(f"Created {len(chunks)} chunks from {filename}")
             
-    #         # Prepare chunks with metadata
-    #         all_chunks = []
-    #         for i, chunk in enumerate(chunks):
-    #             all_chunks.append({
-    #                 'text': chunk,
-    #                 'source': filename,
-    #                 'source_file': filename,
-    #                 'chunk_id': i
-    #             })
+            # Prepare chunks with metadata
+            all_chunks = []
+            for i, chunk in enumerate(chunks):
+                all_chunks.append({
+                    'text': chunk,
+                    'source': filename,
+                    'source_file': filename,
+                    'chunk_id': i
+                })
             
-    #         # Get embeddings for all chunks
-    #         text_chunks = [chunk['text'] for chunk in all_chunks]
-    #         print(f"Getting embeddings for {len(text_chunks)} chunks")
-    #         embeddings = self.get_embeddings(text_chunks)
+            # Get embeddings for all chunks
+            text_chunks = [chunk['text'] for chunk in all_chunks]
+            print(f"Getting embeddings for {len(text_chunks)} chunks")
+            embeddings = self.get_embeddings(text_chunks)
             
-    #         if not embeddings:
-    #             raise ValueError("Failed to generate embeddings for document chunks")
+            if not embeddings:
+                raise ValueError("Failed to generate embeddings for document chunks")
             
-    #         # Save to pgvector database
-    #         self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
+            # Save to pgvector database
+            self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
             
-    #         print(f"Document processed successfully: {len(all_chunks)} chunks saved to pgvector")
+            print(f"Document processed successfully: {len(all_chunks)} chunks saved to pgvector")
             
-    #         return {
-    #             'storage_type': 'pgvector',
-    #             'chunks_count': len(all_chunks),
-    #             'full_text': cleaned_text,
-    #             'markdown_path': ''
-    #         }
+            return {
+                'storage_type': 'pgvector',
+                'chunks_count': len(all_chunks),
+                'full_text': cleaned_text,
+                'markdown_path': ''
+            }
             
-    #     except Exception as e:
-    #         print(f"Error in process_document_from_text_pgvector: {str(e)}")
-    #         raise
+        except Exception as e:
+            print(f"Error in process_document_from_text_pgvector: {str(e)}")
+            raise
 
+
+    def process_complex_document_with_llamaparse_pgvector_blob(self, file_path, file_name, user, document):
+        """
+        Process complex document using LlamaParse with user's API token and save to pgvector.
+        """
+        import tempfile
+        from llama_parse import LlamaParse
+       
+        try:
+            # Get the user's Llama API token
+            try:
+                user_api_tokens = UserAPITokens.objects.get(user=user)
+                llama_api_key = user_api_tokens.llama_token
+               
+                # If no token is saved for the user, use a fallback mechanism or raise an error
+                if not llama_api_key:
+                    logger.warning(f"No Llama API token found for user {user.username}")
+                    # Optional: You could implement a fallback or raise an error
+                    raise ValueError("Llama API token is required for processing complex documents")
+                   
+            except UserAPITokens.DoesNotExist:
+                logger.error(f"No API tokens record found for user {user.username}")
+                raise ValueError("User API tokens not configured")
+           
+            parser = LlamaParse(
+                api_key=llama_api_key,  # Use the user's Llama API token
+                result_type="markdown",
+                verbose=True,
+                images=True,
+                premium_mode=True
+            )
+           
+            parsed_documents = parser.load_data(file_path)
+            full_text = '\n'.join([doc.text for doc in parsed_documents])
+           
+            # Check if extracted text is empty or only whitespace
+            if not full_text or not full_text.strip():
+                logger.error(f"No text could be extracted from document: {file_name}")
+                raise ValueError(f"Failed to extract any text content from the document '{file_name}'. The document may be corrupted, password-protected, or in an unsupported format.")
+           
+            # Additional check for very short content (optional - adjust threshold as needed)
+            if len(full_text.strip()) < 5:  # Less than 5 characters
+                logger.warning(f"Very little text extracted from document: {file_name} (only {len(full_text.strip())} characters)")
+                raise ValueError(f"Insufficient text content extracted from document '{file_name}'. Only {len(full_text.strip())} characters were extracted.")
+           
+            logger.info(f"Successfully extracted {len(full_text)} characters from document: {file_name}")
+           
+            # Save markdown (adapted from Streamlit implementation)
+            base_name = os.path.splitext(file_name)[0]
+            safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
+            md_path = os.path.join("markdown_files", f"{safe_name}.md")
+            os.makedirs("markdown_files", exist_ok=True)
+            with open(md_path, "w", encoding='utf-8') as f:
+                f.write(full_text)
+           
+            # Create chunks with overlap for better retrieval
+            chunked_texts = []
+            all_chunks = []
+            chunk_id = 0
+            
+            for doc in parsed_documents:
+                # Skip documents with no meaningful content
+                if not doc.text or not doc.text.strip():
+                    continue
+                   
+                # Original document as a chunk
+                chunked_texts.append(doc.text)
+                all_chunks.append({
+                    'text': doc.text,
+                    'source': file_name,
+                    'source_file': file_name,
+                    'chunk_id': chunk_id
+                })
+                chunk_id += 1
+               
+                # Create additional smaller chunks for better retrieval
+                words = doc.text.split()
+                chunk_size = 200  # Smaller chunk size
+                stride = 100      # With overlap
+               
+                if len(words) > chunk_size:
+                    for i in range(0, len(words) - chunk_size, stride):
+                        chunk = " ".join(words[i:i+chunk_size])
+                        if len(chunk.split()) > 50:  # Ensure chunk has substantial content
+                            chunked_texts.append(chunk)
+                            all_chunks.append({
+                                'text': chunk,
+                                'source': file_name,
+                                'source_file': file_name,
+                                'chunk_id': chunk_id
+                            })
+                            chunk_id += 1
+           
+            # Final check to ensure we have chunks to process
+            if not chunked_texts:
+                logger.error(f"No valid text chunks created from document: {file_name}")
+                raise ValueError(f"Unable to create text chunks from document '{file_name}'. The document content may be insufficient or invalid.")
+           
+            # Get embeddings for all chunks
+            print(f"Getting embeddings for {len(chunked_texts)} chunks")
+            embeddings = self.get_embeddings(chunked_texts)
+            
+            if not embeddings:
+                raise ValueError("Failed to generate embeddings for document chunks")
+            
+            # Save to pgvector database
+            self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
+           
+            return {
+                'storage_type': 'pgvector',
+                'chunks_count': len(all_chunks),
+                'full_text': full_text,
+                'markdown_path': md_path  # Include the markdown path
+            }
+           
+        except Exception as e:
+            logger.error(f"Error in complex document processing for file '{file_name}': {str(e)}")
+            print(f"Error in complex document processing: {str(e)}")
+            raise
 
     # def process_complex_document_with_llamaparse_pgvector_blob(self, file_path, file_name, user, document):
     #     """
-    #     Process complex document using LlamaParse with user's API token and save to pgvector.
+    #     Process complex document using LlamaParse with user's API token, 
+    #     save to pgvector for embeddings, and save markdown to blob storage.
     #     """
     #     import tempfile
     #     from llama_parse import LlamaParse
+    #     from notebook.utils import upload_markdown_to_blob
        
     #     try:
     #         # Get the user's Llama API token
@@ -2561,19 +2373,24 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
            
     #         logger.info(f"Successfully extracted {len(full_text)} characters from document: {file_name}")
            
-    #         # Save markdown (adapted from Streamlit implementation)
+    #         # Save markdown to blob storage (instead of local filesystem)
     #         base_name = os.path.splitext(file_name)[0]
     #         safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
-    #         md_path = os.path.join("markdown_files", f"{safe_name}.md")
-    #         os.makedirs("markdown_files", exist_ok=True)
-    #         with open(md_path, "w", encoding='utf-8') as f:
-    #             f.write(full_text)
+    #         markdown_filename = f"{safe_name}_llamaparse.md"
+            
+    #         # Upload markdown to Azure Blob Storage
+    #         markdown_result = upload_markdown_to_blob(full_text, markdown_filename)
+    #         if not markdown_result:
+    #             raise ValueError("Failed to upload markdown file to blob storage")
+            
+    #         markdown_path = markdown_result['filename']
+    #         print(f"Uploaded markdown to blob storage: {markdown_path}")
            
     #         # Create chunks with overlap for better retrieval
     #         chunked_texts = []
     #         all_chunks = []
     #         chunk_id = 0
-            
+           
     #         for doc in parsed_documents:
     #             # Skip documents with no meaningful content
     #             if not doc.text or not doc.text.strip():
@@ -2615,10 +2432,10 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     #         # Get embeddings for all chunks
     #         print(f"Getting embeddings for {len(chunked_texts)} chunks")
     #         embeddings = self.get_embeddings(chunked_texts)
-            
+           
     #         if not embeddings:
     #             raise ValueError("Failed to generate embeddings for document chunks")
-            
+           
     #         # Save to pgvector database
     #         self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
            
@@ -2626,207 +2443,81 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     #             'storage_type': 'pgvector',
     #             'chunks_count': len(all_chunks),
     #             'full_text': full_text,
-    #             'markdown_path': md_path  # Include the markdown path
+    #             'markdown_path': markdown_path  # This is the blob storage path
     #         }
            
     #     except Exception as e:
     #         logger.error(f"Error in complex document processing for file '{file_name}': {str(e)}")
     #         print(f"Error in complex document processing: {str(e)}")
-    #         raise
+    #         raise  
 
-    # # def process_complex_document_with_llamaparse_pgvector_blob(self, file_path, file_name, user, document):
-    # #     """
-    # #     Process complex document using LlamaParse with user's API token, 
-    # #     save to pgvector for embeddings, and save markdown to blob storage.
-    # #     """
-    # #     import tempfile
-    # #     from llama_parse import LlamaParse
-    # #     from notebook.utils import upload_markdown_to_blob
-       
-    # #     try:
-    # #         # Get the user's Llama API token
-    # #         try:
-    # #             user_api_tokens = UserAPITokens.objects.get(user=user)
-    # #             llama_api_key = user_api_tokens.llama_token
-               
-    # #             # If no token is saved for the user, use a fallback mechanism or raise an error
-    # #             if not llama_api_key:
-    # #                 logger.warning(f"No Llama API token found for user {user.username}")
-    # #                 # Optional: You could implement a fallback or raise an error
-    # #                 raise ValueError("Llama API token is required for processing complex documents")
-                   
-    # #         except UserAPITokens.DoesNotExist:
-    # #             logger.error(f"No API tokens record found for user {user.username}")
-    # #             raise ValueError("User API tokens not configured")
-           
-    # #         parser = LlamaParse(
-    # #             api_key=llama_api_key,  # Use the user's Llama API token
-    # #             result_type="markdown",
-    # #             verbose=True,
-    # #             images=True,
-    # #             premium_mode=True
-    # #         )
-           
-    # #         parsed_documents = parser.load_data(file_path)
-    # #         full_text = '\n'.join([doc.text for doc in parsed_documents])
-           
-    # #         # Check if extracted text is empty or only whitespace
-    # #         if not full_text or not full_text.strip():
-    # #             logger.error(f"No text could be extracted from document: {file_name}")
-    # #             raise ValueError(f"Failed to extract any text content from the document '{file_name}'. The document may be corrupted, password-protected, or in an unsupported format.")
-           
-    # #         # Additional check for very short content (optional - adjust threshold as needed)
-    # #         if len(full_text.strip()) < 5:  # Less than 5 characters
-    # #             logger.warning(f"Very little text extracted from document: {file_name} (only {len(full_text.strip())} characters)")
-    # #             raise ValueError(f"Insufficient text content extracted from document '{file_name}'. Only {len(full_text.strip())} characters were extracted.")
-           
-    # #         logger.info(f"Successfully extracted {len(full_text)} characters from document: {file_name}")
-           
-    # #         # Save markdown to blob storage (instead of local filesystem)
-    # #         base_name = os.path.splitext(file_name)[0]
-    # #         safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
-    # #         markdown_filename = f"{safe_name}_llamaparse.md"
-            
-    # #         # Upload markdown to Azure Blob Storage
-    # #         markdown_result = upload_markdown_to_blob(full_text, markdown_filename)
-    # #         if not markdown_result:
-    # #             raise ValueError("Failed to upload markdown file to blob storage")
-            
-    # #         markdown_path = markdown_result['filename']
-    # #         print(f"Uploaded markdown to blob storage: {markdown_path}")
-           
-    # #         # Create chunks with overlap for better retrieval
-    # #         chunked_texts = []
-    # #         all_chunks = []
-    # #         chunk_id = 0
-           
-    # #         for doc in parsed_documents:
-    # #             # Skip documents with no meaningful content
-    # #             if not doc.text or not doc.text.strip():
-    # #                 continue
-                   
-    # #             # Original document as a chunk
-    # #             chunked_texts.append(doc.text)
-    # #             all_chunks.append({
-    # #                 'text': doc.text,
-    # #                 'source': file_name,
-    # #                 'source_file': file_name,
-    # #                 'chunk_id': chunk_id
-    # #             })
-    # #             chunk_id += 1
-               
-    # #             # Create additional smaller chunks for better retrieval
-    # #             words = doc.text.split()
-    # #             chunk_size = 200  # Smaller chunk size
-    # #             stride = 100      # With overlap
-               
-    # #             if len(words) > chunk_size:
-    # #                 for i in range(0, len(words) - chunk_size, stride):
-    # #                     chunk = " ".join(words[i:i+chunk_size])
-    # #                     if len(chunk.split()) > 50:  # Ensure chunk has substantial content
-    # #                         chunked_texts.append(chunk)
-    # #                         all_chunks.append({
-    # #                             'text': chunk,
-    # #                             'source': file_name,
-    # #                             'source_file': file_name,
-    # #                             'chunk_id': chunk_id
-    # #                         })
-    # #                         chunk_id += 1
-           
-    # #         # Final check to ensure we have chunks to process
-    # #         if not chunked_texts:
-    # #             logger.error(f"No valid text chunks created from document: {file_name}")
-    # #             raise ValueError(f"Unable to create text chunks from document '{file_name}'. The document content may be insufficient or invalid.")
-           
-    # #         # Get embeddings for all chunks
-    # #         print(f"Getting embeddings for {len(chunked_texts)} chunks")
-    # #         embeddings = self.get_embeddings(chunked_texts)
-           
-    # #         if not embeddings:
-    # #             raise ValueError("Failed to generate embeddings for document chunks")
-           
-    # #         # Save to pgvector database
-    # #         self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
-           
-    # #         return {
-    # #             'storage_type': 'pgvector',
-    # #             'chunks_count': len(all_chunks),
-    # #             'full_text': full_text,
-    # #             'markdown_path': markdown_path  # This is the blob storage path
-    # #         }
-           
-    # #     except Exception as e:
-    # #         logger.error(f"Error in complex document processing for file '{file_name}': {str(e)}")
-    # #         print(f"Error in complex document processing: {str(e)}")
-    # #         raise  
-
-    # def count_document_pages(self, file_path, file_ext):
-    #     """
-    #     Count the number of pages in a document based on file type
-    #     """
-    #     try:
-    #         if file_ext == '.pdf':
-    #             # PDF files
-    #             import fitz
-    #             pdf_doc = fitz.open(file_path)
-    #             total_pages = len(pdf_doc)
-    #             pdf_doc.close()
-    #             return total_pages
+    def count_document_pages(self, file_path, file_ext):
+        """
+        Count the number of pages in a document based on file type
+        """
+        try:
+            if file_ext == '.pdf':
+                # PDF files
+                import fitz
+                pdf_doc = fitz.open(file_path)
+                total_pages = len(pdf_doc)
+                pdf_doc.close()
+                return total_pages
                 
-    #         elif file_ext in ['.docx', '.doc']:
-    #             # Word documents
-    #             try:
-    #                 import docx
-    #                 doc = docx.Document(file_path)
-    #                 # For Word docs, we'll count sections or estimate based on content
-    #                 # This is an approximation as Word doesn't have explicit page numbers
-    #                 total_paragraphs = len(doc.paragraphs)
-    #                 # Rough estimation: ~25-30 paragraphs per page (adjustable)
-    #                 estimated_pages = max(1, total_paragraphs // 25)
-    #                 return estimated_pages
-    #             except:
-    #                 return 1  # Default to 1 if we can't determine
+            elif file_ext in ['.docx', '.doc']:
+                # Word documents
+                try:
+                    import docx
+                    doc = docx.Document(file_path)
+                    # For Word docs, we'll count sections or estimate based on content
+                    # This is an approximation as Word doesn't have explicit page numbers
+                    total_paragraphs = len(doc.paragraphs)
+                    # Rough estimation: ~25-30 paragraphs per page (adjustable)
+                    estimated_pages = max(1, total_paragraphs // 25)
+                    return estimated_pages
+                except:
+                    return 1  # Default to 1 if we can't determine
                     
-    #         elif file_ext == '.pptx':
-    #             # PowerPoint presentations
-    #             try:
-    #                 from pptx import Presentation
-    #                 prs = Presentation(file_path)
-    #                 return len(prs.slides)
-    #             except:
-    #                 return 1
+            elif file_ext == '.pptx':
+                # PowerPoint presentations
+                try:
+                    from pptx import Presentation
+                    prs = Presentation(file_path)
+                    return len(prs.slides)
+                except:
+                    return 1
                     
-    #         elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']:
-    #             # Image files - always 1 page
-    #             return 1
+            elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']:
+                # Image files - always 1 page
+                return 1
                 
-    #         elif file_ext == '.txt':
-    #             # Text files - estimate based on content
-    #             try:
-    #                 with open(file_path, 'r', encoding='utf-8') as f:
-    #                     content = f.read()
-    #                     # Rough estimation: ~3000 characters per page
-    #                     estimated_pages = max(1, len(content) // 3000)
-    #                     return estimated_pages
-    #             except:
-    #                 return 1
+            elif file_ext == '.txt':
+                # Text files - estimate based on content
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        # Rough estimation: ~3000 characters per page
+                        estimated_pages = max(1, len(content) // 3000)
+                        return estimated_pages
+                except:
+                    return 1
                     
-    #         elif file_ext in ['.xlsx', '.xls']:
-    #             # Excel files - count worksheets
-    #             try:
-    #                 import openpyxl
-    #                 wb = openpyxl.load_workbook(file_path)
-    #                 return len(wb.worksheets)
-    #             except:
-    #                 return 1
+            elif file_ext in ['.xlsx', '.xls']:
+                # Excel files - count worksheets
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(file_path)
+                    return len(wb.worksheets)
+                except:
+                    return 1
                     
-    #         else:
-    #             # For other file types, default to 1
-    #             return 1
+            else:
+                # For other file types, default to 1
+                return 1
                 
-    #     except Exception as e:
-    #         print(f"Error counting pages for {file_path}: {str(e)}")
-    #         return 1  # Default to 1 page if there's an error
+        except Exception as e:
+            print(f"Error counting pages for {file_path}: {str(e)}")
+            return 1  # Default to 1 page if there's an error
 
 
 class DocumentProcessingStatusView(APIView):
