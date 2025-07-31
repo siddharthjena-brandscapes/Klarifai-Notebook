@@ -1384,9 +1384,9 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
 
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
-   
-    def post(self, request):
 
+    
+    def post(self, request):
         files = request.FILES.getlist('files')
         user = request.user
         main_project_id = request.data.get('main_project_id')
@@ -2271,6 +2271,8 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             print(f"Error in process_document_from_text_pgvector: {str(e)}")
             raise
 
+
+    
     def process_complex_document_with_llamaparse_pgvector_blob(self, file_path, file_name, user, document):
         """
         Process complex document using LlamaParse with user's API token, 
@@ -2464,7 +2466,6 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error counting pages for {file_path}: {str(e)}")
             return 1  # Default to 1 page if there's an error
-
 
 def update_doc_status(user, doc_name, status, progress=0, message="", doc_id=None):
     obj, _ = DocumentProcessingStatus.objects.get_or_create(
