@@ -2321,18 +2321,7 @@ const MainChat = forwardRef(
           <div className="web-sources-list">
             {processedSources.map((source, index) => (
               <span key={index} className="source-item">
-                {source.type === "web" ? (
-                  <a
-                    href={source.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="web-source-link"
-                  >
-                    {source.display}
-                  </a>
-                ) : (
-                  <span className="file-source-text">{source.display}</span>
-                )}
+                <span className="file-source-text">{source.display}</span>
                 {index < processedSources.length - 1 && ", "}
               </span>
             ))}
@@ -2897,9 +2886,16 @@ const MainChat = forwardRef(
                             <div className="flex flex-wrap items-center ml-2 gap-1.5">
                               {/* Web Knowledge Badge */}
                               {/* Context Mode Badge */}
-                              {msg.context_mode === "image" ||
-                              msg.isImageResponse ||
-                              contextMode === "image" ? (
+                              {msg.use_web_knowledge &&
+                              propSelectedDocuments.length > 0 ? (
+                                <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs dark:text-orange-400 text-orange-500 ">
+                                  <Globe className="h-3 w-3 mr-0.5" />
+                                  <Database className="h-3 w-3 mr-0.5" />
+                                  <span>Web + Context</span>
+                                </div>
+                              ) : msg.context_mode === "image" ||
+                                msg.isImageResponse ||
+                                contextMode === "image" ? (
                                 <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700">
                                   <Layers className="h-3 w-3 mr-0.5" />
                                   <span>Image</span>
