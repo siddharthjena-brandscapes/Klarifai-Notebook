@@ -28,7 +28,7 @@ logger.info(f"Allowed hosts: {ALLOWED_HOSTS}")
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
     'https://lemon-plant-073b3600f.1.azurestaticapps.net',
-    'https://bsw.klarifai.ai'
+    'https://bsw.klarifai.ai',
     
 ]
 

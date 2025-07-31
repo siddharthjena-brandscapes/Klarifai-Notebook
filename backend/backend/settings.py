@@ -119,7 +119,7 @@ AZURE_AD = {
     'SCOPE': ['User.Read'],
 }
  
-FRONTEND_URL = 'https://lemon-plant-073b3600f.1.azurestaticapps.net'  # Ensure this matches your frontend URL
+FRONTEND_URL = 'https://bsw.klarifai.ai'  # Ensure this matches your frontend URL
  
 # Session configuration for OAuth state management
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
