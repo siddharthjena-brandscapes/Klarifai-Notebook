@@ -44,8 +44,88 @@ import {
   Target,
   ShieldCheck ,
   Workflow,
-  Mail
+  Mail,
+  Play
 } from 'lucide-react';
+
+// Video Modal Component
+const VideoModal = ({ isOpen, onClose, videoUrl }) => {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+      setIsLoading(true);
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  const handleVideoLoad = () => {
+    setIsLoading(false);
+  };
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div className="relative w-full max-w-4xl mx-auto">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors z-10"
+          aria-label="Close video"
+        >
+          <X className="w-8 h-8" />
+        </button>
+
+        {/* Video Container */}
+        <div className="relative bg-black rounded-lg overflow-hidden shadow-2xl">
+          {/* Loading Spinner */}
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-white text-lg">Loading demo...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Video Element */}
+          <video
+            className="w-full h-auto max-h-[80vh]"
+            controls
+            autoPlay
+            onLoadedData={handleVideoLoad}
+            onError={() => setIsLoading(false)}
+          >
+            <source src={videoUrl} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+
+        {/* Video Info */}
+        <div className="mt-4 text-center">
+          <h3 className="text-white text-xl font-semibold">KLARIFai Demo</h3>
+          <p className="text-gray-300 mt-2">See how KLARIFai transforms your workflow</p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // FlipCard component
 const flipImages = [
@@ -87,20 +167,18 @@ function FlipCard({ images }: { images: string[] }) {
 // ChatAnimation component for smooth infinite chat animation
 function ChatAnimation() {
   const messages = [
-    { text: "Hi KlarifAI, can you summarize this document?", from: "user" },
+    { text: "Hi KLARIFai, can you summarize this document?", from: "user" },
     { text: "Of course! Here's a concise summary:", from: "ai" },
     { text: "Thanks! Can you generate a mind map?", from: "user" },
-    { text: "Mind map generated. Would you like to add notes?", from: "ai" },
-    { text: "Yes, please add key insights.", from: "user" },
-    { text: "Key insights added. Anything else?", from: "ai" },
+    { text: "Mind map generated. Would you like to ask a query?", from: "ai" },
+    { text: "Yes, please provide brand shares for past 3 years.", from: "user" },
+    { text: "Brand shares provided. Anything else?", from: "ai" },
     { text: "Can you extract key themes from this report?", from: "user" },
     { text: "Key themes identified: Innovation, Market Trends, Consumer Insights.", from: "ai" },
-    { text: "Show me related charts and graphs.", from: "user" },
-    { text: "Here are the most relevant charts and graphs.", from: "ai" },
-    { text: "Can you create a summary for the executive team?", from: "user" },
-    { text: "Executive summary created. Would you like to export it?", from: "ai" },
-    { text: "Export as PDF please.", from: "user" },
-    { text: "PDF exported. Anything else I can help with?", from: "ai" },
+    { text: "Show me tabular summary of all key data points.", from: "user" },
+    { text: "Here are the data points provided.", from: "ai" },
+    { text: "Can you create an executive summary?", from: "user" },
+    { text: "Executive summary created. Anything else I can help with?", from: "ai" },
   ];
   const [startIdx, setStartIdx] = React.useState(0);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
@@ -327,10 +405,22 @@ const useScrollReveal = () => {
 function WelcomeScreen() {
   const [scrollY, setScrollY] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const navigate = useNavigate();
+
+  // Replace this with your Azure Blob Storage video URL
+  const videoUrl = "https://dockerblobklarifaibbsr.blob.core.windows.net/uploadfiles/1409899-uhd_3840_2160_25fps.mp4";
 
   const handleGetStarted = () => {
     navigate('/auth');
+  };
+
+  const handleWatchDemo = () => {
+    setIsVideoModalOpen(true);
+  };
+
+  const closeVideoModal = () => {
+    setIsVideoModalOpen(false);
   };
 
   useScrollReveal();
@@ -349,6 +439,17 @@ function WelcomeScreen() {
     setIsMenuOpen(false);
   };
 
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isVideoModalOpen) {
+        closeVideoModal();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isVideoModalOpen]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white overflow-x-hidden">
       {/* Navigation */}
@@ -356,76 +457,18 @@ function WelcomeScreen() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <img src={logo1} alt="KlarifAI Logo" className="w-30 h-10 object-contain rounded-lg" />
-            </div>
-            
-            <div className="hidden md:flex items-center space-x-8">
-              <button 
-                onClick={() => scrollToSection('features')}
-                className="text-slate-300 hover:text-white transition-colors"
-              >
-                Features
-              </button>
-              <button 
-                onClick={() => scrollToSection('modules')}
-                className="text-slate-300 hover:text-white transition-colors"
-              >
-                Modules
-              </button>
-              <button 
-                onClick={() => scrollToSection('contact')}
-                className="text-slate-300 hover:text-white transition-colors"
-              >
-                Contact
-              </button>
-              <button
-  className="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 rounded-lg ..."
-  onClick={handleGetStarted}
->
-  Get Started
-</button>
-            </div>
-
-            <div className="md:hidden">
-              <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="text-slate-300 hover:text-white"
-              >
-                {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
+              <img src={logo1} alt="KLARIFai Logo" className="w-30 h-10 object-contain rounded-lg" />
             </div>
           </div>
         </div>
-
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div className="md:hidden bg-slate-900/95 backdrop-blur-md border-t border-slate-800">
-            <div className="px-4 py-4 space-y-4">
-              <button 
-                onClick={() => scrollToSection('features')}
-                className="block text-slate-300 hover:text-white transition-colors"
-              >
-                Features
-              </button>
-              <button 
-                onClick={() => scrollToSection('modules')}
-                className="block text-slate-300 hover:text-white transition-colors"
-              >
-                Modules
-              </button>
-              <button 
-                onClick={() => scrollToSection('contact')}
-                className="block text-slate-300 hover:text-white transition-colors"
-              >
-                Contact
-              </button>
-              <button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-300">
-                Get Started
-              </button>
-            </div>
-          </div>
-        )}
       </nav>
+
+      {/* Video Modal */}
+      <VideoModal 
+        isOpen={isVideoModalOpen} 
+        onClose={closeVideoModal} 
+        videoUrl={videoUrl} 
+      />
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -458,20 +501,19 @@ function WelcomeScreen() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
-                <button className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25"
-                onClick={handleGetStarted}>
-                  Start Creating
+                {/* <button className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25">
+                  Log in
                   <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button className="px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50">
                   Watch Demo
-                </button>
+                </button> */}
               </div>
             </div>
 
             <div className="animate-bounce">
               <ChevronDown 
-                className="w-10 h-10 text-slate-400 mx-auto cursor-pointer hover:text-white transition-colors"
+                className="w-12 h-12 text-red-500 mx-auto cursor-pointer hover:text-white transition-colors"
                 onClick={() => scrollToSection('features')}
               />
             </div>
@@ -479,46 +521,6 @@ function WelcomeScreen() {
         </div>
       </section>
 
-      {/* Features Overview */}
-      <section id="features" className="py-20 bg-slate-900/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
-            <h2 className="text-4xl sm:text-5xl font-bold mb-6">
-              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                Why Choose KlarifAI?
-              </span>
-            </h2>
-            <p className="text-xl text-slate-300 max-w-3xl mx-auto">
-              Experience the future of AI-powered productivity combined with our legacy domain Knowledge designed for consumer insights, innovation and marketing analytics teams.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              { icon: ShieldCheck , title: "Secure & Private", desc: "Your data is protected with enterprise-grade security" },
-              { icon: Target, title: "Need-based use cases", desc: "Customized workstreams tailored to your project & analysis needs" },
-              { icon: TrendingUp, title: "Insights deep dives", desc: "Drive strategic & tactical depth through comprehensive analyses" },
-              // { icon: Workflow, title: "Smart Integration", desc: "Connect with your favorite tools and workflows" }
-            ].map((feature, idx) => (
-              <div 
-                key={idx}
-                className="group p-6 bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 hover:border-blue-500/50 transition-all duration-300 hover:transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/10 scroll-reveal opacity-0 translate-y-8"
-                style={{ transitionDelay: `${idx * 100}ms` }}
-              >
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:rotate-6 transition-transform duration-300">
-                  <feature.icon className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold mb-3 text-white group-hover:text-blue-400 transition-colors">
-                  {feature.title}
-                </h3>
-                <p className="text-slate-300 group-hover:text-slate-200 transition-colors">
-                  {feature.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* Modules Section */}
       <section id="modules" className="py-20">
@@ -530,23 +532,23 @@ function WelcomeScreen() {
               </span>
             </h2>
             <p className="text-xl text-slate-300 max-w-3xl mx-auto">
-              Two revolutionary modules designed to transform how you work with documents and ideas.
+              Modular design to transform how you work with documents and ideas.
             </p>
           </div>
 
           <div className="space-y-20">
-            {/* KlarifAI Notebook */}
+            {/* KLARIFai Notebook */}
             <div className="flex flex-col lg:flex-row items-center gap-12 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
               <div className="flex-1 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                     <FileText className="w-6 h-6 text-white" />
                   </div>
-                  <h3 className="text-3xl font-bold text-white">KlarifAI Notebook</h3>
+                  <h3 className="text-3xl font-bold text-white">KLARIFai Notebook</h3>
                 </div>
                 
                 <p className="text-xl text-slate-300 leading-relaxed">
-                  Transform your documents into intelligent conversations. Upload any document and engage with your content through our agentic RAG-powered chatbot, just like Google's NotebookLM but more powerful.
+                  Transform your documents into intelligent conversations. Upload files - Analyze content - Reveal insights
                 </p>
 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -592,14 +594,15 @@ function WelcomeScreen() {
                 </div>
                 
                 <p className="text-xl text-slate-300 leading-relaxed">
-                  Transform your product concepts into visual reality. Input your ideas, generate unlimited variations, and create stunning AI-generated images to bring your concepts to life.
+                  Bring your early stage ideas to life. From Concept to Canvas <br />
+                  Input Guidelines - Generate Copy - Visualize Ideas
                 </p>
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   {[
-                    { icon: Lightbulb, text: "Idea Input & Analysis" },
-                    { icon: Sparkles, text: "Variation Generation" },
-                    { icon: Brain, text: "AI Image Creation" },
+                    { icon: Lightbulb, text: "Input Idea Specs" },
+                    { icon: Sparkles, text: "Generate Idea Copy" },
+                    { icon: Brain, text: "Context Relevant Visuals" },
                     { icon: Workflow, text: "Export & Share" }
                   ].map((feature, idx) => (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg hover:bg-slate-800/50 transition-colors">
@@ -640,19 +643,23 @@ function WelcomeScreen() {
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
           <h2 className="text-4xl sm:text-5xl font-bold mb-6">
             <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Ready to Transform Your Workstreams?
+              Transform Your Workstreams
             </span>
           </h2>
-          <p className="text-xl text-slate-300 mb-12 max-w-2xl mx-auto">
-            Join thousands of consumer & marketing insights professionals who are already using KlarifAI to reduce time to insights and drive action to impact.
+          <p className="text-xl text-red-500 mb-12 max-w-2xl mx-auto">
+            Reduce Time to Insights & Drive Action to Impact.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button onClick={handleGetStarted} className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25">
-              Get Started Free
+              Log in
               <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
-            <button className="px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50">
+            <button 
+              onClick={handleWatchDemo}
+              className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
+            >
+              <Play className="w-5 h-5" />
               Watch Demo
             </button>
           </div>
@@ -665,22 +672,9 @@ function WelcomeScreen() {
           <div className="grid md:grid-cols-2 gap-8 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
             <div className="space-y-4 flex-1">
               <div className="flex items-center space-x-3">
-                <img src={logo1} alt="KlarifAI Logo" className="w-30 h-10 object-contain rounded-lg" />
+                <img src={logo1} alt="KLARIFai Logo" className="w-30 h-10 object-contain rounded-lg" />
               </div>
-              <p className="text-slate-400 max-w-sm">
-                Empowering creativity and productivity through intelligent AI solutions.
-              </p>
-              <div className="flex space-x-4">
-                <a href="mailto:contact@brand-scapes.com" className="text-slate-400 hover:text-white transition-colors" aria-label="Email">
-                  <Mail className="w-5 h-5" />
-                </a>
-                <a href="https://www.instagram.com/brandscapesworldwide/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors" aria-label="Instagram">
-                  <Instagram className="w-5 h-5" />
-                </a>
-                <a href="https://www.linkedin.com/company/brandscapes-worldwide" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors" aria-label="LinkedIn">
-                  <Linkedin className="w-5 h-5" />
-                </a>
-              </div>
+              
             </div>
 
             <div className="flex-1 flex flex-col items-end justify-center space-y-2 md:items-end md:justify-center md:pl-12">
@@ -690,7 +684,7 @@ function WelcomeScreen() {
           </div>
           <div className="mt-10 flex justify-center items-center w-full">
             <p className="text-slate-400 text-center w-full">
-              © 2025 KlarifAI. All rights reserved.
+              © 2025 KLARIFai. All rights reserved.
             </p>
           </div>
         </div>

@@ -822,32 +822,32 @@ def get_all_users_admin(request):
                 'status': 'error',
                 'message': 'Permission denied'
             }, status=403)
-            
+           
         users = User.objects.all()
         users_data = []
-        
+       
         for user in users:
             api_tokens, _ = UserAPITokens.objects.get_or_create(user=user)
-
+ 
             # Get module permissions from chat app
             try:
                 module_permissions = UserModulePermissions.objects.get(user=user)
                 disabled_modules = module_permissions.disabled_modules
             except UserModulePermissions.DoesNotExist:
                 disabled_modules = {}
-            
+           
             # Get upload permissions from chat app
             try:
                 upload_permissions = UserUploadPermissions.objects.get(user=user)
                 can_upload = upload_permissions.can_upload
             except UserUploadPermissions.DoesNotExist:
                 can_upload = True
-          
-            
+         
+           
             # Get RIGHT PANEL feature permissions
             feature_permissions = UserFeaturePermissions.get_or_create_for_user(user)
             disabled_features_data = feature_permissions.to_disabled_dict()
-            
+           
             # 🔥 Make sure to include disabled_features in the response
             users_data.append({
                 'id': user.id,
@@ -857,17 +857,19 @@ def get_all_users_admin(request):
                     'nebius_token': api_tokens.nebius_token or '',
                     'gemini_token': api_tokens.gemini_token or '',
                     'llama_token': api_tokens.llama_token or '',
+                    'token_limit': api_tokens.token_limit or '',
+                    'page_limit': api_tokens.page_limit or '',
                 },
                'disabled_modules': disabled_modules,  # From chat app
             'upload_permissions': {'can_upload': can_upload},
-
-                
+ 
+               
                 # ✅ ADD THIS LINE - This is what's missing!
                 'disabled_features': disabled_features_data,
             })
-            
+           
         return JsonResponse(users_data, safe=False)
-        
+       
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -877,6 +879,7 @@ def get_all_users_admin(request):
         }, status=500)
     
 
+    
 @api_view(['PATCH'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])

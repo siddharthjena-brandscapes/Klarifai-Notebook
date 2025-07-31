@@ -22,8 +22,14 @@ GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash',
     }
 )
 
+from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+ 
 class UserAPITokens(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='api_tokens')
+   
     huggingface_token = models.CharField(
         max_length=255,
         blank=True,
@@ -34,23 +40,28 @@ class UserAPITokens(models.Model):
         max_length=255,
         blank=True,
         null=True,
-        default='AIzaSyAMAFDLQ641viyiISfvSj906w9EK4kn1E0'
+        default='AIzaSyC5Dqjx0DLbkRXH9YWqWZ1SPTK0w0C4oFY'
     )
     llama_token = models.CharField(
         max_length=255,
         blank=True,
         null=True,
-        default='llx-cX0562QyiWbfLgoaCR5aqTPdBX0rw3jSha2kC9pEMecpvVIb'
+        default='llx-NRa3hhTEIranlZsk6e9zucPfIU9AnuC11kXNsxS7kD0VICzR'
     )
     nebius_token = models.CharField(
-        max_length=1024, 
-        blank=True, 
-        null=True, 
-        default='eyJhbGciOiJIUzI1NiIsImtpZCI6IlV6SXJWd1h0dnprLVRvdzlLZWstc0M1akptWXBvX1VaVkxUZlpnMDRlOFUiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJnb29nbGUtb2F1dGgyfDEwNDA3NjM1MTQxNjY5Mzc1MzgxNiIsInNjb3BlIjoib3BlbmlkIG9mZmxpbmVfYWNjZXNzIiwiaXNzIjoiYXBpX2tleV9pc3N1ZXIiLCJhdWQiOlsiaHR0cHM6Ly9uZWJpdXMtaW5mZXJlbmNlLmV1LmF1dGgwLmNvbS9hcGkvdjIvIl0sImV4cCI6MTkwODA5OTQyNywidXVpZCI6IjY5N2ExOGI1LTVmMjMtNDM4YS1iYmVmLTdhNmYwZGUxYzY2MyIsIm5hbWUiOiJpbWdfZ2VuIiwiZXhwaXJlc19hdCI6IjIwMzAtMDYtMTlUMTE6Mzc6MDcrMDAwMCJ9.X_f-n1ginmJkWBmbkhMt12L-k-fapnoo8ws4WXFWC4E')
-   
+        max_length=1024,
+        blank=True,
+        null=True,
+        default='eyJhbGciOiJIUzI1NiIsImtpZCI6IlV6SXJWd1h0dnprLVRvdzlLZWstc0M1akptWXBvX1VaVkxUZlpnMDRlOFUiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJnb29nbGUtb2F1dGgyfDEwNDA3NjM1MTQxNjY5Mzc1MzgxNiIsInNjb3BlIjoib3BlbmlkIG9mZmxpbmVfYWNjZXNzIiwiaXNzIjoiYXBpX2tleV9pc3N1ZXIiLCJhdWQiOlsiaHR0cHM6Ly9uZWJpdXMtaW5mZXJlbmNlLmV1LmF1dGgwLmNvbS9hcGkvdjIvIl0sImV4cCI6MTkwODA5OTQyNywidXVpZCI6IjY5N2ExOGI1LTVmMjMtNDM4YS1iYmVmLTdhNmYwZGUxYzY2MyIsIm5hbWUiOiJpbWdfZ2VuIiwiZXhwaXJlc19hdCI6IjIwMzAtMDYtMTlUMTE6Mzc6MDcrMDAwMCJ9.X_f-n1ginmJkWBmbkhMt12L-k-fapnoo8ws4WXFWC4E'
+    )
+ 
+    page_limit = models.PositiveIntegerField(default=20)
+    token_limit = models.PositiveBigIntegerField(default=1_000_000)
+ 
     def __str__(self):
         return f"{self.user.username}'s API Tokens"
- 
+
+        
 # Signal to automatically create UserAPITokens when a User is created
 @receiver(post_save, sender=User)
 def create_user_api_tokens(sender, instance, created, **kwargs):

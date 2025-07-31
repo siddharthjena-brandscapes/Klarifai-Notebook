@@ -615,7 +615,7 @@ class UserProfileView(APIView):
                 'error': f'Failed to update profile picture: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
- 
+
 class GetUserDocumentsView(APIView):
     def get(self, request):
         try:
@@ -8523,18 +8523,25 @@ class AdminUserStatsView(APIView):
  
         return Response({'user_stats': stats}, status=200)
 
+ 
+from django.db import transaction
+from .models import UserAPITokens
+ 
 class AdminUserManagementView(APIView):
     def get(self, request):
+        print("AdminUserManagementView GET request received")
+        print(f"Request user: {request.user.username}")
+        # Your existing GET method code stays the same
         try:
             # Check if the requesting user is an admin
             if not request.user.username == 'admin':
                 return Response({
                     'error': 'Unauthorized. Only admin users can access this endpoint'
                 }, status=status.HTTP_403_FORBIDDEN)
-           
+                   
             # Get all users with their API tokens
             users = User.objects.all()
-           
+                   
             user_data = []
             for user in users:
                 # Get API tokens if they exist
@@ -8543,7 +8550,7 @@ class AdminUserManagementView(APIView):
                     api_tokens = user.api_tokens
                 except UserAPITokens.DoesNotExist:
                     pass
-
+                 
                 # Get disabled modules
                 try:
                     module_permissions = user.module_permissions.disabled_modules
@@ -8551,7 +8558,7 @@ class AdminUserManagementView(APIView):
                     module_permissions = {}
                     # Create module permissions if they don't exist
                     UserModulePermissions.objects.create(user=user, disabled_modules={})
-
+                 
                 # Get upload permissions
                 try:
                     upload_permissions = UserUploadPermissions.objects.get(user=user)
@@ -8561,191 +8568,238 @@ class AdminUserManagementView(APIView):
                     can_upload = True
                     # Create default permissions
                     UserUploadPermissions.objects.create(user=user, can_upload=True)
-               
+                           
                 user_info = {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
+                    'tokens_used': user.tokens_used if hasattr(user, 'tokens_used') else 0,                
+                    'token_limit': api_tokens.token_limit if api_tokens and api_tokens.token_limit is not None else None,
+                    'page_limit': api_tokens.page_limit if api_tokens and api_tokens.page_limit is not None else None,
                     'disabled_modules': module_permissions,
                     'upload_permissions': {
-                    'can_upload': can_upload
-                },
+                        'can_upload': can_upload
+                    },
                     'api_tokens': {
                         'nebius_token': api_tokens.nebius_token if api_tokens else None,
                         'gemini_token': api_tokens.gemini_token if api_tokens else None,
-                        'llama_token': api_tokens.llama_token if api_tokens else None  # Include Llama token
+                        'llama_token': api_tokens.llama_token if api_tokens else None,
+                        'huggingface_token': api_tokens.huggingface_token if api_tokens else None,
+                        'token_limit': api_tokens.token_limit if api_tokens and api_tokens.token_limit is not None else None,
+                        'page_limit': int(api_tokens.page_limit) if api_tokens and api_tokens.page_limit is not None else None,
                     }
                 }
                 user_data.append(user_info)
-           
+                print("##############################:", user_data)  # Log user info for debugging
+                   
             return Response(user_data, status=status.HTTP_200_OK)
-           
+                     
         except Exception as e:
             print(f"Error in AdminUserManagementView.get: {str(e)}")
             return Response(
                 {'error': f'Failed to fetch user data: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-   
-    @transaction.atomic
-    def post(self, request):
+ 
+    def put(self, request):
+        """Update user tokens - ADD THIS METHOD"""
+        print(f"AdminUserManagementView PUT data: {request.data}")
         try:
             # Check if the requesting user is an admin
             if not request.user.username == 'admin':
                 return Response({
-                    'error': 'Unauthorized. Only admin users can create new users'
+                    'error': 'Unauthorized. Only admin users can access this endpoint'
                 }, status=status.HTTP_403_FORBIDDEN)
-       
-            # Extract data from request
+ 
+            user_id = request.data.get('user_id')
+            if not user_id:
+                return Response({
+                    'error': 'user_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+ 
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'User not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+ 
+            # Get or create API tokens for the user
+            api_tokens, created = UserAPITokens.objects.get_or_create(user=user)
+ 
+            # Update tokens
+            if 'nebius_token' in request.data:
+                api_tokens.nebius_token = request.data['nebius_token']
+            if 'gemini_token' in request.data:
+                api_tokens.gemini_token = request.data['gemini_token']
+            if 'llama_token' in request.data:
+                api_tokens.llama_token = request.data['llama_token']
+            # if 'token_limit' in request.data:
+            #     api_tokens.token_limit = request.data['token_limit'] if request.data['token_limit'] else None
+ 
+            if 'token_limit' in request.data:
+                token_limit = request.data['token_limit']
+                api_tokens.token_limit = int(token_limit) if token_limit not in [None, ""] else 1_000_000
+            # FIX: Set default if page_limit is empty
+            if 'page_limit' in request.data:
+                page_limit = request.data['page_limit']
+                api_tokens.page_limit = int(page_limit) if page_limit not in [None, ""] else 20
+ 
+            api_tokens.save()
+ 
+            return Response({
+                'success': True,
+                'message': 'User tokens updated successfully'
+            }, status=status.HTTP_200_OK)
+ 
+        except Exception as e:
+            print(f"Error in AdminUserManagementView.put: {str(e)}")
+            return Response(
+                {'error': f'Failed to update user tokens: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+ 
+    def post(self, request):
+        """Create new user - ADD THIS METHOD"""
+        try:
+            # Check if the requesting user is an admin
+            if not request.user.username == 'admin':
+                return Response({
+                    'error': 'Unauthorized. Only admin users can access this endpoint'
+                }, status=status.HTTP_403_FORBIDDEN)
+ 
             username = request.data.get('username')
             email = request.data.get('email')
             password = request.data.get('password')
-            nebius_token = request.data.get('nebius_token', '')
-            gemini_token = request.data.get('gemini_token', '')
-            llama_token = request.data.get('llama_token', '')
-       
-            # Validate required fields
+ 
             if not all([username, email, password]):
                 return Response({
-                    'error': 'Username, email, and password are required fields'
+                    'error': 'username, email, and password are required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-       
-            # Check if username already exists
+ 
+            # Check if user already exists
             if User.objects.filter(username=username).exists():
                 return Response({
                     'error': 'Username already exists'
                 }, status=status.HTTP_400_BAD_REQUEST)
-       
-            # Create the user
+ 
+            if User.objects.filter(email=email).exists():
+                return Response({
+                    'error': 'Email already exists'
+                }, status=status.HTTP_400_BAD_REQUEST)
+ 
+            # Create new user
             user = User.objects.create_user(
                 username=username,
                 email=email,
                 password=password
             )
-       
-            # Update the automatically created API tokens with provided values
-            # The post_save signal already created UserAPITokens with default values
-            api_tokens = user.api_tokens
-            if nebius_token:
-                api_tokens.nebius_token = nebius_token
-            if gemini_token:
-                api_tokens.gemini_token = gemini_token
-            if llama_token:
-                api_tokens.llama_token = llama_token
-            api_tokens.save()
-       
+ 
+            # Create API tokens if provided
+            if any([request.data.get('nebius_token'), request.data.get('gemini_token'), request.data.get('llama_token')]):
+                UserAPITokens.objects.create(
+                    user=user,
+                    nebius_token=request.data.get('nebius_token', ''),
+                    gemini_token=request.data.get('gemini_token', ''),
+                    llama_token=request.data.get('llama_token', ''),
+                    token_limit=request.data.get('token_limit') if request.data.get('token_limit') else None
+                )
+ 
             return Response({
                 'success': True,
-                'message': f'User {username} created successfully',
+                'message': 'User created successfully',
                 'user_id': user.id
             }, status=status.HTTP_201_CREATED)
-       
+ 
         except Exception as e:
             print(f"Error in AdminUserManagementView.post: {str(e)}")
             return Response(
                 {'error': f'Failed to create user: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-    @transaction.atomic
-    def put(self, request):
-        try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
-                return Response({
-                    'error': 'Unauthorized. Only admin users can update user data'
-                }, status=status.HTTP_403_FORBIDDEN)
-           
-            # Extract data from request
-            user_id = request.data.get('user_id')
-            nebius_token = request.data.get('nebius_token')
-            gemini_token = request.data.get('gemini_token')
-            llama_token = request.data.get('llama_token')  # Get Llama token
-           
-            if not user_id:
-                return Response({
-                    'error': 'User ID is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Get the user
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response({
-                    'error': 'User not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-           
-            # Update API tokens
-            api_tokens, created = UserAPITokens.objects.get_or_create(user=user)
-           
-            if nebius_token is not None:
-                api_tokens.nebius_token = nebius_token
-           
-            if gemini_token is not None:
-                api_tokens.gemini_token = gemini_token
-                
-            if llama_token is not None:
-                api_tokens.llama_token = llama_token  # Update Llama token
-           
-            api_tokens.save()
-           
-            return Response({
-                'success': True,
-                'message': f'API tokens for user {user.username} updated successfully'
-            }, status=status.HTTP_200_OK)
-           
-        except Exception as e:
-            print(f"Error in AdminUserManagementView.put: {str(e)}")
-            return Response(
-                {'error': f'Failed to update user API tokens: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-   
-    @transaction.atomic
+ 
     def delete(self, request):
+        """Delete user - ADD THIS METHOD"""
         try:
             # Check if the requesting user is an admin
             if not request.user.username == 'admin':
                 return Response({
-                    'error': 'Unauthorized. Only admin users can delete users'
+                    'error': 'Unauthorized. Only admin users can access this endpoint'
                 }, status=status.HTTP_403_FORBIDDEN)
-           
-            # Extract user_id from query parameters
-            user_id = request.query_params.get('user_id')
-           
+ 
+            user_id = request.GET.get('user_id')
             if not user_id:
                 return Response({
-                    'error': 'User ID is required'
+                    'error': 'user_id is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Don't allow deleting the admin user
-            if User.objects.get(id=user_id).username == 'admin':
-                return Response({
-                    'error': 'Cannot delete the admin user'
-                }, status=status.HTTP_400_BAD_REQUEST)
-           
-            # Get and delete the user
+ 
             try:
                 user = User.objects.get(id=user_id)
-                username = user.username
-                user.delete()  # This will also delete related UserAPITokens due to CASCADE
+               
+                # Prevent deletion of admin user
+                if user.username == 'admin':
+                    return Response({
+                        'error': 'Cannot delete admin user'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+               
+                user.delete()
                
                 return Response({
                     'success': True,
-                    'message': f'User {username} deleted successfully'
+                    'message': 'User deleted successfully'
                 }, status=status.HTTP_200_OK)
-               
+ 
             except User.DoesNotExist:
                 return Response({
                     'error': 'User not found'
                 }, status=status.HTTP_404_NOT_FOUND)
-           
+ 
         except Exception as e:
             print(f"Error in AdminUserManagementView.delete: {str(e)}")
             return Response(
                 {'error': f'Failed to delete user: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+ 
+    # Token Usage Tracking Methods (keep these the same)
+    @staticmethod
+    def check_token_limit(user):
+        """Check if user has exceeded their token limit"""
+        try:
+            api_tokens = user.api_tokens
+            if api_tokens.token_limit:
+                current_usage = user.tokens_used if hasattr(user, 'tokens_used') else 0
+                if current_usage >= api_tokens.token_limit:
+                    return False, "Token limit exceeded"
+            return True, None
+        except UserAPITokens.DoesNotExist:
+            return True, None  # No limit set, allow usage
+ 
+    @staticmethod
+    def increment_token_usage(user, tokens_used):
+        """Increment user's token usage"""
+        try:
+            current_usage = user.tokens_used if hasattr(user, 'tokens_used') else 0
+            user.tokens_used = current_usage + tokens_used
+            user.save()
+            return True
+        except Exception as e:
+            print(f"Error incrementing token usage: {str(e)}")
+            return False
+ 
+    @staticmethod
+    def get_remaining_tokens(user):
+        """Get remaining tokens for a user"""
+        try:
+            api_tokens = user.api_tokens
+            if api_tokens.token_limit:
+                current_usage = user.tokens_used if hasattr(user, 'tokens_used') else 0
+                return max(0, api_tokens.token_limit - current_usage)
+            return None  # Unlimited
+        except UserAPITokens.DoesNotExist:
+            return None  # Unlimited
+ 
+
 
 class AdminUserModuleView(APIView):
     def patch(self, request, user_id):

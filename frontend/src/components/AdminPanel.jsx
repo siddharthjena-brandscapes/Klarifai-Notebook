@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { adminService, documentService,adminNotebookServiceNB,getAdminUserStats } from "../utils/axiosConfig";
 import {
@@ -97,6 +99,7 @@ const AdminPanel = () => {
     nebius_token: "",
     gemini_token: "",
     llama_token: "",
+    token_limit: "", 
   });
 
   const [categoryFormData, setCategoryFormData] = useState({
@@ -134,7 +137,13 @@ const [ideaGenStats, setIdeaGenStats] = useState({
 
 const [loadingIdeaStats, setLoadingIdeaStats] = useState(false);
 const [ideaStatsError, setIdeaStatsError] = useState(null);
-// ...existing code...
+// Add these state variables near the top with other state declarations
+const [isGlobalTokenLimitModalOpen, setIsGlobalTokenLimitModalOpen] = useState(false);
+const [globalTokenLimitValue, setGlobalTokenLimitValue] = useState("");
+const [isGlobalPageLimitModalOpen, setIsGlobalPageLimitModalOpen] = useState(false);
+const [globalPageLimitValue, setGlobalPageLimitValue] = useState("");
+
+
 const fetchNotebookUserStats = async () => {
   try {
     const stats = await adminNotebookServiceNB.getNotebookUserStats();
@@ -234,50 +243,64 @@ useEffect(() => {
   
 
   // Updated fetchUsers function with debug logging
-  const fetchUsers = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await adminService.getAllUsers();
+// Replace the existing fetchUsers function with this fixed version
 
-      console.log("=== FETCH USERS DEBUG ===");
-      console.log("Raw backend response:", JSON.stringify(data, null, 2));
+// Replace the existing fetchUsers function with this fixed version
 
-      data.forEach((user) => {
-        console.log(`User ${user.username}:`, {
-          id: user.id,
-          disabled_features: user.disabled_features,
-          disabled_features_type: typeof user.disabled_features,
-          disabled_features_keys: user.disabled_features
-            ? Object.keys(user.disabled_features)
-            : "null/undefined",
-        });
+const fetchUsers = async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    const data = await adminService.getAllUsers();
+
+    console.log("=== FETCH USERS DEBUG ===");
+    console.log("Raw backend response:", JSON.stringify(data, null, 2));
+
+    data.forEach((user) => {
+      console.log(`User ${user.username}:`, {
+        id: user.id,
+        disabled_features: user.disabled_features,
+        disabled_features_type: typeof user.disabled_features,
+        disabled_features_keys: user.disabled_features
+          ? Object.keys(user.disabled_features)
+          : "null/undefined",
+        token_limit_from_api_tokens: user.api_tokens?.token_limit,
+        token_limit_from_user: user.token_limit,
       });
+    });
 
-      // Initialize upload permissions state with proper boolean values
-      const permissions = {};
-      data.forEach((user) => {
-        const canUpload = user.upload_permissions
-          ? user.upload_permissions.can_upload
-          : true;
-        permissions[user.id] = Boolean(canUpload);
+    // Process the data - FIX: The token_limit is already at user level from backend
+    const processedUsers = data.map(user => ({
+      ...user,
+      token_limit: user.token_limit || user.api_tokens?.token_limit || null, // Check both locations
+      tokens_used: user.tokens_used || 0
+    }));
 
-        console.log(`User ${user.id} (${user.username}):`, {
-          upload_permissions: permissions[user.id],
-          disabled_features: user.disabled_features,
-          disabled_modules: user.disabled_modules,
-        });
+    // Initialize upload permissions state with proper boolean values
+    const permissions = {};
+    processedUsers.forEach((user) => {
+      const canUpload = user.upload_permissions
+        ? user.upload_permissions.can_upload
+        : true;
+      permissions[user.id] = Boolean(canUpload);
+
+      console.log(`User ${user.id} (${user.username}):`, {
+        upload_permissions: permissions[user.id],
+        disabled_features: user.disabled_features,
+        disabled_modules: user.disabled_modules,
+        token_limit: user.token_limit, // This should now show the correct value
       });
+    });
 
-      setUserUploadPermissions(permissions);
-      setUsers(data);
-    } catch (err) {
-      setError("Failed to fetch users. Please try again.");
-      console.error("Error fetching users:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setUserUploadPermissions(permissions);
+    setUsers(processedUsers);
+  } catch (err) {
+    setError("Failed to fetch users. Please try again.");
+    console.error("Error fetching users:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Function to fetch all categories
   const fetchCategories = async () => {
@@ -319,6 +342,8 @@ useEffect(() => {
       nebius_token: user.api_tokens.nebius_token || "",
       gemini_token: user.api_tokens.gemini_token || "",
       llama_token: user.api_tokens.llama_token || "",
+      token_limit: user.token_limit || "",
+      page_limit: user.api_tokens.page_limit || "",
     });
     setIsEditModalOpen(true);
   };
@@ -490,6 +515,116 @@ useEffect(() => {
       setLoading(false);
     }
   };
+const handleSetGlobalTokenLimit = async (e) => {
+  e.preventDefault();
+  
+  if (!globalTokenLimitValue) {
+    toast.warning("Please enter a token limit value");
+    return;
+  }
+
+  const confirmMessage = `Are you sure you want to set token limit to ${globalTokenLimitValue} for ALL users? This will override existing individual limits.`;
+  
+  if (!window.confirm(confirmMessage)) {
+    return;
+  }
+
+  setLoading(true);
+  let successCount = 0;
+  let errorCount = 0;
+
+  try {
+    // Update token limit for all users
+    for (const user of users) {
+      try {
+        await adminService.updateUserTokens(user.id, {
+          nebius_token: user.api_tokens.nebius_token || "",
+          gemini_token: user.api_tokens.gemini_token || "",
+          llama_token: user.api_tokens.llama_token || "",
+          token_limit: globalTokenLimitValue,
+        });
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to update tokens for user ${user.username}:`, err);
+        errorCount++;
+      }
+    }
+
+    setIsGlobalTokenLimitModalOpen(false);
+    setGlobalTokenLimitValue("");
+    
+    // Refresh users to show updated limits
+    await fetchUsers();
+    
+    if (errorCount === 0) {
+      toast.success(`Successfully updated token limit for all ${successCount} users`);
+    } else {
+      toast.warning(`Updated ${successCount} users successfully, ${errorCount} failed`);
+    }
+    
+  } catch (err) {
+    console.error("Error setting global token limit:", err);
+    toast.error("Failed to set global token limit");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleSetGlobalPageLimit = async (e) => {
+  e.preventDefault();
+  
+  if (!globalPageLimitValue) {
+    toast.warning("Please enter a page limit value");
+    return;
+  }
+
+  const confirmMessage = `Are you sure you want to set page limit to ${globalPageLimitValue} for ALL users? This will override existing individual page limits.`;
+  
+  if (!window.confirm(confirmMessage)) {
+    return;
+  }
+
+  setLoading(true);
+  let successCount = 0;
+  let errorCount = 0;
+
+  try {
+    // Update page limit for all users
+    for (const user of users) {
+      try {
+        await adminService.updateUserTokens(user.id, {
+          nebius_token: user.api_tokens.nebius_token || "",
+          gemini_token: user.api_tokens.gemini_token || "",
+          llama_token: user.api_tokens.llama_token || "",
+          token_limit: user.token_limit || "",
+          page_limit: globalPageLimitValue, // Add this field
+        });
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to update page limit for user ${user.username}:`, err);
+        errorCount++;
+      }
+    }
+
+    setIsGlobalPageLimitModalOpen(false);
+    setGlobalPageLimitValue("");
+    
+    // Refresh users to show updated limits
+    await fetchUsers();
+    
+    if (errorCount === 0) {
+      toast.success(`Successfully updated page limit for all ${successCount} users`);
+    } else {
+      toast.warning(`Updated ${successCount} users successfully, ${errorCount} failed`);
+    }
+    
+  } catch (err) {
+    console.error("Error setting global page limit:", err);
+    toast.error("Failed to set global page limit");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Handle form submission for new user
   const handleCreateUser = async (e) => {
@@ -526,6 +661,8 @@ useEffect(() => {
         nebius_token: formData.nebius_token,
         gemini_token: formData.gemini_token,
         llama_token: formData.llama_token,
+        token_limit: formData.token_limit,
+        page_limit: formData.page_limit, 
       });
       setIsEditModalOpen(false);
       fetchUsers();
@@ -687,6 +824,7 @@ const IdeaGenStatsSection = () => (
       <div className="p-6 bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
+            
             <div className="p-2 rounded-lg bg-orange-400/20 dark:bg-orange-600/20">
               <FaTags className="text-orange-700 dark:text-orange-300" size={20} />
             </div>
@@ -919,13 +1057,15 @@ const UserInfoSection = () => {
     const disabledModules = user.disabled_modules || {};
     const disabledCount = Object.values(disabledModules).filter(isDisabled => isDisabled === true).length;
     const enabledCount = totalModules - disabledCount;
-    
+  
     return {
       username: user.username,
       enabled: enabledCount,
       disabled: disabledCount,
     };
   });
+
+
 
   const totalOverviewData = [
     { name: 'Doc Q&A Documents', value: totalDocQAStats.totalDocuments, color: '#3B82F6' },
@@ -959,6 +1099,21 @@ const UserInfoSection = () => {
       <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3">
+  <button
+    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
+    onClick={() => setIsGlobalTokenLimitModalOpen(true)}
+  >
+    <FaGlobe className="mr-2" size={14} /> Set Global Token Limit
+  </button>
+  <button
+    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
+    onClick={() => setIsGlobalPageLimitModalOpen(true)}
+  >
+    <FaFileUpload className="mr-2" size={14} /> Set Global Page Limit
+  </button>
+  
+</div>
             <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
               <FaUsers
                 className="text-[#a55233] dark:text-emerald-400"
@@ -1272,81 +1427,172 @@ const UserInfoSection = () => {
                             </div>
                           </div>
                         )}
+<div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-4">
+  <div className="space-y-3">
+    <p className="text-sm font-bold text-[#556052] dark:text-blue-400 uppercase tracking-wide">
+      API Tokens
+    </p>
+    <div className="text-sm space-y-2">
+      <div className="flex justify-between">
+        <span className="font-medium">Nebius:</span>
+        <span className="text-[#5e4636] dark:text-gray-300">
+          {user.api_tokens.nebius_token ? `${user.api_tokens.nebius_token.slice(0, 30)}...` : "Not set"}
+        </span>
+      </div>
+      <div className="flex justify-between">
+        <span className="font-medium">Gemini:</span>
+        <span className="text-[#5e4636] dark:text-gray-300">
+          {user.api_tokens.gemini_token ? `${user.api_tokens.gemini_token.slice(0, 30)}...` : "Not set"}
+        </span>
+      </div>
+      <div className="flex justify-between">
+        <span className="font-medium">Llama:</span>
+        <span className="text-[#5e4636] dark:text-gray-300">
+          {user.api_tokens.llama_token ? `${user.api_tokens.llama_token.slice(0, 30)}...` : "Not set"}
+        </span>
+      </div>
+    </div>
+  </div>
+  
+  <div className="space-y-3">
+    <p className="text-sm font-bold text-[#556052] dark:text-purple-400 uppercase tracking-wide">
+      Module Access
+    </p>
+    <div className="text-sm">
+      <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
+        <span className="text-[#5e4636] dark:text-gray-300 font-medium">
+          {(() => {
+            const totalModules = availableModules.length;
+            const disabledModules = user.disabled_modules || {};
+            const disabledCount = Object.values(disabledModules).filter(
+              (isDisabled) => isDisabled === true
+            ).length;
+            const enabledCount = totalModules - disabledCount;
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
-                          <div className="space-y-3">
-                            <p className="text-sm font-bold text-[#556052] dark:text-blue-400 uppercase tracking-wide">
-                              API Tokens
-                            </p>
-                            <div className="text-sm space-y-2">
-                              <div className="flex justify-between">
-                                <span className="font-medium">Nebius:</span>
-                                <span className="text-[#5e4636] dark:text-gray-300">
-                                  {user.api_tokens.nebius_token ? `${user.api_tokens.nebius_token.slice(0, 30)}...` : "Not set"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="font-medium">Gemini:</span>
-                                <span className="text-[#5e4636] dark:text-gray-300">
-                                  {user.api_tokens.gemini_token ? `${user.api_tokens.gemini_token.slice(0, 30)}...` : "Not set"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="font-medium">Llama:</span>
-                                <span className="text-[#5e4636] dark:text-gray-300">
-                                  {user.api_tokens.llama_token ? `${user.api_tokens.llama_token.slice(0, 30)}...` : "Not set"}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <p className="text-sm font-bold text-[#556052] dark:text-purple-400 uppercase tracking-wide">
-                              Module Access
-                            </p>
-                            <div className="text-sm">
-                              <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
-                                <span className="text-[#5e4636] dark:text-gray-300 font-medium">
-                                  {(() => {
-                                    const totalModules = availableModules.length;
-                                    const disabledModules = user.disabled_modules || {};
-                                    const disabledCount = Object.values(disabledModules).filter(
-                                      (isDisabled) => isDisabled === true
-                                    ).length;
-                                    const enabledCount = totalModules - disabledCount;
+            if (disabledCount === 0) {
+              return `All ${totalModules} modules enabled`;
+            } else if (enabledCount === 0) {
+              return `All modules disabled`;
+            } else {
+              return `${enabledCount}/${totalModules} modules enabled`;
+            }
+          })()}
+        </span>
+      </div>
+    </div>
+  </div>
+  
+  <div className="space-y-3">
+    <p className="text-sm font-bold text-[#556052] dark:text-yellow-400 uppercase tracking-wide">
+      Token Usage
+    </p>
+    <div className="text-sm">
+      <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
+    {user.token_limit !== null && user.token_limit !== undefined ? (
+  <div className="space-y-2">
+    <div className="flex justify-between">
+      <span className="font-medium">Used:</span>
+      <span className="text-[#5e4636] dark:text-gray-300">
+        {(userNotebookStats?.total_tokens_used ?? 0)} / {user.token_limit}
+      </span>
+    </div>
+    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+      <div
+        className={`h-2 rounded-full transition-all ${
+          ((user.tokens_used || 0) / user.token_limit) > 0.8
+            ? 'bg-red-500'
+            : ((user.tokens_used || 0) / user.token_limit) > 0.6
+            ? 'bg-yellow-500'
+            : 'bg-green-500'
+        }`}
+        style={{
+          width: `${Math.min(
+  ((userNotebookStats?.total_tokens_used ?? 0) / user.token_limit) * 100,
+  100
+)}%`,
+        }}
+      ></div>
+    </div>
+    <div className="text-xs text-center">
+     {(((userNotebookStats?.total_tokens_used ?? 0) / user.token_limit) * 100).toFixed(1)}% used
+    </div>
+  </div>
+) : (
+  <span className="text-[#5e4636] dark:text-gray-300 font-medium">
+    Unlimited tokens
+  </span>
+)}
+      </div>
+    </div>
+  </div>
 
-                                    if (disabledCount === 0) {
-                                      return `All ${totalModules} modules enabled`;
-                                    } else if (enabledCount === 0) {
-                                      return `All modules disabled`;
-                                    } else {
-                                      return `${enabledCount}/${totalModules} modules enabled`;
-                                    }
-                                  })()}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <p className="text-sm font-bold text-[#556052] dark:text-cyan-400 uppercase tracking-wide">
-                              Upload Status
-                            </p>
-                            <div className="text-sm">
-                              <div
-                                className={`rounded-lg p-3 font-medium ${
-                                  userUploadPermissions[user.id]
-                                    ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                    : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                                }`}
-                              >
-                                {userUploadPermissions[user.id]
-                                  ? "Upload Enabled"
-                                  : "Upload Disabled"}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+  {/* NEW: Page Usage Section */}
+  <div className="space-y-3">
+    <p className="text-sm font-bold text-[#556052] dark:text-cyan-400 uppercase tracking-wide">
+      Page Usage
+    </p>
+    <div className="text-sm">
+      <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
+        {user.api_tokens.page_limit !== null && user.api_tokens.page_limit !== undefined ? (
+  <div className="space-y-2">
+    <div className="flex justify-between">
+      <span className="font-medium">Used:</span>
+      <span className="text-[#5e4636] dark:text-gray-300">
+        {(userNotebookStats?.total_pages_processed ?? 0)} / {user.api_tokens.page_limit}
+      </span>
+    </div>
+    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+      <div
+        className={`h-2 rounded-full transition-all ${
+          ((user.pages_used || 0) / user.api_tokens.page_limit) > 0.8
+            ? 'bg-red-500'
+            : ((user.pages_used || 0) / user.api_tokens.page_limit) > 0.6
+            ? 'bg-yellow-500'
+            : 'bg-green-500'
+        }`}
+        style={{
+          width: `${Math.min(
+  ((userNotebookStats?.total_pages_processed ?? 0) / user.api_tokens.page_limit) * 100,
+  100
+)}%`,
+        }}
+      ></div>
+    </div>
+    <div className="text-xs text-center">
+     {(((userNotebookStats?.total_pages_processed ?? 0) / user.api_tokens.page_limit) * 100).toFixed(1)}% used
+    </div>
+  </div>
+) : (
+  <span className="text-[#5e4636] dark:text-gray-300 font-medium">
+    Unlimited pages
+  </span>
+)}
+      </div>
+    </div>
+  </div>
+</div>
+
+{/* Upload Status as separate row */}
+<div className="mt-4">
+  <div className="space-y-3">
+    <p className="text-sm font-bold text-[#556052] dark:text-green-400 uppercase tracking-wide">
+      Upload Status
+    </p>
+    <div className="text-sm">
+      <div
+        className={`rounded-lg p-3 font-medium ${
+          userUploadPermissions[user.id]
+            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+            : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+        }`}
+      >
+        {userUploadPermissions[user.id]
+          ? "Upload Enabled"
+          : "Upload Disabled"}
+      </div>
+    </div>
+  </div>
+</div>
                       </div>
 
                       <div className="flex flex-col space-y-2">
@@ -1434,80 +1680,103 @@ const UserInfoSection = () => {
                           );
                         })()}
                         
-                        {/* Notebook Stats */}
-                        {notebookUserStats.length > 0 && (() => {
-                          const userNotebookStats = notebookUserStats.find((u) => u.user_id === user.id);
-                          const totalNotebookDocs = userNotebookStats?.document_upload_count || 0;
-                          const totalNotebookQuestions = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
-                          const totalNotebookShort = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.short_responses, 0) || 0;
-                          const totalNotebookComprehensive = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.comprehensive_responses, 0) || 0;
-                          
-                          const notebookDocuments = userNotebookStats?.documents || [];
-                          const [showNotebookDetails, setShowNotebookDetails] = useState(false);
-                     
-                          return (
-                            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg p-4 border border-emerald-200 dark:border-emerald-800/30">
-                              <div className="flex items-center justify-between mb-3">
-                                <h5 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center">
-                                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-                                    <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
-                                  </svg>
-                                  Notebook Statistics
-                                </h5>
-                                <div className="flex items-center space-x-4">
-                                  <div className="flex space-x-4">
-                                    <div className="text-center">
-                                      <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookDocs}</div>
-                                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Documents</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookQuestions}</div>
-                                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Questions</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookShort}</div>
-                                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Short</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookComprehensive}</div>
-                                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Comprehensive</div>
-                                    </div>
-                                  </div>
-                                  {notebookDocuments.length > 0 && (
-                                    <button
-                                      onClick={() => setShowNotebookDetails(!showNotebookDetails)}
-                                      className="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-800/30 dark:hover:bg-emerald-700/30 text-emerald-700 dark:text-emerald-300 rounded-lg transition-all flex items-center"
-                                    >
-                                      {showNotebookDetails ? 'Hide Details' : 'View Details'}
-                                      <svg className={`w-3 h-3 ml-1 transition-transform ${showNotebookDetails ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
-                                      </svg>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                             
-                              {notebookDocuments.length > 0 && showNotebookDetails && (
-                                <div className="space-y-2 border-t border-emerald-200 dark:border-emerald-700/30 pt-3">
-                                  <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-2">Document Activity:</div>
-                                  <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
-                                    {notebookDocuments.map((doc) => (
-                                      <div key={doc.document_id} className="flex items-center justify-between bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
-                                        <span className="text-xs text-emerald-800 dark:text-emerald-200 truncate flex-1 mr-2" title={doc.filename}>
-                                          {doc.filename.length > 25 ? `${doc.filename.substring(0, 25)}...` : doc.filename}
-                                        </span>
-                                        <span className="text-xs font-mono bg-emerald-100 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">
-                                          {doc.questions_asked}Q
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        
+
+{/* Notebook Stats */}
+{notebookUserStats.length > 0 && (() => {
+  const userNotebookStats = notebookUserStats.find((u) => u.user_id === user.id);
+  const totalNotebookDocs = userNotebookStats?.document_upload_count || 0;
+  const totalNotebookQuestions = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
+  const totalNotebookShort = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.short_responses, 0) || 0;
+  const totalNotebookComprehensive = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.comprehensive_responses, 0) || 0;
+  
+  // Add the new fields
+  const totalTokensUsed = userNotebookStats?.total_tokens_used || 0;
+  const totalInputTokens = userNotebookStats?.total_input_tokens || 0;
+  const totalOutputTokens = userNotebookStats?.total_output_tokens || 0;
+  const totalPagesProcessed = userNotebookStats?.total_pages_processed || 0;
+  
+  const notebookDocuments = userNotebookStats?.documents || [];
+  const [showNotebookDetails, setShowNotebookDetails] = useState(false);
+
+  return (
+    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg p-4 border border-emerald-200 dark:border-emerald-800/30">
+      <div className="flex items-center justify-between mb-3">
+        <h5 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center">
+          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+            <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
+          </svg>
+          Notebook Statistics
+        </h5>
+        <div className="flex items-center space-x-4">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="text-center">
+              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookDocs}</div>
+              <div className="text-xs text-emerald-600 dark:text-emerald-400">Documents</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookShort}</div>
+              <div className="text-xs text-emerald-600 dark:text-emerald-400">Short</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookComprehensive}</div>
+              <div className="text-xs text-emerald-600 dark:text-emerald-400">Comprehensive</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalPagesProcessed}</div>
+              <div className="text-xs text-emerald-600 dark:text-emerald-400">Pages</div>
+            </div>
+          </div>
+          {/* Second row for token stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{totalTokensUsed.toLocaleString()}</div>
+              <div className="text-xs text-emerald-600 dark:text-emerald-400">Total Tokens</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{totalInputTokens.toLocaleString()}</div>
+              <div className="text-xs text-emerald-600 dark:text-emerald-400">Input Tokens</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{totalOutputTokens.toLocaleString()}</div>
+              <div className="text-xs text-emerald-600 dark:text-emerald-400">Output Tokens</div>
+            </div>
+          </div>
+          {notebookDocuments.length > 0 && (
+            <button
+              onClick={() => setShowNotebookDetails(!showNotebookDetails)}
+              className="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-800/30 dark:hover:bg-emerald-700/30 text-emerald-700 dark:text-emerald-300 rounded-lg transition-all flex items-center"
+            >
+              {showNotebookDetails ? 'Hide Details' : 'View Details'}
+              <svg className={`w-3 h-3 ml-1 transition-transform ${showNotebookDetails ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+     
+      {notebookDocuments.length > 0 && showNotebookDetails && (
+        <div className="space-y-2 border-t border-emerald-200 dark:border-emerald-700/30 pt-3">
+          <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-2">Document Activity:</div>
+          <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+            {notebookDocuments.map((doc) => (
+              <div key={doc.document_id} className="flex items-center justify-between bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
+                <span className="text-xs text-emerald-800 dark:text-emerald-200 truncate flex-1 mr-2" title={doc.filename}>
+                  {doc.filename.length > 25 ? `${doc.filename.substring(0, 25)}...` : doc.filename}
+                </span>
+                <span className="text-xs font-mono bg-emerald-100 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">
+                  {doc.questions_asked}Q
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})()}
                       </div>
                     )}
                   </div>
@@ -2402,6 +2671,35 @@ const CategoryManagementSection = () => {
                     className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
                   />
                 </div>
+                <div className="mb-4">
+  <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
+    Token Allocation Limit
+  </label>
+  <input
+    type="number"
+    name="token_limit"
+    value={formData.token_limit}
+    onChange={handleInputChange}
+    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+    placeholder="Enter token limit (leave empty for unlimited)"
+  />
+  <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1">
+    Set maximum tokens this user can consume. Leave empty for unlimited.
+  </p>
+</div>
+<div className="mb-4">
+  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+    Page Limit
+  </label>
+  <input
+    type="number"
+    name="page_limit"
+    value={formData.page_limit}
+    onChange={handleInputChange}
+    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+    placeholder="Leave empty for unlimited pages"
+  />
+</div>
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -2516,7 +2814,165 @@ const CategoryManagementSection = () => {
             </div>
           </div>
         )}
+{/* Global Token Limit Modal */}
+{isGlobalTokenLimitModalOpen && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Set Global Token Limit
+        </h3>
+        <button
+          onClick={() => setIsGlobalTokenLimitModalOpen(false)}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          <FaTimes size={20} />
+        </button>
+      </div>
+      
+      <form onSubmit={handleSetGlobalTokenLimit}>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Token Limit for All Users
+          </label>
+          <input
+            type="number"
+            value={globalTokenLimitValue}
+            onChange={(e) => setGlobalTokenLimitValue(e.target.value)}
+            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+            placeholder="Enter token limit (e.g., 20)"
+            min="1"
+            required
+          />
+          <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+              </svg>
+              <div>
+                <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                  Warning
+                </h4>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                  This will override the current token limit for <strong>ALL {users.length} users</strong>. 
+                  Individual custom limits will be replaced with this global value.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex justify-end space-x-3">
+          <button
+            type="button"
+            onClick={() => setIsGlobalTokenLimitModalOpen(false)}
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors"
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <FaSpinner className="animate-spin mr-2" size={14} />
+                Updating...
+              </>
+            ) : (
+              <>
+                <FaGlobe className="mr-2" size={14} />
+                Set for All Users
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
 
+{/* Global Page Limit Modal */}
+{isGlobalPageLimitModalOpen && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Set Global Page Limit
+        </h3>
+        <button
+          onClick={() => setIsGlobalPageLimitModalOpen(false)}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          <FaTimes size={20} />
+        </button>
+      </div>
+      
+      <form onSubmit={handleSetGlobalPageLimit}>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Page Limit for All Users
+          </label>
+          <input
+            type="number"
+            value={globalPageLimitValue}
+            onChange={(e) => setGlobalPageLimitValue(e.target.value)}
+            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-white"
+            placeholder="Enter page limit (e.g., 100)"
+            min="1"
+            required
+          />
+          <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+              </svg>
+              <div>
+                <h4 className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                  Warning
+                </h4>
+                <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
+                  This will override the current page limit for <strong>ALL {users.length} users</strong>. 
+                  Individual custom page limits will be replaced with this global value.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex justify-end space-x-3">
+          <button
+            type="button"
+            onClick={() => setIsGlobalPageLimitModalOpen(false)}
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors"
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <FaSpinner className="animate-spin mr-2" size={14} />
+                Updating...
+              </>
+            ) : (
+              <>
+                <FaFileUpload className="mr-2" size={14} />
+                Set for All Users
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
         {/* Right Panel Permissions Modal */}
         {isRightPanelPermissionsModalOpen && currentUser && (
           <div className="fixed inset-0 bg-black/30 dark:bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">

@@ -2457,16 +2457,65 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     def count_document_pages(self, file_path, file_ext):
         """
         Count the number of pages in a document based on file type
+        For PDF and PPTX files, only count pages that contain images
         """
         try:
             if file_ext == '.pdf':
-                # PDF files
+                # PDF files - count only pages with images
                 import fitz
                 pdf_doc = fitz.open(file_path)
-                total_pages = len(pdf_doc)
+                pages_with_images = 0
+               
+                for page_num in range(len(pdf_doc)):
+                    page = pdf_doc[page_num]
+                    # Get list of images on the page
+                    image_list = page.get_images()
+                    if image_list:  # If page has images
+                        pages_with_images += 1
+               
                 pdf_doc.close()
-                return total_pages
-                
+                return pages_with_images
+               
+            elif file_ext == '.pptx':
+                # PowerPoint presentations - count only slides with images
+                import fitz
+                try:
+                    # Convert PPTX to PDF in memory for image detection
+                    pptx_doc = fitz.open(file_path)
+                    slides_with_images = 0
+                   
+                    for page_num in range(len(pptx_doc)):
+                        page = pptx_doc[page_num]
+                        # Get list of images on the page/slide
+                        image_list = page.get_images()
+                        if image_list:  # If slide has images
+                            slides_with_images += 1
+                   
+                    pptx_doc.close()
+                    return slides_with_images
+                   
+                except Exception as pptx_error:
+                    # Fallback to python-pptx if fitz fails
+                    try:
+                        from pptx import Presentation
+                        from pptx.enum.shapes import MSO_SHAPE_TYPE
+                       
+                        prs = Presentation(file_path)
+                        slides_with_images = 0
+                       
+                        for slide in prs.slides:
+                            has_image = False
+                            for shape in slide.shapes:
+                                if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                                    has_image = True
+                                    break
+                            if has_image:
+                                slides_with_images += 1
+                       
+                        return slides_with_images
+                    except:
+                        return 0  # Return 0 if we can't determine
+                   
             elif file_ext in ['.docx', '.doc']:
                 # Word documents
                 try:
@@ -2480,20 +2529,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     return estimated_pages
                 except:
                     return 1  # Default to 1 if we can't determine
-                    
-            elif file_ext == '.pptx':
-                # PowerPoint presentations
-                try:
-                    from pptx import Presentation
-                    prs = Presentation(file_path)
-                    return len(prs.slides)
-                except:
-                    return 1
-                    
+                   
             elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']:
                 # Image files - always 1 page
                 return 1
-                
+               
             elif file_ext == '.txt':
                 # Text files - estimate based on content
                 try:
@@ -2504,7 +2544,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         return estimated_pages
                 except:
                     return 1
-                    
+                   
             elif file_ext in ['.xlsx', '.xls']:
                 # Excel files - count worksheets
                 try:
@@ -2513,15 +2553,15 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     return len(wb.worksheets)
                 except:
                     return 1
-                    
+                   
             else:
                 # For other file types, default to 1
                 return 1
-                
+               
         except Exception as e:
             print(f"Error counting pages for {file_path}: {str(e)}")
             return 1  # Default to 1 page if there's an error
-
+        
 def update_doc_status(user, doc_name, status, progress=0, message="", doc_id=None):
     obj, _ = DocumentProcessingStatus.objects.get_or_create(
         user=user, document_name=doc_name,
