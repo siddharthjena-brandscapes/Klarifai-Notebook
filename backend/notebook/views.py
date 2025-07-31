@@ -1821,7 +1821,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         Optimized PDF processing with pgvector storage instead of FAISS
 
         """
-
+        import fitz  # PyMuPDF
         try:
 
             # Save uploaded file to temporary location
@@ -2026,6 +2026,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         OPTIMIZATION: Process multiple image pages together using LlamaParse
         """
         import tempfile
+        import fitz  # PyMuPDF
         
         try:
             # Create a single PDF with all image pages
@@ -2081,6 +2082,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         Process image pages individually but in parallel
         """
         import tempfile
+        import fitz  # PyMuPDF
         from concurrent.futures import ThreadPoolExecutor, as_completed
         def process_single_image_page(page_num):
 

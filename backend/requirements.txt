@@ -141,7 +141,6 @@ langchain_text_splitters
 PyPDF2
 msal
 pgvector>=0.2.4
-
 # Cache
 redis>=5.0.0
 django-redis>=5.4.0
