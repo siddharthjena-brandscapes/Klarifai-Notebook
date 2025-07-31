@@ -491,6 +491,7 @@ class UserProfileView(APIView):
        
         # Get document statistics
         document_stats = self.get_user_document_stats(user)
+        api_tokens = user.api_tokens if hasattr(user, 'api_tokens') else None
        
         print(token_stats)
         print(document_stats)
@@ -509,6 +510,8 @@ class UserProfileView(APIView):
             'total_questions_asked': token_stats['total_questions'],
             'total_pages_processed': document_stats['total_pages'],
             'total_documents_uploaded': document_stats['total_documents'],
+            'token_limit': api_tokens.token_limit if api_tokens and api_tokens.token_limit is not None else None,
+            'page_limit': (api_tokens.page_limit) if api_tokens and api_tokens.page_limit is not None else None,
         }, status=status.HTTP_200_OK)
  
     def get_user_token_stats(self, user):

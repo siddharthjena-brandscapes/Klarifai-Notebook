@@ -103,94 +103,73 @@ const Header = () => {
 
   // Fetch user data in background without affecting render
   useEffect(() => {
-   const fetchUserProfile = async () => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      navigate("/auth");
-      return;
-    }
-
-    try {
-      // Fetch basic profile info
-      const response = await axiosInstance.get("/user/profile/");
-      const currentUsername = response.data.username;
-      const currentUserId = response.data.id;
-
-      if (currentUsername) {
-        setUsername(currentUsername);
-        localStorage.setItem("username", currentUsername);
-      }
-
-      // Generate fallback avatar if needed
-      const defaultAvatar = currentUsername
-        ? `https://ui-avatars.com/api/?name=${encodeURIComponent(
-            currentUsername
-          )}&background=random`
-        : "";
-
-      // Use profile picture or default avatar
-      if (response.data.profile_picture || defaultAvatar) {
-        setProfileImage(response.data.profile_picture || defaultAvatar);
-        localStorage.setItem(
-          "profile_image",
-          response.data.profile_picture || defaultAvatar
-        );
-      }
-
-      // Fetch all users from admin endpoint
-      const users = await adminService.getAllUsers();
-      // Find the current user by username or ID
-      const matchedUser = users.find(
-        (u) => u.username === currentUsername || u.id === currentUserId
-      );
-
-      // Fallback if not found
-      const tokenLimit =
-        matchedUser?.token_limit ||
-        matchedUser?.api_tokens?.token_limit ||
-        0;
-      const pageLimit =
-        matchedUser?.api_tokens?.page_limit ||
-        matchedUser?.page_limit ||
-        0;
-
-      // Update user details and store disabled modules
-      setUserDetails({
-        email: response.data.email || "Not available",
-        joinedDate: response.data.date_joined
-          ? new Date(response.data.date_joined).toLocaleDateString()
-          : "Not available",
-        total_tokens_used: response.data.total_tokens_used || 0,
-        total_input_tokens: response.data.total_input_tokens || 0,
-        total_output_tokens: response.data.total_output_tokens || 0,
-        total_questions_asked: response.data.total_questions_asked || 0,
-        total_pages_processed: response.data.total_pages_processed || 0,
-        total_documents_uploaded: response.data.total_documents_uploaded || 0,
-        token_limit: tokenLimit,
-        page_limit: pageLimit,
-      });
-
-      // Set disabled modules from user profile
-      if (response.data.disabled_modules) {
-        setDisabledModules(response.data.disabled_modules);
-        localStorage.setItem(
-          "disabled_modules",
-          JSON.stringify(response.data.disabled_modules)
-        );
-      }
-    } catch (error) {
-      console.error("Failed to fetch user profile:", error);
-
-      // Only show toast if we don't have cached data
-      if (!username) {
-        toast.error("Could not retrieve user profile");
-      }
-    }
-  };
-
-    fetchUserProfile();
-  }, [navigate, username]);
+    const fetchUserProfile = async () => {
+        const token = localStorage.getItem("token");
+      
+        if (!token) {
+          navigate("/auth");
+          return;
+        }
+      
+        try {
+          const response = await axiosInstance.get("/user/profile/");
+        
+          if (response.data.username) {
+            setUsername(response.data.username);
+            localStorage.setItem("username", response.data.username);
+          }
+  
+          // Generate fallback avatar if needed
+          const defaultAvatar = response.data.username ?
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              response.data.username
+            )}&background=random` : "";
+  
+          // Use profile picture or default avatar
+          if (response.data.profile_picture || defaultAvatar) {
+            setProfileImage(response.data.profile_picture || defaultAvatar);
+            localStorage.setItem(
+              "profile_image",
+              response.data.profile_picture || defaultAvatar
+            );
+          }
+  
+          // Update user details and store disabled modules
+          // Update user details and store disabled modules
+  setUserDetails({
+    email: response.data.email || "Not available",
+    joinedDate: response.data.date_joined ?
+      new Date(response.data.date_joined).toLocaleDateString() :
+      "Not available",
+    total_tokens_used: response.data.total_tokens_used || 0,
+    total_input_tokens: response.data.total_input_tokens || 0,
+    total_output_tokens: response.data.total_output_tokens || 0,
+    total_questions_asked: response.data.total_questions_asked || 0,
+    total_pages_processed: response.data.total_pages_processed || 0,
+    total_documents_uploaded: response.data.total_documents_uploaded || 0,
+     token_limit: response.data.token_limit || null,
+     page_limit: response.data.page_limit || null,
+  });
+  
+          // Set disabled modules from user profile
+          if (response.data.disabled_modules) {
+            setDisabledModules(response.data.disabled_modules);
+            // Store disabled modules in localStorage for other components
+            localStorage.setItem('disabled_modules', JSON.stringify(response.data.disabled_modules));
+          }
+        } catch (error) {
+          console.error("Failed to fetch user profile:", error);
+        
+          // Only show toast if we don't have cached data
+          if (!username) {
+            toast.error("Could not retrieve user profile");
+          }
+        }
+      };
+  
+     fetchUserProfile();
+   }, [navigate, username]);
+  
 
   // Fetch project details to get selected modules
   useEffect(() => {
