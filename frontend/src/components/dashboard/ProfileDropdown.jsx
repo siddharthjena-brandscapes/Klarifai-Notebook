@@ -365,7 +365,7 @@ const ProfileDropdown = ({
               </Tooltip.Portal>
             </Tooltip.Root>
           </h4>
-          <button
+          {/* <button
             onClick={handleRefreshStats}
             disabled={isRefreshing}
             className="flex items-center justify-center p-1.5 rounded-lg bg-[#f5e6d8] dark:bg-gray-800 hover:bg-[#e3d5c8] dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -376,7 +376,7 @@ const ProfileDropdown = ({
                 isRefreshing ? "animate-spin" : ""
               }`}
             />
-          </button>
+          </button> */}
         </div>
         {/* Usage Progress Bars */}
         <div className="grid grid-cols-2 gap-3 mb-3">
