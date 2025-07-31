@@ -372,23 +372,8 @@ const ProfileDropdown = ({
               {formatNumber(userDetails.total_questions_asked)}
             </p>
           </div>
-
-          {/* Total Tokens */}
-          <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
-            <div className="flex items-center justify-between">
-              <BarChart3 className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
-              <span className="text-xs text-[#5a544a] dark:text-gray-400">
-                Total Tokens
-              </span>
-            </div>
-            <p className="text-lg font-semibold text-[#0a3b25] dark:text-white mt-1">
-              {formatNumber(userDetails.total_tokens_used)}
-            </p>
-          </div>
-        </div>
-
-        {/* second Row - Document Stats */}
-        <div className="grid grid-cols-2 gap-3">
+ 
+         
           {/* Total Documents */}
           <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
             <div className="flex items-center justify-between">
@@ -401,20 +386,9 @@ const ProfileDropdown = ({
               {formatNumber(userDetails.total_documents_uploaded)}
             </p>
           </div>
-
-          {/* Total Pages */}
-          <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
-            <div className="flex items-center justify-between">
-              <FileText className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
-              <span className="text-xs text-[#5a544a] dark:text-gray-400">
-                Pages
-              </span>
-            </div>
-            <p className="text-lg font-semibold text-[#0a3b25] dark:text-white mt-1">
-              {formatNumber(userDetails.total_pages_processed)}
-            </p>
-          </div>
         </div>
+
+        {/* second Row - Document Stats */}
 
         
       </div>
