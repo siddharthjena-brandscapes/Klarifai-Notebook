@@ -14,20 +14,19 @@ import FaqPage from '../components/faq/FaqPage';
 import MainDashboard from '../components/klarifai_notebook/MainDashboard';
 import SSOCallback from '../components/auth/SSOCallback';
 import SignupForm from '../components/auth/SignupForm';
-import FileDownloader from '../components/FileDownloader';
-  
+import WelcomeScreen from '../components/WelcomeScreen';
  
 const AppRoutes = () => {
   return (
     
       <Routes>
         {/* Auth Routes */}
+        <Route path="/welcome" element={<WelcomeScreen />} />
         <Route path="/auth" element={<LoginSignup />} />
         <Route path="/forgot-password" element={<ForgotPasswordForm />} />
         <Route path="/reset-password" element={<ResetPasswordForm />} />
         <Route path="/sso-callback" element={<SSOCallback />} />
         <Route path="/auth/signup" element={<SignupForm />} />
-        <Route path="/downloader" element={<FileDownloader />} />
  
        
         {/* Main Landing Page */}
@@ -86,7 +85,7 @@ const AppRoutes = () => {
         <Route path="/faq" element={<FaqPage />} />
        
         {/* Default Route */}
-        <Route path="/" element={<Navigate to="/auth" replace />} />
+        <Route path="/" element={<WelcomeScreen />} />
       </Routes>
    
   );
