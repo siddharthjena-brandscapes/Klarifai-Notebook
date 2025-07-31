@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useRef, useState } from "react";
 // import { Tooltip } from "react-tooltip";
-import * as Tooltip from '@radix-ui/react-tooltip';
+import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Calendar,
   Camera,
@@ -31,7 +31,7 @@ const ProfileDropdown = ({
   isOpen,
   onProfileUpdate,
   onLogout,
-  onUserDetailsUpdate
+  onUserDetailsUpdate,
 }) => {
   const navigate = useNavigate(); // Initialize the navigation hook
   const fileInputRef = useRef(null);
@@ -46,7 +46,7 @@ const ProfileDropdown = ({
 
   // Helper for percentage
   const getPercent = (used, limit) =>
-    limit ? Math.min((used / limit) * 100, 100).toFixed(1) : '0';
+    limit ? Math.min((used / limit) * 100, 100).toFixed(1) : "0";
 
   if (!isOpen) return null;
 
@@ -87,17 +87,19 @@ const ProfileDropdown = ({
       if (response.data && response.data.profile_picture) {
         // The backend now returns the full Azure blob URL
         const newProfilePictureUrl = response.data.profile_picture;
-        
+
         onProfileUpdate(newProfilePictureUrl);
-        localStorage.setItem('profile_image', newProfilePictureUrl);
-        toast.success('Profile picture updated successfully');
-        
+        localStorage.setItem("profile_image", newProfilePictureUrl);
+        toast.success("Profile picture updated successfully");
+
         // Clear the preview since we have the new image
         setPreviewImage(null);
       }
     } catch (error) {
-      console.error('Error uploading profile picture:', error);
-      toast.error(error.response?.data?.error || 'Failed to update profile picture');
+      console.error("Error uploading profile picture:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to update profile picture"
+      );
       setPreviewImage(null);
     } finally {
       setIsUploading(false);
@@ -122,6 +124,8 @@ const ProfileDropdown = ({
   };
 
   // Function to refresh usage statistics
+  // Function to refresh usage statistics
+
   const handleRefreshStats = async () => {
     setIsRefreshing(true);
 
@@ -129,26 +133,82 @@ const ProfileDropdown = ({
       const response = await axiosInstance.get("/user/profile/");
 
       if (response.data) {
+        // Get current username for fetching limits
+
+        const currentUsername = response.data.username;
+
+        const currentUserId = response.data.id;
+
+        // Fetch user limits from admin service (same logic as Header)
+
+        let tokenLimit = 0;
+
+        let pageLimit = 0;
+
+        try {
+          const { adminService } = await import("../../utils/axiosConfig");
+
+          const users = await adminService.getAllUsers();
+
+          const matchedUser = users.find(
+            (u) => u.username === currentUsername || u.id === currentUserId
+          );
+
+          tokenLimit =
+            matchedUser?.token_limit ||
+            matchedUser?.api_tokens?.token_limit ||
+            0;
+
+          pageLimit =
+            matchedUser?.api_tokens?.page_limit || matchedUser?.page_limit || 0;
+        } catch (error) {
+          console.error("Failed to fetch user limits:", error);
+        }
+
         const updatedUserDetails = {
           email: response.data.email || "Not available",
+
           joinedDate: response.data.date_joined
             ? new Date(response.data.date_joined).toLocaleDateString()
             : "Not available",
+
           total_tokens_used: response.data.total_tokens_used || 0,
+
           total_input_tokens: response.data.total_input_tokens || 0,
+
           total_output_tokens: response.data.total_output_tokens || 0,
+
           total_questions_asked: response.data.total_questions_asked || 0,
+
           total_pages_processed: response.data.total_pages_processed || 0,
+
           total_documents_uploaded: response.data.total_documents_uploaded || 0,
+
+          token_limit: tokenLimit, // Add this
+
+          page_limit: pageLimit, // Add this
         };
 
+        // Update localStorage cache
+
+        localStorage.setItem(
+          "user_details",
+          JSON.stringify({
+            token_limit: tokenLimit,
+
+            page_limit: pageLimit,
+          })
+        );
+
         // Call the callback function to update user details in the parent component
+
         if (onUserDetailsUpdate) {
           onUserDetailsUpdate(updatedUserDetails);
         }
       }
     } catch (error) {
       console.error("Error refreshing usage statistics:", error);
+
       toast.error("Failed to refresh usage statistics");
     } finally {
       setIsRefreshing(false);
@@ -230,23 +290,23 @@ const ProfileDropdown = ({
       {/* Token Usage Statistics */}
       <div className="pt-3 border-t border-[#e3d5c8] dark:border-gray-700">
         <div className="flex items-center justify-between mb-3">
-    <h4 className="text-[#0a3b25] dark:text-white text-sm font-medium flex items-center">
-  <BarChart3 className="w-4 h-4 mr-2 text-[#a55233] dark:text-blue-400" />
-  Usage Statistics
-  <Tooltip.Root>
-  <Tooltip.Trigger asChild>
-    <span
-      className="ml-2 cursor-pointer"
-      tabIndex={0}
-      title="What do these mean?"
-    >
-      <Info className="w-4 h-4 text-blue-500 inline" />
-    </span>
-  </Tooltip.Trigger>
-<Tooltip.Portal>
-  <Tooltip.Content
-    side="bottom"
-    className={`
+          <h4 className="text-[#0a3b25] dark:text-white text-sm font-medium flex items-center">
+            <BarChart3 className="w-4 h-4 mr-2 text-[#a55233] dark:text-blue-400" />
+            Usage Statistics
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <span
+                  className="ml-2 cursor-pointer"
+                  tabIndex={0}
+                  title="What do these mean?"
+                >
+                  <Info className="w-4 h-4 text-blue-500 inline" />
+                </span>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content
+                  side="bottom"
+                  className={`
       bg-[#fffbe6] 
       dark:bg-[#101a2c]
       text-[#2d1e0f] 
@@ -263,37 +323,48 @@ const ProfileDropdown = ({
       flex flex-col justify-center items-start
       transition-colors
     `}
-    style={{
-      minWidth: "260px",
-      maxWidth: "300px",
-      minHeight: "120px",
-      boxShadow: "0 8px 32px 0 rgba(247, 200, 115, 0.25)",
-    }}
-  >
-    <div className="font-bold mb-3 text-lg tracking-wide">Usage Info</div>
-    <div className="mb-2">
-      <strong className="text-[#a55233] dark:text-[#60a5fa]">Token Usage:</strong>
-      <span className="font-normal ml-1">
-        Number of AI tokens you've consumed out of your allowed limit.
-      </span>
-    </div>
-    <div className="mb-2">
-      <strong className="text-[#a55233] dark:text-[#60a5fa]">Page Usage:</strong>
-      <span className="font-normal ml-1">
-        Number of document pages you've processed out of your allowed limit.
-      </span>
-    </div>
-    <div>
-      <strong className="text-[#a55233] dark:text-[#60a5fa]">Limits:</strong>
-      <span className="font-normal ml-1">
-        If you reach your limit, you may need to request more or wait for reset.
-      </span>
-    </div>
-    <Tooltip.Arrow className="fill-[#f7c873] dark:fill-[#2563eb]" />
-  </Tooltip.Content>
-</Tooltip.Portal>
-</Tooltip.Root>
-</h4>
+                  style={{
+                    minWidth: "260px",
+                    maxWidth: "300px",
+                    minHeight: "120px",
+                    boxShadow: "0 8px 32px 0 rgba(247, 200, 115, 0.25)",
+                  }}
+                >
+                  <div className="font-bold mb-3 text-lg tracking-wide">
+                    Usage Info
+                  </div>
+                  <div className="mb-2">
+                    <strong className="text-[#a55233] dark:text-[#60a5fa]">
+                      Token Usage:
+                    </strong>
+                    <span className="font-normal ml-1">
+                      Number of AI tokens you've consumed out of your allowed
+                      limit.
+                    </span>
+                  </div>
+                  <div className="mb-2">
+                    <strong className="text-[#a55233] dark:text-[#60a5fa]">
+                      Page Usage:
+                    </strong>
+                    <span className="font-normal ml-1">
+                      Number of document pages you've processed out of your
+                      allowed limit.
+                    </span>
+                  </div>
+                  <div>
+                    <strong className="text-[#a55233] dark:text-[#60a5fa]">
+                      Limits:
+                    </strong>
+                    <span className="font-normal ml-1">
+                      If you reach your limit, you may need to request more or
+                      wait for reset.
+                    </span>
+                  </div>
+                  <Tooltip.Arrow className="fill-[#f7c873] dark:fill-[#2563eb]" />
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          </h4>
           <button
             onClick={handleRefreshStats}
             disabled={isRefreshing}
@@ -307,16 +378,18 @@ const ProfileDropdown = ({
             />
           </button>
         </div>
-                {/* Usage Progress Bars */}
+        {/* Usage Progress Bars */}
         <div className="grid grid-cols-2 gap-3 mb-3">
           {/* Token Usage */}
           <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
             <div className="flex items-center justify-between">
               <BarChart3 className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
-              <span className="text-xs text-[#5a544a] dark:text-gray-400">Token Usage</span>
+              <span className="text-xs text-[#5a544a] dark:text-gray-400">
+                Token Usage
+              </span>
             </div>
             <p className="text-sm font-semibold text-[#0a3b25] dark:text-white mt-1">
-              {tokensUsed} / {tokenLimit ?? 'Unlimited'}
+              {tokensUsed} / {tokenLimit ?? "Unlimited"}
             </p>
             {tokenLimit && (
               <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mt-2">
@@ -337,10 +410,12 @@ const ProfileDropdown = ({
           <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
             <div className="flex items-center justify-between">
               <FileText className="w-4 h-4 text-[#a55233] dark:text-blue-400" />
-              <span className="text-xs text-[#5a544a] dark:text-gray-400">Page Usage</span>
+              <span className="text-xs text-[#5a544a] dark:text-gray-400">
+                Page Usage
+              </span>
             </div>
             <p className="text-sm font-semibold text-[#0a3b25] dark:text-white mt-1">
-              {pagesUsed} / {pageLimit ?? 'Unlimited'}
+              {pagesUsed} / {pageLimit ?? "Unlimited"}
             </p>
             {pageLimit && (
               <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mt-2">
@@ -372,8 +447,7 @@ const ProfileDropdown = ({
               {formatNumber(userDetails.total_questions_asked)}
             </p>
           </div>
- 
-         
+
           {/* Total Documents */}
           <div className="bg-[#f5e6d8] dark:bg-gray-800 p-3 rounded-lg">
             <div className="flex items-center justify-between">
@@ -389,8 +463,6 @@ const ProfileDropdown = ({
         </div>
 
         {/* second Row - Document Stats */}
-
-        
       </div>
 
       {/* Admin Panel Button - Only shown for admin users */}
