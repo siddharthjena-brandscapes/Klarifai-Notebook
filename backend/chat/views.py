@@ -344,7 +344,7 @@ class MicrosoftSSOCallbackView(APIView):
                 module_perm = UserModulePermissions.objects.create(user=user)
  
             # Assuming these are your modules (customize as needed)
-            all_modules = ["document-qa", "idea-generator", "klarifai-notebook", "ad-campaign-generator"]
+            all_modules = ["document-qa", "idea-generator", "ad-campaign-generator"]
             module_perm.disabled_modules = {module: True for module in all_modules}
             module_perm.save()
  
