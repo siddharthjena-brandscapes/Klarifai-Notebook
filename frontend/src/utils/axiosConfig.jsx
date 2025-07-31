@@ -1398,19 +1398,15 @@ export const adminService = {
 
   // Create a new user (admin only)
   createUser: (userData) => {
-    if (!userData) {
-      console.error("userData is required for createUser");
-      return Promise.reject(new Error("userData is required"));
-    }
-    
     return axiosInstance
-      .post("/api/admin/users/", userData) // Fixed: removed duplicate '/api'
+      .post("/api/admin/users/", userData)  // ✅ Keep original endpoint
       .then((response) => {
         console.log("Admin service - create user response:", response.data);
         return response.data;
       })
       .catch((error) => {
         console.error("Admin service - create user error:", error);
+        console.error("Error response data:", error.response?.data);
         throw error;
       });
   },
@@ -1429,18 +1425,8 @@ export const adminService = {
   },
   // Update a user's API tokens (admin only)
   updateUserTokens: (userId, tokenData) => {
-    if (!userId) {
-      console.error("userId is required for updateUserTokens");
-      return Promise.reject(new Error("userId is required"));
-    }
-    
-    if (!tokenData) {
-      console.error("tokenData is required for updateUserTokens");
-      return Promise.reject(new Error("tokenData is required"));
-    }
-    
     return axiosInstance
-      .put("/api/admin/users/", { // Fixed: removed duplicate '/api'
+      .put("/api/admin/users/", {  // ✅ Keep original endpoint
         user_id: userId,
         ...tokenData,
       })
@@ -1456,13 +1442,8 @@ export const adminService = {
 
   // Delete a user (admin only)
   deleteUser: (userId) => {
-    if (!userId) {
-      console.error("userId is required for deleteUser");
-      return Promise.reject(new Error("userId is required"));
-    }
-    
     return axiosInstance
-      .delete(`/api/admin/users/?user_id=${userId}`) // Fixed: removed duplicate '/api'
+      .delete(`/api/admin/users/?user_id=${userId}`)  // ✅ Keep original endpoint
       .then((response) => {
         console.log("Admin service - delete user response:", response.data);
         return response.data;
