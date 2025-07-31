@@ -28,6 +28,7 @@ logger.info(f"Allowed hosts: {ALLOWED_HOSTS}")
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
     'https://lemon-plant-073b3600f.1.azurestaticapps.net',
+    
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -59,9 +60,9 @@ try:
     # Check for VM database connection first
     VM_DB_HOST = os.environ.get('VM_DB_HOST')  # Your VM's public IP or domain
     VM_DB_PORT = os.environ.get('VM_DB_PORT', '5432')
-    VM_DB_NAME = os.environ.get('VM_DB_NAME', 'data_analysis_prod')  # Match your docker-compose
+    VM_DB_NAME = os.environ.get('VM_DB_NAME', 'klarifai_prod_db')  # Match your docker-compose
     VM_DB_USER = os.environ.get('VM_DB_USER', 'postgres')
-    VM_DB_PASSWORD = os.environ.get('VM_DB_PASSWORD', 'Password123')  # Match your docker-compose
+    VM_DB_PASSWORD = os.environ.get('VM_DB_PASSWORD', 'KlarifaiDatabase123')  # Match your docker-compose
     
     if VM_DB_HOST:
         # Use VM PostgreSQL database

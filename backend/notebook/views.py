@@ -1815,107 +1815,160 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     # -------------------------------
     # Replace process_pdf_document_optimized() with:
     def process_pdf_document_optimized_pgvector(self, file, user, document):
-            """
-            Optimized PDF processing with pgvector storage instead of FAISS
-            """
-            try:
-                # Save uploaded file to temporary location
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                    for chunk in file.chunks():
-                        tmp_file.write(chunk)
-                    pdf_path = tmp_file.name
-                
-                try:
-                    # ... Keep all your existing optimization logic ...
-                    pdf_doc = fitz.open(pdf_path)
-                    total_pages = len(pdf_doc)
-                    print(f"Processing PDF with {total_pages} pages: {file.name}")
-                    
-                    # Keep all your parallel processing logic
-                    pages_with_images, pages_without_images = self._bulk_analyze_pages_for_images(pdf_doc)
-                    
-                    combined_markdown = ""
-                    page_results = {}
-                    
-                    # Process pages without images in parallel (fast)
-                    if pages_without_images:
-                        print("Processing text-only pages in parallel...")
-                        text_results = self._process_text_pages_parallel(pdf_doc, pages_without_images)
-                        page_results.update(text_results)
-                    
-                    # OPTIMIZATION 3: Batch process image pages if there are many
-                    if pages_with_images:
-                        if len(pages_with_images) > 5:  # If many image pages, use batch processing
-                            print(f"Batch processing {len(pages_with_images)} image pages...")
-                            image_results = self._batch_process_image_pages_pgvector(pdf_doc, pages_with_images, file.name, user, document)
-                        else:
-                            print(f"Processing {len(pages_with_images)} image pages individually...")
-                            image_results = self._process_image_pages_parallel_pgvector(pdf_doc, pages_with_images, file.name, user, document)
-                        page_results.update(image_results)
-                    
-                    pdf_doc.close()
-                    
-                    # Combine results in page order
-                    for page_num in range(total_pages):
-                        page_text = page_results.get(page_num, "[No extractable content]")
-                        combined_markdown += f"\n\n## Page {page_num + 1}\n\n{page_text.strip()}\n"
-                    
-                    if not combined_markdown.strip():
-                        raise ValueError("No content could be extracted from any page of the PDF")
-                    
-                    # Save markdown file locally instead of blob storage
-                    import uuid
-                    session_id = uuid.uuid4().hex
-                    markdown_filename = f"document_{session_id}.md"
-                    markdown_path = os.path.join(tempfile.gettempdir(), markdown_filename)
-                    
-                    with open(markdown_path, 'w', encoding='utf-8') as f:
-                        f.write(combined_markdown)
-                    
-                    print(f"Complete markdown saved to: {markdown_path}")
-                    
-                    # Process with pgvector instead of FAISS
-                    cleaned_text = self.clean_text(combined_markdown)
-                    chunks = self._smart_chunk_text(cleaned_text, target_chunk_size=2000)
-                    
-                    all_chunks = []
-                    for i, chunk in enumerate(chunks):
-                        all_chunks.append({
-                            'text': chunk,
-                            'source': file.name,
-                            'source_file': file.name,
-                            'chunk_id': i
-                        })
-                    
-                    # Batch embeddings
-                    text_chunks = [chunk['text'] for chunk in all_chunks]
-                    print(f"Getting embeddings for {len(text_chunks)} optimized chunks")
-                    embeddings = self._get_embeddings_batch(text_chunks, batch_size=50)
-                    
-                    if not embeddings:
-                        raise ValueError("Failed to generate embeddings for document chunks")
-                    
-                    # Save to pgvector instead of FAISS
-                    self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
-                    
-                    print(f"PDF processed successfully: {len(all_chunks)} chunks saved to pgvector from {total_pages} pages")
-                    
-                    return {
-                        'storage_type': 'pgvector',
-                        'chunks_count': len(all_chunks),
-                        'full_text': cleaned_text,
-                        'markdown_path': markdown_path,
-                        'page_count': total_pages
-                    }
-                    
-                finally:
-                    if os.path.exists(pdf_path):
-                        os.unlink(pdf_path)
-                        
-            except Exception as e:
-                print(f"Error in process_pdf_document_optimized_pgvector: {str(e)}")
-                raise
 
+        """
+
+        Optimized PDF processing with pgvector storage instead of FAISS
+
+        """
+
+        try:
+
+            # Save uploaded file to temporary location
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+
+                for chunk in file.chunks():
+
+                    tmp_file.write(chunk)
+
+                pdf_path = tmp_file.name
+
+            try:
+
+                # ... Keep all your existing optimization logic ...
+
+                pdf_doc = fitz.open(pdf_path)
+
+                total_pages = len(pdf_doc)
+
+                print(f"Processing PDF with {total_pages} pages: {file.name}")
+
+                # Keep all your parallel processing logic
+
+                pages_with_images, pages_without_images = self._bulk_analyze_pages_for_images(pdf_doc)
+
+                combined_markdown = ""
+
+                page_results = {}
+
+                # Process pages (keep existing logic)
+
+                if pages_without_images:
+
+                    text_results = self._process_text_pages_parallel(pdf_doc, pages_without_images)
+
+                    page_results.update(text_results)
+
+                if pages_with_images:
+
+                    if len(pages_with_images) > 5:
+
+                        image_results = self._batch_process_image_pages_pgvector(pdf_doc, pages_with_images, file.name, user, document)
+
+                    else:
+
+                        image_results = self._process_image_pages_parallel_pgvector(pdf_doc, pages_with_images, file.name, user, document)
+
+                    page_results.update(image_results)
+
+                pdf_doc.close()
+
+                # Combine results in page order
+
+                for page_num in range(total_pages):
+
+                    page_text = page_results.get(page_num, "[No extractable content]")
+
+                    combined_markdown += f"\n\n## Page {page_num + 1}\n\n{page_text.strip()}\n"
+
+                if not combined_markdown.strip():
+
+                    raise ValueError("No content could be extracted from any page of the PDF")
+
+                # Upload markdown to blob storage instead of saving locally
+
+                from notebook.utils import upload_markdown_to_blob
+
+                import uuid
+
+                session_id = uuid.uuid4().hex
+
+                markdown_filename = f"document_{session_id}.md"
+
+                markdown_result = upload_markdown_to_blob(combined_markdown, markdown_filename)
+
+                if not markdown_result:
+
+                    raise ValueError("Failed to upload markdown file to blob storage")
+
+                markdown_path = markdown_result['filename']
+
+                print(f"Complete markdown uploaded to blob: {markdown_path}")
+
+                # Process with pgvector instead of FAISS
+
+                cleaned_text = self.clean_text(combined_markdown)
+
+                chunks = self._smart_chunk_text(cleaned_text, target_chunk_size=2000)
+
+                all_chunks = []
+
+                for i, chunk in enumerate(chunks):
+
+                    all_chunks.append({
+
+                        'text': chunk,
+
+                        'source': file.name,
+
+                        'source_file': file.name,
+
+                        'chunk_id': i
+
+                    })
+
+                # Batch embeddings
+
+                text_chunks = [chunk['text'] for chunk in all_chunks]
+
+                print(f"Getting embeddings for {len(text_chunks)} optimized chunks")
+
+                embeddings = self._get_embeddings_batch(text_chunks, batch_size=50)
+
+                if not embeddings:
+
+                    raise ValueError("Failed to generate embeddings for document chunks")
+
+                # Save to pgvector instead of FAISS
+
+                self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
+
+                print(f"PDF processed successfully: {len(all_chunks)} chunks saved to pgvector from {total_pages} pages")
+
+                return {
+
+                    'storage_type': 'pgvector',
+
+                    'chunks_count': len(all_chunks),
+
+                    'full_text': cleaned_text,
+
+                    'markdown_path': markdown_path
+
+                }
+
+            finally:
+
+                if os.path.exists(pdf_path):
+
+                    os.unlink(pdf_path)
+
+        except Exception as e:
+
+            print(f"Error in process_pdf_document_optimized_pgvector: {str(e)}")
+
+            raise
     def _bulk_analyze_pages_for_images(self, pdf_doc):
         """
         OPTIMIZATION: Analyze all pages for images in one pass
@@ -2138,7 +2191,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         import tempfile
         
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1], dir='/tmp') as tmp_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
                 for chunk in file.chunks():
                     tmp_file.write(chunk)
                 file_path = tmp_file.name
