@@ -277,7 +277,7 @@ function ArchivedProjects({ onBack, onRestoreProject }) {
           </div>
         )}
       </div>
-      <FaqButton />
+      {/* <FaqButton /> */}
     </div>
   );
 }

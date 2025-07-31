@@ -492,7 +492,7 @@ const handleSubmit = async (e) => {
                     Enhance with AI
                   </button>
 
-                  <div className="relative">
+                  {/* <div className="relative">
                     <input
                       type="file"
                       id="documentUploadEdit"
@@ -508,7 +508,7 @@ const handleSubmit = async (e) => {
                       <Paperclip className="w-4 h-4 mr-1.5" />
                       Upload Files
                     </label>
-                  </div>
+                  </div> */}
 
                   {documentFile && (
                     <button

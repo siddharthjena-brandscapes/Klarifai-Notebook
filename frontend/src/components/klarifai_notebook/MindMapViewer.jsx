@@ -612,7 +612,7 @@ const MindMapViewer = ({
                   </button>
                 </div>
 
-                <button
+                {/* <button
                   onClick={exportMindmap}
                   className={`p-2 rounded transition-colors ${
                     theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
@@ -620,7 +620,7 @@ const MindMapViewer = ({
                   title="Export mindmap as JSON"
                 >
                   <Download size={16} />
-                </button>
+                </button> */}
               </div>
 
               {/* Mobile menu button */}
@@ -701,7 +701,7 @@ const MindMapViewer = ({
                 </div>
                 
                 {/* Export button */}
-                <button
+                {/* <button
                   onClick={() => {
                     exportMindmap();
                     setShowMobileMenu(false);
@@ -712,7 +712,7 @@ const MindMapViewer = ({
                 >
                   <Download size={16} />
                   <span>Export Mindmap</span>
-                </button>
+                </button> */}
               </div>
             </div>
           )}
