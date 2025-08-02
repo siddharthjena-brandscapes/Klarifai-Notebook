@@ -1614,71 +1614,10 @@ const UserInfoSection = () => {
                       </div>
                     </div>
                     
-                    {/* Show question stats if available */}
+                    Show question stats if available
                     {(userStats.length > 0 || notebookUserStats.length > 0) && (
                       <div className="mt-6 space-y-4">
-                        {/* Document Q&A Stats */}
-                        {userStats.length > 0 && (() => {
-                          const userDocQAStats = userStats.find((u) => u.user_id === user.id);
-                          const totalDocuments = userDocQAStats?.document_upload_count || 0;
-                          const totalQuestions = userDocQAStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
-                          const documents = userDocQAStats?.documents || [];
-                          const [showDocQADetails, setShowDocQADetails] = useState(false);
-                     
-                          return (
-                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800/30">
-                              <div className="flex items-center justify-between mb-3">
-                                <h5 className="text-sm font-bold text-blue-700 dark:text-blue-300 flex items-center">
-                                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                  </svg>
-                                  Document Q&A Statistics
-                                </h5>
-                                <div className="flex items-center space-x-4">
-                                  <div className="flex space-x-4">
-                                    <div className="text-center">
-                                      <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{totalDocuments}</div>
-                                      <div className="text-xs text-blue-600 dark:text-blue-400">Documents</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{totalQuestions}</div>
-                                      <div className="text-xs text-blue-600 dark:text-blue-400">Questions</div>
-                                    </div>
-                                  </div>
-                                  {documents.length > 0 && (
-                                    <button
-                                      onClick={() => setShowDocQADetails(!showDocQADetails)}
-                                      className="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-800/30 dark:hover:bg-blue-700/30 text-blue-700 dark:text-blue-300 rounded-lg transition-all flex items-center"
-                                    >
-                                      {showDocQADetails ? 'Hide Details' : 'View Details'}
-                                      <svg className={`w-3 h-3 ml-1 transition-transform ${showDocQADetails ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
-                                      </svg>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                             
-                              {documents.length > 0 && showDocQADetails && (
-                                <div className="space-y-2 border-t border-blue-200 dark:border-blue-700/30 pt-3">
-                                  <div className="text-xs text-blue-600 dark:text-blue-400 mb-2">Document Activity:</div>
-                                  <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
-                                    {documents.map((doc) => (
-                                      <div key={doc.document_id} className="flex items-center justify-between bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
-                                        <span className="text-xs text-blue-800 dark:text-blue-200 truncate flex-1 mr-2" title={doc.filename}>
-                                          {doc.filename.length > 25 ? `${doc.filename.substring(0, 25)}...` : doc.filename}
-                                        </span>
-                                        <span className="text-xs font-mono bg-blue-100 dark:bg-blue-800/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
-                                          {doc.questions_asked}Q
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
+                      
                         
                         
 
