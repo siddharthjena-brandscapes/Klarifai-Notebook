@@ -11932,11 +11932,35 @@ class AdminNotebookUserStatsView(APIView):
  
             doc_upload_count = docs.count()
  
+            # --- Add aggregate stats for user ---
+            # Token and question stats
+            from notebook.models import ConversationTransaction, DocumentTransaction
+            conv_stats = ConversationTransaction.objects.filter(
+                user_transaction__user=user
+            ).aggregate(
+                total_tokens=Sum('total_tokens_used'),
+                total_input_tokens=Sum('input_api_tokens'),
+                total_output_tokens=Sum('output_api_tokens'),
+                total_questions=Sum('question_count'),
+            )
+            doc_stats_agg = DocumentTransaction.objects.filter(
+                user_transaction__user=user
+            ).aggregate(
+                total_pages=Sum('no_pages'),
+                total_documents=Count('id'),
+            )
+ 
             stats.append({
                 'user_id': user.id,
                 'username': user.username,
                 'document_upload_count': doc_upload_count,
                 'documents': doc_stats,
+                'total_tokens_used': conv_stats['total_tokens'] or 0,
+                'total_input_tokens': conv_stats['total_input_tokens'] or 0,
+                'total_output_tokens': conv_stats['total_output_tokens'] or 0,
+                'total_questions_asked': conv_stats['total_questions'] or 0,
+                'total_pages_processed': doc_stats_agg['total_pages'] or 0,
+                'total_documents_uploaded': doc_stats_agg['total_documents'] or 0,
             })
  
         return Response({
@@ -11945,6 +11969,7 @@ class AdminNotebookUserStatsView(APIView):
             'total_comprehensive_responses': total_comprehensive
         }, status=200)
     
+ 
 class GenerateIdeaContextView(APIView):
     """
     API endpoint to extract structured idea generation parameters

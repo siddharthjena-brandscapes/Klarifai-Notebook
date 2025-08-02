@@ -1890,7 +1890,7 @@ const MainChat = forwardRef(
         );
 
         if (
-          response?.status && response.status !== 200 ||
+          response?.status && response.status === 429 ||
           response?.data?.error ||
           response?.data?.status === "error"
         ) {
