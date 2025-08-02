@@ -1639,14 +1639,53 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 filename=file.name,
                                 main_project=main_project
                             )
-                            
+                            import tempfile
+
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
+                                for chunk in file.chunks():
+                                    tmp_file.write(chunk)
+                                file_path = tmp_file.name
+
+                            file_ext = os.path.splitext(file_path)[1].lower()
+                    
+                            # Count pages based on file type
+                            page_count = self.count_document_pages(file_path, file_ext)
+                            print(f"Detected {page_count} pages in {file.name}")
+
+                            file_size = file.size if hasattr(file, 'size') else None
+
+                            # CHECK PAGE LIMIT BEFORE PROCESSING - MOVE THIS UP
+                            transaction_result = self.create_document_transaction(
+                                user, document, main_project, 
+                                upload_method='regular', 
+                                file_size=file_size, 
+                                page_count=page_count
+                            )
+                                    
+                            # Check if page limit was exceeded
+                            if isinstance(transaction_result, dict) and transaction_result.get('error'):
+                                # Delete the document we just created since we can't proceed
+                                document.delete()
+                                        
+                                # Clean up temp file
+                                if os.path.exists(file_path):
+                                    os.unlink(file_path)
+                                        
+                                # Update status to failed
+                                update_doc_status(user, file.name, "failed", 0, f"Upload failed: {transaction_result.get('message', 'Page limit exceeded')}")
+                                        
+                                print(f"Page limit exceeded for ########################### {file.name}")
+                                # Return error response - THIS WILL STOP THE PROCESSING
+                                return Response(transaction_result, status=status.HTTP_429_TOO_MANY_REQUESTS)
+                                                    
+                            # ONLY PROCESS IF PAGE LIMIT CHECK PASSED
                             # Process the document with optimized pgvector processing
                             processed_data = self.process_document_pgvector_optimized(file, user, document)
-                            
-                            file_size = file.size if hasattr(file, 'size') else None
-                            page_count = processed_data.get('page_count', 1)  # Get page count from processed data
-                            upload_method = 'regular'
-                            self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size, page_count=page_count)
+                                    
+                            # Clean up temp file
+                            if os.path.exists(file_path):
+                                os.unlink(file_path)
+                           
 
                             # --- Status: Indexing ---
                             update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
@@ -1698,9 +1737,45 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def create_document_transaction(self, user, document, main_project, upload_method, file_size=None, page_count=None):
-        """Create transaction record for document upload"""
+        """Create transaction record for document upload with page limit validation"""
         try:
-            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",page_count)
+            
+            # Get or create user API tokens record
+            user_api_tokens, created = UserAPITokens.objects.get_or_create(
+                user=user,
+                defaults={
+                    'page_limit': 20,
+                    'token_limit': 1_000_000
+                }
+            )
+            
+            # Calculate current page usage for this user
+            current_total_pages = self.get_user_total_page_usage(user)
+            
+            # Get pages for this request
+            request_pages = page_count or 1  # Default to 1 if no page count provided
+            
+            # Check if adding these pages would exceed the limit
+            new_total_pages = current_total_pages + request_pages
+            
+            print(f"Page usage check - Current: {current_total_pages}, Request: {request_pages}, New Total: {new_total_pages}, Limit: {user_api_tokens.page_limit}")
+            
+            if new_total_pages > user_api_tokens.page_limit:
+                # Return error data instead of creating transaction
+                remaining_pages = max(0, user_api_tokens.page_limit - current_total_pages)
+                error_data = {
+                    'error': 'page_limit_exceeded',
+                    'message': f"You have reached your document page limit of {user_api_tokens.page_limit} pages. Current usage: {current_total_pages} pages. Remaining: {remaining_pages} pages. This document has {request_pages} pages.",
+                    'current_usage': current_total_pages,
+                    'page_limit': user_api_tokens.page_limit,
+                    'remaining_pages': remaining_pages,
+                    'requested_pages': request_pages,
+                    'document_name': document.filename
+                }
+                print(f"Page limit exceeded for user {user.id}: {new_total_pages} > {user_api_tokens.page_limit}")
+                return error_data
+            
             # Create main transaction record
             user_transaction = UserTransaction.objects.create(
                 user=user,
@@ -1712,7 +1787,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     'upload_timestamp': timezone.now().isoformat(),
                     'upload_method': upload_method,
                     'file_size': file_size or getattr(document.file, 'size', None),
-                    'page_count': page_count  # Add page count to metadata as well
+                    'page_count': page_count,
+                    'page_limit_check': {
+                        'previous_total': current_total_pages,
+                        'request_pages': request_pages,
+                        'new_total': new_total_pages,
+                        'limit': user_api_tokens.page_limit
+                    }
                 }
             )
            
@@ -1727,9 +1808,43 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             )
            
             print(f"Transaction recorded for document: {document.filename} with {page_count} pages")
-           
+            print(f"User total page usage: {new_total_pages}/{user_api_tokens.page_limit}")
+            
+            # Return success data
+            return {
+                'success': True,
+                'current_usage': new_total_pages,
+                'page_limit': user_api_tokens.page_limit,
+                'remaining_pages': user_api_tokens.page_limit - new_total_pages,
+                'document_pages': request_pages
+            }
+        
         except Exception as e:
             print(f"Error creating document transaction: {str(e)}")
+            return {
+                'error': 'transaction_error',
+                'message': f'Error creating document transaction: {str(e)}'
+            }
+
+    def get_user_total_page_usage(self, user):
+        """Calculate total page usage for a user across all documents"""
+        from django.db.models import Sum,Count
+        try:
+            # Get all document transactions for this user
+            total_pages = DocumentTransaction.objects.filter(
+                user_transaction__user=user,
+                user_transaction__is_active=True
+            ).aggregate(
+                total_pages=Sum('no_pages')
+            )
+            
+            pages_total = total_pages.get('total_pages') or 0
+            
+            return pages_total
+            
+        except Exception as e:
+            print(f"Error calculating user page usage: {str(e)}")
+        return 0
     # Keep the complexity detection from original code
     # -------------------------------
     def detect_document_complexity(self, file_path):
@@ -1954,8 +2069,9 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
 
                     'full_text': cleaned_text,
 
-                    'markdown_path': markdown_path
+                    'markdown_path': markdown_path,
 
+                    'page_count': total_pages
                 }
 
             finally:
@@ -3127,30 +3243,32 @@ class ChatView(APIView):
                         conversation_id=conversation_id,
                         user=user
                     )
-                   
-                    # Get last 5 conversation messages (max 10 messages = 5 turns)
+                    
+                    # Get last 10 conversation messages (5 user + 5 assistant = 5 complete turns)
                     recent_messages = ChatMessage.objects.filter(
                         chat_history=conversation
                     ).order_by('-created_at')[:10]
-                   
-                    # Format for context
+                    
+                    # Format for context - get full messages, not truncated
                     if recent_messages:
                         context_messages = []
-                        for msg in recent_messages:
+                        for msg in reversed(recent_messages):  # Reverse to get chronological order
                             prefix = "User: " if msg.role == 'user' else "Assistant: "
-                            context_messages.append(f"{prefix}{msg.content[:400]}...")
-                       
-                        conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
-                   
-                    # Try to get memory buffer
+                            # Don't truncate the messages - get full context
+                            context_messages.append(f"{prefix}{msg.content}")
+                        
+                        conversation_context = "\n\n".join(context_messages)
+                        print(f"Retrieved conversation context with {len(recent_messages)} messages")
+                    
+                    # Try to get memory buffer for additional context summary
                     try:
                         memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
                         if memory_buffer.context_summary:
-                            conversation_context += f"\n\nConversation Summary: {memory_buffer.context_summary}"
+                            conversation_context += f"\n\n--- Conversation Summary ---\n{memory_buffer.context_summary}"
                     except ConversationMemoryBuffer.DoesNotExist:
                         # No memory buffer yet, that's fine
                         pass
-                       
+                        
                 except ChatHistory.DoesNotExist:
                     # No conversation yet, that's fine
                     pass
@@ -3316,11 +3434,11 @@ class ChatView(APIView):
                     """
                    
                     # Use the existing general chat function but with our augmented query
-                    answer, token_usage = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format, user=user)
+                    answer, token_usage = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format,conversation_context, user=user)
                     print("Generated response using general chat mode with URL content")
                 else:
                     # Standard general chat response without URL content
-                    answer, token_usage = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format, user=user)
+                    answer, token_usage = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format, conversation_context, user=user)
                     print("Generated response using general chat mode")
             else:
                 # Document chat mode - now handles URL content too
@@ -3570,15 +3688,191 @@ class ChatView(APIView):
                 )
  
             if created:
-                # Create conversation transaction
-                self.create_conversation_transaction(
+                # Create conversation transaction with token limit check
+                transaction_result = self.create_conversation_transaction(
                     user, conversation, main_project_id,
                     use_web_knowledge, response_format, response_length,
                     token_usage  # Pass token usage
                 )
+                
+                # Check if token limit was exceeded
+                if isinstance(transaction_result, dict) and transaction_result.get('error'):
+                    # Instead of deleting conversation and returning HTTP error,
+                    # create user message and error response message
+                    
+                    # Create user message
+                    user_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='user',
+                        content=message
+                    )
+                    
+                    # Create AI error response message 
+                    error_message = transaction_result.get('message', 'Token limit exceeded')
+                    ai_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='assistant',
+                        content=error_message,
+                        sources='',
+                        citations=[],
+                        use_web_knowledge=use_web_knowledge,
+                        response_length=response_length,
+                        response_format=response_format,
+                    )
+                    
+                    # Update memory buffer
+                    memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
+                        conversation=conversation
+                    )
+                    
+                    # Get all messages for this conversation
+                    all_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('created_at')
+                    
+                    # Update memory with all messages
+                    memory_buffer.update_memory(all_messages)
+                    
+                    # Update conversation details
+                    conversation.title = title
+                    conversation.follow_up_questions = []  # No follow-up questions for error
+                    conversation.save()
+                    
+                    # Prepare response data
+                    response_data = {
+                        'response': error_message,
+                        'follow_up_questions': [],
+                        'conversation_id': str(conversation.conversation_id),
+                        'citations': [],
+                        'active_document_id': request.session.get('active_document_id') if not general_chat_mode else None,
+                        'sources_info': '',
+                        'use_web_knowledge': use_web_knowledge,
+                        'general_chat_mode': general_chat_mode,
+                        'response_length': response_length,
+                        'response_format': response_format,
+                        'url_content_used': False,
+                        'extracted_urls': [],
+                        'storage_types_used': []
+                    }
+                    
+                    # Get all messages for this conversation (with IDs)
+                    all_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('created_at')
+                    
+                    message_list = []
+                    for msg in all_messages:
+                        message_data = {
+                            'id': msg.id,
+                            'role': msg.role,
+                            'content': msg.content,
+                            'created_at': msg.created_at.strftime('%Y-%m-%d %H:%M'),
+                            'citations': msg.citations or [],
+                            'sources_info': getattr(msg, 'sources', ''),
+                            'extracted_urls': getattr(msg, 'extracted_urls', []),
+                        }
+                        # Add badge properties for assistant messages
+                        if msg.role == 'assistant':
+                            message_data['use_web_knowledge'] = getattr(msg, 'use_web_knowledge', False)
+                            message_data['response_length'] = getattr(msg, 'response_length', 'comprehensive')
+                            message_data['response_format'] = getattr(msg, 'response_format', 'natural')
+                        message_list.append(message_data)
+                    
+                    response_data['messages'] = message_list
+                    
+                    # Return successful response with error message as content
+                    return Response(response_data, status=status.HTTP_200_OK)
+                    
             else:
-                # Update existing conversation transaction
-                self.update_conversation_transaction(conversation, use_web_knowledge, token_usage)
+                # Update existing conversation transaction with token limit check
+                transaction_result = self.update_conversation_transaction(
+                    conversation, use_web_knowledge, token_usage
+                )
+                
+                # Check if token limit was exceeded
+                if isinstance(transaction_result, dict) and transaction_result.get('error'):
+                    # Create user message
+                    user_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='user',
+                        content=message
+                    )
+                    
+                    # Create AI error response message
+                    error_message = transaction_result.get('message', 'Token limit exceeded')
+                    ai_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='assistant',
+                        content=error_message,
+                        sources='',
+                        citations=[],
+                        use_web_knowledge=use_web_knowledge,
+                        response_length=response_length,
+                        response_format=response_format,
+                    )
+                    
+                    # Update memory buffer
+                    memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
+                        conversation=conversation
+                    )
+                    
+                    # Get all messages for this conversation
+                    all_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('created_at')
+                    
+                    # Update memory with all messages
+                    memory_buffer.update_memory(all_messages)
+                    
+                    # Update conversation details
+                    conversation.title = title
+                    conversation.follow_up_questions = []  # No follow-up questions for error
+                    conversation.save()
+                    
+                    # Prepare response data
+                    response_data = {
+                        'response': error_message,
+                        'follow_up_questions': [],
+                        'conversation_id': str(conversation.conversation_id),
+                        'citations': [],
+                        'active_document_id': request.session.get('active_document_id') if not general_chat_mode else None,
+                        'sources_info': '',
+                        'use_web_knowledge': use_web_knowledge,
+                        'general_chat_mode': general_chat_mode,
+                        'response_length': response_length,
+                        'response_format': response_format,
+                        'url_content_used': False,
+                        'extracted_urls': [],
+                        'storage_types_used': []
+                    }
+                    
+                    # Get all messages for this conversation (with IDs)
+                    all_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('created_at')
+                    
+                    message_list = []
+                    for msg in all_messages:
+                        message_data = {
+                            'id': msg.id,
+                            'role': msg.role,
+                            'content': msg.content,
+                            'created_at': msg.created_at.strftime('%Y-%m-%d %H:%M'),
+                            'citations': msg.citations or [],
+                            'sources_info': getattr(msg, 'sources', ''),
+                            'extracted_urls': getattr(msg, 'extracted_urls', []),
+                        }
+                        # Add badge properties for assistant messages
+                        if msg.role == 'assistant':
+                            message_data['use_web_knowledge'] = getattr(msg, 'use_web_knowledge', False)
+                            message_data['response_length'] = getattr(msg, 'response_length', 'comprehensive')
+                            message_data['response_format'] = getattr(msg, 'response_format', 'natural')
+                        message_list.append(message_data)
+                    
+                    response_data['messages'] = message_list
+                    
+                    # Return successful response with error message as content
+                    return Response(response_data, status=status.HTTP_200_OK)
  
             # Create user message
             user_message = ChatMessage.objects.create(
@@ -3753,8 +4047,46 @@ class ChatView(APIView):
             print(f"Error in fallback text search: {str(e)}")
             return None
     def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length, token_usage=None):
-        """Create transaction record for conversation"""
+        """Create transaction record for conversation with token limit validation"""
         try:
+            # Get or create user API tokens record
+            user_api_tokens, created = UserAPITokens.objects.get_or_create(
+                user=user,
+                defaults={
+                    'page_limit': 20,
+                    'token_limit': 1_000_000
+                }
+            )
+            
+            # Calculate current token usage for this user
+            current_total_tokens = self.get_user_total_token_usage(user)
+            
+            # Get tokens for this request
+            request_tokens = 0
+            if token_usage:
+                request_tokens = token_usage.get('total_tokens', 0)
+                if request_tokens == 0:  # Fallback calculation
+                    request_tokens = token_usage.get('input_tokens', 0) + token_usage.get('output_tokens', 0)
+            
+            # Check if adding these tokens would exceed the limit
+            new_total = current_total_tokens + request_tokens
+            
+            print(f"Token usage check - Current: {current_total_tokens}, Request: {request_tokens}, New Total: {new_total}, Limit: {user_api_tokens.token_limit}")
+            
+            if new_total > user_api_tokens.token_limit:
+                # Return error data instead of creating transaction
+                remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
+                error_data = {
+                    'error': 'token_limit_exceeded',
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset.",
+                    'current_usage': current_total_tokens,
+                    'token_limit': user_api_tokens.token_limit,
+                    'remaining_tokens': remaining_tokens,
+                    'requested_tokens': request_tokens
+                }
+                print(f"Token limit exceeded for user {user.id}: {new_total} > {user_api_tokens.token_limit}")
+                return error_data
+            
             # Get the project
             main_project = Project.objects.get(id=main_project_id, user=user)
             
@@ -3770,7 +4102,13 @@ class ChatView(APIView):
                     'web_knowledge_used': use_web_knowledge,
                     'response_format': response_format,
                     'response_length': response_length,
-                    'token_usage': token_usage or {}  # Store token usage in metadata
+                    'token_usage': token_usage or {},
+                    'token_limit_check': {
+                        'previous_total': current_total_tokens,
+                        'request_tokens': request_tokens,
+                        'new_total': new_total,
+                        'limit': user_api_tokens.token_limit
+                    }
                 }
             )
             
@@ -3792,13 +4130,90 @@ class ChatView(APIView):
             
             print(f"Transaction recorded for conversation: {conversation.title}")
             print(f"Token usage - Input: {input_tokens}, Output: {output_tokens}, Total: {input_tokens + output_tokens}")
+            print(f"User total token usage: {new_total}/{user_api_tokens.token_limit}")
+            
+            # Return success data
+            return {
+                'success': True,
+                'current_usage': new_total,
+                'token_limit': user_api_tokens.token_limit,
+                'remaining_tokens': user_api_tokens.token_limit - new_total
+            }
             
         except Exception as e:
             print(f"Error creating conversation transaction: {str(e)}")
+            return {
+                'error': 'transaction_error',
+                'message': f'Error creating conversation transaction: {str(e)}'
+            }
+
+    def get_user_total_token_usage(self, user):
+        """Calculate total token usage for a user across all conversations"""
+        from django.db.models import Sum,Count
+        try:
+            from django.db.models import Sum,Count
+            # Get all conversation transactions for this user
+            total_tokens = ConversationTransaction.objects.filter(
+                user_transaction__user=user,
+                user_transaction__is_active=True
+            ).aggregate(
+                total_input=Sum('input_api_tokens'),
+                total_output=Sum('output_api_tokens')
+            )
+            
+            input_total = total_tokens.get('total_input') or 0
+            output_total = total_tokens.get('total_output') or 0
+            
+            return input_total + output_total
+            
+        except Exception as e:
+            print(f"Error calculating user token usage: {str(e)}")
+            return 0
  
     def update_conversation_transaction(self, conversation, use_web_knowledge, token_usage=None):
-        """Update existing conversation transaction when new messages are added"""
+        """Update existing conversation transaction when new messages are added with token limit validation"""
         try:
+            # Get user from conversation
+            user = conversation.user
+            
+            # Get or create user API tokens record
+            user_api_tokens, created = UserAPITokens.objects.get_or_create(
+                user=user,
+                defaults={
+                    'page_limit': 20,
+                    'token_limit': 1_000_000
+                }
+            )
+            
+            # Calculate current token usage for this user
+            current_total_tokens = self.get_user_total_token_usage(user)
+            
+            # Get tokens for this request
+            request_tokens = 0
+            if token_usage:
+                request_tokens = token_usage.get('total_tokens', 0)
+                if request_tokens == 0:  # Fallback calculation
+                    request_tokens = token_usage.get('input_tokens', 0) + token_usage.get('output_tokens', 0)
+            
+            # Check if adding these tokens would exceed the limit
+            new_total = current_total_tokens + request_tokens
+            
+            print(f"Token usage update check - Current: {current_total_tokens}, Request: {request_tokens}, New Total: {new_total}, Limit: {user_api_tokens.token_limit}")
+            
+            if new_total > user_api_tokens.token_limit:
+                # Return error data instead of updating transaction
+                remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
+                error_data = {
+                    'error': 'token_limit_exceeded',
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset.",
+                    'current_usage': current_total_tokens,
+                    'token_limit': user_api_tokens.token_limit,
+                    'remaining_tokens': remaining_tokens,
+                    'requested_tokens': request_tokens
+                }
+                print(f"Token limit exceeded during update for user {user.id}: {new_total} > {user_api_tokens.token_limit}")
+                return error_data
+            
             # Find existing transaction for this conversation
             user_transaction = UserTransaction.objects.filter(
                 conversation_id=conversation.conversation_id,
@@ -3836,12 +4251,31 @@ class ChatView(APIView):
                     })
                 
                 user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
+                user_transaction.metadata['token_limit_check'] = {
+                    'previous_total': current_total_tokens,
+                    'request_tokens': request_tokens,
+                    'new_total': new_total,
+                    'limit': user_api_tokens.token_limit
+                }
                 user_transaction.save()
                 
                 print(f"Updated conversation transaction - Questions: {conv_details.question_count}, Total tokens: {conv_details.total_tokens_used}")
+                print(f"User total token usage: {new_total}/{user_api_tokens.token_limit}")
+                
+                # Return success data
+                return {
+                    'success': True,
+                    'current_usage': new_total,
+                    'token_limit': user_api_tokens.token_limit,
+                    'remaining_tokens': user_api_tokens.token_limit - new_total
+                }
                 
         except Exception as e:
             print(f"Error updating conversation transaction: {str(e)}")
+            return {
+                'error': 'transaction_error',
+                'message': f'Error updating conversation transaction: {str(e)}'
+            }
 
     def _parse_json_response(self, response_content, fallback_message="Error processing response"):
         """Helper method to safely parse JSON responses from LLM"""
@@ -4650,6 +5084,9 @@ class ChatView(APIView):
         except Exception as e:
             logger.warning(f"Failed to resolve redirect URL {redirect_url}: {e}")
             return None
+ 
+   
+ 
     
     def combine_document_and_web_responses(self, query, document_response, web_response, doc_sources, web_sources, response_format, conversation_context, original_doc_context=None, doc_citation_sources=None, doc_token_usage=None):
         """
@@ -4843,6 +5280,27 @@ class ChatView(APIView):
                 use_model_knowledge = True
                 logger.info("Using model knowledge to supplement information about entities")
             
+            # Include conversation context if available (same as above)
+            conversation_prompt = ""
+            if conversation_context and conversation_context.strip():
+                conversation_prompt = f"""
+                RECENT CONVERSATION HISTORY:
+                {conversation_context}
+                
+                The above messages are the previous parts of the same ongoing conversation with the user.
+                When generating your response:
+                - Consider the conversation flow and any references to previous topics
+                - If the user is asking follow-up questions or clarifications, refer back to the relevant previous context
+                - Maintain consistency with earlier responses and user preferences shown in the conversation
+                - If the current question builds upon or relates to previous discussions, acknowledge that connection
+                - Avoid repeating information already covered unless specifically asked for clarification
+                - Keep the conversation natural and flowing, showing awareness of the ongoing dialogue
+                
+                Use this conversation history to provide more contextually aware and relevant responses.
+                """
+                print(f"Including conversation context in prompt (length: {len(conversation_context)} chars)")
+            else:
+                print("No conversation context available for this response")
             # Create system message for JSON response combination
             system_message = """You are an expert at combining information from multiple sources and using your knowledge to provide comprehensive answers.
             You must respond in JSON format with the following structure:
@@ -4969,6 +5427,9 @@ class ChatView(APIView):
                 {conversation_context}
 
                 User query: {query}
+
+                conversation history:
+                {conversation_prompt}
 
                 RESPONSE FROM DOCUMENTS:
                 {document_response}
@@ -5913,21 +6374,25 @@ class ChatView(APIView):
        
         # Include conversation context if available
         conversation_prompt = ""
-        if conversation_context:
+        if conversation_context and conversation_context.strip():
             conversation_prompt = f"""
             RECENT CONVERSATION HISTORY:
             {conversation_context}
-           
+            
             The above messages are the previous parts of the same ongoing conversation with the user.
             When generating your response:
-            - Assume that the user may be referring back to earlier topics or questions from this history.
-            - Resolve any references, clarifications, or follow-up questions based on this conversation history.
-            - Maintain consistency with the user's earlier context, assumptions, and preferred response style if any.
-            - If something from the conversation history clearly answers or helps answer the current question, incorporate it thoughtfully.
-            - If there is ambiguity, prefer interpretations that align with prior conversation context.
-           
-            Please use this conversation history to maintain continuity, relevance, and coherence in your response.
+            - Consider the conversation flow and any references to previous topics
+            - If the user is asking follow-up questions or clarifications, refer back to the relevant previous context
+            - Maintain consistency with earlier responses and user preferences shown in the conversation
+            - If the current question builds upon or relates to previous discussions, acknowledge that connection
+            - Avoid repeating information already covered unless specifically asked for clarification
+            - Keep the conversation natural and flowing, showing awareness of the ongoing dialogue
+            
+            Use this conversation history to provide more contextually aware and relevant responses.
             """
+            print(f"Including conversation context in prompt (length: {len(conversation_context)} chars)")
+        else:
+            print("No conversation context available for this response")
  
         # Get project description if available
         project_description = self._get_project_description(query)
@@ -5967,7 +6432,8 @@ class ChatView(APIView):
         # Enhanced comprehensive response prompt
         user_prompt = f"""
         You are a highly skilled expert in deep document analysis and summarization. Your task is to create a **massive, exhaustive, and detailed answer** of the provided context using rich HTML formatting, prioritizing **tables** whenever asked and **clear breakdowns** for optimal readability.
- 
+
+
         <b>OBJECTIVE:</b> Provide a **comprehensive, all-encompassing summary** of the information extracted from multiple documents and URLs, with a focus on **clarity, structured analysis, tabular representation**, and in-depth explanation of every important aspect.
  
         <b>RESPONSE STYLE & FOCUS:</b>
@@ -5995,6 +6461,9 @@ class ChatView(APIView):
         DOCUMENT AND URL CONTEXT:
         {full_context}
  
+        CONVERSATION HISTORY:
+        {conversation_prompt}
+        
         USER QUERY:
         {query}
  
@@ -6268,21 +6737,25 @@ class ChatView(APIView):
        
         # Include conversation context if available (same as above)
         conversation_prompt = ""
-        if conversation_context:
+        if conversation_context and conversation_context.strip():
             conversation_prompt = f"""
             RECENT CONVERSATION HISTORY:
             {conversation_context}
-           
+            
             The above messages are the previous parts of the same ongoing conversation with the user.
             When generating your response:
-            - Assume that the user may be referring back to earlier topics or questions from this history.
-            - Resolve any references, clarifications, or follow-up questions based on this conversation history.
-            - Maintain consistency with the user's earlier context, assumptions, and preferred response style if any.
-            - If something from the conversation history clearly answers or helps answer the current question, incorporate it thoughtfully.
-            - If there is ambiguity, prefer interpretations that align with prior conversation context.
-           
-            Please use this conversation history to maintain continuity, relevance, and coherence in your response.
+            - Consider the conversation flow and any references to previous topics
+            - If the user is asking follow-up questions or clarifications, refer back to the relevant previous context
+            - Maintain consistency with earlier responses and user preferences shown in the conversation
+            - If the current question builds upon or relates to previous discussions, acknowledge that connection
+            - Avoid repeating information already covered unless specifically asked for clarification
+            - Keep the conversation natural and flowing, showing awareness of the ongoing dialogue
+            
+            Use this conversation history to provide more contextually aware and relevant responses.
             """
+            print(f"Including conversation context in prompt (length: {len(conversation_context)} chars)")
+        else:
+            print("No conversation context available for this response")
  
         # Get project description if available
         project_description = self._get_project_description(query)
@@ -6508,7 +6981,7 @@ class ChatView(APIView):
             return ""
     
 
-    def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural', user=None):
+    def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural', conversation_context="", user=None):
         """
         Generate an answer for general chat mode, optionally using web knowledge.
     
@@ -6604,6 +7077,28 @@ class ChatView(APIView):
 
                 # Get format-specific guidance
                 format_guidance = self._get_format_guidance(response_format, 'short' if response_length == 'short' else 'comprehensive')
+
+                # Include conversation context if available (same as above)
+                conversation_prompt = ""
+                if conversation_context and conversation_context.strip():
+                    conversation_prompt = f"""
+                    RECENT CONVERSATION HISTORY:
+                    {conversation_context}
+                    
+                    The above messages are the previous parts of the same ongoing conversation with the user.
+                    When generating your response:
+                    - Consider the conversation flow and any references to previous topics
+                    - If the user is asking follow-up questions or clarifications, refer back to the relevant previous context
+                    - Maintain consistency with earlier responses and user preferences shown in the conversation
+                    - If the current question builds upon or relates to previous discussions, acknowledge that connection
+                    - Avoid repeating information already covered unless specifically asked for clarification
+                    - Keep the conversation natural and flowing, showing awareness of the ongoing dialogue
+                    
+                    Use this conversation history to provide more contextually aware and relevant responses.
+                    """
+                    print(f"Including conversation context in prompt (length: {len(conversation_context)} chars)")
+                else:
+                    print("No conversation context available for this response")
             
                 # Updated system message for JSON response
                 system_message = """You are a web research assistant. 
@@ -6637,6 +7132,9 @@ class ChatView(APIView):
                 - If the web sources do NOT contain relevant information, clearly state that and summarize any related or tangential insights.
 
                 QUESTION: {query}
+
+                conversation history:
+                {conversation_prompt}
 
                 INFORMATION FROM WEB SOURCES:
                 {web_response_clean}
@@ -11920,6 +12418,7 @@ class GenerateIdeaContextView(APIView):
                 "Theme": "",
                 "Demographics": ""
             }
+        
 import base64
 import uuid
 from datetime import datetime
@@ -11932,7 +12431,6 @@ import logging
  
 # Assuming these are your existing imports and models
 from .models import ChatHistory, ChatMessage, ConversationMemoryBuffer, Document
- 
  
 logger = logging.getLogger(__name__)
  
@@ -11981,43 +12479,70 @@ class GPTImageChatView(APIView):
             print(f"Question: {question}")
             print(f"Number of images: {len(images)}")
  
-            # Get conversation context if available
             conversation_context = ""
             if conversation_id:
                 try:
+                    # Try to get existing conversation
                     conversation = ChatHistory.objects.get(
                         conversation_id=conversation_id,
                         user=user
                     )
- 
+                   
+                    # Get last 10 conversation messages (5 user + 5 assistant = 5 complete turns)
                     recent_messages = ChatMessage.objects.filter(
                         chat_history=conversation
                     ).order_by('-created_at')[:10]
- 
+                   
+                    # Format for context - get full messages, not truncated
                     if recent_messages:
                         context_messages = []
-                        for msg in recent_messages:
+                        for msg in reversed(recent_messages):  # Reverse to get chronological order
                             prefix = "User: " if msg.role == 'user' else "Assistant: "
-                            context_messages.append(f"{prefix}{msg.content[:400]}...")
- 
-                        conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
- 
+                            # Don't truncate the messages - get full context
+                            context_messages.append(f"{prefix}{msg.content}")
+                       
+                        conversation_context = "\n\n".join(context_messages)
+                        print(f"Retrieved conversation context with {len(recent_messages)} messages")
+                   
+                    # Try to get memory buffer for additional context summary
                     try:
                         memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
                         if memory_buffer.context_summary:
-                            conversation_context += f"\n\nConversation Summary: {memory_buffer.context_summary}"
+                            conversation_context += f"\n\n--- Conversation Summary ---\n{memory_buffer.context_summary}"
                     except ConversationMemoryBuffer.DoesNotExist:
+                        # No memory buffer yet, that's fine
                         pass
- 
+                       
                 except ChatHistory.DoesNotExist:
+                    # No conversation yet, that's fine
                     pass
  
             # Prepare message content for OpenAI API
             message_content = [{"type": "text", "text": question}]
  
-            if conversation_context:
-                message_content[0]["text"] = f"{conversation_context}\n\nCurrent question: {question}"
+            # Include conversation context if available
+            conversation_prompt = ""
+            if conversation_context and conversation_context.strip():
+                conversation_prompt = f"""
+                RECENT CONVERSATION HISTORY:
+                {conversation_context}
+               
+                The above messages are the previous parts of the same ongoing conversation with the user.
+                When generating your response:
+                - Consider the conversation flow and any references to previous topics
+                - If the user is asking follow-up questions or clarifications, refer back to the relevant previous context
+                - Maintain consistency with earlier responses and user preferences shown in the conversation
+                - If the current question builds upon or relates to previous discussions, acknowledge that connection
+                - Avoid repeating information already covered unless specifically asked for clarification
+                - Keep the conversation natural and flowing, showing awareness of the ongoing dialogue
+               
+                Use this conversation history to provide more contextually aware and relevant responses.
+                """
+                print(f"Including conversation context in prompt (length: {len(conversation_context)} chars)")
+            else:
+                print("No conversation context available for this response")
  
+            message_content.append({"type": "text", "text": conversation_prompt})
             # Process images and add to message content
             for image in images:
                 img_bytes = image.read()
@@ -12038,10 +12563,16 @@ class GPTImageChatView(APIView):
                     model="gpt-4o",
                     messages=[{
                         "role": "user",
-                        "content": message_content
+                        "content": message_content,
                     }],
                     max_tokens=max_tokens,
                 )
+ 
+                token_usage = {
+                    'input_tokens': response.usage.prompt_tokens if response.usage else 0,
+                    'output_tokens': response.usage.completion_tokens if response.usage else 0,
+                    'total_tokens': response.usage.total_tokens if response.usage else 0
+                }
  
                 clean_response = response.choices[0].message.content
                 print(f"Generated GPT response: {clean_response[:200]}...")
@@ -12072,12 +12603,162 @@ class GPTImageChatView(APIView):
             )
  
             if created:
-                self.create_conversation_transaction(
+                transaction_result = self.create_conversation_transaction(
                     user, conversation, main_project_id,
-                    None, None, None  # Removed removed params
+                    None, None, None, token_usage # Image chat specific params
                 )
+               
+                # Check if token limit was exceeded
+                if isinstance(transaction_result, dict) and transaction_result.get('error'):
+                    # Instead of deleting conversation and returning HTTP error,
+                    # create user message and error response message
+                   
+                    # Create user message
+                    user_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='user',
+                        content=question
+                    )
+                   
+                    # Create AI error response message
+                    error_message = transaction_result.get('message', 'Token limit exceeded')
+                    ai_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='assistant',
+                        content=error_message,
+                        sources="System",
+                        citations=[],
+                    )
+                   
+                    # Update memory buffer
+                    memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
+                        conversation=conversation
+                    )
+                   
+                    # Get all messages for this conversation
+                    all_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('created_at')
+                   
+                    # Update memory with all messages
+                    memory_buffer.update_memory(all_messages)
+                   
+                    # Update conversation details
+                    conversation.title = title
+                    conversation.follow_up_questions = []  # No follow-up questions for error
+                    conversation.save()
+                   
+                    # Get all messages for response
+                    message_list = []
+                    for message in all_messages:
+                        message_data = {
+                            'id': message.id,
+                            'role': message.role,
+                            'content': message.content,
+                            'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
+                            'citations': message.citations or [],
+                            'sources_info': getattr(message, 'sources', ''),
+                            'extracted_urls': getattr(message, 'extracted_urls', []),
+                            'context_mode': 'image' if message.role == 'assistant' else None,
+                        }
+                        message_list.append(message_data)
+                   
+                    response_data = {
+                        'response': error_message,
+                        'follow_up_questions': [],
+                        'conversation_id': str(conversation.conversation_id),
+                        'citations': [],
+                        'active_document_id': None,
+                        'sources_info': "System",
+                        'url_content_used': False,
+                        'extracted_urls': [],
+                        'messages': message_list,
+                        'image_count': len(images),
+                        'context_mode': context_mode,
+                    }
+                   
+                    # Return successful response with error message as content
+                    return Response(response_data, status=status.HTTP_200_OK)
+                   
             else:
-                self.update_conversation_transaction(conversation, None)
+                transaction_result = self.update_conversation_transaction(conversation, None, token_usage)
+               
+                # Check if token limit was exceeded
+                if isinstance(transaction_result, dict) and transaction_result.get('error'):
+                    # Create user message
+                    user_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='user',
+                        content=question
+                    )
+                   
+                    # Create AI error response message
+                    error_message = transaction_result.get('message', 'Token limit exceeded')
+                    ai_message = ChatMessage.objects.create(
+                        chat_history=conversation,
+                        role='assistant',
+                        content=error_message,
+                        sources="System",
+                        citations=[],
+                    )
+                   
+                    # Update memory buffer
+                    memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
+                        conversation=conversation
+                    )
+                   
+                    # Get all messages for this conversation
+                    all_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('created_at')
+                   
+                    # Update memory with all messages
+                    memory_buffer.update_memory(all_messages)
+                   
+                    # Update conversation details
+                    conversation.title = title
+                    conversation.follow_up_questions = []  # No follow-up questions for error
+                    conversation.save()
+                   
+                    # Get all messages for response
+                    message_list = []
+                    for message in all_messages:
+                        message_data = {
+                            'id': message.id,
+                            'role': message.role,
+                            'content': message.content,
+                            'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
+                            'citations': message.citations or [],
+                            'sources_info': getattr(message, 'sources', ''),
+                            'extracted_urls': getattr(message, 'extracted_urls', []),
+                            'context_mode': 'image' if message.role == 'assistant' else None,
+                        }
+                        message_list.append(message_data)
+                   
+                    response_data = {
+                        'response': error_message,
+                        'follow_up_questions': [],
+                        'conversation_id': str(conversation.conversation_id),
+                        'citations': [],
+                        'active_document_id': None,
+                        'sources_info': "System",
+                        'url_content_used': False,
+                        'extracted_urls': [],
+                        'messages': message_list,
+                        'image_count': len(images),
+                        'context_mode': context_mode,
+                    }
+                   
+                    # Return successful response with error message as content
+                    return Response(response_data, status=status.HTTP_200_OK)
+ 
+            # Continue with normal flow if no token limit exceeded...
+            # Create user message
+            user_message = ChatMessage.objects.create(
+                chat_history=conversation,
+                role='user',
+                content=question
+            )
  
             # Create user message
             user_message = ChatMessage.objects.create(
@@ -12095,16 +12776,19 @@ class GPTImageChatView(APIView):
                 citations=[],
             )
  
-            # Update or create memory buffer
+            # Update or create memory buffer after saving the new messages
             memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
                 conversation=conversation
             )
  
+            # Get all messages for this conversation (including the new ones we just created)
             all_messages = ChatMessage.objects.filter(
                 chat_history=conversation
-            ).order_by('created_at')
+            )
  
+            # Update memory with all messages - this will now properly populate the buffer
             memory_buffer.update_memory(all_messages)
+            print(f"Updated memory buffer for conversation {conversation_id}")
  
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
@@ -12180,10 +12864,48 @@ class GPTImageChatView(APIView):
             pass
        
         return base_questions[:3]  # Return first 3 questions
-   
-    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length):
-        """Create transaction record for conversation"""
+ 
+    def create_conversation_transaction(self, user, conversation, main_project_id, use_web_knowledge, response_format, response_length, token_usage=None):
+        """Create transaction record for conversation with token limit validation"""
         try:
+            # Get or create user API tokens record
+            user_api_tokens, created = UserAPITokens.objects.get_or_create(
+                user=user,
+                defaults={
+                    'page_limit': 20,
+                    'token_limit': 1_000_000
+                }
+            )
+           
+            # Calculate current token usage for this user
+            current_total_tokens = self.get_user_total_token_usage(user)
+           
+            # Get tokens for this request
+            request_tokens = 0
+            if token_usage:
+                request_tokens = token_usage.get('total_tokens', 0)
+                if request_tokens == 0:  # Fallback calculation
+                    request_tokens = token_usage.get('input_tokens', 0) + token_usage.get('output_tokens', 0)
+           
+            # Check if adding these tokens would exceed the limit
+            new_total = current_total_tokens + request_tokens
+           
+            print(f"Token usage check - Current: {current_total_tokens}, Request: {request_tokens}, New Total: {new_total}, Limit: {user_api_tokens.token_limit}")
+           
+            if new_total > user_api_tokens.token_limit:
+                # Return error data instead of creating transaction
+                remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
+                error_data = {
+                    'error': 'token_limit_exceeded',
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens.",
+                    'current_usage': current_total_tokens,
+                    'token_limit': user_api_tokens.token_limit,
+                    'remaining_tokens': remaining_tokens,
+                    'requested_tokens': request_tokens
+                }
+                print(f"Token limit exceeded for user {user.id}: {new_total} > {user_api_tokens.token_limit}")
+                return error_data
+           
             # Get the project
             main_project = Project.objects.get(id=main_project_id, user=user)
            
@@ -12198,29 +12920,119 @@ class GPTImageChatView(APIView):
                     'creation_timestamp': timezone.now().isoformat(),
                     'web_knowledge_used': use_web_knowledge,
                     'response_format': response_format,
-                    'response_length': response_length
+                    'response_length': response_length,
+                    'token_usage': token_usage or {},
+                    'token_limit_check': {
+                        'previous_total': current_total_tokens,
+                        'request_tokens': request_tokens,
+                        'new_total': new_total,
+                        'limit': user_api_tokens.token_limit
+                    }
                 }
             )
+           
+            # Extract token information if available
+            input_tokens = token_usage.get('input_tokens', 0) if token_usage else 0
+            output_tokens = token_usage.get('output_tokens', 0) if token_usage else 0
            
             # Create detailed conversation transaction
             ConversationTransaction.objects.create(
                 user_transaction=user_transaction,
                 message_count=1,  # Initial message
-                web_knowledge_used=use_web_knowledge,
-                response_format=response_format,
-                response_length=response_length
+                question_count=1,  # First question
+                input_api_tokens=input_tokens,
+                output_api_tokens=output_tokens,
+                web_knowledge_used=True,
+                response_format="image",
+                response_length="image"
             )
            
             print(f"Transaction recorded for conversation: {conversation.title}")
+            print(f"Token usage - Input: {input_tokens}, Output: {output_tokens}, Total: {input_tokens + output_tokens}")
+            print(f"User total token usage: {new_total}/{user_api_tokens.token_limit}")
+           
+            # Return success data
+            return {
+                'success': True,
+                'current_usage': new_total,
+                'token_limit': user_api_tokens.token_limit,
+                'remaining_tokens': user_api_tokens.token_limit - new_total
+            }
            
         except Exception as e:
             print(f"Error creating conversation transaction: {str(e)}")
+            return {
+                'error': 'transaction_error',
+                'message': f'Error creating conversation transaction: {str(e)}'
+            }
  
-    def update_conversation_transaction(self, conversation, use_web_knowledge):
-
-
-        """Update existing conversation transaction when new messages are added"""
+    def get_user_total_token_usage(self, user):
+        """Calculate total token usage for a user across all conversations"""
+        from django.db.models import Sum,Count
         try:
+            from django.db.models import Sum,Count
+            # Get all conversation transactions for this user
+            total_tokens = ConversationTransaction.objects.filter(
+                user_transaction__user=user,
+                user_transaction__is_active=True
+            ).aggregate(
+                total_input=Sum('input_api_tokens'),
+                total_output=Sum('output_api_tokens')
+            )
+           
+            input_total = total_tokens.get('total_input') or 0
+            output_total = total_tokens.get('total_output') or 0
+           
+            return input_total + output_total
+           
+        except Exception as e:
+            print(f"Error calculating user token usage: {str(e)}")
+            return 0
+ 
+    def update_conversation_transaction(self, conversation, use_web_knowledge=True, token_usage=None):
+        """Update existing conversation transaction when new messages are added with token limit validation"""
+        try:
+            # Get user from conversation
+            user = conversation.user
+           
+            # Get or create user API tokens record
+            user_api_tokens, created = UserAPITokens.objects.get_or_create(
+                user=user,
+                defaults={
+                    'page_limit': 20,
+                    'token_limit': 1_000_000
+                }
+            )
+           
+            # Calculate current token usage for this user
+            current_total_tokens = self.get_user_total_token_usage(user)
+           
+            # Get tokens for this request
+            request_tokens = 0
+            if token_usage:
+                request_tokens = token_usage.get('total_tokens', 0)
+                if request_tokens == 0:  # Fallback calculation
+                    request_tokens = token_usage.get('input_tokens', 0) + token_usage.get('output_tokens', 0)
+           
+            # Check if adding these tokens would exceed the limit
+            new_total = current_total_tokens + request_tokens
+           
+            print(f"Token usage update check - Current: {current_total_tokens}, Request: {request_tokens}, New Total: {new_total}, Limit: {user_api_tokens.token_limit}")
+           
+            if new_total > user_api_tokens.token_limit:
+                # Return error data instead of updating transaction
+                remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
+                error_data = {
+                    'error': 'token_limit_exceeded',
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens.",
+                    'current_usage': current_total_tokens,
+                    'token_limit': user_api_tokens.token_limit,
+                    'remaining_tokens': remaining_tokens,
+                    'requested_tokens': request_tokens
+                }
+                print(f"Token limit exceeded during update for user {user.id}: {new_total} > {user_api_tokens.token_limit}")
+                return error_data
+           
             # Find existing transaction for this conversation
             user_transaction = UserTransaction.objects.filter(
                 conversation_id=conversation.conversation_id,
@@ -12228,16 +13040,58 @@ class GPTImageChatView(APIView):
                 is_active=True
             ).first()
            
-            if user_transaction and hasattr(user_transaction, 'conversation_details'):
-                # Update message count
-                user_transaction.conversation_details.message_count += 1
-                if use_web_knowledge:
-                    user_transaction.conversation_details.web_knowledge_used = True
-                user_transaction.conversation_details.save()
+            if user_transaction and hasattr(user_transaction, 'notebook_conversation_details'):
+                # Get the conversation details
+                conv_details = user_transaction.notebook_conversation_details
                
-                # Update metadata
+                # Update message count and question count
+                conv_details.message_count += 1
+                conv_details.question_count += 1  # Each update represents a new question
+               
+                # Update token usage if provided
+                if token_usage:
+                    conv_details.input_api_tokens += token_usage.get('input_tokens', 0)
+                    conv_details.output_api_tokens += token_usage.get('output_tokens', 0)
+               
+                if use_web_knowledge:
+                    conv_details.web_knowledge_used = True
+                   
+                conv_details.save()
+               
+                # Update metadata with token usage
+                if token_usage:
+                    if 'token_history' not in user_transaction.metadata:
+                        user_transaction.metadata['token_history'] = []
+                    user_transaction.metadata['token_history'].append({
+                        'timestamp': timezone.now().isoformat(),
+                        'input_tokens': token_usage.get('input_tokens', 0),
+                        'output_tokens': token_usage.get('output_tokens', 0),
+                        'total_tokens': token_usage.get('total_tokens', 0)
+                    })
+               
                 user_transaction.metadata['last_message_timestamp'] = timezone.now().isoformat()
+                user_transaction.metadata['token_limit_check'] = {
+                    'previous_total': current_total_tokens,
+                    'request_tokens': request_tokens,
+                    'new_total': new_total,
+                    'limit': user_api_tokens.token_limit
+                }
                 user_transaction.save()
+               
+                print(f"Updated conversation transaction - Questions: {conv_details.question_count}, Total tokens: {conv_details.total_tokens_used}")
+                print(f"User total token usage: {new_total}/{user_api_tokens.token_limit}")
+               
+                # Return success data
+                return {
+                    'success': True,
+                    'current_usage': new_total,
+                    'token_limit': user_api_tokens.token_limit,
+                    'remaining_tokens': user_api_tokens.token_limit - new_total
+                }
                
         except Exception as e:
             print(f"Error updating conversation transaction: {str(e)}")
+            return {
+                'error': 'transaction_error',
+                'message': f'Error updating conversation transaction: {str(e)}'
+            }

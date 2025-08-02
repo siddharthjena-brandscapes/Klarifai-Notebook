@@ -7,12 +7,15 @@ import {
   FolderOpen,
   FileText,
   Lightbulb,
+  AlertTriangle,
+  X as CloseIcon
 } from "lucide-react";
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import logo from "../../assets/Logo1.png";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axiosConfig";
-import { coreService, adminService } from "../../utils/axiosConfig";
+import { coreService } from "../../utils/axiosConfig";
 import ProfileDropdown from "./ProfileDropdown";
 import ThemeToggle from "../Themes/ThemeToggle";
 import logoLight from "../../assets/new-Logo4-redtext.png";
@@ -61,6 +64,30 @@ const Header = () => {
   const isDocQA = location.pathname.includes("/dashboard");
   const isIdeaGen = location.pathname.includes("/idea-generation");
   const isKlarifaiNotebook = location.pathname.includes("/klarifai-notebook");
+  const isTokenLimitHit =
+    userDetails.token_limit &&
+    userDetails.total_tokens_used >= userDetails.token_limit;
+
+  const isTokenLimitNearing =
+  userDetails.token_limit &&
+  userDetails.total_tokens_used >= 0.8 * userDetails.token_limit && // 80% threshold
+  userDetails.total_tokens_used < userDetails.token_limit;
+
+  const isPageLimitHit =
+    userDetails.page_limit &&
+    userDetails.total_pages_processed >= userDetails.page_limit;
+
+  const isPageLimitNearing =
+  userDetails.page_limit &&
+  userDetails.total_pages_processed >= 0.8 * userDetails.page_limit &&
+  userDetails.total_pages_processed < userDetails.page_limit;
+
+  const [showLimitWarning, setShowLimitWarning] = useState(true);
+
+  // Reset warning if limits change (optional: so it shows again if user refreshes or new session)
+  useEffect(() => {
+    setShowLimitWarning(true);
+  }, [isTokenLimitHit, isPageLimitHit, isTokenLimitNearing]);
 
   // Handle clicks outside dropdown
   useEffect(() => {
@@ -102,74 +129,73 @@ const Header = () => {
   }, [location.pathname]);
 
   // Fetch user data in background without affecting render
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-        const token = localStorage.getItem("token");
+   useEffect(() => {
+   const fetchUserProfile = async () => {
+       const token = localStorage.getItem("token");
       
-        if (!token) {
-          navigate("/auth");
-          return;
-        }
+       if (!token) {
+         navigate("/auth");
+         return;
+       }
       
-        try {
-          const response = await axiosInstance.get("/user/profile/");
+       try {
+         const response = await axiosInstance.get("/user/profile/");
         
-          if (response.data.username) {
-            setUsername(response.data.username);
-            localStorage.setItem("username", response.data.username);
-          }
+         if (response.data.username) {
+           setUsername(response.data.username);
+           localStorage.setItem("username", response.data.username);
+         }
   
-          // Generate fallback avatar if needed
-          const defaultAvatar = response.data.username ?
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(
-              response.data.username
-            )}&background=random` : "";
+         // Generate fallback avatar if needed
+         const defaultAvatar = response.data.username ?
+           `https://ui-avatars.com/api/?name=${encodeURIComponent(
+             response.data.username
+           )}&background=random` : "";
   
-          // Use profile picture or default avatar
-          if (response.data.profile_picture || defaultAvatar) {
-            setProfileImage(response.data.profile_picture || defaultAvatar);
-            localStorage.setItem(
-              "profile_image",
-              response.data.profile_picture || defaultAvatar
-            );
-          }
+         // Use profile picture or default avatar
+         if (response.data.profile_picture || defaultAvatar) {
+           setProfileImage(response.data.profile_picture || defaultAvatar);
+           localStorage.setItem(
+             "profile_image",
+             response.data.profile_picture || defaultAvatar
+           );
+         }
   
-          // Update user details and store disabled modules
-          // Update user details and store disabled modules
-  setUserDetails({
-    email: response.data.email || "Not available",
-    joinedDate: response.data.date_joined ?
-      new Date(response.data.date_joined).toLocaleDateString() :
-      "Not available",
-    total_tokens_used: response.data.total_tokens_used || 0,
-    total_input_tokens: response.data.total_input_tokens || 0,
-    total_output_tokens: response.data.total_output_tokens || 0,
-    total_questions_asked: response.data.total_questions_asked || 0,
-    total_pages_processed: response.data.total_pages_processed || 0,
-    total_documents_uploaded: response.data.total_documents_uploaded || 0,
-     token_limit: response.data.token_limit || null,
-     page_limit: response.data.page_limit || null,
-  });
-  
-          // Set disabled modules from user profile
-          if (response.data.disabled_modules) {
-            setDisabledModules(response.data.disabled_modules);
-            // Store disabled modules in localStorage for other components
-            localStorage.setItem('disabled_modules', JSON.stringify(response.data.disabled_modules));
-          }
-        } catch (error) {
-          console.error("Failed to fetch user profile:", error);
+         // Update user details and store disabled modules
+         // Update user details and store disabled modules
+ setUserDetails({
+   email: response.data.email || "Not available",
+   joinedDate: response.data.date_joined ?
+     new Date(response.data.date_joined).toLocaleDateString() :
+     "Not available",
+   total_tokens_used: response.data.total_tokens_used || 0,
+   total_input_tokens: response.data.total_input_tokens || 0,
+   total_output_tokens: response.data.total_output_tokens || 0,
+   total_questions_asked: response.data.total_questions_asked || 0,
+   total_pages_processed: response.data.total_pages_processed || 0,
+   total_documents_uploaded: response.data.total_documents_uploaded || 0,
+    token_limit: response.data.token_limit || null,
+    page_limit: response.data.page_limit || null,
+ });
+ 
+         // Set disabled modules from user profile
+         if (response.data.disabled_modules) {
+           setDisabledModules(response.data.disabled_modules);
+           // Store disabled modules in localStorage for other components
+           localStorage.setItem('disabled_modules', JSON.stringify(response.data.disabled_modules));
+         }
+       } catch (error) {
+         console.error("Failed to fetch user profile:", error);
         
-          // Only show toast if we don't have cached data
-          if (!username) {
-            toast.error("Could not retrieve user profile");
-          }
-        }
-      };
-  
-     fetchUserProfile();
-   }, [navigate, username]);
-  
+         // Only show toast if we don't have cached data
+         if (!username) {
+           toast.error("Could not retrieve user profile");
+         }
+       }
+     };
+
+    fetchUserProfile();
+  }, [navigate, username]);
 
   // Fetch project details to get selected modules
   useEffect(() => {
@@ -504,6 +530,93 @@ const Header = () => {
           {renderNavigationItems()}
         </div>
       )}
+        {/* Floating Limit Warning Tooltip */}
+{(isTokenLimitHit || isPageLimitHit || isTokenLimitNearing || isPageLimitNearing) && showLimitWarning && (
+  <div
+    className={`
+      absolute left-1/2 -translate-x-1/2 top-full mt-2 z-[9999] 
+      flex items-center rounded-lg px-4 py-2 min-w-[320px] max-w-lg
+      transition-all duration-300 ease-out
+      ${(isTokenLimitHit || isPageLimitHit) 
+        ? 'bg-red-50 dark:bg-gray-800/90 border border-red-200 dark:border-gray-700/60' 
+        : 'bg-amber-50 dark:bg-gray-800/90 border border-amber-200 dark:border-gray-700/60'
+      }
+    `}
+    style={{
+      fontSize: "0.875rem",
+      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+    }}
+    role="alert"
+  >
+    {/* Icon */}
+    <div className={`
+      flex-shrink-0 mr-3 w-5 h-5 rounded-full flex items-center justify-center
+      ${(isTokenLimitHit || isPageLimitHit)
+        ? 'bg-red-500 text-white'
+        : 'bg-amber-500 text-white'
+      }
+    `}>
+      {(isTokenLimitHit || isPageLimitHit) ? (
+        <span className="text-xs font-bold">!</span>
+      ) : (
+        <AlertTriangle className="w-3 h-3" />
+      )}
+    </div>
+
+    {/* Content */}
+    <div className="flex-1 min-w-0">
+      <span className={`
+        font-medium
+        ${(isTokenLimitHit || isPageLimitHit)
+          ? 'text-red-800 dark:text-red-400'
+          : 'text-amber-800 dark:text-yellow-400'
+        }
+      `}>
+        {isTokenLimitHit && "Token Limit Reached!"}
+        {isTokenLimitNearing && !isTokenLimitHit && "Token Limit Warning!"}
+        {isPageLimitHit && !isTokenLimitHit && !isTokenLimitNearing && "Page Limit Reached!"}
+        {isPageLimitNearing && !isTokenLimitHit && !isTokenLimitNearing && !isPageLimitHit && "Page Limit Warning!"}
+      </span>
+      <span className={`
+        ml-2 text-sm
+        ${(isTokenLimitHit || isPageLimitHit)
+          ? 'text-red-600 dark:text-red-300'
+          : 'text-amber-600 dark:text-yellow-300'
+        }
+      `}>
+        {isTokenLimitHit &&
+          "You may not receive responses until reset."}
+        {isTokenLimitNearing && !isTokenLimitHit &&
+          `${Math.round(
+            (userDetails.total_tokens_used / userDetails.token_limit) * 100
+          )}% used. Some responses may be limited soon.`}
+        {isPageLimitHit && !isTokenLimitHit && !isTokenLimitNearing &&
+          "You may not be able to process documents until reset."}
+        {isPageLimitNearing && !isTokenLimitHit && !isTokenLimitNearing && !isPageLimitHit &&
+          `${Math.round(
+            (userDetails.total_pages_processed / userDetails.page_limit) * 100
+          )}% used. Some documents may not be processed soon.`}
+      </span>
+    </div>
+
+    {/* Close button */}
+    <button
+      onClick={() => setShowLimitWarning(false)}
+      className={`
+        ml-3 flex-shrink-0 p-1 transition-colors rounded
+        hover:bg-black/5 dark:hover:bg-white/10 focus:outline-none
+        ${(isTokenLimitHit || isPageLimitHit)
+          ? 'text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300'
+          : 'text-amber-400 hover:text-amber-600 dark:text-yellow-400 dark:hover:text-yellow-300'
+        }
+      `}
+      aria-label="Close warning"
+      tabIndex={0}
+    >
+      <CloseIcon className="w-4 h-4" />
+    </button>
+  </div>
+)}
     </header>
   );
 };

@@ -1889,6 +1889,19 @@ const MainChat = forwardRef(
           }
         );
 
+        if (
+          response?.status && response.status !== 200 ||
+          response?.data?.error ||
+          response?.data?.status === "error"
+        ) {
+          // Use backend message if available, else generic
+          const errorMessage =
+            response?.data?.message ||
+            response?.data?.error ||
+            "Upload failed. Please try again.";
+          throw new Error(errorMessage);
+        }
+
         // Processing stage
         uploadStage = 2;
         setProcessingProgress(75);

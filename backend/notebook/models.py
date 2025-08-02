@@ -203,71 +203,109 @@ class ConversationMemoryBuffer(models.Model):
         """
         Update memory buffer with conversation insights
         """
+        if not messages.exists():
+            return
+           
         # Extract key entities and summarize context
-        key_entities = self.extract_key_entities(messages)
-        context_summary = self.summarize_context(messages)
-
-        self.key_entities = key_entities
-        self.context_summary = context_summary
-        self.save()
-
+        try:
+            key_entities = self.extract_key_entities(messages)
+            context_summary = self.summarize_context(messages)
+ 
+            self.key_entities = key_entities
+            self.context_summary = context_summary
+            self.save()
+            print(f"Updated conversation memory buffer with {messages.count()} messages")
+        except Exception as e:
+            print(f"Error updating conversation memory: {str(e)}")
+ 
     def extract_key_entities(self, messages):
         """
         Extract key named entities and important concepts
         """
-        # Use NLP techniques to extract entities
         entities = {}
         try:
-            # You might want to use spaCy or another NLP library here
-            context_text = " ".join([msg.content for msg in messages])
-            
-            # Use Gemini to extract key entities
+            # Get the last 6 messages for entity extraction (not all messages)
+            recent_messages = messages.order_by('-created_at')[:6]
+            if not recent_messages:
+                return entities
+               
+            context_text = " ".join([msg.content for msg in reversed(recent_messages)])
+           
+            # Limit context text length to avoid token limits
+            if len(context_text) > 3000:
+                context_text = context_text[:3000] + "..."
+           
             entity_prompt = f"""
-            Extract key entities and important concepts from this text:
+            Extract key entities and important concepts from this conversation:
             {context_text}
-            
-            Return as a JSON object with categories like 'people', 'organizations', 'topics', etc.
+           
+            Return a JSON object with categories like:
+            {{
+                "people": ["names mentioned"],
+                "organizations": ["companies, institutions"],
+                "topics": ["main subjects discussed"],
+                "key_terms": ["important technical terms or concepts"],
+                "dates": ["important dates mentioned"],
+                "locations": ["places mentioned"]
+            }}
+           
+            Keep it concise and relevant.
             """
-            
+           
             response = GENERATIVE_MODEL.generate_content(entity_prompt)
-            
+           
             # Try to parse the response as JSON
             try:
                 import json
                 entities = json.loads(response.text)
             except:
-                # Fallback to text parsing if JSON parsing fails
+                # Fallback to simple text extraction
                 entities = {"extracted_concepts": response.text.split(',')}
-            
+           
         except Exception as e:
             print(f"Error extracting entities: {str(e)}")
-        
+            entities = {"error": "Failed to extract entities"}
+       
         return entities
-
+ 
     def summarize_context(self, messages):
         """
         Generate a concise summary of conversation context
         """
         try:
-            context_text = " ".join([msg.content for msg in messages])
+            # Get the last 8 messages for summary (4 complete turns)
+            recent_messages = messages.order_by('-created_at')[:8]
+            if not recent_messages:
+                return "No conversation history available"
+               
+            context_text = ""
+            for msg in reversed(recent_messages):
+                role = "User" if msg.role == 'user' else "Assistant"
+                context_text += f"{role}: {msg.content}\n\n"
+           
+            # Limit context text length
+            if len(context_text) > 4000:
+                context_text = context_text[:4000] + "..."
+           
             summary_prompt = f"""
-            Provide a concise summary of the key points and context of this conversation:
+            Provide a concise summary of this conversation focusing on:
+            - Main topics and questions discussed
+            - Key information or insights shared
+            - Current context and direction of the conversation
+            - Any important preferences or requirements mentioned by the user
+           
+            Conversation:
             {context_text}
-            
-            Focus on:
-            - Main topics discussed
-            - Key insights
-            - Important context
+           
+            Keep the summary under 200 words and focus on information that would help understand future questions in this conversation.
             """
-            
+           
             response = GENERATIVE_MODEL.generate_content(summary_prompt)
             return response.text
-        
+       
         except Exception as e:
             print(f"Error generating context summary: {str(e)}")
             return "Unable to generate conversation summary"
-
-
 
         
 

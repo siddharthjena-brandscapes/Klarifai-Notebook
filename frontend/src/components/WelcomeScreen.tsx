@@ -1,38 +1,38 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import logo1 from '../assets/Logo1.png';
-import img1 from '../assets/1.png';
-import img2 from '../assets/2.png';
-import img3 from '../assets/3.png';
-import img4 from '../assets/4.png';
-import img5 from '../assets/5.png';
-import img6 from '../assets/6.png';
-import img7 from '../assets/7.png';
-import img8 from '../assets/8.png';
-import img9 from '../assets/9.png';
-import img10 from '../assets/10.png';
-import img11 from '../assets/11.png';
-import img12 from '../assets/12.png';
-import img13 from '../assets/13.png';
-import img14 from '../assets/14.png';
-import img15 from '../assets/15.png';
-import img16 from '../assets/16.png';
-import img17 from '../assets/17.png';
-import img18 from '../assets/18.png';
-import img19 from '../assets/19.png';
-import img20 from '../assets/20.png';
-import img21 from '../assets/21.png';
-import img22 from '../assets/22.png';
-import img23 from '../assets/23.png';
-import img24 from '../assets/24.png';
-import brandScarpeLogo from '../assets/brand-scarpes-logo.png';
-import { 
-  Brain, 
-  FileText, 
-  Lightbulb, 
-  Upload, 
-  MessageCircle, 
+import logo1 from "../assets/Logo1.png";
+import img1 from "../assets/1.png";
+import img2 from "../assets/2.png";
+import img3 from "../assets/3.png";
+import img4 from "../assets/4.png";
+import img5 from "../assets/5.png";
+import img6 from "../assets/6.png";
+import img7 from "../assets/7.png";
+import img8 from "../assets/8.png";
+import img9 from "../assets/9.png";
+import img10 from "../assets/10.png";
+import img11 from "../assets/11.png";
+import img12 from "../assets/12.png";
+import img13 from "../assets/13.png";
+import img14 from "../assets/14.png";
+import img15 from "../assets/15.png";
+import img16 from "../assets/16.png";
+import img17 from "../assets/17.png";
+import img18 from "../assets/18.png";
+import img19 from "../assets/19.png";
+import img20 from "../assets/20.png";
+import img21 from "../assets/21.png";
+import img22 from "../assets/22.png";
+import img23 from "../assets/23.png";
+import img24 from "../assets/24.png";
+import brandScarpeLogo from "../assets/brand-scarpes-logo.png";
+import {
+  Brain,
+  FileText,
+  Lightbulb,
+  Upload,
+  MessageCircle,
   Sparkles,
   ChevronDown,
   Menu,
@@ -42,11 +42,11 @@ import {
   ArrowRight,
   TrendingUp,
   Target,
-  ShieldCheck ,
+  ShieldCheck,
   Workflow,
   Mail,
-  Play
-} from 'lucide-react';
+  Play,
+} from "lucide-react";
 
 // Video Modal Component
 const VideoModal = ({ isOpen, onClose, videoUrl }) => {
@@ -54,14 +54,14 @@ const VideoModal = ({ isOpen, onClose, videoUrl }) => {
 
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
       setIsLoading(true);
     }
 
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
@@ -78,7 +78,7 @@ const VideoModal = ({ isOpen, onClose, videoUrl }) => {
   if (!isOpen) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={handleBackdropClick}
     >
@@ -120,7 +120,9 @@ const VideoModal = ({ isOpen, onClose, videoUrl }) => {
         {/* Video Info */}
         <div className="mt-4 text-center">
           <h3 className="text-white text-xl font-semibold">KLARIFai Demo</h3>
-          <p className="text-gray-300 mt-2">See how KLARIFai transforms your workflow</p>
+          <p className="text-gray-300 mt-2">
+            See how KLARIFai transforms your workflow
+          </p>
         </div>
       </div>
     </div>
@@ -151,13 +153,24 @@ function FlipCard({ images }: { images: string[] }) {
   }, [images.length]);
 
   return (
-    <div className="flip-card aspect-square rounded-lg overflow-hidden" style={{ perspective: 1000 }}>
-      <div className={`flip-card-inner ${flipped ? 'flipped' : ''}`}>
+    <div
+      className="flip-card aspect-square rounded-lg overflow-hidden"
+      style={{ perspective: 1000 }}
+    >
+      <div className={`flip-card-inner ${flipped ? "flipped" : ""}`}>
         <div className="flip-card-front w-full h-full">
-          <img src={images[current]} alt="AI Idea" className="object-cover w-full h-full" />
+          <img
+            src={images[current]}
+            alt="AI Idea"
+            className="object-cover w-full h-full"
+          />
         </div>
         <div className="flip-card-back w-full h-full">
-          <img src={images[(current + 1) % images.length]} alt="AI Idea" className="object-cover w-full h-full" />
+          <img
+            src={images[(current + 1) % images.length]}
+            alt="AI Idea"
+            className="object-cover w-full h-full"
+          />
         </div>
       </div>
     </div>
@@ -171,18 +184,27 @@ function ChatAnimation() {
     { text: "Of course! Here's a concise summary:", from: "ai" },
     { text: "Thanks! Can you generate a mind map?", from: "user" },
     { text: "Mind map generated. Would you like to ask a query?", from: "ai" },
-    { text: "Yes, please provide brand shares for past 3 years.", from: "user" },
+    {
+      text: "Yes, please provide brand shares for past 3 years.",
+      from: "user",
+    },
     { text: "Brand shares provided. Anything else?", from: "ai" },
     { text: "Can you extract key themes from this report?", from: "user" },
-    { text: "Key themes identified: Innovation, Market Trends, Consumer Insights.", from: "ai" },
+    {
+      text: "Key themes identified: Innovation, Market Trends, Consumer Insights.",
+      from: "ai",
+    },
     { text: "Show me tabular summary of all key data points.", from: "user" },
     { text: "Here are the data points provided.", from: "ai" },
     { text: "Can you create an executive summary?", from: "user" },
-    { text: "Executive summary created. Anything else I can help with?", from: "ai" },
+    {
+      text: "Executive summary created. Anything else I can help with?",
+      from: "ai",
+    },
   ];
   const [startIdx, setStartIdx] = React.useState(0);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
-  
+
   React.useEffect(() => {
     const interval = setInterval(() => {
       setIsTransitioning(true);
@@ -193,22 +215,26 @@ function ChatAnimation() {
     }, 1800);
     return () => clearInterval(interval);
   }, [messages.length]);
-  
+
   // Show 4 messages at a time, wrapping around
-  const visible = [0,1,2,3].map(i => (startIdx + i) % messages.length);
-  
+  const visible = [0, 1, 2, 3].map((i) => (startIdx + i) % messages.length);
+
   return (
     <div className="flex flex-col gap-3 h-44 justify-end">
       {visible.map((i, index) => {
         const msg = messages[i];
         const isUser = msg.from === "user";
         const isOldest = index === 0;
-        
+
         return (
           <div
             key={i}
-            className={`flex w-full transition-all duration-700 ${isUser ? "justify-start" : "justify-end"} ${
-              isTransitioning && isOldest ? "animate-fade-out" : "animate-fade-in"
+            className={`flex w-full transition-all duration-700 ${
+              isUser ? "justify-start" : "justify-end"
+            } ${
+              isTransitioning && isOldest
+                ? "animate-fade-out"
+                : "animate-fade-in"
             }`}
           >
             <div
@@ -224,31 +250,34 @@ function ChatAnimation() {
           </div>
         );
       })}
-      
     </div>
   );
 }
 
 // Animated Background Component
 const AnimatedBackground = () => {
-  const [particles, setParticles] = useState<Array<{
-    id: number;
-    x: number;
-    y: number;
-    size: number;
-    speedX: number;
-    speedY: number;
-    opacity: number;
-  }>>([]);
+  const [particles, setParticles] = useState<
+    Array<{
+      id: number;
+      x: number;
+      y: number;
+      size: number;
+      speedX: number;
+      speedY: number;
+      opacity: number;
+    }>
+  >([]);
 
-  const [connections, setConnections] = useState<Array<{
-    id: number;
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    opacity: number;
-  }>>([]);
+  const [connections, setConnections] = useState<
+    Array<{
+      id: number;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      opacity: number;
+    }>
+  >([]);
 
   useEffect(() => {
     // Initialize particles
@@ -266,23 +295,25 @@ const AnimatedBackground = () => {
     let animationId: number;
 
     const animateParticles = () => {
-      setParticles(prev => prev.map(particle => {
-        let newX = particle.x + particle.speedX;
-        let newY = particle.y + particle.speedY;
+      setParticles((prev) =>
+        prev.map((particle) => {
+          let newX = particle.x + particle.speedX;
+          let newY = particle.y + particle.speedY;
 
-        // Bounce off edges
-        if (newX <= 0 || newX >= window.innerWidth) {
-          particle.speedX *= -1;
-        }
-        if (newY <= 0 || newY >= window.innerHeight) {
-          particle.speedY *= -1;
-        }
+          // Bounce off edges
+          if (newX <= 0 || newX >= window.innerWidth) {
+            particle.speedX *= -1;
+          }
+          if (newY <= 0 || newY >= window.innerHeight) {
+            particle.speedY *= -1;
+          }
 
-        newX = Math.max(0, Math.min(window.innerWidth, newX));
-        newY = Math.max(0, Math.min(window.innerHeight, newY));
+          newX = Math.max(0, Math.min(window.innerWidth, newX));
+          newY = Math.max(0, Math.min(window.innerHeight, newY));
 
-        return { ...particle, x: newX, y: newY };
-      }));
+          return { ...particle, x: newX, y: newY };
+        })
+      );
 
       animationId = requestAnimationFrame(animateParticles);
     };
@@ -300,13 +331,13 @@ const AnimatedBackground = () => {
   useEffect(() => {
     const updateConnections = () => {
       const newConnections: typeof connections = [];
-      
+
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
           const dy = particles[i].y - particles[j].y;
           const distance = Math.sqrt(dx * dx + dy * dy);
-          
+
           if (distance < 120 && newConnections.length < 30) {
             newConnections.push({
               id: i * 1000 + j,
@@ -331,7 +362,7 @@ const AnimatedBackground = () => {
     <div className="absolute inset-0 overflow-hidden">
       {/* Neural Network Connections */}
       <svg className="absolute inset-0 w-full h-full">
-        {connections.map(connection => (
+        {connections.map((connection) => (
           <line
             key={connection.id}
             x1={connection.x1}
@@ -345,7 +376,13 @@ const AnimatedBackground = () => {
           />
         ))}
         <defs>
-          <linearGradient id="neuralGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient
+            id="neuralGradient"
+            x1="0%"
+            y1="0%"
+            x2="100%"
+            y2="100%"
+          >
             <stop offset="0%" stopColor="#3b82f6" />
             <stop offset="50%" stopColor="#8b5cf6" />
             <stop offset="100%" stopColor="#ec4899" />
@@ -354,7 +391,7 @@ const AnimatedBackground = () => {
       </svg>
 
       {/* Floating Particles */}
-      {particles.map(particle => (
+      {particles.map((particle) => (
         <div
           key={particle.id}
           className="absolute rounded-full bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 particle-glow"
@@ -364,12 +401,14 @@ const AnimatedBackground = () => {
             width: `${particle.size}px`,
             height: `${particle.size}px`,
             opacity: particle.opacity,
-            boxShadow: `0 0 ${particle.size * 3}px rgba(59, 130, 246, 0.6), 0 0 ${particle.size * 6}px rgba(139, 92, 246, 0.3)`,
+            boxShadow: `0 0 ${
+              particle.size * 3
+            }px rgba(59, 130, 246, 0.6), 0 0 ${
+              particle.size * 6
+            }px rgba(139, 92, 246, 0.3)`,
           }}
         />
       ))}
-
-      
 
       {/* Gradient Overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-blue-950/50 to-purple-950/70" />
@@ -382,21 +421,21 @@ const useScrollReveal = () => {
   useEffect(() => {
     const observerOptions = {
       threshold: 0.1,
-      rootMargin: '0px 0px -50px 0px'
+      rootMargin: "0px 0px -50px 0px",
     };
 
     const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          entry.target.classList.add('animate-reveal');
-          entry.target.classList.remove('opacity-0', 'translate-y-8');
+          entry.target.classList.add("animate-reveal");
+          entry.target.classList.remove("opacity-0", "translate-y-8");
         }
       });
     }, observerOptions);
 
     // Observe all elements with scroll-reveal class
-    const elements = document.querySelectorAll('.scroll-reveal');
-    elements.forEach(el => observer.observe(el));
+    const elements = document.querySelectorAll(".scroll-reveal");
+    elements.forEach((el) => observer.observe(el));
 
     return () => observer.disconnect();
   }, []);
@@ -409,10 +448,11 @@ function WelcomeScreen() {
   const navigate = useNavigate();
 
   // Replace this with your Azure Blob Storage video URL
-  const videoUrl = "https://dockerblobklarifaibbsr.blob.core.windows.net/uploadfiles/1409899-uhd_3840_2160_25fps.mp4";
+  const videoUrl =
+    "https://dockerblobklarifaibbsr.blob.core.windows.net/uploadfiles/1409899-uhd_3840_2160_25fps.mp4";
 
   const handleGetStarted = () => {
-    navigate('/auth');
+    navigate("/auth");
   };
 
   const handleWatchDemo = () => {
@@ -427,27 +467,27 @@ function WelcomeScreen() {
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+      element.scrollIntoView({ behavior: "smooth" });
     }
     setIsMenuOpen(false);
   };
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isVideoModalOpen) {
+      if (e.key === "Escape" && isVideoModalOpen) {
         closeVideoModal();
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
   }, [isVideoModalOpen]);
 
   return (
@@ -456,18 +496,32 @@ function WelcomeScreen() {
       <nav className="fixed top-0 w-full z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/50 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
+            {/* KLARIFai Logo - Left */}
             <div className="flex items-center space-x-3">
-              <img src={logo1} alt="KLARIFai Logo" className="w-30 h-10 object-contain rounded-lg" />
+              <img
+                src={logo1}
+                alt="KLARIFai Logo"
+                className="w-30 h-10 object-contain rounded-lg"
+              />
+            </div>
+
+            {/* Brandscapes Logo - Right */}
+            <div className="flex items-center space-x-3">
+              <img
+                src={brandScarpeLogo}
+                alt="Brandscapes Logo"
+                className="w-30 h-6 object-contain rounded-lg"
+              />
             </div>
           </div>
         </div>
       </nav>
 
       {/* Video Modal */}
-      <VideoModal 
-        isOpen={isVideoModalOpen} 
-        onClose={closeVideoModal} 
-        videoUrl={videoUrl} 
+      <VideoModal
+        isOpen={isVideoModalOpen}
+        onClose={closeVideoModal}
+        videoUrl={videoUrl}
       />
 
       {/* Hero Section */}
@@ -480,7 +534,7 @@ function WelcomeScreen() {
           className="relative z-10 w-full"
           style={{
             transform: `translateY(${scrollY * 0.3}px)`,
-            transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         >
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -488,15 +542,17 @@ function WelcomeScreen() {
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6">
                 <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                   From Knowledge to Impact
-                </span> 
+                </span>
                 <br />
                 {/* <span className="text-white">AI insight command center</span> */}
               </h1>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-semibold mb-8 text-white">AI insight command center</h2>
-              
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-semibold mb-8 text-white">
+                AI insight command center
+              </h2>
+
               <p className="text-lg sm:text-xl text-slate-300 mb-12 max-w-3xl mx-auto leading-relaxed">
                 One modular platform, infinite AI possibilities.
-                <br/>
+                <br />
                 Tailored for unique intelligence needs.
               </p>
 
@@ -504,23 +560,26 @@ function WelcomeScreen() {
                 {/* <button className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25">
                   Log in
                   <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </button>
-                <button className="px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50">
-                  Watch Demo
                 </button> */}
+                <button
+                  onClick={handleWatchDemo}
+                  className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
+                >
+                  <Play className="w-5 h-5" />
+                  Watch Demo
+                </button>
               </div>
             </div>
 
             <div className="animate-bounce">
-              <ChevronDown 
+              <ChevronDown
                 className="w-12 h-12 text-red-500 mx-auto cursor-pointer hover:text-white transition-colors"
-                onClick={() => scrollToSection('features')}
+                onClick={() => scrollToSection("modules")}
               />
             </div>
           </div>
         </div>
       </section>
-
 
       {/* Modules Section */}
       <section id="modules" className="py-20">
@@ -544,11 +603,14 @@ function WelcomeScreen() {
                   <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                     <FileText className="w-6 h-6 text-white" />
                   </div>
-                  <h3 className="text-3xl font-bold text-white">KLARIFai Notebook</h3>
+                  <h3 className="text-3xl font-bold text-white">
+                    KLARIFai Notebook
+                  </h3>
                 </div>
-                
+
                 <p className="text-xl text-slate-300 leading-relaxed">
-                  Transform your documents into intelligent conversations. Upload files - Analyze content - Reveal insights
+                  Transform your documents into intelligent conversations.
+                  Upload files - Analyze content - Reveal insights
                 </p>
 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -556,16 +618,22 @@ function WelcomeScreen() {
                     { icon: Upload, text: "Document Upload & Processing" },
                     { icon: MessageCircle, text: "Intelligent Q&A Chatbot" },
                     { icon: Brain, text: "Mind Map Generation" },
-                    { icon: FileText, text: "Smart Note-Taking" }
+                    { icon: FileText, text: "Smart Note-Taking" },
                   ].map((feature, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg hover:bg-slate-800/50 transition-colors">
+                    <div
+                      key={idx}
+                      className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg hover:bg-slate-800/50 transition-colors"
+                    >
                       <feature.icon className="w-5 h-5 text-blue-400" />
                       <span className="text-slate-200">{feature.text}</span>
                     </div>
                   ))}
                 </div>
 
-                <button onClick={handleGetStarted} className="group bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105">
+                <button
+                  onClick={handleGetStarted}
+                  className="group bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105"
+                >
                   Try Notebook
                   <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -583,18 +651,34 @@ function WelcomeScreen() {
               </div>
             </div>
 
+            {/* ChevronDown for KLARIFai Notebook */}
+            <div className="text-center">
+              <div className="animate-bounce">
+                <ChevronDown
+                  className="w-12 h-12 text-blue-500 mx-auto cursor-pointer hover:text-white transition-colors"
+                  onClick={() => scrollToSection("idea-generator")}
+                />
+              </div>
+            </div>
+
             {/* Idea Generator */}
-            <div className="flex flex-col lg:flex-row-reverse items-center gap-12 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
+            <div
+              id="idea-generator"
+              className="flex flex-col lg:flex-row-reverse items-center gap-12 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out"
+            >
               <div className="flex-1 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
                     <Lightbulb className="w-6 h-6 text-white" />
                   </div>
-                  <h3 className="text-3xl font-bold text-white">Idea Generator</h3>
+                  <h3 className="text-3xl font-bold text-white">
+                    Idea Generator
+                  </h3>
                 </div>
-                
+
                 <p className="text-xl text-slate-300 leading-relaxed">
-                  Bring your early stage ideas to life. From Concept to Canvas <br />
+                  Bring your early stage ideas to life. From Concept to Canvas{" "}
+                  <br />
                   Input Guidelines - Generate Copy - Visualize Ideas
                 </p>
 
@@ -603,16 +687,22 @@ function WelcomeScreen() {
                     { icon: Lightbulb, text: "Input Idea Specs" },
                     { icon: Sparkles, text: "Generate Idea Copy" },
                     { icon: Brain, text: "Context Relevant Visuals" },
-                    { icon: Workflow, text: "Export & Share" }
+                    { icon: Workflow, text: "Export & Share" },
                   ].map((feature, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg hover:bg-slate-800/50 transition-colors">
+                    <div
+                      key={idx}
+                      className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg hover:bg-slate-800/50 transition-colors"
+                    >
                       <feature.icon className="w-5 h-5 text-purple-400" />
                       <span className="text-slate-200">{feature.text}</span>
                     </div>
                   ))}
                 </div>
 
-                <button onClick={handleGetStarted} className="group bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 transform hover:scale-105">
+                <button
+                  onClick={handleGetStarted}
+                  className="group bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 transform hover:scale-105"
+                >
                   Generate Ideas
                   <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -634,12 +724,25 @@ function WelcomeScreen() {
                 </div>
               </div>
             </div>
+
+            {/* ChevronDown for Idea Generator */}
+            <div className="text-center">
+              <div className="animate-bounce">
+                <ChevronDown
+                  className="w-12 h-12 text-purple-500 mx-auto cursor-pointer hover:text-white transition-colors"
+                  onClick={() => scrollToSection("cta-section")}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-br from-blue-900/20 via-purple-900/20 to-slate-900 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
+      <section
+        id="cta-section"
+        className="py-20 bg-gradient-to-br from-blue-900/20 via-purple-900/20 to-slate-900 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out"
+      >
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
           <h2 className="text-4xl sm:text-5xl font-bold mb-6">
             <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
@@ -649,19 +752,18 @@ function WelcomeScreen() {
           <p className="text-xl text-red-500 mb-12 max-w-2xl mx-auto">
             Reduce Time to Insights & Drive Action to Impact.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button onClick={handleGetStarted} className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25">
+            <button
+              onClick={handleGetStarted}
+              className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25"
+            >
               Log in
               <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
-            <button 
-              onClick={handleWatchDemo}
-              className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
-            >
-              <Play className="w-5 h-5" />
+            {/* <button className="px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50">
               Watch Demo
-            </button>
+            </button> */}
           </div>
         </div>
       </section>
@@ -669,23 +771,30 @@ function WelcomeScreen() {
       {/* Footer */}
       <footer id="contact" className="bg-slate-900 border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid md:grid-cols-2 gap-8 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
-            <div className="space-y-4 flex-1">
-              <div className="flex items-center space-x-3">
-                <img src={logo1} alt="KLARIFai Logo" className="w-30 h-10 object-contain rounded-lg" />
-              </div>
-              
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
+            {/* KLARIFai Logo */}
+            <div className="flex items-center space-x-3">
+              <img
+                src={logo1}
+                alt="KLARIFai Logo"
+                className="w-30 h-10 object-contain rounded-lg"
+              />
             </div>
 
-            <div className="flex-1 flex flex-col items-end justify-center space-y-2 md:items-end md:justify-center md:pl-12">
-              <span className="text-slate-400 font-semibold mb-2">Powered by:</span>
-              <img src={brandScarpeLogo} alt="Powered by Brandscapes" className="w-33 h-6 object-contain rounded-lg mb-1 md:mb-0" />
-            </div>
-          </div>
-          <div className="mt-10 flex justify-center items-center w-full">
-            <p className="text-slate-400 text-center w-full">
+            {/* Copyright */}
+            <p className="text-slate-400 text-center">
               © 2025 KLARIFai. All rights reserved.
             </p>
+
+            {/* Powered by */}
+            <div className="flex flex-col items-center space-y-2">
+              <span className="text-slate-400 font-semibold">Powered by:</span>
+              <img
+                src={brandScarpeLogo}
+                alt="Powered by Brandscapes"
+                className="w-33 h-6 object-contain rounded-lg"
+              />
+            </div>
           </div>
         </div>
       </footer>
