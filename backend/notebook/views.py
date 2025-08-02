@@ -11885,7 +11885,14 @@ def get_mindmap_data(request, mindmap_id):
             'error': f'Failed to process mindmap: {str(e)}',
             'success': False
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
+from django.db.models import Sum, Count
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth.models import User
+from .models import Document, ChatMessage
+
 class AdminNotebookUserStatsView(APIView):
     permission_classes = [IsAuthenticated]
  
