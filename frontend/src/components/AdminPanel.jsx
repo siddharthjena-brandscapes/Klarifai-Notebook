@@ -1614,7 +1614,7 @@ const UserInfoSection = () => {
                       </div>
                     </div>
                     
-                    Show question stats if available
+                    {/* Show question stats if available */}
                     {(userStats.length > 0 || notebookUserStats.length > 0) && (
                       <div className="mt-6 space-y-4">
                       

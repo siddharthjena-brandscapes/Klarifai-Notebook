@@ -4078,7 +4078,7 @@ class ChatView(APIView):
                 remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
                 error_data = {
                     'error': 'token_limit_exceeded',
-                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset.",
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset at - contact@klarifai.ai",
                     'current_usage': current_total_tokens,
                     'token_limit': user_api_tokens.token_limit,
                     'remaining_tokens': remaining_tokens,
@@ -4205,7 +4205,7 @@ class ChatView(APIView):
                 remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
                 error_data = {
                     'error': 'token_limit_exceeded',
-                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset.",
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset at - contact@klarifai.ai",
                     'current_usage': current_total_tokens,
                     'token_limit': user_api_tokens.token_limit,
                     'remaining_tokens': remaining_tokens,
@@ -12929,7 +12929,7 @@ class GPTImageChatView(APIView):
                 remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
                 error_data = {
                     'error': 'token_limit_exceeded',
-                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens.",
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset at - contact@klarifai.ai",
                     'current_usage': current_total_tokens,
                     'token_limit': user_api_tokens.token_limit,
                     'remaining_tokens': remaining_tokens,
@@ -13056,7 +13056,7 @@ class GPTImageChatView(APIView):
                 remaining_tokens = max(0, user_api_tokens.token_limit - current_total_tokens)
                 error_data = {
                     'error': 'token_limit_exceeded',
-                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens.",
+                    'message': f"You have reached your conversation token limit of {user_api_tokens.token_limit:,} tokens. Current usage: {current_total_tokens:,} tokens. Remaining: {remaining_tokens:,} tokens. The current message exceeds your remaining token quota and cannot be processed. Please limit your usage or request for reset at - contact@klarifai.ai",
                     'current_usage': current_total_tokens,
                     'token_limit': user_api_tokens.token_limit,
                     'remaining_tokens': remaining_tokens,
