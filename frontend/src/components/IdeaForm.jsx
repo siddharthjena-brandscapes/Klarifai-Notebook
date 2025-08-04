@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 //IdeaForm.jsx
 import React, { useState, useCallback, useEffect, useRef, useContext } from "react";
 import { ideaService } from "../utils/axiosConfig";
@@ -27,6 +20,7 @@ import IdeaTitle from "./IdeaGenerator/IdeaTitle";
 import { useLocation } from 'react-router-dom';
 import { ThemeContext } from "../context/ThemeContext";
 import CircularProgressButton from "../components/CircularProgressButton";
+import ideaFaqButton from "./faq/ideaFaqButton";
 
 
 
@@ -2305,6 +2299,7 @@ const fillFormWithDocParams = () => {
         </main>
       </div>
       <DocumentParamsModal />
+      <ideaFaqButton />
       <style>{`
       .loader {
     animation: rotate 1s infinite;

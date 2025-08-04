@@ -8,6 +8,8 @@ import Header from './dashboard/Header';
 import backgroundImage from '../assets/bg-main.jpg';
 import { ideaService } from "../utils/axiosConfig";
 import { ThemeContext } from '../context/ThemeContext';
+import ideaFaqButton from './faq/ideaFaqButton';
+
 
 const Alert = ({ title, description, onConfirm, onCancel }) => (
   <div className="fixed inset-0 z-[100] bg-[#faf4ee]/80 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -504,6 +506,7 @@ const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
           onCancel={() => setShowDeleteAlert(false)}
         />
       )}
+      <ideaFaqButton />
     </div>
   );
 };

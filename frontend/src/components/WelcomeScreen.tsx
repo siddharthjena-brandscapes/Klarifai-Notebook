@@ -27,6 +27,7 @@ import img22 from "../assets/22.png";
 import img23 from "../assets/23.png";
 import img24 from "../assets/24.png";
 import brandScarpeLogo from "../assets/brand-scarpes-logo.png";
+import LoginForm from "./auth/LoginForm";
 import {
   Brain,
   FileText,
@@ -47,8 +48,9 @@ import {
   Mail,
   Play,
 } from "lucide-react";
-
+import FaqButton from "./faq/FaqButton";
 // Video Modal Component
+
 const VideoModal = ({ isOpen, onClose, videoUrl }) => {
   const [isLoading, setIsLoading] = useState(true);
 
@@ -125,6 +127,139 @@ const VideoModal = ({ isOpen, onClose, videoUrl }) => {
           </p>
         </div>
       </div>
+    </div>
+  );
+};
+
+// Login Modal Component
+// Login Modal Component
+const LoginModal = ({ isOpen, onClose }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [isOpen]);
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleLoginSuccess = (token) => {
+    console.log('Login successful:', token);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div className="relative w-full max-w-md mx-auto">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors z-10"
+          aria-label="Close login modal"
+        >
+          <X className="w-8 h-8" />
+        </button>
+
+        {/* Modal Container */}
+        <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl p-8 shadow-2xl border border-slate-700/50 relative">
+          {/* Gradient Border Effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur-xl -z-10"></div>
+          
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+              Welcome to KLARIFai
+            </h2>
+          </div>
+
+          {/* Themed Login Form Wrapper */}
+          <div className="themed-login-form">
+            <LoginForm onSuccess={handleLoginSuccess} />
+          </div>
+        </div>
+      </div>
+
+      {/* CSS Overrides for LoginForm */}
+      <style jsx>{`
+        .themed-login-form input[type="text"],
+        .themed-login-form input[type="password"] {
+          background-color: rgba(30, 41, 59, 0.7) !important;
+          border: 1px solid rgb(71, 85, 105) !important;
+          color: white !important;
+          border-radius: 0.75rem !important;
+          padding: 12px 16px !important;
+        }
+        
+        .themed-login-form input[type="text"]:focus,
+        .themed-login-form input[type="password"]:focus {
+          background-color: rgba(30, 41, 59, 0.9) !important;
+          border-color: rgb(59, 130, 246) !important;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+        }
+        
+        .themed-login-form input::placeholder {
+          color: rgb(148, 163, 184) !important;
+        }
+        
+        .themed-login-form label {
+          color: rgb(203, 213, 225) !important;
+          font-weight: 500 !important;
+        }
+        
+        .themed-login-form button[type="submit"] {
+          background: linear-gradient(to right, rgb(59, 130, 246), rgb(147, 51, 234)) !important;
+          border: none !important;
+          border-radius: 0.75rem !important;
+          padding: 12px 16px !important;
+          font-weight: 600 !important;
+          transform: scale(1) !important;
+          transition: all 0.3s ease !important;
+        }
+        
+        .themed-login-form button[type="submit"]:hover {
+          background: linear-gradient(to right, rgb(37, 99, 235), rgb(126, 34, 206)) !important;
+          transform: scale(1.02) !important;
+        }
+        
+        .themed-login-form .bg-white {
+          background-color: transparent !important;
+        }
+        
+        .themed-login-form .dark\\:text-gray-600 {
+          color: rgb(203, 213, 225) !important;
+        }
+        
+        .themed-login-form .dark\\:text-black {
+          color: white !important;
+        }
+        
+        /* SSO Button Styling */
+        .themed-login-form button:not([type="submit"]) {
+          background-color: rgba(30, 41, 59, 0.5) !important;
+          border: 1px solid rgb(71, 85, 105) !important;
+          color: rgb(203, 213, 225) !important;
+          border-radius: 0.75rem !important;
+        }
+        
+        .themed-login-form button:not([type="submit"]):hover {
+          background-color: rgba(51, 65, 85, 0.7) !important;
+          border-color: rgb(100, 116, 139) !important;
+        }
+      `}</style>
     </div>
   );
 };
@@ -445,6 +580,7 @@ function WelcomeScreen() {
   const [scrollY, setScrollY] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const navigate = useNavigate();
 
   // Replace this with your Azure Blob Storage video URL
@@ -479,16 +615,21 @@ function WelcomeScreen() {
     setIsMenuOpen(false);
   };
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isVideoModalOpen) {
+ useEffect(() => {
+  const handleEscape = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      if (isVideoModalOpen) {
         closeVideoModal();
       }
-    };
+      if (isLoginModalOpen) {
+        setIsLoginModalOpen(false);
+      }
+    }
+  };
 
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [isVideoModalOpen]);
+  document.addEventListener("keydown", handleEscape);
+  return () => document.removeEventListener("keydown", handleEscape);
+}, [isVideoModalOpen, isLoginModalOpen]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white overflow-x-hidden">
@@ -506,11 +647,11 @@ function WelcomeScreen() {
             </div>
 
             {/* Brandscapes Logo - Right */}
-            <div className="flex items-center space-x-3">
+           <div className="flex flex-col items-center space-y-2">
               <img
                 src={brandScarpeLogo}
                 alt="Brandscapes Logo"
-                className="w-30 h-6 object-contain rounded-lg"
+                className="w-33 h-6 object-contain rounded-lg"
               />
             </div>
           </div>
@@ -523,6 +664,11 @@ function WelcomeScreen() {
         onClose={closeVideoModal}
         videoUrl={videoUrl}
       />
+      {/* Login Modal */}
+<LoginModal
+  isOpen={isLoginModalOpen}
+  onClose={() => setIsLoginModalOpen(false)}
+/>
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -556,24 +702,21 @@ function WelcomeScreen() {
                 Tailored for unique intelligence needs.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
-                {/* <button className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25">
-                  Log in
-                  <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </button> */}
-                <button
-                  onClick={handleWatchDemo}
-                  className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
-                >
-                  <Play className="w-5 h-5" />
-                  Watch Demo
-                </button>
-              </div>
+             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+  
+  <button
+    onClick={handleWatchDemo}
+    className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
+  >
+    <Play className="w-5 h-5" />
+    Watch Demo
+  </button>
+</div>
             </div>
 
             <div className="animate-bounce">
               <ChevronDown
-                className="w-12 h-12 text-red-500 mx-auto cursor-pointer hover:text-white transition-colors"
+                className="w-12 h-12 mt-10 text-red-500 mx-auto cursor-pointer hover:text-white transition-colors"
                 onClick={() => scrollToSection("modules")}
               />
             </div>
@@ -635,7 +778,7 @@ function WelcomeScreen() {
                   className="group bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105"
                 >
                   Try Notebook
-                  <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  {/* <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" /> */}
                 </button>
               </div>
 
@@ -704,7 +847,7 @@ function WelcomeScreen() {
                   className="group bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 transform hover:scale-105"
                 >
                   Generate Ideas
-                  <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  {/* <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" /> */}
                 </button>
               </div>
 
@@ -731,7 +874,7 @@ function WelcomeScreen() {
                 <ChevronDown
                   className="w-12 h-12 text-purple-500 mx-auto cursor-pointer hover:text-white transition-colors"
                   onClick={() => scrollToSection("cta-section")}
-                />
+                /> 
               </div>
             </div>
           </div>
@@ -749,24 +892,31 @@ function WelcomeScreen() {
               Transform Your Workstreams
             </span>
           </h2>
-          <p className="text-xl text-red-500 mb-12 max-w-2xl mx-auto">
-            Reduce Time to Insights & Drive Action to Impact.
+          <p className="text-xl text-white mb-12 max-w-2xl mx-auto">
+            Reduce TIME to INSIGHTS & Drive ACTION to IMPACT
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button
-              onClick={handleGetStarted}
-              className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25"
-            >
-              Log in
-              <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </button>
+    onClick={() => setIsLoginModalOpen(true)}
+    className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105"
+  >
+    Log in
+    {/* <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" /> */}
+  </button>
+  
             {/* <button className="px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50">
               Watch Demo
             </button> */}
           </div>
         </div>
+        
       </section>
+      {/* Floating FAQ Button - always visible, not inside header/footer/cta */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <FaqButton />
+      </div>
+
 
       {/* Footer */}
       <footer id="contact" className="bg-slate-900 border-t border-slate-800">
@@ -776,8 +926,9 @@ function WelcomeScreen() {
             <div className="flex items-center space-x-3">
               <img
                 src={logo1}
+                onClick={handleGetStarted}
                 alt="KLARIFai Logo"
-                className="w-30 h-10 object-contain rounded-lg"
+                className="w-30 h-10 object-contain rounded-lg on hover:animate-bounce cursor-pointer"
               />
             </div>
 
@@ -788,11 +939,11 @@ function WelcomeScreen() {
 
             {/* Powered by */}
             <div className="flex flex-col items-center space-y-2">
-              <span className="text-slate-400 font-semibold">Powered by:</span>
+              {/* <span className="text-slate-400 font-semibold">Powered by:</span> */}
               <img
                 src={brandScarpeLogo}
                 alt="Powered by Brandscapes"
-                className="w-33 h-6 object-contain rounded-lg"
+                className="w-34 h-6 object-contain rounded-lg"
               />
             </div>
           </div>

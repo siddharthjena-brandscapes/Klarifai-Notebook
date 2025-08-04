@@ -126,7 +126,7 @@ const LoginSignup = () => {
           </div>
         </div>
       </div>
-      {/* <FaqButton /> */}
+      <FaqButton />
     </div>
   );
 };

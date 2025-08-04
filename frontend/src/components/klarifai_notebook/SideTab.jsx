@@ -41,7 +41,7 @@ import { ideaService, coreService } from "../../utils/axiosConfig";
 import DocumentSearchModalNB from "./DocumentSearchModalNB";
 import ChatDownloadFeatureNB from "./ChatDownloadFeatureNB";
 import BulkDeleteModal from "../dashboard/BulkDeleteModal";
-import FaqButton from "../faq/FaqButton";
+import klarifaiFaqButton from "../faq/klarifaiFaqButton";
 import { ThemeContext } from "../../context/ThemeContext";
 import ViewDoc from "./ViewDoc";
 
@@ -2446,13 +2446,13 @@ const SideTab = ({
                 </div>
 
                 {/* Add FAQ button here */}
-                {/* <FaqButton
+                <klarifaiFaqButton
                   className={`ml-2 ${
                     theme === "dark"
                       ? "hover:bg-gray-700/50"
                       : "hover:bg-[#f5e6d8]"
                   } rounded-lg`}
-                /> */}
+                />
               </div>
             </div>
           )}
@@ -3046,9 +3046,9 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
               />
             </button>
 
-            {/* FAQ button
+            {/* FAQ button */}
             <button
-              onClick={() => window.open("/faq", "_blank")}
+              onClick={() => window.open("https://dockerblobklarifaibbsr.blob.core.windows.net/uploadfiles/FaqFolder/User_guide_getting_started_with_notebook.pdf", "_blank")}
               className={`p-2 ${
                 theme === "dark"
                   ? "text-white hover:bg-gray-700"
@@ -3062,7 +3062,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
                   theme === "dark" ? "text-purple-400" : "text-[#7a5741]"
                 }
               />
-            </button> */}
+            </button>
           </div>
         </div>
       )}

@@ -10,7 +10,6 @@ import ResetPasswordForm from '../components/auth/ResetPasswordForm';
 import IdeaForm from '../components/IdeaForm';
 import ProjectsIdeaGen from '../components/ProjectsIdeaGen';
 import AdminPanel from '../components/AdminPanel';
-import FaqPage from '../components/faq/FaqPage';
 import MainDashboard from '../components/klarifai_notebook/MainDashboard';
 import SSOCallback from '../components/auth/SSOCallback';
 import SignupForm from '../components/auth/SignupForm';
@@ -82,7 +81,7 @@ const AppRoutes = () => {
         } />
 
         {/* FAQ Page */}
-        <Route path="/faq" element={<FaqPage />} />
+       
        
         {/* Default Route */}
         <Route path="/" element={<WelcomeScreen />} />
