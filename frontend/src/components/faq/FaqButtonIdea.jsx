@@ -2,7 +2,7 @@
 import React from 'react';
 import { HelpCircle } from 'lucide-react';
 
-const ideaFaqButton = ({ className }) => {
+const FaqButtonIdea = ({ className }) => {
   // Replace this with your actual Azure Blob Storage URL
   const AZURE_BLOB_FAQ_URL = 'https://dockerblobklarifaibbsr.blob.core.windows.net/uploadfiles/FaqFolder/User_guide_idea_generator.pdf';
   
@@ -24,4 +24,4 @@ const ideaFaqButton = ({ className }) => {
   );
 };
 
-export default ideaFaqButton;
+export default FaqButtonIdea;

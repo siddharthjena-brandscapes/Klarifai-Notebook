@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+
 import logo1 from "../assets/Logo1.png";
 import img1 from "../assets/1.png";
 import img2 from "../assets/2.png";
@@ -134,6 +135,7 @@ const VideoModal = ({ isOpen, onClose, videoUrl }) => {
 // Login Modal Component
 // Login Modal Component
 const LoginModal = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -153,8 +155,9 @@ const LoginModal = ({ isOpen, onClose }) => {
   };
 
   const handleLoginSuccess = (token) => {
-    console.log('Login successful:', token);
+    console.log("Login successful:", token);
     onClose();
+    navigate('/landing', { replace: true });
   };
 
   if (!isOpen) return null;
@@ -178,7 +181,7 @@ const LoginModal = ({ isOpen, onClose }) => {
         <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl p-8 shadow-2xl border border-slate-700/50 relative">
           {/* Gradient Border Effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur-xl -z-10"></div>
-          
+
           {/* Header */}
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
@@ -203,25 +206,29 @@ const LoginModal = ({ isOpen, onClose }) => {
           border-radius: 0.75rem !important;
           padding: 12px 16px !important;
         }
-        
+
         .themed-login-form input[type="text"]:focus,
         .themed-login-form input[type="password"]:focus {
           background-color: rgba(30, 41, 59, 0.9) !important;
           border-color: rgb(59, 130, 246) !important;
           box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
         }
-        
+
         .themed-login-form input::placeholder {
           color: rgb(148, 163, 184) !important;
         }
-        
+
         .themed-login-form label {
           color: rgb(203, 213, 225) !important;
           font-weight: 500 !important;
         }
-        
+
         .themed-login-form button[type="submit"] {
-          background: linear-gradient(to right, rgb(59, 130, 246), rgb(147, 51, 234)) !important;
+          background: linear-gradient(
+            to right,
+            rgb(59, 130, 246),
+            rgb(147, 51, 234)
+          ) !important;
           border: none !important;
           border-radius: 0.75rem !important;
           padding: 12px 16px !important;
@@ -229,24 +236,28 @@ const LoginModal = ({ isOpen, onClose }) => {
           transform: scale(1) !important;
           transition: all 0.3s ease !important;
         }
-        
+
         .themed-login-form button[type="submit"]:hover {
-          background: linear-gradient(to right, rgb(37, 99, 235), rgb(126, 34, 206)) !important;
+          background: linear-gradient(
+            to right,
+            rgb(37, 99, 235),
+            rgb(126, 34, 206)
+          ) !important;
           transform: scale(1.02) !important;
         }
-        
+
         .themed-login-form .bg-white {
           background-color: transparent !important;
         }
-        
+
         .themed-login-form .dark\\:text-gray-600 {
           color: rgb(203, 213, 225) !important;
         }
-        
+
         .themed-login-form .dark\\:text-black {
           color: white !important;
         }
-        
+
         /* SSO Button Styling */
         .themed-login-form button:not([type="submit"]) {
           background-color: rgba(30, 41, 59, 0.5) !important;
@@ -254,7 +265,7 @@ const LoginModal = ({ isOpen, onClose }) => {
           color: rgb(203, 213, 225) !important;
           border-radius: 0.75rem !important;
         }
-        
+
         .themed-login-form button:not([type="submit"]):hover {
           background-color: rgba(51, 65, 85, 0.7) !important;
           border-color: rgb(100, 116, 139) !important;
@@ -615,21 +626,21 @@ function WelcomeScreen() {
     setIsMenuOpen(false);
   };
 
- useEffect(() => {
-  const handleEscape = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
-      if (isVideoModalOpen) {
-        closeVideoModal();
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isVideoModalOpen) {
+          closeVideoModal();
+        }
+        if (isLoginModalOpen) {
+          setIsLoginModalOpen(false);
+        }
       }
-      if (isLoginModalOpen) {
-        setIsLoginModalOpen(false);
-      }
-    }
-  };
+    };
 
-  document.addEventListener("keydown", handleEscape);
-  return () => document.removeEventListener("keydown", handleEscape);
-}, [isVideoModalOpen, isLoginModalOpen]);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isVideoModalOpen, isLoginModalOpen]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white overflow-x-hidden">
@@ -647,7 +658,7 @@ function WelcomeScreen() {
             </div>
 
             {/* Brandscapes Logo - Right */}
-           <div className="flex flex-col items-center space-y-2">
+            <div className="flex flex-col items-center space-y-2">
               <img
                 src={brandScarpeLogo}
                 alt="Brandscapes Logo"
@@ -665,10 +676,10 @@ function WelcomeScreen() {
         videoUrl={videoUrl}
       />
       {/* Login Modal */}
-<LoginModal
-  isOpen={isLoginModalOpen}
-  onClose={() => setIsLoginModalOpen(false)}
-/>
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -702,16 +713,15 @@ function WelcomeScreen() {
                 Tailored for unique intelligence needs.
               </p>
 
-             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-  
-  <button
-    onClick={handleWatchDemo}
-    className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
-  >
-    <Play className="w-5 h-5" />
-    Watch Demo
-  </button>
-</div>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <button
+                  onClick={handleWatchDemo}
+                  className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
+                >
+                  <Play className="w-5 h-5" />
+                  Watch Demo
+                </button>
+              </div>
             </div>
 
             <div className="animate-bounce">
@@ -874,7 +884,7 @@ function WelcomeScreen() {
                 <ChevronDown
                   className="w-12 h-12 text-purple-500 mx-auto cursor-pointer hover:text-white transition-colors"
                   onClick={() => scrollToSection("cta-section")}
-                /> 
+                />
               </div>
             </div>
           </div>
@@ -898,25 +908,23 @@ function WelcomeScreen() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button
-    onClick={() => setIsLoginModalOpen(true)}
-    className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105"
-  >
-    Log in
-    {/* <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" /> */}
-  </button>
-  
+              onClick={() => setIsLoginModalOpen(true)}
+              className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105"
+            >
+              Log in
+              {/* <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" /> */}
+            </button>
+
             {/* <button className="px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50">
               Watch Demo
             </button> */}
           </div>
         </div>
-        
       </section>
       {/* Floating FAQ Button - always visible, not inside header/footer/cta */}
       <div className="fixed bottom-6 right-6 z-50">
         <FaqButton />
       </div>
-
 
       {/* Footer */}
       <footer id="contact" className="bg-slate-900 border-t border-slate-800">

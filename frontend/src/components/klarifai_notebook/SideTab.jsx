@@ -41,7 +41,7 @@ import { ideaService, coreService } from "../../utils/axiosConfig";
 import DocumentSearchModalNB from "./DocumentSearchModalNB";
 import ChatDownloadFeatureNB from "./ChatDownloadFeatureNB";
 import BulkDeleteModal from "../dashboard/BulkDeleteModal";
-import klarifaiFaqButton from "../faq/klarifaiFaqButton";
+import NotebookFaqButton from "../faq/NotebookFaqButton";
 import { ThemeContext } from "../../context/ThemeContext";
 import ViewDoc from "./ViewDoc";
 
@@ -2446,7 +2446,7 @@ const SideTab = ({
                 </div>
 
                 {/* Add FAQ button here */}
-                <klarifaiFaqButton
+                <NotebookFaqButton
                   className={`ml-2 ${
                     theme === "dark"
                       ? "hover:bg-gray-700/50"

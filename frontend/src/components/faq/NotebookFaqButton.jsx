@@ -2,7 +2,7 @@
 import React from 'react';
 import { HelpCircle } from 'lucide-react';
 
-const klarifaiFaqButton = ({ className }) => {
+const NotebookFaqButton = ({ className }) => {
   // Replace this with your actual Azure Blob Storage URL
   const AZURE_BLOB_FAQ_URL = 'https://dockerblobklarifaibbsr.blob.core.windows.net/uploadfiles/FaqFolder/User_guide_getting_started_with_notebook.pdf';
   
@@ -24,4 +24,4 @@ const klarifaiFaqButton = ({ className }) => {
   );
 };
 
-export default klarifaiFaqButton;
+export default NotebookFaqButton;

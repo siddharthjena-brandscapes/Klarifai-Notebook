@@ -8,7 +8,7 @@ import Header from './dashboard/Header';
 import backgroundImage from '../assets/bg-main.jpg';
 import { ideaService } from "../utils/axiosConfig";
 import { ThemeContext } from '../context/ThemeContext';
-import ideaFaqButton from './faq/ideaFaqButton';
+import FaqButtonIdea from './faq/FaqButtonIdea';
 
 
 const Alert = ({ title, description, onConfirm, onCancel }) => (
@@ -506,7 +506,7 @@ const ProjectList = ({ mainProjectId, onSelectProject, onNewProject }) => {
           onCancel={() => setShowDeleteAlert(false)}
         />
       )}
-      <ideaFaqButton />
+      <FaqButtonIdea />
     </div>
   );
 };

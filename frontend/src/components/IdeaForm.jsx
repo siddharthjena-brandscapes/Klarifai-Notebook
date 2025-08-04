@@ -20,7 +20,7 @@ import IdeaTitle from "./IdeaGenerator/IdeaTitle";
 import { useLocation } from 'react-router-dom';
 import { ThemeContext } from "../context/ThemeContext";
 import CircularProgressButton from "../components/CircularProgressButton";
-import ideaFaqButton from "./faq/ideaFaqButton";
+import FaqButtonIdea from "./faq/FaqButtonIdea";
 
 
 
@@ -2299,7 +2299,7 @@ const fillFormWithDocParams = () => {
         </main>
       </div>
       <DocumentParamsModal />
-      <ideaFaqButton />
+      <FaqButtonIdea />
       <style>{`
       .loader {
     animation: rotate 1s infinite;

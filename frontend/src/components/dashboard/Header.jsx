@@ -277,7 +277,7 @@ const Header = () => {
       localStorage.removeItem("project_modules");
 
       toast.success("Logged out successfully");
-      navigate("/auth");
+      navigate("/");
       setTimeout(() => {
         window.location.reload(); // Ensures all React state and effects are reset
       }, 100); // Small delay to allow navigation
