@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-
 import logo1 from "../assets/Logo1.png";
 import img1 from "../assets/1.png";
 import img2 from "../assets/2.png";
@@ -157,7 +156,7 @@ const LoginModal = ({ isOpen, onClose }) => {
   const handleLoginSuccess = (token) => {
     console.log("Login successful:", token);
     onClose();
-    navigate('/landing', { replace: true });
+    navigate("/landing", { replace: true });
   };
 
   if (!isOpen) return null;
@@ -593,6 +592,11 @@ function WelcomeScreen() {
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const navigate = useNavigate();
+  const [heroAnimated, setHeroAnimated] = useState(false);
+
+  useEffect(() => {
+    setTimeout(() => setHeroAnimated(true), 100); // slight delay for effect
+  }, []);
 
   // Replace this with your Azure Blob Storage video URL
   const videoUrl =
@@ -902,9 +906,17 @@ function WelcomeScreen() {
               Transform Your Workstreams
             </span>
           </h2>
-          <p className="text-xl text-white mb-12 max-w-2xl mx-auto">
-            Reduce TIME to INSIGHTS & Drive ACTION to IMPACT
+
+          <p className="text-xl text-white mb-12 max-w-2xl mx-auto leading-relaxed">
+            Reduce <span className="cta-emphasis-gradient">TIME</span> to{" "}
+            <span className="cta-emphasis-gradient">INSIGHTS</span> & Drive{" "}
+            <span className="cta-emphasis-gradient">ACTION</span> to{" "}
+            <span className="cta-emphasis-gradient">IMPACT</span>
           </p>
+
+          {/* <p className="text-xl text-white mb-12 max-w-2xl mx-auto text-center leading-relaxed">
+  Reduce <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-500 to-pink-500 hover:animate-pulse transition">TIME</span> to <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 hover:animate-pulse transition">INSIGHTS</span> &amp; Drive <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-red-500 to-pink-500 hover:animate-pulse transition">ACTION</span> to <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 via-purple-500 to-indigo-500 hover:animate-pulse transition">IMPACT</span>
+</p> */}
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button
@@ -914,10 +926,6 @@ function WelcomeScreen() {
               Log in
               {/* <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" /> */}
             </button>
-
-            {/* <button className="px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50">
-              Watch Demo
-            </button> */}
           </div>
         </div>
       </section>
@@ -929,34 +937,77 @@ function WelcomeScreen() {
       {/* Footer */}
       <footer id="contact" className="bg-slate-900 border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out">
-            {/* KLARIFai Logo */}
-            <div className="flex items-center space-x-3">
-              <img
-                src={logo1}
-                onClick={handleGetStarted}
-                alt="KLARIFai Logo"
-                className="w-30 h-10 object-contain rounded-lg on hover:animate-bounce cursor-pointer"
-              />
-            </div>
-
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             {/* Copyright */}
             <p className="text-slate-400 text-center">
-              © 2025 KLARIFai. All rights reserved.
+              © 2025 KLARIFai. All rights reserved
             </p>
-
-            {/* Powered by */}
-            <div className="flex flex-col items-center space-y-2">
-              {/* <span className="text-slate-400 font-semibold">Powered by:</span> */}
-              <img
-                src={brandScarpeLogo}
-                alt="Powered by Brandscapes"
-                className="w-34 h-6 object-contain rounded-lg"
-              />
+            {/* Option 1 */}
+            <div className="flex items-center justify-center gap-2 text-slate-400">
+              <Mail className="w-5 h-5" />
+              <span>contact@klarifai.ai</span>
             </div>
           </div>
         </div>
       </footer>
+      <style jsx>{`
+        .cta-emphasis-gradient {
+          background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          font-weight: 800;
+          font-size: 1.1em;
+        }
+
+        .cta-badge {
+          background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+          padding: 4px 12px;
+          border-radius: 20px;
+          font-weight: 700;
+          font-size: 0.9em;
+          display: inline-block;
+        }
+
+        .cta-glow {
+          color: #60a5fa;
+          font-weight: 800;
+          text-shadow: 0 0 10px rgba(96, 165, 250, 0.5),
+            0 0 20px rgba(96, 165, 250, 0.3);
+        }
+        .cta-gradient-blue {
+          background: linear-gradient(90deg, #3b82f6, #60a5fa);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          font-weight: 800;
+          text-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+        .cta-gradient-purple {
+          background: linear-gradient(90deg, #8b5cf6, #ec4899);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          font-weight: 800;
+          text-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+        }
+        .cta-gradient-green {
+          background: linear-gradient(90deg, #22c55e, #14b8a6);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          font-weight: 800;
+          text-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+        }
+        .cta-gradient-yellow {
+          background: linear-gradient(90deg, #fde047, #fb923c);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          font-weight: 800;
+          text-shadow: 0 2px 8px rgba(253, 224, 71, 0.3);
+        }
+      `}</style>
     </div>
   );
 }

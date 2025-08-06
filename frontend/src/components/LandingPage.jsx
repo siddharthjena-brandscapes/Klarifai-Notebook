@@ -29,7 +29,7 @@ import Header from "./dashboard/Header";
 import { coreService, adminService } from "../utils/axiosConfig";
 import EditProject from "./EditProject";
 import DeleteProjectModal from "./DeleteProjectModal";
-// import FaqButton from "./faq/FaqButton";
+import FaqButton from "./faq/FaqButton";
 import ArchiveProjectModal from "./LandingPage/ArchiveProjectModal";
 import ArchivedProjects from "./LandingPage/ArchivedProjects";
 import MultiSelectDropdown from "./LandingPage/MultiSelectDropdown";
@@ -955,7 +955,7 @@ function App() {
             className="absolute bottom-8 text-center text-[#5a544a] dark:text-gray-500 text-sm opacity-70 animate-fade-in"
             style={{ animationDelay: "1s" }}
           >
-            <p>© 2025 Klarifai • Intelligent Document Solutions</p>
+            <p>© 2025 KLARIFai. All rights reserved</p>
           </div>
         </div>
       </div>
@@ -1162,7 +1162,7 @@ function App() {
             })}
           </div>
         </div>
-        {/* <FaqButton /> */}
+        <FaqButton />
       </div>
     );
   }
@@ -1590,7 +1590,7 @@ function App() {
             </div>
           )}
         </div>
-        {/* <FaqButton /> */}
+        <FaqButton />
       </div>
     );
   }
@@ -1989,7 +1989,7 @@ function App() {
             </div>
           </form>
         </div>
-        {/* <FaqButton /> */}
+        <FaqButton />
       </div>
     </>
   );
