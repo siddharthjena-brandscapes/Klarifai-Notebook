@@ -36,7 +36,10 @@ urlpatterns = [
     path('admin/users/<int:user_id>/upload-permissions/', views.update_user_upload_permissions, name='update_user_upload_permissions'),
 
     # Add these two lines after the admin/users/ line:
-path('admin/users/<int:user_id>/modules/', views.update_user_module_permissions, name='update_user_module_permissions'),
+     path('admin/users/<int:user_id>/modules/', views.update_user_module_permissions, name='update_user_module_permissions'),
+     path('analytics/first-activities/', views.get_first_activities, name='first-activities'),
+     
+     path('analytics/all-activities/', views.get_all_activities, name='all-activities'),
 
 ]
 

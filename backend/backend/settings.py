@@ -1,4 +1,4 @@
-# settings.py
+
 
 """
 Django settings for backend project.
@@ -52,7 +52,7 @@ INSTALLED_APPS = [
     'chat',
     'ideaGen',
     'core',
-    'notebook',
+    'notebook',  # Ensure notebook app is included
    
 ]
 
@@ -97,34 +97,31 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 
+# Database
+# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
+###
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'klarifai-bbsr-app-database',
+        'NAME': 'klarifai-dockerdb',
         'USER': 'postgres',
         'PASSWORD': 'root',
         'HOST': 'localhost',
-        'PORT': '5432',
+        'PORT': '6432',
     }
     
 }
 
-AZURE_AD = {
-    'CLIENT_ID': 'ea731533-1633-4bef-9cce-214cebf756ec',
-    'CLIENT_SECRET': 'iv.8Q~bWSRQ34SSCW75liVGOY5V-nJX1aHwoldna',
-    'AUTHORITY': 'https://login.microsoftonline.com/289e3141-3166-4730-9a0c-b9ba490d78cd',
-    'REDIRECT_URI': 'https://docker-appserver-klarifai-bbsr-ddbjesd4fng3avgp.centralindia-01.azurewebsites.net/api/get_token/', # Updated redirect URI
-    'SCOPE': ['User.Read'],
-}
- 
-FRONTEND_URL = 'https://bsw.klarifai.ai'  # Ensure this matches your frontend URL
- 
-# Session configuration for OAuth state management
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-SESSION_COOKIE_AGE = 1800  # 30 minutes
-SESSION_SAVE_EVERY_REQUEST = True
+
 
 # # The database URL for structuredDataQuery
 # DATABASE_URL = f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'root')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/data_analysis"
@@ -244,7 +241,30 @@ LOGGING = {
         },
     },
 }
+
+AZURE_AD = {
+    'CLIENT_ID': 'ea731533-1633-4bef-9cce-214cebf756ec',
+    'CLIENT_SECRET': 'iv.8Q~bWSRQ34SSCW75liVGOY5V-nJX1aHwoldna',
+    'AUTHORITY': 'https://login.microsoftonline.com/289e3141-3166-4730-9a0c-b9ba490d78cd',
+    'REDIRECT_URI': 'http://localhost:8000/api/get_token/', # Updated redirect URI
+    'SCOPE': ['User.Read'],
+}
+ 
+FRONTEND_URL = 'http://localhost:5173'
+ 
+# Session configuration for OAuth state management
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 1800  # 30 minutes
+SESSION_SAVE_EVERY_REQUEST = True
+
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 MEDIA_ROOT_PATH = os.path.join(BASE_DIR, 'media')
 PROFILE_PICTURES_PATH = os.path.join(MEDIA_ROOT_PATH, 'profile_pictures')
 os.makedirs(PROFILE_PICTURES_PATH, exist_ok=True)
+
+
+
+
+
+

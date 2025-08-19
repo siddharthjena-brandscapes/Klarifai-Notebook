@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 # Ensure you have the GENERATIVE_MODEL configured at the top of your views.py or in a separate configuration file
-GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash', 
+GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash',
     generation_config={
         'temperature': 0.7,
         'max_output_tokens': 1024
@@ -21,16 +21,16 @@ GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash',
         genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE
     }
 )
-
+ 
 class UserAPITokens(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='api_tokens_NB')
     nebius_token = models.CharField(max_length=1024, blank=True, null=True)
     gemini_token = models.CharField(max_length=255, blank=True, null=True)
     llama_token = models.CharField(max_length=255, blank=True, null=True)
-    
+   
     def __str__(self):
         return f"{self.user.username}'s API Tokens"
-
+ 
 class Document(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notebook_documents')
     file = models.FileField(upload_to='documents/')
@@ -42,8 +42,8 @@ class Document(models.Model):
     last_viewed_at = models.DateTimeField(null=True, blank=True)
     def __str__(self):
         return self.filename
-
-
+ 
+ 
 class DocumentProcessingStatus(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='document_processing_statuses_NB')
     document_name = models.CharField(max_length=255)
@@ -56,20 +56,20 @@ class DocumentProcessingStatus(models.Model):
  
     def __str__(self):
         return f"{self.document_name} - {self.status}"
-
+ 
 class UserUploadPermissions(models.Model):
     user = models.OneToOneField(User, related_name='upload_permissions_NB', on_delete=models.CASCADE)
     can_upload = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+   
     def __str__(self):
         return f"{self.user.username} - Can Upload: {self.can_upload}"
-    
-
+   
+ 
 from django.db import models
 import json
-
+ 
 from django.db import models
 import json
  
@@ -124,7 +124,7 @@ class ProcessedIndex(models.Model):
    
     mindmap_generated = models.BooleanField(default=False, help_text="Whether a mindmap has been generated from this document")
     last_mindmap_generated = models.DateTimeField(null=True, blank=True, help_text="When was the last mindmap generated")
-
+ 
     def get_key_points(self):
         """Helper method to get key points as a list"""
         if isinstance(self.key_points, list):
@@ -142,197 +142,266 @@ class ProcessedIndex(models.Model):
    
     def __str__(self):
         return f"Processed Index for {self.document.filename}"
-
-
+ 
+ 
 class ChatMessage(models.Model):
     ROLE_CHOICES = (
         ('user', 'User'),
         ('assistant', 'Assistant'),
         ('system', 'System')
     )
-    
+   
     chat_history = models.ForeignKey('ChatHistory', related_name='messages_NB', on_delete=models.CASCADE)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     citations = models.JSONField(blank=True, null=True)
     sources = models.TextField(blank=True, null=True)
-    
+   
     # New fields for message properties
     use_web_knowledge = models.BooleanField(default=False)
     response_length = models.CharField(max_length=20, default="comprehensive", null=True, blank=True)
     response_format = models.CharField(max_length=50, default="natural", null=True, blank=True)
-    
-
-    
+   
+ 
+   
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"
-
+ 
 class ChatHistory(models.Model):
     conversation_id = models.UUIDField(default=uuid.uuid4, editable=False)
-    
+   
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_histories_NB')
-    
+   
     documents = models.ManyToManyField(Document, blank=True, related_name='chat_histories_NB')
-    
+   
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+   
     title = models.CharField(max_length=255, blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    is_archived = models.BooleanField(default=False)
     
     follow_up_questions = models.JSONField(blank=True, null=True)
     main_project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='chat_histories_NB', null=True)
-    
-
-
+   
+ 
+ 
     def __str__(self):
         return f"{self.user.username} - {self.title or 'Untitled Chat'}"
-    
+   
+import json
+import logging
+from django.db import models
+from openai import OpenAI
+from django.conf import settings
+from dotenv import load_dotenv
+ 
+logger = logging.getLogger(__name__)
+ 
+load_dotenv()
+ 
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+ 
+if not OPENAI_API_KEY:
+    raise ValueError("Missing required API keys in environment variables")
+ 
+ 
+ 
+client = OpenAI(api_key=OPENAI_API_KEY)
+ 
 class ConversationMemoryBuffer(models.Model):
     conversation = models.OneToOneField(
-        'ChatHistory', 
-        on_delete=models.CASCADE, 
+        'ChatHistory',
+        on_delete=models.CASCADE,
         related_name='memory_buffer_NB'
     )
     key_entities = models.JSONField(blank=True, null=True)
     context_summary = models.TextField(blank=True, null=True)
     last_updated = models.DateTimeField(auto_now=True)
-
+ 
     def update_memory(self, messages):
         """
-        Update memory buffer with conversation insights
+        Update memory buffer with conversation insights using OpenAI
         """
         if not messages.exists():
             return
            
-        # Extract key entities and summarize context
         try:
-            key_entities = self.extract_key_entities(messages)
-            context_summary = self.summarize_context(messages)
- 
-            self.key_entities = key_entities
-            self.context_summary = context_summary
-            self.save()
-            print(f"Updated conversation memory buffer with {messages.count()} messages")
-        except Exception as e:
-            print(f"Error updating conversation memory: {str(e)}")
- 
-    def extract_key_entities(self, messages):
-        """
-        Extract key named entities and important concepts
-        """
-        entities = {}
-        try:
-            # Get the last 6 messages for entity extraction (not all messages)
-            recent_messages = messages.order_by('-created_at')[:6]
-            if not recent_messages:
-                return entities
+            print(f"🧠 Starting memory buffer update for {messages.count()} messages")
+           
+            # OPTIMIZATION: Extract entities and summary in ONE API call
+            combined_result = self.extract_entities_and_summary(messages)
+           
+            if combined_result:
+                self.key_entities = combined_result.get('entities', {})
+                self.context_summary = combined_result.get('summary', 'No summary available')
+                self.save()
+                print(f"✅ Updated conversation memory buffer successfully")
+            else:
+                print("⚠️ Failed to update memory buffer - using fallback")
                
-            context_text = " ".join([msg.content for msg in reversed(recent_messages)])
-           
-            # Limit context text length to avoid token limits
-            if len(context_text) > 3000:
-                context_text = context_text[:3000] + "..."
-           
-            entity_prompt = f"""
-            Extract key entities and important concepts from this conversation:
-            {context_text}
-           
-            Return a JSON object with categories like:
-            {{
-                "people": ["names mentioned"],
-                "organizations": ["companies, institutions"],
-                "topics": ["main subjects discussed"],
-                "key_terms": ["important technical terms or concepts"],
-                "dates": ["important dates mentioned"],
-                "locations": ["places mentioned"]
-            }}
-           
-            Keep it concise and relevant.
-            """
-           
-            response = GENERATIVE_MODEL.generate_content(entity_prompt)
-           
-            # Try to parse the response as JSON
-            try:
-                import json
-                entities = json.loads(response.text)
-            except:
-                # Fallback to simple text extraction
-                entities = {"extracted_concepts": response.text.split(',')}
-           
         except Exception as e:
-            print(f"Error extracting entities: {str(e)}")
-            entities = {"error": "Failed to extract entities"}
-       
-        return entities
+            logger.error(f"Error updating conversation memory: {str(e)}")
+            print(f"❌ Error updating conversation memory: {str(e)}")
  
-    def summarize_context(self, messages):
+    def extract_entities_and_summary(self, messages):
         """
-        Generate a concise summary of conversation context
+        Extract entities AND generate summary in a single OpenAI API call
         """
         try:
-            # Get the last 8 messages for summary (4 complete turns)
+            # Get the last 8 messages for processing (4 complete turns)
             recent_messages = messages.order_by('-created_at')[:8]
             if not recent_messages:
-                return "No conversation history available"
+                return None
                
             context_text = ""
             for msg in reversed(recent_messages):
                 role = "User" if msg.role == 'user' else "Assistant"
-                context_text += f"{role}: {msg.content}\n\n"
+                # Limit individual message length to prevent token overflow
+                content = msg.content[:1000] + "..." if len(msg.content) > 1000 else msg.content
+                context_text += f"{role}: {content}\n\n"
            
-            # Limit context text length
+            # Limit total context length
             if len(context_text) > 4000:
                 context_text = context_text[:4000] + "..."
            
-            summary_prompt = f"""
-            Provide a concise summary of this conversation focusing on:
-            - Main topics and questions discussed
-            - Key information or insights shared
-            - Current context and direction of the conversation
-            - Any important preferences or requirements mentioned by the user
+            # Combined prompt for both entities and summary
+            combined_prompt = f"""
+            Analyze this conversation and provide both entity extraction and summary.
            
             Conversation:
             {context_text}
            
-            Keep the summary under 200 words and focus on information that would help understand future questions in this conversation.
+            Respond with a JSON object containing:
+            1. "entities" - key entities and concepts organized by category
+            2. "summary" - concise conversation summary (under 200 words)
+           
+            JSON format:
+            {{
+                "entities": {{
+                    "people": ["names mentioned"],
+                    "organizations": ["companies, institutions"],
+                    "topics": ["main subjects discussed"],
+                    "key_terms": ["important technical terms"],
+                    "dates": ["important dates"],
+                    "locations": ["places mentioned"]
+                }},
+                "summary": "Concise summary focusing on main topics, key insights, current context, and user preferences that would help understand future questions."
+            }}
             """
            
-            response = GENERATIVE_MODEL.generate_content(summary_prompt)
-            return response.text
-       
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",  # Use cheaper model for memory tasks
+                messages=[
+                    {"role": "system", "content": "You are a conversation analyzer. Always respond with valid JSON."},
+                    {"role": "user", "content": combined_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,  # Lower temperature for consistent output
+                max_tokens=800    # Limit tokens to prevent long responses
+            )
+           
+            result = json.loads(response.choices[0].message.content)
+            print(f"🧠 Memory extraction completed successfully")
+            return result
+           
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing error in memory extraction: {str(e)}")
+            print(f"❌ JSON parsing error in memory extraction")
+            return self._fallback_memory_extraction(context_text)
+           
         except Exception as e:
-            print(f"Error generating context summary: {str(e)}")
-            return "Unable to generate conversation summary"
-
-        
-
+            logger.error(f"Error in combined entity extraction and summary: {str(e)}")
+            print(f"❌ Error in memory extraction: {str(e)}")
+            return self._fallback_memory_extraction(context_text) if 'context_text' in locals() else None
+ 
+    def _fallback_memory_extraction(self, context_text):
+        """
+        Fallback method for memory extraction without JSON parsing
+        """
+        try:
+            simple_prompt = f"""
+            Briefly summarize this conversation in 2-3 sentences:
+            {context_text[:2000]}
+            """
+           
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Provide a brief conversation summary."},
+                    {"role": "user", "content": simple_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=200
+            )
+           
+            return {
+                "entities": {"topics": ["General conversation"]},
+                "summary": response.choices[0].message.content
+            }
+           
+        except Exception as e:
+            logger.error(f"Fallback memory extraction failed: {str(e)}")
+            return {
+                "entities": {"topics": ["Conversation analysis failed"]},
+                "summary": "Unable to generate conversation summary due to processing error."
+            }
+ 
+    # OPTIONAL: Add async version for background processing
+    def update_memory_async(self, messages):
+        """
+        Async version for background processing (to be used with threading/celery)
+        """
+        try:
+            import threading
+            thread = threading.Thread(target=self.update_memory, args=(messages,))
+            thread.daemon = True
+            thread.start()
+            print("🚀 Started memory update in background thread")
+        except Exception as e:
+            logger.error(f"Failed to start async memory update: {str(e)}")
+            print(f"❌ Failed to start async memory update")
+ 
+    # DEPRECATED: Keep old methods for backward compatibility but mark them
+    def extract_key_entities(self, messages):
+        """DEPRECATED: Use extract_entities_and_summary() instead"""
+        print("⚠️ WARNING: extract_key_entities() is deprecated")
+        return {}
+ 
+    def summarize_context(self, messages):
+        """DEPRECATED: Use extract_entities_and_summary() instead"""
+        print("⚠️ WARNING: summarize_context() is deprecated")
+        return "Please update to use the new combined method."
+ 
+ 
+ 
+       
+ 
 class UserModulePermissions(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='module_permissions_NB')
     disabled_modules = models.JSONField(default=dict, blank=True)
-    
+   
     def __str__(self):
         return f"{self.user.username}'s module permissions"
-    
-
-
+   
+ 
+ 
 # Create the UserModulePermissions when a User is created
 @receiver(post_save, sender=User)
 def create_user_module_permissions(sender, instance, created, **kwargs):
     if created:
         UserModulePermissions.objects.create(user=instance)
-
+ 
 @receiver(post_save, sender=User)
 def save_user_module_permissions(sender, instance, **kwargs):
     try:
         instance.module_permissions.save()
     except UserModulePermissions.DoesNotExist:
         UserModulePermissions.objects.create(user=instance)
-
-
-
+ 
+ 
+ 
 class Note(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notebook_notes')
     title = models.CharField(max_length=255, blank=True, null=True)
@@ -346,10 +415,8 @@ class Note(models.Model):
     def __str__(self):
         title = self.title or f"Note {self.id}"
         return f"{self.user.username} - {title}"
-    
-
-
-
+   
+ 
 class MindMap(models.Model):
     """Model to store generated mindmaps linked to projects and users"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mindmaps_NB')
@@ -359,13 +426,13 @@ class MindMap(models.Model):
     total_nodes = models.PositiveIntegerField(default=0, help_text="Total number of nodes in the mindmap")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+   
     class Meta:
         ordering = ['-created_at']
-    
+   
     def __str__(self):
         return f"MindMap for {self.user.username} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
-    
+   
     def get_document_sources_list(self):
         """Helper method to get document sources as a list"""
         if self.document_sources:
@@ -374,12 +441,12 @@ class MindMap(models.Model):
             except (json.JSONDecodeError, TypeError):
                 return []
         return []
-    
+   
     def set_document_sources_list(self, sources_list):
         """Helper method to set document sources"""
         self.document_sources = json.dumps(sources_list) if isinstance(sources_list, list) else sources_list
-
-
+ 
+ 
 class TransactionType(models.TextChoices):
     DOCUMENT_UPLOAD = 'document_upload', 'Document Upload'
     CONVERSATION_CREATE = 'conversation_create', 'Conversation Create'
@@ -427,6 +494,8 @@ class DocumentTransaction(models.Model):
     class Meta:
         app_label = 'notebook'
  
+
+
 class ConversationTransaction(models.Model):
     """Specific tracking for conversation operations"""
     user_transaction = models.OneToOneField(UserTransaction, on_delete=models.CASCADE, related_name='notebook_conversation_details')
@@ -450,10 +519,6 @@ class ConversationTransaction(models.Model):
         self.total_tokens_used = self.input_api_tokens + self.output_api_tokens
         super().save(*args, **kwargs)
  
- 
- 
- 
-# Add these signal handlers to your models.py
  
 @receiver(pre_delete, sender=Document)
 def track_document_deletion(sender, instance, **kwargs):

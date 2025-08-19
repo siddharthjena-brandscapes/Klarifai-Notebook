@@ -1,8 +1,16 @@
-
-
-
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { adminService, documentService,adminNotebookServiceNB,getAdminUserStats } from "../utils/axiosConfig";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
+import {
+  adminService,
+  documentService,
+  adminNotebookServiceNB,
+  getAdminUserStats,
+} from "../utils/axiosConfig";
 import {
   FaUserPlus,
   FaUserEdit,
@@ -31,11 +39,30 @@ import {
   FaUser,
   FaSearch,
   FaGlobe,
+  FaMedal,
+  FaProjectDiagram,
+  FaQuestion,
+  FaLightbulb, 
 } from "react-icons/fa";
 
 import Header from "../components/dashboard/Header";
 import { toast } from "react-toastify";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Area,
+  AreaChart,
+} from "recharts";
 
 // List of available modules to match the ones from projects page
 const availableModules = [
@@ -75,7 +102,6 @@ const AdminPanel = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("users");
-  
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -99,7 +125,7 @@ const AdminPanel = () => {
     nebius_token: "",
     gemini_token: "",
     llama_token: "",
-    token_limit: "", 
+    token_limit: "",
   });
 
   const [categoryFormData, setCategoryFormData] = useState({
@@ -117,17 +143,18 @@ const AdminPanel = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [userStats, setUserStats] = useState([]);
   const [notebookUserStats, setNotebookUserStats] = useState([]);
-const [showUserTable, setShowUserTable] = useState(false);
+  const [showUserTable, setShowUserTable] = useState(false);
   const fileInputRef = useRef(null);
 
   // State for module permissions
   const [modulePermissions, setModulePermissions] = useState({});
   const [rightPanelPermissions, setRightPanelPermissions] = useState({});
-const [totalShortResponses, setTotalShortResponses] = useState(0);
-const [totalComprehensiveResponses, setTotalComprehensiveResponses] = useState(0);
-const [totalInputTokens, setTotalInputTokens] = useState(0);
-const [totalOutputTokens, setTotalOutputTokens] = useState(0);
-const [ideaGenStats, setIdeaGenStats] = useState({
+  const [totalShortResponses, setTotalShortResponses] = useState(0);
+  const [totalComprehensiveResponses, setTotalComprehensiveResponses] =
+    useState(0);
+  const [totalInputTokens, setTotalInputTokens] = useState(0);
+  const [totalOutputTokens, setTotalOutputTokens] = useState(0);
+  const [ideaGenStats, setIdeaGenStats] = useState({
     total_projects: 0,
     total_ideas: 0,
     total_images: 0,
@@ -135,45 +162,78 @@ const [ideaGenStats, setIdeaGenStats] = useState({
     users: [],
   });
 
-const [loadingIdeaStats, setLoadingIdeaStats] = useState(false);
-const [ideaStatsError, setIdeaStatsError] = useState(null);
-// Add these state variables near the top with other state declarations
-const [isGlobalTokenLimitModalOpen, setIsGlobalTokenLimitModalOpen] = useState(false);
-const [globalTokenLimitValue, setGlobalTokenLimitValue] = useState("");
-const [isGlobalPageLimitModalOpen, setIsGlobalPageLimitModalOpen] = useState(false);
-const [globalPageLimitValue, setGlobalPageLimitValue] = useState("");
+  const [loadingIdeaStats, setLoadingIdeaStats] = useState(false);
+  const [ideaStatsError, setIdeaStatsError] = useState(null);
+  // Add these state variables near the top with other state declarations
+  const [isGlobalTokenLimitModalOpen, setIsGlobalTokenLimitModalOpen] =
+    useState(false);
+  const [globalTokenLimitValue, setGlobalTokenLimitValue] = useState("");
+  const [isGlobalPageLimitModalOpen, setIsGlobalPageLimitModalOpen] =
+    useState(false);
+  const [globalPageLimitValue, setGlobalPageLimitValue] = useState("");
+  const [collapsedUsers, setCollapsedUsers] = useState(new Set());
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+
+  const filteredUsers = useMemo(() => {
+    if (!userSearchTerm.trim()) {
+      return users;
+    }
+    return users.filter(
+      (user) =>
+        user.username.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
+    );
+  }, [users, userSearchTerm]);
 
 
-const fetchNotebookUserStats = async () => {
-  try {
-    const stats = await adminNotebookServiceNB.getNotebookUserStats();
-    setNotebookUserStats(stats.user_stats || []);
-    setTotalShortResponses(stats.total_short_responses ?? getTotalShortResponses(stats.user_stats));
-    setTotalComprehensiveResponses(stats.total_comprehensive_responses ?? getTotalComprehensiveResponses(stats.user_stats));
-    setTotalInputTokens(stats.total_input_tokens || 0);
-    setTotalOutputTokens(stats.total_output_tokens || 0);
-  } catch (err) {
-    console.error("Failed to fetch notebook user stats:", err);
-  }
-};
-const fetchIdeaGenStats = async () => {
+  const toggleUserCollapse = (userId) => {
+    setCollapsedUsers((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(userId)) {
+        newSet.delete(userId);
+      } else {
+        newSet.add(userId);
+      }
+      return newSet;
+    });
+  };
+  const fetchNotebookUserStats = async () => {
+    try {
+      const stats = await adminNotebookServiceNB.getNotebookUserStats();
+      setNotebookUserStats(stats.user_stats || []);
+      setTotalShortResponses(
+        stats.total_short_responses ?? getTotalShortResponses(stats.user_stats)
+      );
+      setTotalComprehensiveResponses(
+        stats.total_comprehensive_responses ??
+          getTotalComprehensiveResponses(stats.user_stats)
+      );
+      setTotalInputTokens(stats.total_input_tokens || 0);
+      setTotalOutputTokens(stats.total_output_tokens || 0);
+    } catch (err) {
+      console.error("Failed to fetch notebook user stats:", err);
+    }
+  };
+  const fetchIdeaGenStats = async () => {
     setLoadingIdeaStats(true);
     setIdeaStatsError(null);
-    
+
     try {
       console.log("Fetching idea generator stats...");
       const response = await getAdminUserStats();
       console.log("Received response:", response);
-      
+
       if (response.success) {
-        setIdeaGenStats(response.stats || {
-          total_projects: 0,
-          total_ideas: 0,
-          total_images: 0,
-          total_users: 0,
-          total_image_cost: 0,
-          users: [],
-        });
+        setIdeaGenStats(
+          response.stats || {
+            total_projects: 0,
+            total_ideas: 0,
+            total_images: 0,
+            total_users: 0,
+            total_image_cost: 0,
+            users: [],
+          }
+        );
       } else {
         setIdeaStatsError(response.error || "Failed to fetch stats");
       }
@@ -185,41 +245,55 @@ const fetchIdeaGenStats = async () => {
     }
   };
 
-// Helper functions to sum short/comprehensive responses if not provided by backend
-function getTotalShortResponses(userStatsArr) {
-  if (!Array.isArray(userStatsArr)) return 0;
-  return userStatsArr.reduce((acc, user) => {
-    return acc + (user.documents?.reduce((sum, doc) => sum + (doc.short_responses || 0), 0) || 0);
-  }, 0);
-}
-function getTotalComprehensiveResponses(userStatsArr) {
-  if (!Array.isArray(userStatsArr)) return 0;
-  return userStatsArr.reduce((acc, user) => {
-    return acc + (user.documents?.reduce((sum, doc) => sum + (doc.comprehensive_responses || 0), 0) || 0);
-  }, 0);
-}
+  // Helper functions to sum short/comprehensive responses if not provided by backend
+  function getTotalShortResponses(userStatsArr) {
+    if (!Array.isArray(userStatsArr)) return 0;
+    return userStatsArr.reduce((acc, user) => {
+      return (
+        acc +
+        (user.documents?.reduce(
+          (sum, doc) => sum + (doc.short_responses || 0),
+          0
+        ) || 0)
+      );
+    }, 0);
+  }
+  function getTotalComprehensiveResponses(userStatsArr) {
+    if (!Array.isArray(userStatsArr)) return 0;
+    return userStatsArr.reduce((acc, user) => {
+      return (
+        acc +
+        (user.documents?.reduce(
+          (sum, doc) => sum + (doc.comprehensive_responses || 0),
+          0
+        ) || 0)
+      );
+    }, 0);
+  }
 
-
+  useEffect(() => {
+    if (users.length > 0 && collapsedUsers.size === 0) {
+      setCollapsedUsers(new Set(users.map((u) => u.id)));
+    }
+    // eslint-disable-next-line
+  }, [users]);
   // Fetch all users on component mount
 
-useEffect(() => {
-  if (
-    activeTab === "users" ||
-    activeTab === "modules" ||
-    activeTab === "uploads" ||
-    activeTab === "features"
-  ) {
-    fetchUsers();
-    fetchUserStats();
-    fetchNotebookUserStats();
-    fetchIdeaGenStats();
-  } else if (activeTab === "categories") {
-    fetchCategories();
-  }
-}, [activeTab]);
-
-
-
+  useEffect(() => {
+    if (
+      activeTab === "users" ||
+      activeTab === "modules" ||
+      activeTab === "uploads" ||
+      activeTab === "features"
+    ) {
+      fetchUsers();
+      fetchUserStats();
+      fetchNotebookUserStats();
+      fetchIdeaGenStats();
+    } else if (activeTab === "categories") {
+      fetchCategories();
+    }
+  }, [activeTab]);
 
   const fetchUserStats = async () => {
     try {
@@ -230,77 +304,60 @@ useEffect(() => {
     }
   };
 
-// const fetchNotebookUserStats = async () => {
-//   try {
-//     const stats = await adminNotebookServiceNB.getNotebookUserStats(); // <-- Use the NB admin service
-//     setNotebookUserStats(stats.user_stats || []);
-//   } catch (err) {
-//     console.error("Failed to fetch notebook user stats:", err);
-//   }
-// };
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await adminService.getAllUsers();
 
+      console.log("=== FETCH USERS DEBUG ===");
+      console.log("Raw backend response:", JSON.stringify(data, null, 2));
 
-  
-
-  // Updated fetchUsers function with debug logging
-// Replace the existing fetchUsers function with this fixed version
-
-// Replace the existing fetchUsers function with this fixed version
-
-const fetchUsers = async () => {
-  setLoading(true);
-  setError(null);
-  try {
-    const data = await adminService.getAllUsers();
-
-    console.log("=== FETCH USERS DEBUG ===");
-    console.log("Raw backend response:", JSON.stringify(data, null, 2));
-
-    data.forEach((user) => {
-      console.log(`User ${user.username}:`, {
-        id: user.id,
-        disabled_features: user.disabled_features,
-        disabled_features_type: typeof user.disabled_features,
-        disabled_features_keys: user.disabled_features
-          ? Object.keys(user.disabled_features)
-          : "null/undefined",
-        token_limit_from_api_tokens: user.api_tokens?.token_limit,
-        token_limit_from_user: user.token_limit,
+      data.forEach((user) => {
+        console.log(`User ${user.username}:`, {
+          id: user.id,
+          disabled_features: user.disabled_features,
+          disabled_features_type: typeof user.disabled_features,
+          disabled_features_keys: user.disabled_features
+            ? Object.keys(user.disabled_features)
+            : "null/undefined",
+          token_limit_from_api_tokens: user.api_tokens?.token_limit,
+          token_limit_from_user: user.token_limit,
+        });
       });
-    });
 
-    // Process the data - FIX: The token_limit is already at user level from backend
-    const processedUsers = data.map(user => ({
-      ...user,
-      token_limit: user.token_limit || user.api_tokens?.token_limit || null, // Check both locations
-      tokens_used: user.tokens_used || 0
-    }));
+      // Process the data - FIX: The token_limit is already at user level from backend
+      const processedUsers = data.map((user) => ({
+        ...user,
+        token_limit: user.token_limit || user.api_tokens?.token_limit || null, // Check both locations
+        tokens_used: user.tokens_used || 0,
+      }));
 
-    // Initialize upload permissions state with proper boolean values
-    const permissions = {};
-    processedUsers.forEach((user) => {
-      const canUpload = user.upload_permissions
-        ? user.upload_permissions.can_upload
-        : true;
-      permissions[user.id] = Boolean(canUpload);
+      // Initialize upload permissions state with proper boolean values
+      const permissions = {};
+      processedUsers.forEach((user) => {
+        const canUpload = user.upload_permissions
+          ? user.upload_permissions.can_upload
+          : true;
+        permissions[user.id] = Boolean(canUpload);
 
-      console.log(`User ${user.id} (${user.username}):`, {
-        upload_permissions: permissions[user.id],
-        disabled_features: user.disabled_features,
-        disabled_modules: user.disabled_modules,
-        token_limit: user.token_limit, // This should now show the correct value
+        console.log(`User ${user.id} (${user.username}):`, {
+          upload_permissions: permissions[user.id],
+          disabled_features: user.disabled_features,
+          disabled_modules: user.disabled_modules,
+          token_limit: user.token_limit, // This should now show the correct value
+        });
       });
-    });
 
-    setUserUploadPermissions(permissions);
-    setUsers(processedUsers);
-  } catch (err) {
-    setError("Failed to fetch users. Please try again.");
-    console.error("Error fetching users:", err);
-  } finally {
-    setLoading(false);
-  }
-};
+      setUserUploadPermissions(permissions);
+      setUsers(processedUsers);
+    } catch (err) {
+      setError("Failed to fetch users. Please try again.");
+      console.error("Error fetching users:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Function to fetch all categories
   const fetchCategories = async () => {
@@ -515,116 +572,128 @@ const fetchUsers = async () => {
       setLoading(false);
     }
   };
-const handleSetGlobalTokenLimit = async (e) => {
-  e.preventDefault();
-  
-  if (!globalTokenLimitValue) {
-    toast.warning("Please enter a token limit value");
-    return;
-  }
+  const handleSetGlobalTokenLimit = async (e) => {
+    e.preventDefault();
 
-  const confirmMessage = `Are you sure you want to set token limit to ${globalTokenLimitValue} for ALL users? This will override existing individual limits.`;
-  
-  if (!window.confirm(confirmMessage)) {
-    return;
-  }
+    if (!globalTokenLimitValue) {
+      toast.warning("Please enter a token limit value");
+      return;
+    }
 
-  setLoading(true);
-  let successCount = 0;
-  let errorCount = 0;
+    const confirmMessage = `Are you sure you want to set token limit to ${globalTokenLimitValue} for ALL users? This will override existing individual limits.`;
 
-  try {
-    // Update token limit for all users
-    for (const user of users) {
-      try {
-        await adminService.updateUserTokens(user.id, {
-          nebius_token: user.api_tokens.nebius_token || "",
-          gemini_token: user.api_tokens.gemini_token || "",
-          llama_token: user.api_tokens.llama_token || "",
-          token_limit: globalTokenLimitValue,
-        });
-        successCount++;
-      } catch (err) {
-        console.error(`Failed to update tokens for user ${user.username}:`, err);
-        errorCount++;
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setLoading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      // Update token limit for all users
+      for (const user of users) {
+        try {
+          await adminService.updateUserTokens(user.id, {
+            nebius_token: user.api_tokens.nebius_token || "",
+            gemini_token: user.api_tokens.gemini_token || "",
+            llama_token: user.api_tokens.llama_token || "",
+            token_limit: globalTokenLimitValue,
+          });
+          successCount++;
+        } catch (err) {
+          console.error(
+            `Failed to update tokens for user ${user.username}:`,
+            err
+          );
+          errorCount++;
+        }
       }
-    }
 
-    setIsGlobalTokenLimitModalOpen(false);
-    setGlobalTokenLimitValue("");
-    
-    // Refresh users to show updated limits
-    await fetchUsers();
-    
-    if (errorCount === 0) {
-      toast.success(`Successfully updated token limit for all ${successCount} users`);
-    } else {
-      toast.warning(`Updated ${successCount} users successfully, ${errorCount} failed`);
-    }
-    
-  } catch (err) {
-    console.error("Error setting global token limit:", err);
-    toast.error("Failed to set global token limit");
-  } finally {
-    setLoading(false);
-  }
-};
+      setIsGlobalTokenLimitModalOpen(false);
+      setGlobalTokenLimitValue("");
 
-const handleSetGlobalPageLimit = async (e) => {
-  e.preventDefault();
-  
-  if (!globalPageLimitValue) {
-    toast.warning("Please enter a page limit value");
-    return;
-  }
+      // Refresh users to show updated limits
+      await fetchUsers();
 
-  const confirmMessage = `Are you sure you want to set page limit to ${globalPageLimitValue} for ALL users? This will override existing individual page limits.`;
-  
-  if (!window.confirm(confirmMessage)) {
-    return;
-  }
-
-  setLoading(true);
-  let successCount = 0;
-  let errorCount = 0;
-
-  try {
-    // Update page limit for all users
-    for (const user of users) {
-      try {
-        await adminService.updateUserTokens(user.id, {
-          nebius_token: user.api_tokens.nebius_token || "",
-          gemini_token: user.api_tokens.gemini_token || "",
-          llama_token: user.api_tokens.llama_token || "",
-          token_limit: user.token_limit || "",
-          page_limit: globalPageLimitValue, // Add this field
-        });
-        successCount++;
-      } catch (err) {
-        console.error(`Failed to update page limit for user ${user.username}:`, err);
-        errorCount++;
+      if (errorCount === 0) {
+        toast.success(
+          `Successfully updated token limit for all ${successCount} users`
+        );
+      } else {
+        toast.warning(
+          `Updated ${successCount} users successfully, ${errorCount} failed`
+        );
       }
+    } catch (err) {
+      console.error("Error setting global token limit:", err);
+      toast.error("Failed to set global token limit");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetGlobalPageLimit = async (e) => {
+    e.preventDefault();
+
+    if (!globalPageLimitValue) {
+      toast.warning("Please enter a page limit value");
+      return;
     }
 
-    setIsGlobalPageLimitModalOpen(false);
-    setGlobalPageLimitValue("");
-    
-    // Refresh users to show updated limits
-    await fetchUsers();
-    
-    if (errorCount === 0) {
-      toast.success(`Successfully updated page limit for all ${successCount} users`);
-    } else {
-      toast.warning(`Updated ${successCount} users successfully, ${errorCount} failed`);
+    const confirmMessage = `Are you sure you want to set page limit to ${globalPageLimitValue} for ALL users? This will override existing individual page limits.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
     }
-    
-  } catch (err) {
-    console.error("Error setting global page limit:", err);
-    toast.error("Failed to set global page limit");
-  } finally {
-    setLoading(false);
-  }
-};
+
+    setLoading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      // Update page limit for all users
+      for (const user of users) {
+        try {
+          await adminService.updateUserTokens(user.id, {
+            nebius_token: user.api_tokens.nebius_token || "",
+            gemini_token: user.api_tokens.gemini_token || "",
+            llama_token: user.api_tokens.llama_token || "",
+            token_limit: user.token_limit || "",
+            page_limit: globalPageLimitValue, // Add this field
+          });
+          successCount++;
+        } catch (err) {
+          console.error(
+            `Failed to update page limit for user ${user.username}:`,
+            err
+          );
+          errorCount++;
+        }
+      }
+
+      setIsGlobalPageLimitModalOpen(false);
+      setGlobalPageLimitValue("");
+
+      // Refresh users to show updated limits
+      await fetchUsers();
+
+      if (errorCount === 0) {
+        toast.success(
+          `Successfully updated page limit for all ${successCount} users`
+        );
+      } else {
+        toast.warning(
+          `Updated ${successCount} users successfully, ${errorCount} failed`
+        );
+      }
+    } catch (err) {
+      console.error("Error setting global page limit:", err);
+      toast.error("Failed to set global page limit");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle form submission for new user
   const handleCreateUser = async (e) => {
@@ -662,7 +731,7 @@ const handleSetGlobalPageLimit = async (e) => {
         gemini_token: formData.gemini_token,
         llama_token: formData.llama_token,
         token_limit: formData.token_limit,
-        page_limit: formData.page_limit, 
+        page_limit: formData.page_limit,
       });
       setIsEditModalOpen(false);
       fetchUsers();
@@ -818,15 +887,16 @@ const handleSetGlobalPageLimit = async (e) => {
     }
   };
 
-const IdeaGenStatsSection = () => (
-  
+  const IdeaGenStatsSection = () => (
     <div className="bg-white/80 dark:bg-black/50 rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden mb-8">
       <div className="p-6 bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            
             <div className="p-2 rounded-lg bg-orange-400/20 dark:bg-orange-600/20">
-              <FaTags className="text-orange-700 dark:text-orange-300" size={20} />
+              <FaTags
+                className="text-orange-700 dark:text-orange-300"
+                size={20}
+              />
             </div>
             <h3 className="text-lg font-semibold text-orange-800 dark:text-orange-300">
               Idea Generator Stats
@@ -841,18 +911,20 @@ const IdeaGenStatsSection = () => (
           </button>
         </div>
       </div>
-      
+
       <div className="p-6">
         {ideaStatsError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             <strong>Error:</strong> {ideaStatsError}
           </div>
         )}
-        
+
         {loadingIdeaStats ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
-            <p className="mt-2 text-orange-600 dark:text-orange-400">Loading stats...</p>
+            <p className="mt-2 text-orange-600 dark:text-orange-400">
+              Loading stats...
+            </p>
           </div>
         ) : (
           <>
@@ -862,36 +934,46 @@ const IdeaGenStatsSection = () => (
                 <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
                   {ideaGenStats.total_users || 0}
                 </div>
-                <div className="text-xs text-orange-600 dark:text-orange-400">Total Users</div>
+                <div className="text-xs text-orange-600 dark:text-orange-400">
+                  Total Users
+                </div>
               </div>
               <div className="bg-white/60 dark:bg-black/20 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
                   {ideaGenStats.total_projects || 0}
                 </div>
-                <div className="text-xs text-orange-600 dark:text-orange-400">Total Projects</div>
+                <div className="text-xs text-orange-600 dark:text-orange-400">
+                  Total Projects
+                </div>
               </div>
               <div className="bg-white/60 dark:bg-black/20 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
                   {ideaGenStats.total_ideas || 0}
                 </div>
-                <div className="text-xs text-orange-600 dark:text-orange-400">Total Ideas</div>
+                <div className="text-xs text-orange-600 dark:text-orange-400">
+                  Total Ideas
+                </div>
               </div>
               <div className="bg-white/60 dark:bg-black/20 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
                   {ideaGenStats.total_images || 0}
                 </div>
-                <div className="text-xs text-orange-600 dark:text-orange-400">Total Images</div>
+                <div className="text-xs text-orange-600 dark:text-orange-400">
+                  Total Images
+                </div>
               </div>
               <div className="bg-white/60 dark:bg-black/20 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
                   ${ideaGenStats.total_image_cost || 0}
                 </div>
-                <div className="text-xs text-orange-600 dark:text-orange-400">Total Cost</div>
+                <div className="text-xs text-orange-600 dark:text-orange-400">
+                  Total Cost
+                </div>
               </div>
             </div>
 
             {/* User Stats Table */}
-             <div className="overflow-x-auto">
+            <div className="overflow-x-auto">
               <table className="min-w-full bg-white dark:bg-black/30 rounded-lg">
                 <thead>
                   <tr className="bg-orange-50 dark:bg-orange-900/20">
@@ -920,15 +1002,33 @@ const IdeaGenStatsSection = () => (
                       <button
                         onClick={() => setShowUserTable(!showUserTable)}
                         className="flex items-center justify-center w-full text-orange-700 dark:text-orange-300 hover:text-orange-900 dark:hover:text-orange-100 transition-colors"
-                        title={showUserTable ? "Hide user data" : "Show user data"}
+                        title={
+                          showUserTable ? "Hide user data" : "Show user data"
+                        }
                       >
                         {showUserTable ? (
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd"/>
+                          <svg
+                            className="w-4 h-4"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                              clipRule="evenodd"
+                            />
                           </svg>
                         ) : (
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
+                          <svg
+                            className="w-4 h-4"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
                           </svg>
                         )}
                       </button>
@@ -938,58 +1038,55 @@ const IdeaGenStatsSection = () => (
                 {showUserTable && (
                   <tbody className="divide-y divide-orange-100 dark:divide-orange-900/30">
                     {ideaGenStats.users && ideaGenStats.users.length > 0 ? (
-                      <tr>
-                        <td colSpan="8" className="p-0">
-                          <div 
-                            className="max-h-96 overflow-y-auto custom-scrollbar"
-                            style={{ 
-                              maxHeight: ideaGenStats.users.length > 15 ? '24rem' : 'auto'
-                            }}
-                          >
-                            <table className="min-w-full">
-                              <tbody className="divide-y divide-orange-100 dark:divide-orange-900/30">
-                                {ideaGenStats.users.map((user, index) => (
-                                  <tr key={user.user_id} className={index % 2 === 0 ? 'bg-orange-25 dark:bg-orange-900/10' : 'bg-white dark:bg-black/20'}>
-                                    <td className="px-4 py-3 text-sm font-medium text-orange-900 dark:text-orange-200">
-                                      {user.username}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-orange-800 dark:text-orange-300">
-                                      {user.email}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
-                                        {user.projects}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
-                                        {user.ideas}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
-                                        {user.images}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                                        ${user.image_cost || 0}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-orange-800 dark:text-orange-300">
-                                      {user.date_joined ? new Date(user.date_joined).toLocaleDateString() : 'N/A'}
-                                    </td>
-                                    <td className="px-4 py-3"></td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </td>
-                      </tr>
+                      ideaGenStats.users.map((user, index) => (
+                        <tr
+                          key={user.user_id}
+                          className={
+                            index % 2 === 0
+                              ? "bg-orange-25 dark:bg-orange-900/10"
+                              : "bg-white dark:bg-black/20"
+                          }
+                        >
+                          <td className="px-4 py-3 text-sm font-medium text-orange-900 dark:text-orange-200">
+                            {user.username}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-orange-800 dark:text-orange-300">
+                            {user.email}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+                              {user.projects}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+                              {user.ideas}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+                              {user.images}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-orange-900 dark:text-orange-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                              ${user.image_cost || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-orange-800 dark:text-orange-300">
+                            {user.date_joined
+                              ? new Date(user.date_joined).toLocaleDateString()
+                              : "N/A"}
+                          </td>
+                          <td className="px-4 py-3"></td>
+                        </tr>
+                      ))
                     ) : (
                       <tr>
-                        <td colSpan="8" className="px-4 py-8 text-center text-orange-600 dark:text-orange-400">
+                        <td
+                          colSpan="8"
+                          className="px-4 py-8 text-center text-orange-600 dark:text-orange-400"
+                        >
                           No user data available
                         </td>
                       </tr>
@@ -997,14 +1094,16 @@ const IdeaGenStatsSection = () => (
                   </tbody>
                 )}
               </table>
-              
+
               {/* Show row count when table is visible */}
-              {showUserTable && ideaGenStats.users && ideaGenStats.users.length > 0 && (
-                <div className="mt-2 text-xs text-orange-600 dark:text-orange-400 text-center">
-                  Showing {ideaGenStats.users.length} users
-                  {ideaGenStats.users.length > 15 && " (scrollable)"}
-                </div>
-              )}
+              {showUserTable &&
+                ideaGenStats.users &&
+                ideaGenStats.users.length > 0 && (
+                  <div className="mt-2 text-xs text-orange-600 dark:text-orange-400 text-center">
+                    Showing {ideaGenStats.users.length} users
+                    {ideaGenStats.users.length > 15 && " (scrollable)"}
+                  </div>
+                )}
             </div>
           </>
         )}
@@ -1012,722 +1111,1519 @@ const IdeaGenStatsSection = () => (
     </div>
   );
 
-const UserInfoSection = () => {
-  console.log("userStats:", userStats);
-  
-  // Calculate total statistics for overview charts
-  const totalDocQAStats = userStats.reduce((acc, user) => {
-    acc.totalDocuments += user.document_upload_count || 0;
-    acc.totalQuestions += user.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
-    return acc;
-  }, { totalDocuments: 0, totalQuestions: 0 });
-
-  const totalNotebookStats = notebookUserStats.reduce((acc, user) => {
-    acc.totalDocuments += user.document_upload_count || 0;
-    acc.totalQuestions += user.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
-    acc.totalShort += user.documents?.reduce((sum, doc) => sum + doc.short_responses, 0) || 0;
-    acc.totalComprehensive += user.documents?.reduce((sum, doc) => sum + doc.comprehensive_responses, 0) || 0;
-    return acc;
-  }, { totalDocuments: 0, totalQuestions: 0, totalShort: 0, totalComprehensive: 0 });
-
-  // Prepare data for charts
-  const userActivityData = users.map(user => {
-    const docQAStats = userStats.find(u => u.user_id === user.id);
-    const notebookStats = notebookUserStats.find(u => u.user_id === user.id);
-    const docQAQuestions = docQAStats?.documents?.reduce((sum, doc) => sum + (doc.questions_asked || 0), 0) || 0;
-  const notebookQuestions = notebookStats?.documents?.reduce((sum, doc) => sum + (doc.questions_asked || 0), 0) || 0;
-  const docQADocs = docQAStats?.document_upload_count || 0;
-  const notebookDocs = notebookStats?.document_upload_count || 0;
-  const shortResponses = notebookStats?.documents?.reduce((sum, doc) => sum + (doc.short_responses || 0), 0) || 0;
-  const comprehensiveResponses = notebookStats?.documents?.reduce((sum, doc) => sum + (doc.comprehensive_responses || 0), 0) || 0;
-
-    return {
-      username: user.username,
-      docQAQuestions: docQAStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0,
-      notebookQuestions: notebookStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0,
-      docQADocs: docQAStats?.document_upload_count || 0,
-      notebookDocs: notebookStats?.document_upload_count || 0,
-      shortResponses: notebookStats?.documents?.reduce((sum, doc) => sum + doc.short_responses, 0) || 0,
-      comprehensiveResponses: notebookStats?.documents?.reduce((sum, doc) => sum + doc.comprehensive_responses, 0) || 0,
-    };
-  });
-
-  const moduleAccessData = users.map(user => {
-    const totalModules = availableModules.length;
-    const disabledModules = user.disabled_modules || {};
-    const disabledCount = Object.values(disabledModules).filter(isDisabled => isDisabled === true).length;
-    const enabledCount = totalModules - disabledCount;
-  
-    return {
-      username: user.username,
-      enabled: enabledCount,
-      disabled: disabledCount,
-    };
-  });
 
 
+  const UserInfoSection = () => {
+    console.log("UserInfoSection re-rendered");
 
-  const totalOverviewData = [
-    { name: 'Doc Q&A Documents', value: totalDocQAStats.totalDocuments, color: '#3B82F6' },
-    { name: 'Doc Q&A Questions', value: totalDocQAStats.totalQuestions, color: '#1E40AF' },
-    { name: 'Notebook Documents', value: totalNotebookStats.totalDocuments, color: '#10B981' },
-    { name: 'Notebook Questions', value: totalNotebookStats.totalQuestions, color: '#059669' },
-    { name: 'Short Responses', value: totalNotebookStats.totalShort, color: '#8B5CF6' },
-    { name: 'Comprehensive Responses', value: totalNotebookStats.totalComprehensive, color: '#7C3AED' },
-  ];
+   
+    // Calculate total statistics for overview charts
+    const totalDocQAStats = userStats.reduce(
+      (acc, user) => {
+        acc.totalDocuments += user.document_upload_count || 0;
+        acc.totalQuestions +=
+          user.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) ||
+          0;
+        return acc;
+      },
+      { totalDocuments: 0, totalQuestions: 0 }
+    );
 
-  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+    const totalNotebookStats = notebookUserStats.reduce(
+      (acc, user) => {
+        acc.totalDocuments += user.document_upload_count || 0;
+        acc.totalQuestions +=
+          user.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) ||
+          0;
+        acc.totalShort +=
+          user.documents?.reduce((sum, doc) => sum + doc.short_responses, 0) ||
+          0;
+        acc.totalComprehensive +=
+          user.documents?.reduce(
+            (sum, doc) => sum + doc.comprehensive_responses,
+            0
+          ) || 0;
+        return acc;
+      },
+      {
+        totalDocuments: 0,
+        totalQuestions: 0,
+        totalShort: 0,
+        totalComprehensive: 0,
+      }
+    );
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-          <p className="font-semibold text-gray-800 dark:text-gray-200">{label}</p>
-          {payload.map((entry, index) => (
-            <p key={index} style={{ color: entry.color }} className="text-sm">
-              {entry.name}: {entry.value}
-            </p>
-          ))}
-        </div>
+    // Prepare data for charts
+    const userActivityData = users.map((user) => {
+      const docQAStats = userStats.find((u) => u.user_id === user.id);
+      const notebookStats = notebookUserStats.find(
+        (u) => u.user_id === user.id
       );
-    }
-    return null;
+      const docQAQuestions =
+        docQAStats?.documents?.reduce(
+          (sum, doc) => sum + (doc.questions_asked || 0),
+          0
+        ) || 0;
+      const notebookQuestions =
+        notebookStats?.documents?.reduce(
+          (sum, doc) => sum + (doc.questions_asked || 0),
+          0
+        ) || 0;
+      const docQADocs = docQAStats?.document_upload_count || 0;
+      const notebookDocs = notebookStats?.document_upload_count || 0;
+      const shortResponses =
+        notebookStats?.documents?.reduce(
+          (sum, doc) => sum + (doc.short_responses || 0),
+          0
+        ) || 0;
+      const comprehensiveResponses =
+        notebookStats?.documents?.reduce(
+          (sum, doc) => sum + (doc.comprehensive_responses || 0),
+          0
+        ) || 0;
+
+      return {
+        username: user.username,
+        docQAQuestions:
+          docQAStats?.documents?.reduce(
+            (sum, doc) => sum + doc.questions_asked,
+            0
+          ) || 0,
+        notebookQuestions:
+          notebookStats?.documents?.reduce(
+            (sum, doc) => sum + doc.questions_asked,
+            0
+          ) || 0,
+        docQADocs: docQAStats?.document_upload_count || 0,
+        notebookDocs: notebookStats?.document_upload_count || 0,
+        shortResponses:
+          notebookStats?.documents?.reduce(
+            (sum, doc) => sum + doc.short_responses,
+            0
+          ) || 0,
+        comprehensiveResponses:
+          notebookStats?.documents?.reduce(
+            (sum, doc) => sum + doc.comprehensive_responses,
+            0
+          ) || 0,
+      };
+    });
+
+    const moduleAccessData = users.map((user) => {
+      const totalModules = availableModules.length;
+      const disabledModules = user.disabled_modules || {};
+      const disabledCount = Object.values(disabledModules).filter(
+        (isDisabled) => isDisabled === true
+      ).length;
+      const enabledCount = totalModules - disabledCount;
+
+      return {
+        username: user.username,
+        enabled: enabledCount,
+        disabled: disabledCount,
+      };
+    });
+
+    const totalOverviewData = [
+      {
+        name: "Doc Q&A Documents",
+        value: totalDocQAStats.totalDocuments,
+        color: "#3B82F6",
+      },
+      {
+        name: "Doc Q&A Questions",
+        value: totalDocQAStats.totalQuestions,
+        color: "#1E40AF",
+      },
+      {
+        name: "Notebook Documents",
+        value: totalNotebookStats.totalDocuments,
+        color: "#10B981",
+      },
+      {
+        name: "Notebook Questions",
+        value: totalNotebookStats.totalQuestions,
+        color: "#059669",
+      },
+      {
+        name: "Short Responses",
+        value: totalNotebookStats.totalShort,
+        color: "#8B5CF6",
+      },
+      {
+        name: "Comprehensive Responses",
+        value: totalNotebookStats.totalComprehensive,
+        color: "#7C3AED",
+      },
+    ];
+
+    const COLORS = [
+      "#3B82F6",
+      "#10B981",
+      "#F59E0B",
+      "#EF4444",
+      "#8B5CF6",
+      "#EC4899",
+      "#06B6D4",
+      "#84CC16",
+    ];
+
+    const CustomTooltip = ({ active, payload, label }) => {
+      if (active && payload && payload.length) {
+        return (
+          <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+            <p className="font-semibold text-gray-800 dark:text-gray-200">
+              {label}
+            </p>
+            {payload.map((entry, index) => (
+              <p key={index} style={{ color: entry.color }} className="text-sm">
+                {entry.name}: {entry.value}
+              </p>
+            ))}
+          </div>
+        );
+      }
+      return null;
+    };
+
+    return (
+      <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3">
+                <button
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
+                  onClick={() => setIsGlobalTokenLimitModalOpen(true)}
+                >
+                  <FaGlobe className="mr-2" size={14} /> Set Global Token Limit
+                </button>
+                <button
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
+                  onClick={() => setIsGlobalPageLimitModalOpen(true)}
+                >
+                  <FaFileUpload className="mr-2" size={14} /> Set Global Page
+                  Limit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="space-y-6">
+            {/* Total Overview Charts */}
+            {(userStats.length > 0 || notebookUserStats.length > 0) && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                {/* Total Activity Overview - Pie Chart */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/30 rounded-xl p-6 border border-blue-200 dark:border-blue-800/30">
+                  <h4 className="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center">
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
+                    </svg>
+                    Total Activity Distribution
+                  </h4>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={totalOverviewData}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          innerRadius={40}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {totalOverviewData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Total Activity Overview - Summary Stats */}
+                <div className="bg-gradient-to-br from-violet-50 to-purple-100 dark:from-violet-900/20 dark:to-purple-900/30 rounded-xl p-6 border border-violet-200 dark:border-violet-800/30">
+                  <h4 className="text-lg font-semibold text-violet-800 dark:text-violet-300 mb-4 flex items-center">
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+                    </svg>
+                    System-Wide Summary
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                          {totalDocQAStats.totalDocuments}
+                        </div>
+                        <div className="text-xs text-blue-600 dark:text-blue-400">
+                          Doc Q&A Docs
+                        </div>
+                      </div>
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                          {totalDocQAStats.totalQuestions}
+                        </div>
+                        <div className="text-xs text-blue-600 dark:text-blue-400">
+                          Doc Q&A Questions
+                        </div>
+                      </div>
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                          {totalNotebookStats.totalDocuments}
+                        </div>
+                        <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                          Notebook Docs
+                        </div>
+                      </div>
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                          {totalNotebookStats.totalQuestions}
+                        </div>
+                        <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                          Notebook Questions
+                        </div>
+                      </div>
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                          {totalNotebookStats.totalShort}
+                        </div>
+                        <div className="text-xs text-purple-600 dark:text-purple-400">
+                          Short Responses
+                        </div>
+                      </div>
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                          {totalNotebookStats.totalComprehensive}
+                        </div>
+                        <div className="text-xs text-purple-600 dark:text-purple-400">
+                          Comprehensive
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-100 to-emerald-100 dark:from-blue-900/30 dark:to-emerald-900/30 rounded-lg p-3 text-center">
+                      <div className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                        {users.length} Total Users
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        Active in System
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Activity Comparison */}
+                <div className="bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-900/30 rounded-xl p-6 border border-emerald-200 dark:border-emerald-800/30">
+                  <h4 className="text-lg font-semibold text-emerald-800 dark:text-emerald-300 mb-4 flex items-center">
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+                      <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+                    </svg>
+                    User Activity Comparison
+                  </h4>
+                  <div className="h-64 overflow-x-auto custom-scrollbar">
+                    <div
+                      style={{
+                        minWidth: `${Math.max(
+                          600,
+                          userActivityData.length * 80
+                        )}px`,
+                        height: "100%",
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={userActivityData}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#e5e7eb"
+                          />
+                          <XAxis
+                            dataKey="username"
+                            stroke="#6b7280"
+                            interval={0}
+                            angle={-45}
+                            textAnchor="end"
+                            height={80}
+                          />
+                          <YAxis stroke="#6b7280" />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Bar
+                            dataKey="docQAQuestions"
+                            fill="#3B82F6"
+                            radius={[2, 2, 0, 0]}
+                          />
+                          <Bar
+                            dataKey="notebookQuestions"
+                            fill="#10B981"
+                            radius={[2, 2, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* All Users Activity Overview - Line Chart */}
+            {(userStats.length > 0 || notebookUserStats.length > 0) &&
+              userActivityData.length > 0 && (
+                <div className="bg-gradient-to-br from-orange-50 to-amber-100 dark:from-orange-900/20 dark:to-amber-900/30 rounded-xl p-6 border border-orange-200 dark:border-orange-800/30 mb-6 custom-scrollbar">
+                  <h4 className="text-lg font-semibold text-orange-800 dark:text-orange-300 mb-4 flex items-center">
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M2 10a8 8 0 118 0v3a1 1 0 001 1h4a1 1 0 100-2h-3V4a1 1 0 00-1-1H3a1 1 0 00-1 1v6z" />
+                      <path d="M6 10a1 1 0 011-1h3a1 1 0 110 2H7a1 1 0 01-1-1zM6 14a1 1 0 011-1h3a1 1 0 110 2H7a1 1 0 01-1-1z" />
+                    </svg>
+                    All Users Activity Trends
+                  </h4>
+                  <div className="h-64 overflow-x-auto scrollbar-thin scrollbar-thumb-orange-400 scrollbar-track-orange-100 dark:scrollbar-thumb-orange-600 dark:scrollbar-track-orange-900/30">
+                    <div
+                      style={{
+                        minWidth: `${Math.max(
+                          800,
+                          userActivityData.length * 100
+                        )}px`,
+                        height: "100%",
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={userActivityData}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#e5e7eb"
+                          />
+                          <XAxis
+                            dataKey="username"
+                            stroke="#6b7280"
+                            interval={0}
+                            angle={-45}
+                            textAnchor="end"
+                            height={80}
+                          />
+                          <YAxis stroke="#6b7280" />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Line
+                            type="monotone"
+                            dataKey="docQAQuestions"
+                            stroke="#3B82F6"
+                            strokeWidth={3}
+                            dot={{ fill: "#3B82F6", strokeWidth: 2, r: 5 }}
+                            name="Doc Q&A Questions"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="notebookQuestions"
+                            stroke="#10B981"
+                            strokeWidth={3}
+                            dot={{ fill: "#10B981", strokeWidth: 2, r: 5 }}
+                            name="Notebook Questions"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="shortResponses"
+                            stroke="#8B5CF6"
+                            strokeWidth={2}
+                            dot={{ fill: "#8B5CF6", strokeWidth: 2, r: 4 }}
+                            name="Short Responses"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="comprehensiveResponses"
+                            stroke="#EC4899"
+                            strokeWidth={2}
+                            dot={{ fill: "#EC4899", strokeWidth: 2, r: 4 }}
+                            name="Comprehensive Responses"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-4 text-sm">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Doc Q&A Questions
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-emerald-500 rounded-full mr-2"></div>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Notebook Questions
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Short Responses
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-pink-500 rounded-full mr-2"></div>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Comprehensive Responses
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            <div className="flex items-center space-x-3">
+              <button
+                className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm transition-all"
+                onClick={() => setCollapsedUsers(new Set())}
+              >
+                Expand All
+              </button>
+              <button
+                className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm transition-all"
+                onClick={() =>
+                  setCollapsedUsers(new Set(users.map((u) => u.id)))
+                }
+              >
+                Collapse All
+              </button>
+              <button
+                className="bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
+                onClick={() => setIsAddModalOpen(true)}
+              >
+                <FaUserPlus className="mr-2" size={14} /> Add New User
+              </button>
+              <div className="w-full sm:w-72 relative search-container">
+  <input
+    type="text"
+    placeholder="Search users by name or email..."
+    value={userSearchTerm}
+    onChange={(e) => setUserSearchTerm(e.target.value)}
+    className="w-full px-4 py-2 rounded-lg border border-[#e3d5c8] dark:border-gray-700 bg-white/80 dark:bg-black/40 text-[#0a3b25] dark:text-gray-200 placeholder-[#5e4636] dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500"
+  />
+  <FaSearch
+    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#a55233] dark:text-emerald-400"
+    size={16}
+  />
+</div>
+            </div>
+            {loading ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
+                <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
+                  Loading users...
+                </span>
+              </div>
+            ) : (
+              <section className="bg-white/80 dark:bg-black/50 rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
+                <div className="flex items-center justify-between p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
+                  <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
+                    User Information
+                  </h3>
+                </div>
+                {userSearchTerm && (
+                  <div className="px-6 pb-2">
+                    <span className="text-xs text-[#5e4636] dark:text-gray-400">
+                      Showing {filteredUsers.length} user
+                      {filteredUsers.length !== 1 && "s"}
+                    </span>
+                  </div>
+                )}
+                <div className="p-6">
+                  <div className="grid gap-6">
+                    {filteredUsers.map((user) => {
+                      const userDocQAStats = userStats.find(
+                        (u) => u.user_id === user.id
+                      );
+                      const userNotebookStats = notebookUserStats.find(
+                        (u) => u.user_id === user.id
+                      );
+
+                      // Individual user chart data
+                      const userChartData = [
+                        {
+                          name: "Doc Q&A Questions",
+                          value:
+                            userDocQAStats?.documents?.reduce(
+                              (sum, doc) => sum + doc.questions_asked,
+                              0
+                            ) || 0,
+                        },
+                        {
+                          name: "Notebook Questions",
+                          value:
+                            userNotebookStats?.documents?.reduce(
+                              (sum, doc) => sum + doc.questions_asked,
+                              0
+                            ) || 0,
+                        },
+                        {
+                          name: "Short Responses",
+                          value:
+                            userNotebookStats?.documents?.reduce(
+                              (sum, doc) => sum + doc.short_responses,
+                              0
+                            ) || 0,
+                        },
+                        {
+                          name: "Comprehensive Responses",
+                          value:
+                            userNotebookStats?.documents?.reduce(
+                              (sum, doc) => sum + doc.comprehensive_responses,
+                              0
+                            ) || 0,
+                        },
+                      ].filter((item) => item.value > 0);
+
+                      return (
+                        <div
+                          key={user.id}
+                          className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg border border-[#e3d5c8] dark:border-gray-700/50 hover:shadow-md transition-all"
+                        >
+                          {/* Header - Always Visible */}
+                          <div className="p-6 border-b border-[#e3d5c8] dark:border-gray-700/50">
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+                                  {user.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-lg">
+                                    {user.username}
+                                  </h4>
+                                  <p className="text-sm text-[#5a544a] dark:text-gray-400 mt-1">
+                                    ID: {user.id} • {user.email}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                {/* Action Buttons */}
+                                <button
+                                  className="p-3 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-lg transition-all"
+                                  onClick={() => handleOpenEditModal(user)}
+                                  title="Edit API Tokens"
+                                >
+                                  <FaKey size={18} />
+                                </button>
+                                <button
+                                  className="p-3 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                                  onClick={() =>
+                                    handleDeleteUser(user.id, user.username)
+                                  }
+                                  title="Delete User"
+                                  disabled={user.username === "admin"}
+                                >
+                                  <FaUserMinus size={18} />
+                                </button>
+
+                                {/* Collapse Toggle Button */}
+                                <button
+                                  onClick={() => toggleUserCollapse(user.id)}
+                                  className="p-3 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-lg transition-all"
+                                  title={
+                                    collapsedUsers.has(user.id)
+                                      ? "Expand Details"
+                                      : "Collapse Details"
+                                  }
+                                >
+                                  {collapsedUsers.has(user.id) ? (
+                                    <FaChevronDown className="w-3 h-3 transition-transform duration-200" />
+                                  ) : (
+                                    <FaChevronUp className="w-3 h-3 transition-transform duration-200" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Collapsible Content */}
+                          {!collapsedUsers.has(user.id) && (
+                            <div className="p-6">
+                              {/* Individual User Activity Chart */}
+                              {userChartData.length > 0 && (
+                                <div className="mb-6">
+                                  <h5 className="text-sm font-semibold text-[#556052] dark:text-gray-300 mb-3">
+                                    Activity Overview
+                                  </h5>
+                                  <div className="h-32 bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                    <ResponsiveContainer
+                                      width="100%"
+                                      height="100%"
+                                    >
+                                      <LineChart data={userChartData}>
+                                        <XAxis dataKey="name" hide />
+                                        <YAxis hide />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="value"
+                                          stroke="#a55233"
+                                          strokeWidth={2}
+                                          dot={{
+                                            fill: "#a55233",
+                                            strokeWidth: 2,
+                                            r: 4,
+                                          }}
+                                        />
+                                      </LineChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-4">
+                                <div className="space-y-3">
+                                  <p className="text-sm font-bold text-[#556052] dark:text-blue-400 uppercase tracking-wide">
+                                    API Tokens
+                                  </p>
+                                  <div className="text-sm space-y-2">
+                                    <div className="flex justify-between">
+                                      <span className="font-medium">
+                                        Nebius:
+                                      </span>
+                                      <span className="text-[#5e4636] dark:text-gray-300">
+                                        {user.api_tokens.nebius_token
+                                          ? `${user.api_tokens.nebius_token.slice(
+                                              0,
+                                              30
+                                            )}...`
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="font-medium">
+                                        Gemini:
+                                      </span>
+                                      <span className="text-[#5e4636] dark:text-gray-300">
+                                        {user.api_tokens.gemini_token
+                                          ? `${user.api_tokens.gemini_token.slice(
+                                              0,
+                                              30
+                                            )}...`
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="font-medium">
+                                        Llama:
+                                      </span>
+                                      <span className="text-[#5e4636] dark:text-gray-300">
+                                        {user.api_tokens.llama_token
+                                          ? `${user.api_tokens.llama_token.slice(
+                                              0,
+                                              30
+                                            )}...`
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <p className="text-sm font-bold text-[#556052] dark:text-purple-400 uppercase tracking-wide">
+                                    Module Access
+                                  </p>
+                                  <div className="text-sm">
+                                    <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
+                                      <span className="text-[#5e4636] dark:text-gray-300 font-medium">
+                                        {(() => {
+                                          const totalModules =
+                                            availableModules.length;
+                                          const disabledModules =
+                                            user.disabled_modules || {};
+                                          const disabledCount = Object.values(
+                                            disabledModules
+                                          ).filter(
+                                            (isDisabled) => isDisabled === true
+                                          ).length;
+                                          const enabledCount =
+                                            totalModules - disabledCount;
+
+                                          if (disabledCount === 0) {
+                                            return `All ${totalModules} modules enabled`;
+                                          } else if (enabledCount === 0) {
+                                            return `All modules disabled`;
+                                          } else {
+                                            return `${enabledCount}/${totalModules} modules enabled`;
+                                          }
+                                        })()}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <p className="text-sm font-bold text-[#556052] dark:text-yellow-400 uppercase tracking-wide">
+                                    Token Usage
+                                  </p>
+                                  <div className="text-sm">
+                                    <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
+                                      {user.token_limit !== null &&
+                                      user.token_limit !== undefined ? (
+                                        <div className="space-y-2">
+                                          <div className="flex justify-between">
+                                            <span className="font-medium">
+                                              Used:
+                                            </span>
+                                            <span className="text-[#5e4636] dark:text-gray-300">
+                                              {userNotebookStats?.total_tokens_used ??
+                                                0}{" "}
+                                              / {user.token_limit}
+                                            </span>
+                                          </div>
+                                          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                                            <div
+                                              className={`h-2 rounded-full transition-all ${
+                                                (user.tokens_used || 0) /
+                                                  user.token_limit >
+                                                0.8
+                                                  ? "bg-red-500"
+                                                  : (user.tokens_used || 0) /
+                                                      user.token_limit >
+                                                    0.6
+                                                  ? "bg-yellow-500"
+                                                  : "bg-green-500"
+                                              }`}
+                                              style={{
+                                                width: `${Math.min(
+                                                  ((userNotebookStats?.total_tokens_used ??
+                                                    0) /
+                                                    user.token_limit) *
+                                                    100,
+                                                  100
+                                                )}%`,
+                                              }}
+                                            ></div>
+                                          </div>
+                                          <div className="text-xs text-center">
+                                            {(
+                                              ((userNotebookStats?.total_tokens_used ??
+                                                0) /
+                                                user.token_limit) *
+                                              100
+                                            ).toFixed(1)}
+                                            % used
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[#5e4636] dark:text-gray-300 font-medium">
+                                          Unlimited tokens
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Page Usage Section */}
+                                <div className="space-y-3">
+                                  <p className="text-sm font-bold text-[#556052] dark:text-cyan-400 uppercase tracking-wide">
+                                    Page Usage
+                                  </p>
+                                  <div className="text-sm">
+                                    <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
+                                      {user.api_tokens.page_limit !== null &&
+                                      user.api_tokens.page_limit !==
+                                        undefined ? (
+                                        <div className="space-y-2">
+                                          <div className="flex justify-between">
+                                            <span className="font-medium">
+                                              Used:
+                                            </span>
+                                            <span className="text-[#5e4636] dark:text-gray-300">
+                                              {userNotebookStats?.total_pages_processed ??
+                                                0}{" "}
+                                              / {user.api_tokens.page_limit}
+                                            </span>
+                                          </div>
+                                          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                                            <div
+                                              className={`h-2 rounded-full transition-all ${
+                                                (user.pages_used || 0) /
+                                                  user.api_tokens.page_limit >
+                                                0.8
+                                                  ? "bg-red-500"
+                                                  : (user.pages_used || 0) /
+                                                      user.api_tokens
+                                                        .page_limit >
+                                                    0.6
+                                                  ? "bg-yellow-500"
+                                                  : "bg-green-500"
+                                              }`}
+                                              style={{
+                                                width: `${Math.min(
+                                                  ((userNotebookStats?.total_pages_processed ??
+                                                    0) /
+                                                    user.api_tokens
+                                                      .page_limit) *
+                                                    100,
+                                                  100
+                                                )}%`,
+                                              }}
+                                            ></div>
+                                          </div>
+                                          <div className="text-xs text-center">
+                                            {(
+                                              ((userNotebookStats?.total_pages_processed ??
+                                                0) /
+                                                user.api_tokens.page_limit) *
+                                              100
+                                            ).toFixed(1)}
+                                            % used
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[#5e4636] dark:text-gray-300 font-medium">
+                                          Unlimited pages
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Upload Status as separate row */}
+                              <div className="mt-4">
+                                <div className="space-y-3">
+                                  <p className="text-sm font-bold text-[#556052] dark:text-green-400 uppercase tracking-wide">
+                                    Upload Status
+                                  </p>
+                                  <div className="text-sm">
+                                    <div
+                                      className={`rounded-lg p-3 font-medium ${
+                                        userUploadPermissions[user.id]
+                                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                          : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                      }`}
+                                    >
+                                      {userUploadPermissions[user.id]
+                                        ? "Upload Enabled"
+                                        : "Upload Disabled"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Show question stats if available */}
+                              {(userStats.length > 0 ||
+                                notebookUserStats.length > 0) && (
+                                <div className="mt-6 space-y-4">
+                                  {/* Notebook Stats */}
+                                  {notebookUserStats.length > 0 &&
+                                    (() => {
+                                      const userNotebookStats =
+                                        notebookUserStats.find(
+                                          (u) => u.user_id === user.id
+                                        );
+                                      const totalNotebookDocs =
+                                        userNotebookStats?.document_upload_count ||
+                                        0;
+                                      const totalNotebookQuestions =
+                                        userNotebookStats?.documents?.reduce(
+                                          (sum, doc) =>
+                                            sum + doc.questions_asked,
+                                          0
+                                        ) || 0;
+                                      const totalNotebookShort =
+                                        userNotebookStats?.documents?.reduce(
+                                          (sum, doc) =>
+                                            sum + doc.short_responses,
+                                          0
+                                        ) || 0;
+                                      const totalNotebookComprehensive =
+                                        userNotebookStats?.documents?.reduce(
+                                          (sum, doc) =>
+                                            sum + doc.comprehensive_responses,
+                                          0
+                                        ) || 0;
+
+                                      // Add the new fields
+                                      const totalTokensUsed =
+                                        userNotebookStats?.total_tokens_used ||
+                                        0;
+                                      const totalInputTokens =
+                                        userNotebookStats?.total_input_tokens ||
+                                        0;
+                                      const totalOutputTokens =
+                                        userNotebookStats?.total_output_tokens ||
+                                        0;
+                                      const totalPagesProcessed =
+                                        userNotebookStats?.total_pages_processed ||
+                                        0;
+
+                                      const notebookDocuments =
+                                        userNotebookStats?.documents || [];
+                                      const [
+                                        showNotebookDetails,
+                                        setShowNotebookDetails,
+                                      ] = useState(false);
+
+                                      return (
+                                        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg p-4 border border-emerald-200 dark:border-emerald-800/30">
+                                          <div className="flex items-center justify-between mb-3">
+                                            <h5 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center">
+                                              <svg
+                                                className="w-4 h-4 mr-2"
+                                                fill="currentColor"
+                                                viewBox="0 0 20 20"
+                                              >
+                                                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                                                <path
+                                                  fillRule="evenodd"
+                                                  d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z"
+                                                  clipRule="evenodd"
+                                                />
+                                              </svg>
+                                              Notebook Statistics
+                                            </h5>
+                                            <div className="flex items-center space-x-4">
+                                              <div className="grid grid-cols-4 gap-3">
+                                                <div className="text-center">
+                                                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                                                    {totalNotebookDocs}
+                                                  </div>
+                                                  <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                                    Documents
+                                                  </div>
+                                                </div>
+                                                <div className="text-center">
+                                                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                                                    {totalNotebookShort}
+                                                  </div>
+                                                  <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                                    Short
+                                                  </div>
+                                                </div>
+                                                <div className="text-center">
+                                                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                                                    {totalNotebookComprehensive}
+                                                  </div>
+                                                  <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                                    Comprehensive
+                                                  </div>
+                                                </div>
+                                                <div className="text-center">
+                                                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                                                    {totalPagesProcessed}
+                                                  </div>
+                                                  <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                                    Pages
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              {/* Second row for token stats */}
+                                              <div className="grid grid-cols-3 gap-3">
+                                                <div className="text-center">
+                                                  <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                                                    {totalTokensUsed.toLocaleString()}
+                                                  </div>
+                                                  <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                                    Total Tokens
+                                                  </div>
+                                                </div>
+                                                <div className="text-center">
+                                                  <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                                                    {totalInputTokens.toLocaleString()}
+                                                  </div>
+                                                  <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                                    Input Tokens
+                                                  </div>
+                                                </div>
+                                                <div className="text-center">
+                                                  <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                                                    {totalOutputTokens.toLocaleString()}
+                                                  </div>
+                                                  <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                                    Output Tokens
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              {notebookDocuments.length > 0 && (
+                                                <button
+                                                  onClick={() =>
+                                                    setShowNotebookDetails(
+                                                      !showNotebookDetails
+                                                    )
+                                                  }
+                                                  className="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-800/30 dark:hover:bg-emerald-700/30 text-emerald-700 dark:text-emerald-300 rounded-lg transition-all flex items-center"
+                                                >
+                                                  {showNotebookDetails
+                                                    ? "Hide Details"
+                                                    : "View Details"}
+                                                  <svg
+                                                    className={`w-3 h-3 ml-1 transition-transform ${
+                                                      showNotebookDetails
+                                                        ? "rotate-180"
+                                                        : ""
+                                                    }`}
+                                                    fill="currentColor"
+                                                    viewBox="0 0 20 20"
+                                                  >
+                                                    <path
+                                                      fillRule="evenodd"
+                                                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                      clipRule="evenodd"
+                                                    />
+                                                  </svg>
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {notebookDocuments.length > 0 &&
+                                            showNotebookDetails && (
+                                              <div className="space-y-2 border-t border-emerald-200 dark:border-emerald-700/30 pt-3">
+                                                <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-2">
+                                                  Document Activity:
+                                                </div>
+                                                <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+                                                  {notebookDocuments.map(
+                                                    (doc) => (
+                                                      <div
+                                                        key={doc.document_id}
+                                                        className="flex items-center justify-between bg-white/60 dark:bg-black/20 rounded px-2 py-1.5"
+                                                      >
+                                                        <span
+                                                          className="text-xs text-emerald-800 dark:text-emerald-200 truncate flex-1 mr-2"
+                                                          title={doc.filename}
+                                                        >
+                                                          {doc.filename.length >
+                                                          25
+                                                            ? `${doc.filename.substring(
+                                                                0,
+                                                                25
+                                                              )}...`
+                                                            : doc.filename}
+                                                        </span>
+                                                        <span className="text-xs font-mono bg-emerald-100 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">
+                                                          {doc.questions_asked}Q
+                                                        </span>
+                                                      </div>
+                                                    )
+                                                  )}
+                                                </div>
+                                              </div>
+                                            )}
+                                        </div>
+                                      );
+                                    })()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  return (
-    <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
-      <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
-        <div className="flex items-center justify-between">
+  const FirstActivitySection = () => {
+    const [firstActivities, setFirstActivities] = useState({
+      firstProject: null,
+      firstNotebookQuestion: null,
+      firstIdeaGeneration: null,
+    });
+ 
+    const [showAllActivities, setShowAllActivities] = useState(false);
+    const [allActivities, setAllActivities] = useState([]);
+    const [filteredActivities, setFilteredActivities] = useState([]);
+    const [activeFilter, setActiveFilter] = useState("all");
+ 
+    useEffect(() => {
+      const fetchAllActivities = async () => {
+        try {
+          const response = await adminService.getAllActivities();
+          const sortedActivities = response.activities.sort(
+            (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+          );
+          setAllActivities(sortedActivities);
+          setFilteredActivities(sortedActivities);
+        } catch (error) {
+          console.error("Error fetching all activities:", error);
+        }
+      };
+ 
+      if (showAllActivities) {
+        fetchAllActivities();
+      }
+    }, [showAllActivities]);
+ 
+    const formatDateTime = (timestamp) => {
+      if (!timestamp) return "N/A";
+      const date = new Date(timestamp);
+      return new Intl.DateTimeFormat("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }).format(date);
+    };
+ 
+    useEffect(() => {
+      const fetchFirstActivities = async () => {
+        try {
+          const response = await adminService.getFirstActivities();
+ 
+          setFirstActivities({
+            firstProject: response.first_project,
+            firstNotebookQuestion: response.first_question,
+            firstIdeaGeneration: response.first_idea,
+          });
+        } catch (error) {
+          console.error("Error fetching activity data:", error);
+        }
+      };
+ 
+      fetchFirstActivities();
+    }, []);
+ 
+    // Filter activities based on selected filter
+    const handleFilterChange = (filterType) => {
+      setActiveFilter(filterType);
+ 
+      if (filterType === "all") {
+        setFilteredActivities(allActivities);
+      } else {
+        const filtered = allActivities.filter((activity) => {
+          switch (filterType) {
+            case "projects":
+              return activity.type === "Project Creation";
+            case "questions":
+              return activity.type === "Notebook Question";
+            case "ideas":
+              return activity.type === "Idea Generation";
+            default:
+              return true;
+          }
+        });
+        setFilteredActivities(filtered);
+      }
+    };
+ 
+    // Get filter button style
+    const getFilterButtonStyle = (filterType) => {
+      const baseStyle =
+        "px-3 py-2 rounded-lg text-sm font-medium transition-all";
+      const activeStyle = "bg-[#a55233] text-white";
+      const inactiveStyle =
+        "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600";
+ 
+      return `${baseStyle} ${
+        activeFilter === filterType ? activeStyle : inactiveStyle
+      }`;
+    };
+ 
+    return (
+      <div className="bg-white/80 dark:bg-black/50 rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden mb-8">
+        <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
           <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-3">
-  <button
-    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
-    onClick={() => setIsGlobalTokenLimitModalOpen(true)}
-  >
-    <FaGlobe className="mr-2" size={14} /> Set Global Token Limit
-  </button>
-  <button
-    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
-    onClick={() => setIsGlobalPageLimitModalOpen(true)}
-  >
-    <FaFileUpload className="mr-2" size={14} /> Set Global Page Limit
-  </button>
-  
-</div>
             <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
-              <FaUsers
+              <FaMedal
                 className="text-[#a55233] dark:text-emerald-400"
                 size={20}
               />
             </div>
             <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
-              User Information
+              First Activities
             </h3>
           </div>
+        </div>
+ 
+        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* First Project Card */}
+          <div className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-4 border border-[#e3d5c8]">
+            <div className="flex items-center mb-3">
+              <FaProjectDiagram className="text-[#a55233] mr-2" />
+              <h4 className="font-semibold">First Project</h4>
+            </div>
+            {firstActivities.firstProject ? (
+              <>
+                <p className="text-sm">
+                  Created by: {firstActivities.firstProject.username}
+                </p>
+                {/* <p className="text-sm">
+                  Project: {firstActivities.firstProject.projectName}
+                </p> */}
+                <p className="text-xs text-gray-600 mt-1">
+                  {formatDateTime(firstActivities.firstProject.timestamp)}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">No projects created yet</p>
+            )}
+          </div>
+ 
+          {/* First Notebook Question Card */}
+          <div className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-4 border border-[#e3d5c8]">
+            <div className="flex items-center mb-3">
+              <FaQuestion className="text-[#a55233] mr-2" />
+              <h4 className="font-semibold">First Notebook Question</h4>
+            </div>
+            {firstActivities.firstNotebookQuestion ? (
+              <>
+                <p className="text-sm">
+                  Asked by: {firstActivities.firstNotebookQuestion.username}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  {formatDateTime(
+                    firstActivities.firstNotebookQuestion.timestamp
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">No questions asked yet</p>
+            )}
+          </div>
+ 
+          {/* First Idea Generation Card */}
+          <div className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-4 border border-[#e3d5c8]">
+            <div className="flex items-center mb-3">
+              <FaLightbulb className="text-[#a55233] mr-2" />
+              <h4 className="font-semibold">First Idea Generation</h4>
+            </div>
+            {firstActivities.firstIdeaGeneration ? (
+              <>
+                <p className="text-sm">
+                  Created by: {firstActivities.firstIdeaGeneration.username}
+                </p>
+                {/* <p className="text-sm">
+                  Project: {firstActivities.firstIdeaGeneration.projectName}
+                </p> */}
+                <p className="text-xs text-gray-600 mt-1">
+                  {formatDateTime(
+                    firstActivities.firstIdeaGeneration.timestamp
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">No ideas generated yet</p>
+            )}
+          </div>
+        </div>
+ 
+        <div className="mt-4 flex justify-end px-6 pb-6">
           <button
-            className="bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => setShowAllActivities(true)}
+            className="flex items-center px-4 py-2 bg-[#a55233] hover:bg-[#8b4513] text-white rounded-lg transition-all"
           >
-            <FaUserPlus className="mr-2" size={14} /> Add New User
+            <FaEye className="mr-2" /> View All Activities
           </button>
         </div>
-      </div>
-
-      <div className="p-6">
-        <div className="space-y-6">
-          <p className="text-[#5e4636] dark:text-gray-300 text-base">
-            Manage user accounts and basic information
-          </p>
-
-          {/* Total Overview Charts */}
-          {(userStats.length > 0 || notebookUserStats.length > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              {/* Total Activity Overview - Pie Chart */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/30 rounded-xl p-6 border border-blue-200 dark:border-blue-800/30">
-                <h4 className="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center">
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
-                  </svg>
-                  Total Activity Distribution
-                </h4>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={totalOverviewData}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        innerRadius={40}
-                        paddingAngle={2}
-                        dataKey="value"
+ 
+        {/* Enhanced Activities Modal */}
+        {showAllActivities && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/30 dark:bg-black/70 backdrop-blur-sm"
+              onClick={() => setShowAllActivities(false)}
+            />
+ 
+            <div className="relative min-h-screen flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-6xl max-h-[85vh] overflow-hidden shadow-xl">
+                {/* Modal Header with Filters */}
+                <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                  <div className="flex justify-between items-center p-6">
+                    <h2 className="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
+                      <FaMedal className="mr-2" /> Activity Timeline
+                    </h2>
+                    <button
+                      onClick={() => setShowAllActivities(false)}
+                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    >
+                      <FaTimes size={20} />
+                    </button>
+                  </div>
+ 
+                  {/* Filter Buttons */}
+                  <div className="px-6 pb-4">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleFilterChange("all")}
+                        className={getFilterButtonStyle("all")}
                       >
-                        {totalOverviewData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        All Activities ({allActivities.length})
+                      </button>
+                      <button
+                        onClick={() => handleFilterChange("projects")}
+                        className={getFilterButtonStyle("projects")}
+                      >
+                        <FaProjectDiagram className="inline mr-1" size={12} />
+                        Projects (
+                        {
+                          allActivities.filter(
+                            (a) => a.type === "Project Creation"
+                          ).length
+                        }
+                        )
+                      </button>
+                      <button
+                        onClick={() => handleFilterChange("questions")}
+                        className={getFilterButtonStyle("questions")}
+                      >
+                        <FaQuestion className="inline mr-1" size={12} />
+                        Notebook (
+                        {
+                          allActivities.filter(
+                            (a) => a.type === "Notebook Question"
+                          ).length
+                        }
+                        )
+                      </button>
+                      <button
+                        onClick={() => handleFilterChange("ideas")}
+                        className={getFilterButtonStyle("ideas")}
+                      >
+                        <FaLightbulb className="inline mr-1" size={12} />
+                        Ideas (
+                        {
+                          allActivities.filter(
+                            (a) => a.type === "Idea Generation"
+                          ).length
+                        }
+                        )
+                      </button>
+                    </div>
+                  </div>
+                </div>
+ 
+                {/* Modal Body */}
+                <div className="overflow-auto max-h-[calc(85vh-180px)]">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                        <tr>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                          >
+                            User
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                          >
+                            Activity Type
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                          >
+                            Details
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                          >
+                            Date & Time
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {filteredActivities.map((activity, index) => (
+                          <tr
+                            key={index}
+                            className="hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-gradient-to-br from-[#a55233] to-[#556052] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                  {activity.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="ml-3">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    {activity.username}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                              ${
+                                activity.type === "Project Creation"
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                  : activity.type === "Notebook Question"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                  : "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                              }`}
+                              >
+                                {activity.type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p
+                                className="text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate"
+                                title={activity.details}
+                              >
+                                {activity.details}
+                              </p>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                              {formatDateTime(activity.timestamp)}
+                            </td>
+                          </tr>
                         ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Total Activity Overview - Summary Stats */}
-              <div className="bg-gradient-to-br from-violet-50 to-purple-100 dark:from-violet-900/20 dark:to-purple-900/30 rounded-xl p-6 border border-violet-200 dark:border-violet-800/30">
-                <h4 className="text-lg font-semibold text-violet-800 dark:text-violet-300 mb-4 flex items-center">
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
-                  </svg>
-                  System-Wide Summary
-                </h4>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                        {totalDocQAStats.totalDocuments}
-                      </div>
-                      <div className="text-xs text-blue-600 dark:text-blue-400">Doc Q&A Docs</div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                        {totalDocQAStats.totalQuestions}
-                      </div>
-                      <div className="text-xs text-blue-600 dark:text-blue-400">Doc Q&A Questions</div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-                        {totalNotebookStats.totalDocuments}
-                      </div>
-                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Notebook Docs</div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-                        {totalNotebookStats.totalQuestions}
-                      </div>
-                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Notebook Questions</div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                        {totalNotebookStats.totalShort}
-                      </div>
-                      <div className="text-xs text-purple-600 dark:text-purple-400">Short Responses</div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                        {totalNotebookStats.totalComprehensive}
-                      </div>
-                      <div className="text-xs text-purple-600 dark:text-purple-400">Comprehensive</div>
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-r from-blue-100 to-emerald-100 dark:from-blue-900/30 dark:to-emerald-900/30 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-gray-800 dark:text-gray-200">
-                      {users.length} Total Users
-                    </div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Active in System</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* User Activity Comparison */}
-              <div className="bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-900/30 rounded-xl p-6 border border-emerald-200 dark:border-emerald-800/30">
-                <h4 className="text-lg font-semibold text-emerald-800 dark:text-emerald-300 mb-4 flex items-center">
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"/>
-                    <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"/>
-                  </svg>
-                  User Activity Comparison
-                </h4>
-                <div className="h-64 overflow-x-auto custom-scrollbar">
-                  <div style={{ minWidth: `${Math.max(600, userActivityData.length * 80)}px`, height: '100%' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={userActivityData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis 
-                          dataKey="username" 
-                          stroke="#6b7280" 
-                          interval={0}
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                        />
-                        <YAxis stroke="#6b7280" />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="docQAQuestions" fill="#3B82F6" radius={[2, 2, 0, 0]} />
-                        <Bar dataKey="notebookQuestions" fill="#10B981" radius={[2, 2, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* All Users Activity Overview - Line Chart */}
-          {(userStats.length > 0 || notebookUserStats.length > 0) && userActivityData.length > 0 && (
-            <div className="bg-gradient-to-br from-orange-50 to-amber-100 dark:from-orange-900/20 dark:to-amber-900/30 rounded-xl p-6 border border-orange-200 dark:border-orange-800/30 mb-6 custom-scrollbar">
-              <h4 className="text-lg font-semibold text-orange-800 dark:text-orange-300 mb-4 flex items-center">
-                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 10a8 8 0 118 0v3a1 1 0 001 1h4a1 1 0 100-2h-3V4a1 1 0 00-1-1H3a1 1 0 00-1 1v6z"/>
-                  <path d="M6 10a1 1 0 011-1h3a1 1 0 110 2H7a1 1 0 01-1-1zM6 14a1 1 0 011-1h3a1 1 0 110 2H7a1 1 0 01-1-1z"/>
-                </svg>
-                All Users Activity Trends
-              </h4>
-              <div className="h-64 overflow-x-auto scrollbar-thin scrollbar-thumb-orange-400 scrollbar-track-orange-100 dark:scrollbar-thumb-orange-600 dark:scrollbar-track-orange-900/30">
-                <div style={{ minWidth: `${Math.max(800, userActivityData.length * 100)}px`, height: '100%' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={userActivityData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis 
-                        dataKey="username" 
-                        stroke="#6b7280"
-                        interval={0}
-                        angle={-45}
-                        textAnchor="end"
-                        height={80}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Line 
-                        type="monotone" 
-                        dataKey="docQAQuestions" 
-                        stroke="#3B82F6" 
-                        strokeWidth={3}
-                        dot={{ fill: '#3B82F6', strokeWidth: 2, r: 5 }}
-                        name="Doc Q&A Questions"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="notebookQuestions" 
-                        stroke="#10B981" 
-                        strokeWidth={3}
-                        dot={{ fill: '#10B981', strokeWidth: 2, r: 5 }}
-                        name="Notebook Questions"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="shortResponses" 
-                        stroke="#8B5CF6" 
-                        strokeWidth={2}
-                        dot={{ fill: '#8B5CF6', strokeWidth: 2, r: 4 }}
-                        name="Short Responses"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="comprehensiveResponses" 
-                        stroke="#EC4899" 
-                        strokeWidth={2}
-                        dot={{ fill: '#EC4899', strokeWidth: 2, r: 4 }}
-                        name="Comprehensive Responses"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Doc Q&A Questions</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-emerald-500 rounded-full mr-2"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Notebook Questions</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Short Responses</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-pink-500 rounded-full mr-2"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Comprehensive Responses</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          
-
-          {/* Notebook Response Summary */}
-          {(notebookUserStats.length > 0) && (
-            <div className="p-4 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/10 shadow">
-              <h4 className="text-lg font-semibold text-emerald-800 dark:text-emerald-300 mb-2">
-                Notebook Response Summary
-              </h4>
-              <div className="flex gap-6 text-sm text-emerald-700 dark:text-emerald-400">
-                <div>
-                  <span className="font-medium">Total Short Responses:</span> {totalShortResponses}
-                </div>
-                <div>
-                  <span className="font-medium">Total Comprehensive Responses:</span> {totalComprehensiveResponses}
-                </div>
-                <div>
-                  <span className="font-medium">Total Input Tokens:</span> {totalInputTokens}
-                </div>
-                <div>
-                  <span className="font-medium">Total Output Tokens:</span> {totalOutputTokens}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="flex justify-center items-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
-              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
-                Loading users...
-              </span>
-            </div>
-          ) : (
-            <div className="grid gap-6">
-              {users.map((user) => {
-                const userDocQAStats = userStats.find((u) => u.user_id === user.id);
-                const userNotebookStats = notebookUserStats.find((u) => u.user_id === user.id);
-                
-                // Individual user chart data
-                const userChartData = [
-                  { name: 'Doc Q&A Questions', value: userDocQAStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0 },
-                  { name: 'Notebook Questions', value: userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0 },
-                  { name: 'Short Responses', value: userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.short_responses, 0) || 0 },
-                  { name: 'Comprehensive Responses', value: userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.comprehensive_responses, 0) || 0 },
-                ].filter(item => item.value > 0);
-
-                return (
-                  <div
-                    key={user.id}
-                    className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg p-6 border border-[#e3d5c8] dark:border-gray-700/50 hover:shadow-md transition-all"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 mr-4">
-                        <div className="flex items-center space-x-4 mb-5">
-                          <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                            {user.username.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-lg">
-                              {user.username}
-                            </h4>
-                            <p className="text-sm text-[#5a544a] dark:text-gray-400 mt-1">
-                              ID: {user.id} • {user.email}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Individual User Activity Chart */}
-                        {userChartData.length > 0 && (
-                          <div className="mb-6">
-                            <h5 className="text-sm font-semibold text-[#556052] dark:text-gray-300 mb-3">Activity Overview</h5>
-                            <div className="h-32 bg-white/60 dark:bg-black/20 rounded-lg p-3">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={userChartData}>
-                                  <XAxis dataKey="name" hide />
-                                  <YAxis hide />
-                                  <Tooltip content={<CustomTooltip />} />
-                                  <Line type="monotone" dataKey="value" stroke="#a55233" strokeWidth={2} dot={{ fill: '#a55233', strokeWidth: 2, r: 4 }} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                        )}
-<div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-4">
-  <div className="space-y-3">
-    <p className="text-sm font-bold text-[#556052] dark:text-blue-400 uppercase tracking-wide">
-      API Tokens
-    </p>
-    <div className="text-sm space-y-2">
-      <div className="flex justify-between">
-        <span className="font-medium">Nebius:</span>
-        <span className="text-[#5e4636] dark:text-gray-300">
-          {user.api_tokens.nebius_token ? `${user.api_tokens.nebius_token.slice(0, 30)}...` : "Not set"}
-        </span>
-      </div>
-      <div className="flex justify-between">
-        <span className="font-medium">Gemini:</span>
-        <span className="text-[#5e4636] dark:text-gray-300">
-          {user.api_tokens.gemini_token ? `${user.api_tokens.gemini_token.slice(0, 30)}...` : "Not set"}
-        </span>
-      </div>
-      <div className="flex justify-between">
-        <span className="font-medium">Llama:</span>
-        <span className="text-[#5e4636] dark:text-gray-300">
-          {user.api_tokens.llama_token ? `${user.api_tokens.llama_token.slice(0, 30)}...` : "Not set"}
-        </span>
-      </div>
-    </div>
-  </div>
-  
-  <div className="space-y-3">
-    <p className="text-sm font-bold text-[#556052] dark:text-purple-400 uppercase tracking-wide">
-      Module Access
-    </p>
-    <div className="text-sm">
-      <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
-        <span className="text-[#5e4636] dark:text-gray-300 font-medium">
-          {(() => {
-            const totalModules = availableModules.length;
-            const disabledModules = user.disabled_modules || {};
-            const disabledCount = Object.values(disabledModules).filter(
-              (isDisabled) => isDisabled === true
-            ).length;
-            const enabledCount = totalModules - disabledCount;
-
-            if (disabledCount === 0) {
-              return `All ${totalModules} modules enabled`;
-            } else if (enabledCount === 0) {
-              return `All modules disabled`;
-            } else {
-              return `${enabledCount}/${totalModules} modules enabled`;
-            }
-          })()}
-        </span>
-      </div>
-    </div>
-  </div>
-  
-  <div className="space-y-3">
-    <p className="text-sm font-bold text-[#556052] dark:text-yellow-400 uppercase tracking-wide">
-      Token Usage
-    </p>
-    <div className="text-sm">
-      <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
-    {user.token_limit !== null && user.token_limit !== undefined ? (
-  <div className="space-y-2">
-    <div className="flex justify-between">
-      <span className="font-medium">Used:</span>
-      <span className="text-[#5e4636] dark:text-gray-300">
-        {(userNotebookStats?.total_tokens_used ?? 0)} / {user.token_limit}
-      </span>
-    </div>
-    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-      <div
-        className={`h-2 rounded-full transition-all ${
-          ((user.tokens_used || 0) / user.token_limit) > 0.8
-            ? 'bg-red-500'
-            : ((user.tokens_used || 0) / user.token_limit) > 0.6
-            ? 'bg-yellow-500'
-            : 'bg-green-500'
-        }`}
-        style={{
-          width: `${Math.min(
-  ((userNotebookStats?.total_tokens_used ?? 0) / user.token_limit) * 100,
-  100
-)}%`,
-        }}
-      ></div>
-    </div>
-    <div className="text-xs text-center">
-     {(((userNotebookStats?.total_tokens_used ?? 0) / user.token_limit) * 100).toFixed(1)}% used
-    </div>
-  </div>
-) : (
-  <span className="text-[#5e4636] dark:text-gray-300 font-medium">
-    Unlimited tokens
-  </span>
-)}
-      </div>
-    </div>
-  </div>
-
-  {/* NEW: Page Usage Section */}
-  <div className="space-y-3">
-    <p className="text-sm font-bold text-[#556052] dark:text-cyan-400 uppercase tracking-wide">
-      Page Usage
-    </p>
-    <div className="text-sm">
-      <div className="bg-[#e9dcc9] dark:bg-gray-700/50 rounded-lg p-3">
-        {user.api_tokens.page_limit !== null && user.api_tokens.page_limit !== undefined ? (
-  <div className="space-y-2">
-    <div className="flex justify-between">
-      <span className="font-medium">Used:</span>
-      <span className="text-[#5e4636] dark:text-gray-300">
-        {(userNotebookStats?.total_pages_processed ?? 0)} / {user.api_tokens.page_limit}
-      </span>
-    </div>
-    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-      <div
-        className={`h-2 rounded-full transition-all ${
-          ((user.pages_used || 0) / user.api_tokens.page_limit) > 0.8
-            ? 'bg-red-500'
-            : ((user.pages_used || 0) / user.api_tokens.page_limit) > 0.6
-            ? 'bg-yellow-500'
-            : 'bg-green-500'
-        }`}
-        style={{
-          width: `${Math.min(
-  ((userNotebookStats?.total_pages_processed ?? 0) / user.api_tokens.page_limit) * 100,
-  100
-)}%`,
-        }}
-      ></div>
-    </div>
-    <div className="text-xs text-center">
-     {(((userNotebookStats?.total_pages_processed ?? 0) / user.api_tokens.page_limit) * 100).toFixed(1)}% used
-    </div>
-  </div>
-) : (
-  <span className="text-[#5e4636] dark:text-gray-300 font-medium">
-    Unlimited pages
-  </span>
-)}
-      </div>
-    </div>
-  </div>
-</div>
-
-{/* Upload Status as separate row */}
-<div className="mt-4">
-  <div className="space-y-3">
-    <p className="text-sm font-bold text-[#556052] dark:text-green-400 uppercase tracking-wide">
-      Upload Status
-    </p>
-    <div className="text-sm">
-      <div
-        className={`rounded-lg p-3 font-medium ${
-          userUploadPermissions[user.id]
-            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-            : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-        }`}
-      >
-        {userUploadPermissions[user.id]
-          ? "Upload Enabled"
-          : "Upload Disabled"}
-      </div>
-    </div>
-  </div>
-</div>
-                      </div>
-
-                      <div className="flex flex-col space-y-2">
-                        <button
-                          className="p-3 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-lg transition-all"
-                          onClick={() => handleOpenEditModal(user)}
-                          title="Edit API Tokens"
-                        >
-                          <FaKey size={18} />
-                        </button>
-                        <button
-                          className="p-3 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                          onClick={() => handleDeleteUser(user.id, user.username)}
-                          title="Delete User"
-                          disabled={user.username === "admin"}
-                        >
-                          <FaUserMinus size={18} />
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Show question stats if available */}
-                    {(userStats.length > 0 || notebookUserStats.length > 0) && (
-                      <div className="mt-6 space-y-4">
-                      
-                        
-                        
-
-{/* Notebook Stats */}
-{notebookUserStats.length > 0 && (() => {
-  const userNotebookStats = notebookUserStats.find((u) => u.user_id === user.id);
-  const totalNotebookDocs = userNotebookStats?.document_upload_count || 0;
-  const totalNotebookQuestions = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.questions_asked, 0) || 0;
-  const totalNotebookShort = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.short_responses, 0) || 0;
-  const totalNotebookComprehensive = userNotebookStats?.documents?.reduce((sum, doc) => sum + doc.comprehensive_responses, 0) || 0;
-  
-  // Add the new fields
-  const totalTokensUsed = userNotebookStats?.total_tokens_used || 0;
-  const totalInputTokens = userNotebookStats?.total_input_tokens || 0;
-  const totalOutputTokens = userNotebookStats?.total_output_tokens || 0;
-  const totalPagesProcessed = userNotebookStats?.total_pages_processed || 0;
-  
-  const notebookDocuments = userNotebookStats?.documents || [];
-  const [showNotebookDetails, setShowNotebookDetails] = useState(false);
-
-  return (
-    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg p-4 border border-emerald-200 dark:border-emerald-800/30">
-      <div className="flex items-center justify-between mb-3">
-        <h5 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center">
-          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-            <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
-          </svg>
-          Notebook Statistics
-        </h5>
-        <div className="flex items-center space-x-4">
-          <div className="grid grid-cols-4 gap-3">
-            <div className="text-center">
-              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookDocs}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400">Documents</div>
-            </div>
-            <div className="text-center">
-              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookShort}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400">Short</div>
-            </div>
-            <div className="text-center">
-              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalNotebookComprehensive}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400">Comprehensive</div>
-            </div>
-            <div className="text-center">
-              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{totalPagesProcessed}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400">Pages</div>
-            </div>
-          </div>
-          {/* Second row for token stats */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="text-center">
-              <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{totalTokensUsed.toLocaleString()}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400">Total Tokens</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{totalInputTokens.toLocaleString()}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400">Input Tokens</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{totalOutputTokens.toLocaleString()}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400">Output Tokens</div>
-            </div>
-          </div>
-          {notebookDocuments.length > 0 && (
-            <button
-              onClick={() => setShowNotebookDetails(!showNotebookDetails)}
-              className="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-800/30 dark:hover:bg-emerald-700/30 text-emerald-700 dark:text-emerald-300 rounded-lg transition-all flex items-center"
-            >
-              {showNotebookDetails ? 'Hide Details' : 'View Details'}
-              <svg className={`w-3 h-3 ml-1 transition-transform ${showNotebookDetails ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
-              </svg>
-            </button>
-          )}
-        </div>
-      </div>
-     
-      {notebookDocuments.length > 0 && showNotebookDetails && (
-        <div className="space-y-2 border-t border-emerald-200 dark:border-emerald-700/30 pt-3">
-          <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-2">Document Activity:</div>
-          <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
-            {notebookDocuments.map((doc) => (
-              <div key={doc.document_id} className="flex items-center justify-between bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
-                <span className="text-xs text-emerald-800 dark:text-emerald-200 truncate flex-1 mr-2" title={doc.filename}>
-                  {doc.filename.length > 25 ? `${doc.filename.substring(0, 25)}...` : doc.filename}
-                </span>
-                <span className="text-xs font-mono bg-emerald-100 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">
-                  {doc.questions_asked}Q
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-})()}
+                      </tbody>
+                    </table>
+ 
+                    {filteredActivities.length === 0 && (
+                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <div className="text-4xl mb-4">📋</div>
+                        <p className="text-lg font-medium mb-2">
+                          No activities found
+                        </p>
+                        <p className="text-sm">
+                          {activeFilter === "all"
+                            ? "There are no activities to display"
+                            : `No ${activeFilter} activities found`}
+                        </p>
                       </div>
                     )}
                   </div>
-                );
-              })}
+                </div>
+ 
+                {/* Results Summary */}
+                {filteredActivities.length > 0 && (
+                  <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-3 bg-gray-50 dark:bg-gray-900">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Showing {filteredActivities.length} of{" "}
+                      {allActivities.length} activities
+                      {activeFilter !== "all" &&
+                        ` (filtered by ${activeFilter})`}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
-};
+    );
+  };
+
   const ModulePermissionsSection = () => (
     <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
       <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
@@ -2007,297 +2903,335 @@ const UserInfoSection = () => {
     </div>
   );
 
-const CategoryManagementSection = () => {
-  const [expandedUsers, setExpandedUsers] = useState(new Set());
-  const [searchTerm, setSearchTerm] = useState('');
+  const CategoryManagementSection = () => {
+    const [expandedUsers, setExpandedUsers] = useState(new Set());
+    const [searchTerm, setSearchTerm] = useState("");
 
-  // Group categories by username and separate global categories
-  const { globalCategories, userCategories } = useMemo(() => {
-    const global = categories.filter(cat => cat.is_global);
-    const user = categories.filter(cat => !cat.is_global);
-    
-    const grouped = user.reduce((acc, category) => {
-      const username = category.username;
-      if (!acc[username]) {
-        acc[username] = [];
+    // Group categories by username and separate global categories
+    const { globalCategories, userCategories } = useMemo(() => {
+      const global = categories.filter((cat) => cat.is_global);
+      const user = categories.filter((cat) => !cat.is_global);
+
+      const grouped = user.reduce((acc, category) => {
+        const username = category.username;
+        if (!acc[username]) {
+          acc[username] = [];
+        }
+        acc[username].push(category);
+        return acc;
+      }, {});
+
+      return { globalCategories: global, userCategories: grouped };
+    }, [categories]);
+
+    // Filter users based on search term
+    const filteredUsers = useMemo(() => {
+      if (!searchTerm) return Object.entries(userCategories);
+
+      return Object.entries(userCategories).filter(
+        ([username, cats]) =>
+          username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          cats.some((cat) =>
+            cat.name.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+      );
+    }, [userCategories, searchTerm]);
+
+    const toggleUserExpansion = (username) => {
+      const newExpanded = new Set(expandedUsers);
+      if (newExpanded.has(username)) {
+        newExpanded.delete(username);
+      } else {
+        newExpanded.add(username);
       }
-      acc[username].push(category);
-      return acc;
-    }, {});
+      setExpandedUsers(newExpanded);
+    };
 
-    return { globalCategories: global, userCategories: grouped };
-  }, [categories]);
+    const expandAll = () => {
+      setExpandedUsers(new Set(Object.keys(userCategories)));
+    };
 
-  // Filter users based on search term
-  const filteredUsers = useMemo(() => {
-    if (!searchTerm) return Object.entries(userCategories);
-    
-    return Object.entries(userCategories).filter(([username, cats]) => 
-      username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cats.some(cat => cat.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-  }, [userCategories, searchTerm]);
+    const collapseAll = () => {
+      setExpandedUsers(new Set());
+    };
 
-  const toggleUserExpansion = (username) => {
-    const newExpanded = new Set(expandedUsers);
-    if (newExpanded.has(username)) {
-      newExpanded.delete(username);
-    } else {
-      newExpanded.add(username);
-    }
-    setExpandedUsers(newExpanded);
-  };
-
-  const expandAll = () => {
-    setExpandedUsers(new Set(Object.keys(userCategories)));
-  };
-
-  const collapseAll = () => {
-    setExpandedUsers(new Set());
-  };
-
-  return (
-    <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
-      <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
-              <FaTags
-                className="text-[#a55233] dark:text-emerald-400"
-                size={20}
-              />
-            </div>
-            <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
-              Category Management
-            </h3>
-          </div>
-          <button
-            className="bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
-            onClick={handleOpenCategoryModal}
-          >
-            <FaPlus className="mr-2" size={14} /> Add Category
-          </button>
-        </div>
-      </div>
-
-      <div className="p-6">
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <p className="text-[#5e4636] dark:text-gray-300">
-              Organize and manage content categories
-            </p>
-            
-            {/* Search and Controls */}
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <div className="relative">
-                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#5e4636] dark:text-gray-400" size={14} />
-                <input
-                  type="text"
-                  placeholder="Search users or categories..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-[#e3d5c8] dark:border-gray-700 rounded-lg bg-white/60 dark:bg-gray-800/60 text-[#0a3b25] dark:text-gray-200 placeholder-[#5e4636] dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500"
+    return (
+      <div className="bg-white/80 dark:bg-black/50 dark:backdrop-blur-sm rounded-xl shadow-lg border border-[#e8ddcc] dark:border-emerald-900/50 overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-[#e9dcc9] to-[#f5e6d8] dark:from-black/70 dark:to-emerald-900/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-[#a55233]/20 dark:bg-emerald-600/20">
+                <FaTags
+                  className="text-[#a55233] dark:text-emerald-400"
+                  size={20}
                 />
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={expandAll}
-                  className="px-3 py-2 text-xs bg-[#a55233]/10 hover:bg-[#a55233]/20 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 text-[#a55233] dark:text-emerald-400 rounded-lg transition-all"
-                >
-                  Expand All
-                </button>
-                <button
-                  onClick={collapseAll}
-                  className="px-3 py-2 text-xs bg-gray-200/60 hover:bg-gray-300/60 dark:bg-gray-700/60 dark:hover:bg-gray-600/60 text-[#5e4636] dark:text-gray-300 rounded-lg transition-all"
-                >
-                  Collapse All
-                </button>
+              <h3 className="text-lg font-semibold text-[#0a3b25] dark:text-emerald-400">
+                Category Management
+              </h3>
+            </div>
+            <button
+              className="bg-[#a55233] hover:bg-[#8b4513] dark:bg-gradient-to-r dark:from-blue-600/90 dark:to-emerald-600/80 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition-all"
+              onClick={handleOpenCategoryModal}
+            >
+              <FaPlus className="mr-2" size={14} /> Add Category
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+              <p className="text-[#5e4636] dark:text-gray-300">
+                Organize and manage content categories
+              </p>
+
+              {/* Search and Controls */}
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <div className="relative">
+                  <FaSearch
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#5e4636] dark:text-gray-400"
+                    size={14}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search users or categories..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-[#e3d5c8] dark:border-gray-700 rounded-lg bg-white/60 dark:bg-gray-800/60 text-[#0a3b25] dark:text-gray-200 placeholder-[#5e4636] dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={expandAll}
+                    className="px-3 py-2 text-xs bg-[#a55233]/10 hover:bg-[#a55233]/20 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 text-[#a55233] dark:text-emerald-400 rounded-lg transition-all"
+                  >
+                    Expand All
+                  </button>
+                  <button
+                    onClick={collapseAll}
+                    className="px-3 py-2 text-xs bg-gray-200/60 hover:bg-gray-300/60 dark:bg-gray-700/60 dark:hover:bg-gray-600/60 text-[#5e4636] dark:text-gray-300 rounded-lg transition-all"
+                  >
+                    Collapse All
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {loading ? (
-            <div className="flex justify-center items-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
-              <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
-                Loading categories...
-              </span>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Global Categories Section */}
-              {globalCategories.length > 0 && (
-                <div className="bg-gradient-to-r from-[#f9f4ef] to-[#f5e6d8] dark:from-gray-800/70 dark:to-gray-700/50 rounded-xl p-5 border-2 border-[#a55233]/30 dark:border-emerald-500/30 shadow-md">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                      <FaGlobe className="text-white" size={18} />
+            {loading ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#a55233] dark:border-emerald-400"></div>
+                <span className="ml-3 text-[#5e4636] dark:text-emerald-300">
+                  Loading categories...
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Global Categories Section */}
+                {globalCategories.length > 0 && (
+                  <div className="bg-gradient-to-r from-[#f9f4ef] to-[#f5e6d8] dark:from-gray-800/70 dark:to-gray-700/50 rounded-xl p-5 border-2 border-[#a55233]/30 dark:border-emerald-500/30 shadow-md">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                        <FaGlobe className="text-white" size={18} />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-[#0a3b25] dark:text-emerald-400 text-lg flex items-center">
+                          Global Categories
+                          <span className="ml-2 px-2 py-1 bg-[#a55233]/20 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
+                            {globalCategories.length}
+                          </span>
+                        </h4>
+                        <p className="text-sm text-[#5a544a] dark:text-gray-400">
+                          Available to all users
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-[#0a3b25] dark:text-emerald-400 text-lg flex items-center">
-                        Global Categories
-                        <span className="ml-2 px-2 py-1 bg-[#a55233]/20 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
-                          {globalCategories.length}
-                        </span>
-                      </h4>
-                      <p className="text-sm text-[#5a544a] dark:text-gray-400">
-                        Available to all users
-                      </p>
+
+                    <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {globalCategories.map((category) => (
+                        <div
+                          key={category.id}
+                          className="bg-white/80 dark:bg-gray-900/60 rounded-lg p-4 border border-[#e8ddcc] dark:border-gray-600/40 hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <div className="w-8 h-8 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-lg flex items-center justify-center">
+                                  <FaTags className="text-white" size={12} />
+                                </div>
+                                <div>
+                                  <h5 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-sm">
+                                    {category.name}
+                                  </h5>
+                                  <p className="text-xs text-[#5a544a] dark:text-gray-500">
+                                    {new Date(
+                                      category.created_at
+                                    ).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex space-x-1">
+                              <button
+                                className="p-1.5 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-md transition-all"
+                                onClick={() =>
+                                  handleOpenEditCategoryModal(category)
+                                }
+                                title="Edit Category"
+                              >
+                                <FaEdit size={12} />
+                              </button>
+                              <button
+                                className="p-1.5 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
+                                onClick={() =>
+                                  handleDeleteCategory(
+                                    category.id,
+                                    category.name
+                                  )
+                                }
+                                title="Delete Category"
+                              >
+                                <FaTrash size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
+                )}
 
-                  <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {globalCategories.map((category) => (
-                      <div
-                        key={category.id}
-                        className="bg-white/80 dark:bg-gray-900/60 rounded-lg p-4 border border-[#e8ddcc] dark:border-gray-600/40 hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <div className="w-8 h-8 bg-gradient-to-br from-[#a55233] to-[#8b4513] dark:from-emerald-500 dark:to-blue-500 rounded-lg flex items-center justify-center">
-                                <FaTags className="text-white" size={12} />
+                {/* User Categories Section */}
+                <div className="space-y-3">
+                  {filteredUsers.length === 0 && searchTerm ? (
+                    <div className="text-center py-8 text-[#5e4636] dark:text-gray-400">
+                      <FaSearch className="mx-auto mb-3 text-3xl opacity-50" />
+                      <p>No categories found matching "{searchTerm}"</p>
+                    </div>
+                  ) : (
+                    filteredUsers.map(([username, userCats]) => {
+                      const isExpanded = expandedUsers.has(username);
+
+                      return (
+                        <div
+                          key={username}
+                          className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg border border-[#e3d5c8] dark:border-gray-700/50 overflow-hidden transition-all duration-200 hover:shadow-md"
+                        >
+                          {/* Collapsible User Header */}
+                          <button
+                            onClick={() => toggleUserExpansion(username)}
+                            className="w-full flex items-center justify-between p-4 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50 transition-all"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-purple-500 dark:to-pink-500 rounded-full flex items-center justify-center">
+                                <FaUser className="text-white" size={16} />
                               </div>
-                              <div>
-                                <h5 className="font-semibold text-[#0a3b25] dark:text-emerald-400 text-sm">
-                                  {category.name}
-                                </h5>
-                                <p className="text-xs text-[#5a544a] dark:text-gray-500">
-                                  {new Date(category.created_at).toLocaleDateString()}
+                              <div className="text-left">
+                                <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400">
+                                  {username}
+                                </h4>
+                                <p className="text-sm text-[#5a544a] dark:text-gray-400">
+                                  {userCats.length}{" "}
+                                  {userCats.length === 1
+                                    ? "category"
+                                    : "categories"}
                                 </p>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="flex space-x-1">
-                            <button
-                              className="p-1.5 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded-md transition-all"
-                              onClick={() => handleOpenEditCategoryModal(category)}
-                              title="Edit Category"
-                            >
-                              <FaEdit size={12} />
-                            </button>
-                            <button
-                              className="p-1.5 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
-                              onClick={() => handleDeleteCategory(category.id, category.name)}
-                              title="Delete Category"
-                            >
-                              <FaTrash size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* User Categories Section */}
-              <div className="space-y-3">
-                {filteredUsers.length === 0 && searchTerm ? (
-                  <div className="text-center py-8 text-[#5e4636] dark:text-gray-400">
-                    <FaSearch className="mx-auto mb-3 text-3xl opacity-50" />
-                    <p>No categories found matching "{searchTerm}"</p>
-                  </div>
-                ) : (
-                  filteredUsers.map(([username, userCats]) => {
-                    const isExpanded = expandedUsers.has(username);
-                    
-                    return (
-                      <div
-                        key={username}
-                        className="bg-[#f9f4ef] dark:bg-gray-800/50 rounded-lg border border-[#e3d5c8] dark:border-gray-700/50 overflow-hidden transition-all duration-200 hover:shadow-md"
-                      >
-                        {/* Collapsible User Header */}
-                        <button
-                          onClick={() => toggleUserExpansion(username)}
-                          className="w-full flex items-center justify-between p-4 hover:bg-[#f5e6d8] dark:hover:bg-gray-700/50 transition-all"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-purple-500 dark:to-pink-500 rounded-full flex items-center justify-center">
-                              <FaUser className="text-white" size={16} />
+                            <div className="flex items-center space-x-2">
+                              <span className="px-2 py-1 bg-[#a55233]/10 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
+                                {userCats.length}
+                              </span>
+                              {isExpanded ? (
+                                <FaChevronUp
+                                  className="text-[#5e4636] dark:text-gray-400"
+                                  size={14}
+                                />
+                              ) : (
+                                <FaChevronDown
+                                  className="text-[#5e4636] dark:text-gray-400"
+                                  size={14}
+                                />
+                              )}
                             </div>
-                            <div className="text-left">
-                              <h4 className="font-semibold text-[#0a3b25] dark:text-emerald-400">
-                                {username}
-                              </h4>
-                              <p className="text-sm text-[#5a544a] dark:text-gray-400">
-                                {userCats.length} {userCats.length === 1 ? 'category' : 'categories'}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            <span className="px-2 py-1 bg-[#a55233]/10 dark:bg-emerald-500/20 text-[#a55233] dark:text-emerald-400 text-xs rounded-full">
-                              {userCats.length}
-                            </span>
-                            {isExpanded ? (
-                              <FaChevronUp className="text-[#5e4636] dark:text-gray-400" size={14} />
-                            ) : (
-                              <FaChevronDown className="text-[#5e4636] dark:text-gray-400" size={14} />
-                            )}
-                          </div>
-                        </button>
+                          </button>
 
-                        {/* Expandable Categories */}
-                        {isExpanded && (
-                          <div className="px-4 pb-4 border-t border-[#e3d5c8] dark:border-gray-700/50">
-                            <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-4">
-                              {userCats.map((category) => (
-                                <div
-                                  key={category.id}
-                                  className="bg-white/60 dark:bg-gray-900/40 rounded-lg p-3 border border-[#e8ddcc] dark:border-gray-600/30 hover:shadow-md hover:scale-[1.02] transition-all duration-200"
-                                >
-                                  <div className="flex justify-between items-start">
-                                    <div className="flex-1">
-                                      <div className="flex items-center space-x-2 mb-2">
-                                        <div className="w-7 h-7 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-md flex items-center justify-center">
-                                          <FaTags className="text-white" size={10} />
-                                        </div>
-                                        <div>
-                                          <h5 className="font-medium text-[#0a3b25] dark:text-emerald-400 text-sm">
-                                            {category.name}
-                                          </h5>
-                                          <p className="text-xs text-[#5a544a] dark:text-gray-500">
-                                            {new Date(category.created_at).toLocaleDateString()}
-                                          </p>
+                          {/* Expandable Categories */}
+                          {isExpanded && (
+                            <div className="px-4 pb-4 border-t border-[#e3d5c8] dark:border-gray-700/50">
+                              <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-4">
+                                {userCats.map((category) => (
+                                  <div
+                                    key={category.id}
+                                    className="bg-white/60 dark:bg-gray-900/40 rounded-lg p-3 border border-[#e8ddcc] dark:border-gray-600/30 hover:shadow-md hover:scale-[1.02] transition-all duration-200"
+                                  >
+                                    <div className="flex justify-between items-start">
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2 mb-2">
+                                          <div className="w-7 h-7 bg-gradient-to-br from-[#a55233] to-[#556052] dark:from-blue-500 dark:to-emerald-500 rounded-md flex items-center justify-center">
+                                            <FaTags
+                                              className="text-white"
+                                              size={10}
+                                            />
+                                          </div>
+                                          <div>
+                                            <h5 className="font-medium text-[#0a3b25] dark:text-emerald-400 text-sm">
+                                              {category.name}
+                                            </h5>
+                                            <p className="text-xs text-[#5a544a] dark:text-gray-500">
+                                              {new Date(
+                                                category.created_at
+                                              ).toLocaleDateString()}
+                                            </p>
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
 
-                                    <div className="flex space-x-1">
-                                      <button
-                                        className="p-1 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded transition-all"
-                                        onClick={() => handleOpenEditCategoryModal(category)}
-                                        title="Edit Category"
-                                      >
-                                        <FaEdit size={11} />
-                                      </button>
-                                      <button
-                                        className="p-1 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded transition-all"
-                                        onClick={() => handleDeleteCategory(category.id, category.name)}
-                                        title="Delete Category"
-                                      >
-                                        <FaTrash size={11} />
-                                      </button>
+                                      <div className="flex space-x-1">
+                                        <button
+                                          className="p-1 text-[#5e4636] hover:text-[#a55233] dark:text-blue-400 dark:hover:text-emerald-300 hover:bg-[#a55233]/10 dark:hover:bg-emerald-500/20 rounded transition-all"
+                                          onClick={() =>
+                                            handleOpenEditCategoryModal(
+                                              category
+                                            )
+                                          }
+                                          title="Edit Category"
+                                        >
+                                          <FaEdit size={11} />
+                                        </button>
+                                        <button
+                                          className="p-1 text-[#ff4a4a] hover:text-[#e60000] dark:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded transition-all"
+                                          onClick={() =>
+                                            handleDeleteCategory(
+                                              category.id,
+                                              category.name
+                                            )
+                                          }
+                                          title="Delete Category"
+                                        >
+                                          <FaTrash size={11} />
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
   return (
     <div className="bg-[#faf4ee] dark:bg-black min-h-screen text-[#5e4636] dark:text-white">
       <Header />
@@ -2410,8 +3344,10 @@ const CategoryManagementSection = () => {
           >
             {activeTab === "users" && (
               <div className="space-y-8">
+                <FirstActivitySection />
                 <IdeaGenStatsSection />
                 <UserInfoSection />
+                
               </div>
             )}
             {activeTab === "modules" && (
@@ -2611,34 +3547,35 @@ const CategoryManagementSection = () => {
                   />
                 </div>
                 <div className="mb-4">
-  <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
-    Token Allocation Limit
-  </label>
-  <input
-    type="number"
-    name="token_limit"
-    value={formData.token_limit}
-    onChange={handleInputChange}
-    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-    placeholder="Enter token limit (leave empty for unlimited)"
-  />
-  <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1">
-    Set maximum tokens this user can consume. Leave empty for unlimited.
-  </p>
-</div>
-<div className="mb-4">
-  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-    Page Limit
-  </label>
-  <input
-    type="number"
-    name="page_limit"
-    value={formData.page_limit}
-    onChange={handleInputChange}
-    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-    placeholder="Leave empty for unlimited pages"
-  />
-</div>
+                  <label className="block text-sm font-medium text-[#5e4636] dark:text-emerald-300 mb-1">
+                    Token Allocation Limit
+                  </label>
+                  <input
+                    type="number"
+                    name="token_limit"
+                    value={formData.token_limit}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Enter token limit (leave empty for unlimited)"
+                  />
+                  <p className="text-xs text-[#8c715f] dark:text-gray-400 mt-1">
+                    Set maximum tokens this user can consume. Leave empty for
+                    unlimited.
+                  </p>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Page Limit
+                  </label>
+                  <input
+                    type="number"
+                    name="page_limit"
+                    value={formData.page_limit}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="Leave empty for unlimited pages"
+                  />
+                </div>
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -2753,165 +3690,184 @@ const CategoryManagementSection = () => {
             </div>
           </div>
         )}
-{/* Global Token Limit Modal */}
-{isGlobalTokenLimitModalOpen && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Set Global Token Limit
-        </h3>
-        <button
-          onClick={() => setIsGlobalTokenLimitModalOpen(false)}
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          <FaTimes size={20} />
-        </button>
-      </div>
-      
-      <form onSubmit={handleSetGlobalTokenLimit}>
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Token Limit for All Users
-          </label>
-          <input
-            type="number"
-            value={globalTokenLimitValue}
-            onChange={(e) => setGlobalTokenLimitValue(e.target.value)}
-            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-            placeholder="Enter token limit (e.g., 20)"
-            min="1"
-            required
-          />
-          <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-            <div className="flex items-start">
-              <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
-              </svg>
-              <div>
-                <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                  Warning
-                </h4>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                  This will override the current token limit for <strong>ALL {users.length} users</strong>. 
-                  Individual custom limits will be replaced with this global value.
-                </p>
+        {/* Global Token Limit Modal */}
+        {isGlobalTokenLimitModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Set Global Token Limit
+                </h3>
+                <button
+                  onClick={() => setIsGlobalTokenLimitModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <FaTimes size={20} />
+                </button>
               </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={() => setIsGlobalTokenLimitModalOpen(false)}
-            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors"
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <FaSpinner className="animate-spin mr-2" size={14} />
-                Updating...
-              </>
-            ) : (
-              <>
-                <FaGlobe className="mr-2" size={14} />
-                Set for All Users
-              </>
-            )}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
 
-{/* Global Page Limit Modal */}
-{isGlobalPageLimitModalOpen && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Set Global Page Limit
-        </h3>
-        <button
-          onClick={() => setIsGlobalPageLimitModalOpen(false)}
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          <FaTimes size={20} />
-        </button>
-      </div>
-      
-      <form onSubmit={handleSetGlobalPageLimit}>
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Page Limit for All Users
-          </label>
-          <input
-            type="number"
-            value={globalPageLimitValue}
-            onChange={(e) => setGlobalPageLimitValue(e.target.value)}
-            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-white"
-            placeholder="Enter page limit (e.g., 100)"
-            min="1"
-            required
-          />
-          <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-            <div className="flex items-start">
-              <svg className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
-              </svg>
-              <div>
-                <h4 className="text-sm font-medium text-purple-800 dark:text-purple-200">
-                  Warning
-                </h4>
-                <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
-                  This will override the current page limit for <strong>ALL {users.length} users</strong>. 
-                  Individual custom page limits will be replaced with this global value.
-                </p>
-              </div>
+              <form onSubmit={handleSetGlobalTokenLimit}>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Token Limit for All Users
+                  </label>
+                  <input
+                    type="number"
+                    value={globalTokenLimitValue}
+                    onChange={(e) => setGlobalTokenLimitValue(e.target.value)}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Enter token limit (e.g., 20)"
+                    min="1"
+                    required
+                  />
+                  <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <div className="flex items-start">
+                      <svg
+                        className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 mr-2"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <div>
+                        <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                          Warning
+                        </h4>
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                          This will override the current token limit for{" "}
+                          <strong>ALL {users.length} users</strong>. Individual
+                          custom limits will be replaced with this global value.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsGlobalTokenLimitModalOpen(false)}
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <FaSpinner className="animate-spin mr-2" size={14} />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <FaGlobe className="mr-2" size={14} />
+                        Set for All Users
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        </div>
-        
-        <div className="flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={() => setIsGlobalPageLimitModalOpen(false)}
-            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors"
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <FaSpinner className="animate-spin mr-2" size={14} />
-                Updating...
-              </>
-            ) : (
-              <>
-                <FaFileUpload className="mr-2" size={14} />
-                Set for All Users
-              </>
-            )}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
+        )}
+
+        {/* Global Page Limit Modal */}
+        {isGlobalPageLimitModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Set Global Page Limit
+                </h3>
+                <button
+                  onClick={() => setIsGlobalPageLimitModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <FaTimes size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSetGlobalPageLimit}>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Page Limit for All Users
+                  </label>
+                  <input
+                    type="number"
+                    value={globalPageLimitValue}
+                    onChange={(e) => setGlobalPageLimitValue(e.target.value)}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Enter page limit (e.g., 100)"
+                    min="1"
+                    required
+                  />
+                  <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                    <div className="flex items-start">
+                      <svg
+                        className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 mr-2"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <div>
+                        <h4 className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                          Warning
+                        </h4>
+                        <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
+                          This will override the current page limit for{" "}
+                          <strong>ALL {users.length} users</strong>. Individual
+                          custom page limits will be replaced with this global
+                          value.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsGlobalPageLimitModalOpen(false)}
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <FaSpinner className="animate-spin mr-2" size={14} />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <FaFileUpload className="mr-2" size={14} />
+                        Set for All Users
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
         {/* Right Panel Permissions Modal */}
         {isRightPanelPermissionsModalOpen && currentUser && (
           <div className="fixed inset-0 bg-black/30 dark:bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -2989,7 +3945,6 @@ const CategoryManagementSection = () => {
                     <div className="ml-3">
                       <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
                         Important Note
-                     
                       </h3>
                       <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
                         <p>
@@ -3189,7 +4144,6 @@ const CategoryManagementSection = () => {
                     value={categoryFormData.user_id}
                     onChange={handleCategoryInputChange}
                     className="w-full px-3 py-2 bg-white/80 dark:bg-black/50 border border-[#d6cbbf] dark:border-emerald-900/50 rounded-md text-[#5e4636] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#a55233] dark:focus:ring-emerald-500 focus:border-transparent"
-                    
                   >
                     <option value="">Select a user</option>
                     {users.map((user) => (

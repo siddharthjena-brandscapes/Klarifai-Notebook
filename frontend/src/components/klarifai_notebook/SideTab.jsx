@@ -32,6 +32,7 @@ import {
   PanelLeft,
   HelpCircle,
   Brain,
+  Archive,
 } from "lucide-react";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
 import { toast } from "react-toastify";
@@ -107,13 +108,7 @@ const SideTab = ({
 
   // Add this with your other state variables
   const [sidebarView, setSidebarView] = useState("chats"); // Options: 'chats' or 'documents'
-
-  // In Sidebar.jsx, update the useEffect for chat input focus
-  // useEffect(() => {
-  //   if (chatInputFocused) {
-  //     setSidebarView("chats");
-  //   }
-  // }, [chatInputFocused]);
+  const [showArchivedChats, setShowArchivedChats] = useState(false);
 
   // Add this with your other useEffect hooks
   useEffect(() => {
@@ -541,31 +536,51 @@ const SideTab = ({
     }
   }, [selectedDocuments, filteredDocuments, isDocumentsVisible]);
 
-  const generateChatTitle = (chat) => {
-    // If there's a custom title already set, use it
-    if (chat.title && !chat.title.startsWith("Chat 20")) {
-      return chat.title;
-    }
+const generateAITitle = async (message) => {
+  try {
+    const response = await chatServiceNB.generateTitle({
+      message: message,
+      max_length: 40
+    });
+    
+    // Clean the title but don't truncate
+    let title = response.data.title || '';
+    
+    // Remove quotes and 'title:' prefix
+    title = title.replace(/["']/g, '')
+                 .replace(/^(title:|about:|topic:)\s*/i, '')
+                 .trim();
+    
+    // Capitalize first letter
+    title = title.charAt(0).toUpperCase() + title.slice(1);
 
+    return title || message;
+  } catch (error) {
+    console.error("Error generating AI title:", error);
+    return message;
+  }
+};
+  
+const generateChatTitle = async (chat) => {
+  // If there's a custom title already set, use it 
+  if (chat.title && !chat.title.startsWith("Chat 20")) {
+    return chat.title;
+  }
+
+  try {
     // Find the first user message
     const firstUserMessage = chat.messages?.find(
       (msg) => msg.role === "user"
     )?.content;
 
     if (firstUserMessage) {
-      // Truncate and clean the message to create a title
-      let title = firstUserMessage
-        .trim()
-        .split(/[.!?]/)[0] // Take first sentence
-        .slice(0, 22); // Limit length
-
-      // Add ellipsis if truncated
-      if (firstUserMessage.length > 25) {
-        title += "...";
-      }
-
-      return title;
+      // Get AI generated title
+      const title = await generateAITitle(firstUserMessage);
+      return title || "New Conversation";
     }
+  } catch (error) {
+    console.error("Error generating chat title:", error);
+  }
 
     return "New Conversation"; // Default fallback
   };
@@ -574,42 +589,64 @@ const SideTab = ({
   const CHAT_REFRESH_INTERVAL = 5000;
 
   // Enhanced chat history naming and fetching
-  const fetchChatHistory = async (isInitialLoad = false) => {
-    if (isInitialLoad) {
-      setLoading(true);
+// Modify fetchChatHistory to track existing chats
+const fetchChatHistory = async (isInitialLoad = false, archived = showArchivedChats) => {
+  if (isInitialLoad) {
+    setLoading(true);
+  }
+  
+  try {
+    if (!mainProjectId) {
+      console.warn("No mainProjectId provided, skipping chat history fetch");
+      setChatHistory([]);
+      return;
     }
-    try {
-      if (!mainProjectId) {
-        console.warn("No mainProjectId provided, skipping chat history fetch");
-        setChatHistory([]);
-        return;
-      }
 
-      setLoading(true);
-      console.log("Fetching chat history for project:", mainProjectId);
+    const response = await chatServiceNB.getAllConversations(mainProjectId, archived);
 
-      const response = await chatServiceNB.getAllConversations(mainProjectId);
-
-      if (response && response.data) {
-        // Process chat history to ensure proper grouping of messages
-        const processedChatHistory = response.data.map((chat) => {
-          // Use the first user message as the title if no title is set
-
-          const messageCount = chat.messages?.length || 0;
-
+    if (response && response.data) {
+      // Process only new chats or chats without titles
+      const processedChats = await Promise.all(
+        response.data.map(async (chat) => {
+          // Only generate title if:
+          // 1. Chat is new (not in current chatHistory)
+          // 2. Chat has no title or has default timestamp title
+          // 3. Chat has messages
+          const existingChat = chatHistory.find(c => c.conversation_id === chat.conversation_id);
+          const needsTitle = !chat.title || chat.title.startsWith("Chat 20");
+          
+          if (!existingChat && needsTitle && chat.messages?.length > 0) {
+            const title = await generateChatTitle(chat);
+            // Update the chat title in backend to persist it
+            try {
+              await chatServiceNB.updateConversationTitle(chat.conversation_id, {
+                title: title,
+                main_project_id: mainProjectId
+              });
+            } catch (error) {
+              console.error("Failed to persist chat title:", error);
+            }
+            return {
+              ...chat,
+              title: title,
+              message_count: chat.messages?.length || 0,
+            };
+          }
+          
+          // Reuse existing chat data
           return {
             ...chat,
-            title: generateChatTitle(chat),
-            message_count: messageCount,
+            title: existingChat?.title || chat.title || "New Conversation",
+            message_count: chat.messages?.length || 0,
             messages: chat.messages || [],
             conversation_id: chat.conversation_id,
           };
-        });
+        })
+      );
 
-        // Sort chats by most recent first
-        const sortedHistory = processedChatHistory.sort(
-          (a, b) => new Date(b.created_at) - new Date(a.created_at)
-        );
+      const sortedHistory = processedChats.sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+      );
 
         setChatHistory(sortedHistory);
       }
@@ -627,12 +664,12 @@ const SideTab = ({
     let isSubscribed = true;
 
     // Initial fetch
-    fetchChatHistory(true);
+    fetchChatHistory(true, showArchivedChats);
 
     // Set up polling interval
     const intervalId = setInterval(() => {
       if (isSubscribed && mainProjectId) {
-        fetchChatHistory(false);
+        fetchChatHistory(false, showArchivedChats);
       }
     }, CHAT_REFRESH_INTERVAL);
 
@@ -641,100 +678,20 @@ const SideTab = ({
       isSubscribed = false;
       clearInterval(intervalId);
     };
-  }, [mainProjectId]);
+  }, [mainProjectId, showArchivedChats]);
 
-  const handleMindmapDocumentSelection = (documentIds) => {
-    console.log("Documents auto-selected from mindmap:", documentIds);
-
-    // Update selected documents
-    setSelectedDocuments(documentIds);
-
-    // Switch to documents view to show the selection
-    setSidebarView("documents");
-    setIsDocumentsVisible(true);
-
-    // Show user feedback
-    if (documentIds.length > 0) {
-      toast.success(
-        `Auto-selected ${documentIds.length} document(s) from mindmap`,
-        {
-          autoClose: 3000,
-          icon: () => <Brain className="text-purple-500" />,
-        }
-      );
-    }
-  };
-
-  // Enhanced chat selection handler
-  //   const handleChatSelection = async (selectedChat) => {
-  //   try {
-  //     setActiveConversationId(selectedChat.conversation_id);
-  //     console.log("Fetching conversation details for:", selectedChat.conversation_id);
-
-  //     const response = await chatServiceNB.getConversationDetails(
-  //       selectedChat.conversation_id,
-  //       mainProjectId
-  //     );
-
-  //     if (response && response.data) {
-  //       console.log("Fetched conversation details:", response.data);
-
-  //       // Process messages to include webSources
-  //       const processedMessages = (response.data.messages || []).map(msg => {
-  //         if (msg.sources_info || msg.extracted_urls || msg.webSources) {
-  //           return {
-  //             ...msg,
-  //             webSources: msg.webSources || processWebSources(msg.sources_info, msg.extracted_urls)
-  //           };
-  //         }
-  //         return msg;
-  //       });
-
-  //       // Prepare the full chat data with processed messages
-  //       const fullChatData = {
-  //         ...response.data,
-  //         conversation_id: selectedChat.conversation_id,
-  //         messages: processedMessages, // ← Use processed messages instead
-  //         selected_documents: response.data.selected_documents || [],
-  //         title: response.data.title,
-  //         follow_up_questions: response.data.follow_up_questions || [],
-  //       };
-
-  //       const chatDocIds = fullChatData.selected_documents.map((doc) =>
-  //         doc.toString ? doc.toString() : String(doc)
-  //       );
-
-  //       if (chatDocIds.length > 0) {
-  //         scrollToSelectedDocument(chatDocIds[0]);
-  //       }
-
-  //       if (onSelectChat) {
-  //         onSelectChat(fullChatData);
-  //       }
-  //     }
-  //   } catch (error) {
-  //     console.error("Error fetching conversation details:", error);
-  //     toast.error("Failed to load conversation history");
-  //   }
-  //   setSidebarView("chats");
-  // };
   // Enhanced chat selection handler
   const handleChatSelection = async (selectedChat) => {
     try {
       setActiveConversationId(selectedChat.conversation_id);
-      console.log(
-        "Fetching conversation details for:",
-        selectedChat.conversation_id
-      );
-
+      console.log("Fetching conversation details for:", selectedChat.conversation_id);
+   
       const response = await chatServiceNB.getConversationDetails(
         selectedChat.conversation_id,
         mainProjectId
       );
-
+   
       if (response && response.data) {
-        console.log("Fetched conversation details:", response.data);
-
         // Process messages to include webSources
         const processedMessages = (response.data.messages || []).map((msg) => {
           if (msg.sources_info || msg.extracted_urls || msg.webSources) {
@@ -747,8 +704,8 @@ const SideTab = ({
           }
           return msg;
         });
-
-        // Prepare the full chat data with processed messages
+   
+        // Prepare the full chat data
         const fullChatData = {
           ...response.data,
           conversation_id: selectedChat.conversation_id,
@@ -757,34 +714,31 @@ const SideTab = ({
           title: response.data.title,
           follow_up_questions: response.data.follow_up_questions || [],
         };
-
-        // FIXED: Update document context BEFORE setting the chat
+   
+        // IMPORTANT: Set the chat first before updating document context
+        if (onSelectChat) {
+          onSelectChat(fullChatData);
+        }
+   
+        // Then update document context if needed
         const chatDocIds = fullChatData.selected_documents.map((doc) =>
-          doc.toString ? doc.toString() : String(doc)
+          doc.toString()
         );
-
-        // Use a small delay to ensure proper state sequencing
+   
+        // Update document selections without triggering a new chat session
+        if (onDocumentContextChange) {
+          onDocumentContextChange(chatDocIds, "chat_selection");
+        }
+   
+        if (setSelectedDocuments) {
+          setSelectedDocuments(chatDocIds);
+        }
+   
+        // Only scroll to document if there are documents to show
         if (chatDocIds.length > 0) {
-          // Update document context with chat_selection source
-          if (onDocumentSelectionChange) {
-            onDocumentSelectionChange(chatDocIds);
-          }
-
-          // Small delay to ensure document context is set before chat
           setTimeout(() => {
-            if (onSelectChat) {
-              onSelectChat(fullChatData);
-            }
             scrollToSelectedDocument(chatDocIds[0]);
           }, 100);
-        } else {
-          // No documents, set chat immediately
-          if (onSelectChat) {
-            onSelectChat(fullChatData);
-          }
-        }
-        if (setSelectedDocuments) {
-          setSelectedDocuments(fullChatData.selected_documents || []);
         }
       }
     } catch (error) {
@@ -793,6 +747,7 @@ const SideTab = ({
     }
     setSidebarView("chats");
   };
+   
   // New function to scroll to a selected document with visual feedback
   const scrollToSelectedDocument = (documentId) => {
     if (!documentId) return;
@@ -959,14 +914,6 @@ const SideTab = ({
     }
   };
 
-  const toggleChatHistory = () => {
-    setIsChatHistoryVisible(!isChatHistoryVisible);
-    // Close the documents section when chat history is made visible
-    if (!isChatHistoryVisible) {
-      setIsDocumentsVisible(false);
-    }
-  };
-
   const handleNewChat = () => {
     console.log(
       "New Chat clicked in sidebar with documents:",
@@ -1034,33 +981,6 @@ const SideTab = ({
       }
     }
   };
-  // const handleDocumentToggle = async (documentId) => {
-  //   const stringDocumentId = documentId.toString();
-
-  //   // Create a new array based on the current selected documents
-  //   const newSelectedDocuments = selectedDocuments.includes(stringDocumentId)
-  //     ? selectedDocuments.filter((id) => id !== stringDocumentId)
-  //     : [...selectedDocuments, stringDocumentId];
-
-  //   // Update the parent component's state
-  //   setSelectedDocuments(newSelectedDocuments);
-
-  //   // Update "Select All" checkbox state
-  //   const allDocumentIds = filteredDocuments.map((doc) => doc.id.toString());
-  //   setIsSelectAllChecked(
-  //     newSelectedDocuments.length === allDocumentIds.length
-  //   );
-
-  //   // Set the active document if it's being selected
-  //   if (!selectedDocuments.includes(stringDocumentId)) {
-  //     try {
-  //       await documentServiceNB.setActiveDocument(documentId); // Set the active document
-  //     } catch (error) {
-  //       console.error("Failed to set active document:", error);
-  //       toast.error("Failed to set active document");
-  //     }
-  //   }
-  // };
 
   // New method to handle "Select All" and "Deselect All"
   const handleSelectAllDocuments = () => {
@@ -1113,81 +1033,6 @@ const SideTab = ({
     setSidebarView("documents");
   };
 
-  const handleUpdateConversationTitle = async (conversationId, newTitle) => {
-    try {
-      // Validate title
-      if (!newTitle || !newTitle.trim()) {
-        toast.error("Chat title cannot be empty");
-        return;
-      }
-
-      // Log the details for debugging
-      console.log("Attempting to update conversation title:", {
-        conversationId,
-        newTitle,
-      });
-
-      // Add more detailed logging
-      const updateData = {
-        title: newTitle,
-        is_active: true, // Ensure the conversation remains active
-      };
-
-      console.log("Update payload:", updateData);
-
-      // Enhanced error handling in the service call
-      const response = await chatServiceNB.updateConversationTitle(
-        conversationId,
-        updateData
-      );
-
-      console.log("Conversation update response:", response);
-
-      // Update the local state to reflect the new title
-      setChatHistory((prevHistory) =>
-        prevHistory.map((chat) =>
-          chat.conversation_id === conversationId
-            ? { ...chat, title: newTitle }
-            : chat
-        )
-      );
-
-      toast.success("Conversation title updated successfully");
-
-      // Reset renaming state
-      setIsRenamingChat(null);
-      setNewChatTitle("");
-    } catch (error) {
-      // Comprehensive error logging
-      console.error("Failed to update conversation title", {
-        error: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        conversationId,
-        newTitle,
-      });
-
-      // More specific error handling
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        toast.error(
-          error.response.data?.error || "Failed to update conversation title"
-        );
-      } else if (error.request) {
-        // The request was made but no response was received
-        toast.error("No response received from server");
-      } else {
-        // Something happened in setting up the request that triggered an Error
-        toast.error("Error setting up the request");
-      }
-
-      // Optionally, revert any UI changes
-      setIsRenamingChat(null);
-      setNewChatTitle("");
-    }
-  };
-
   const handleDeleteConversation = async (conversationId) => {
     console.log("🗑️ DELETING CONVERSATION:", conversationId);
     console.log("🗑️ Current activeConversationId:", activeConversationId);
@@ -1232,48 +1077,6 @@ const SideTab = ({
     }
   };
 
-  // // Replace the existing handleDeleteConversation function with this updated version
-  // const handleDeleteConversation = async (conversationId) => {
-  //   try {
-  //     await chatServiceNB.deleteConversation(conversationId);
-
-  //     // Remove from chat history state
-  //     setChatHistory((prevHistory) =>
-  //       prevHistory.filter((chat) => chat.conversation_id !== conversationId)
-  //     );
-
-  //     // If the deleted chat was active, reset the view
-  //     if (activeConversationId === conversationId) {
-  //       // Clear the active conversation ID
-  //       setActiveConversationId(null);
-
-  //       // Call the onNewChat callback properly
-  //       if (onNewChat) {
-  //         // Call with no parameter to avoid preventDefault errors
-  //         onNewChat();
-
-  //         // Add a toast notification for better UX
-  //         toast.success("Started new conversation");
-  //       }
-  //     }
-
-  //     // Close the modal
-  //     setIsDeleteChatModalOpen(false);
-  //     setChatToDelete(null);
-
-  //     // Show success message
-  //     toast.success("Conversation deleted");
-  //   } catch (error) {
-  //     console.error("Failed to delete conversation", error);
-  //     toast.error("Failed to delete conversation");
-  //   }
-  // };
-
-  // const handleDeleteChatConfirmation = (chat) => {
-  //   setChatToDelete(chat);
-  //   setIsDeleteChatModalOpen(true);
-  // };
-
   const handleDeleteChatConfirmation = (chat) => {
     // Select the chat before opening the delete modal
     if (chat && chat.conversation_id) {
@@ -1303,13 +1106,27 @@ const SideTab = ({
   const filteredChatHistory = useMemo(() => {
     let filtered = [...chatHistory];
 
+    // Apply archive filter - more explicit logic
+    if (showArchivedChats) {
+      filtered = filtered.filter((chat) => chat.is_archived === true);
+    } else {
+      filtered = filtered.filter((chat) => chat.is_archived !== true);
+    }
+
     // Apply search filter first
     if (chatSearchTerm) {
       const searchTermLower = chatSearchTerm.toLowerCase();
       filtered = filtered.filter(
         (chat) =>
           chat.title.toLowerCase().includes(searchTermLower) ||
-          (chat.summary && chat.summary.toLowerCase().includes(searchTermLower))
+          (chat.summary &&
+            chat.summary.toLowerCase().includes(searchTermLower)) ||
+          (Array.isArray(chat.messages) &&
+            chat.messages.some(
+              (msg) =>
+                typeof msg.content === "string" &&
+                msg.content.toLowerCase().includes(searchTermLower)
+            ))
       );
     }
 
@@ -1334,7 +1151,7 @@ const SideTab = ({
     }
 
     return filtered;
-  }, [chatHistory, chatFilterMode, chatSearchTerm]);
+  }, [chatHistory, chatFilterMode, chatSearchTerm, showArchivedChats]);
 
   // Add this method to handle resetting chat search
   const handleResetChatSearch = () => {
@@ -1396,99 +1213,6 @@ const SideTab = ({
   const closeDocumentViewer = () => {
     setViewingDocument(null);
   };
-
-  const renderDocumentItem = (doc) => (
-    <div
-      key={doc.id}
-      data-doc-id={doc.id}
-      className={`
-        flex items-center gap-1 
-        py-1 px-2 rounded-lg 
-        cursor-pointer 
-        transition-all 
-        ${
-          selectedDocuments.includes(doc.id.toString())
-            ? " bg-gradient-to-b from-blue-300/20 border border-[#5ff2b6]/50 text-white"
-            : "hover:bg-gray-700"
-        }
-        ${
-          activeDocumentId === doc.id && !bulkDeleteMode
-            ? "border border-yellow-400"
-            : ""
-        }
-        ${bulkDeleteMode ? "hover:bg-red-900/20" : ""}
-        group relative
-      `}
-      onClick={() =>
-        bulkDeleteMode
-          ? handleDocumentToggle(doc.id)
-          : handleDocumentClick(doc.id)
-      }
-    >
-      <input
-        type="checkbox"
-        checked={selectedDocuments.includes(doc.id.toString())}
-        readOnly
-        className={`mr-1 form-checkbox 
-          h-1 w-1 
-          ${
-            bulkDeleteMode
-              ? "text-red-600 border-red-400"
-              : "text-blue-600 border-[#5ff2b6]"
-          }
-          rounded-xl
-          focus:ring-[#5ff2b6]`}
-      />
-      <FileText
-        size={14}
-        className={
-          bulkDeleteMode
-            ? "text-red-400 flex-shrink-0"
-            : "text-blue-400 flex-shrink-0"
-        }
-      />
-      <div className="flex-grow flex items-center justify-between overflow-hidden">
-        <div className="flex flex-col flex-grow overflow-hidden">
-          <span className="truncate text-xs">{doc.filename.endsWith('.txt') ? doc.filename.replace(/\.txt$/i, '') : doc.filename}</span>
-          <span className="text-[10px] text-gray-400">
-            {formatRelativeDate(doc.created_at || doc.uploaded_at)}
-          </span>
-        </div>
-
-        {/* Document actions menu - only show when not in bulk delete mode */}
-        {!bulkDeleteMode && (
-          <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition-opacity">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleViewOriginalDocument(doc);
-              }}
-              className="text-blue-400 hover:text-blue-300 p-0.5 rounded-full
-                transition-colors duration-300
-                focus:outline-none
-                hover:bg-blue-500/10"
-              title="View Original Document"
-            >
-              <Eye size={14} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteConfirmation(doc);
-              }}
-              className="text-red-400 hover:text-red-300 p-0.5 rounded-full
-                transition-colors duration-300
-                focus:outline-none
-                hover:bg-red-500/10"
-              title="Delete Document"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   useEffect(() => {
     if (onDocumentsUpdate) {
@@ -1591,7 +1315,8 @@ const SideTab = ({
           flex items-center gap-1 
           py-1 px-2 rounded-lg 
           cursor-pointer 
-          transition-all 
+          transition-all duration-200 ease-in-out
+          hover:shadow-lg hover:translate-x-1
           ${
             selectedDocuments.includes(doc.id.toString())
               ? theme === "dark"
@@ -1682,18 +1407,24 @@ const SideTab = ({
               />
               <div className="flex-grow flex items-center justify-between overflow-hidden">
                 <div className="flex flex-col flex-grow overflow-hidden">
-   
-                <span
-                  className={`truncate text-sm relative group ${
-                    theme === "dark"
-                      ? "text-gray-300"
-                      : "text-[#1a535c] font-medium"
-                  }`}
-                  style={{ maxWidth: "100%", minWidth: "150px", display: "inline-block" }}
-                  title={doc.filename}
-                >
-                  {doc.filename.endsWith('.txt') ? doc.filename.replace(/\.txt$/i, '') : doc.filename}
-                </span>
+                  <span
+                    className={`truncate text-sm relative group ${
+                      theme === "dark"
+                        ? "text-gray-300"
+                        : "text-[#1a535c] font-medium"
+                    }`}
+                    style={{
+                      maxWidth: "100%",
+                      minWidth: "150px",
+                      display: "inline-block",
+                    }}
+                    title={doc.filename} // Add this as fallback
+                  >
+                    {doc.filename.endsWith(".txt")
+                      ? doc.filename.replace(/\.txt$/i, "")
+                      : doc.filename}
+                    
+                  </span>
                   <span
                     className={`text-[10px] ${
                       theme === "dark" ? "text-gray-400" : "text-[#5a544a]"
@@ -2100,12 +1831,33 @@ const SideTab = ({
         p-1.5 rounded-lg
         relative
         ${theme === "dark" ? "" : "border-b border-[#e3d5c8]"}
+        transition-all duration-300 ease-in-out
       `}
                   >
                     Recent Chats{" "}
                     {filteredChatHistory.length > 0 &&
                       `(${filteredChatHistory.length})`}
                     <div className="flex items-center gap-1">
+                      {/* Add your archive toggle button here */}
+                      <button
+                        onClick={() => setShowArchivedChats((prev) => !prev)}
+                        className={`p-1.5 rounded-lg transition-all duration-200 ${
+                          showArchivedChats
+                            ? theme === "dark"
+                              ? "bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
+                              : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                            : theme === "dark"
+                            ? "text-gray-400 hover:text-white hover:bg-gray-700/30"
+                            : "text-[#5a544a] hover:text-[#a55233] hover:bg-[#f5e6d8]"
+                        } active:scale-95`}
+                        title={
+                          showArchivedChats
+                            ? "Show Active Chats"
+                            : "Show Archived Chats"
+                        }
+                      >
+                        <Archive size={14} />
+                      </button>
                       <div className="relative filter-dropdown-container">
                         <button
                           onClick={() =>
@@ -2231,7 +1983,7 @@ const SideTab = ({
                         theme === "dark"
                           ? "bg-gray-800/10"
                           : "bg-white/80 border border-[#d6cbbf]"
-                      } rounded-lg`}
+                      } rounded-lg transition-all duration-200 shadow-sm`}
                     >
                       <Search
                         size={16}
@@ -2293,9 +2045,10 @@ const SideTab = ({
                               ? "hover:bg-gray-700"
                               : "hover:bg-[#f5e6d8]"
                           } 
-                          hover:shadow-md 
+                          hover:shadow-lg hover:translate-x-1
                           p-2 rounded-lg text-sm
-                          transition-all duration-300
+                          transition-all duration-200 ease-linear
+                          
                           ${
                             activeConversationId === chat.conversation_id
                               ? theme === "dark"
@@ -2303,6 +2056,7 @@ const SideTab = ({
                                 : "bg-[#e8ddcc] border-l-2 border-[#a55233] text-[#5e4636]"
                               : ""
                           }
+                           ${chat.is_archived ? "opacity-60" : ""}
                         `}
                         >
                           {isRenamingChat === chat.conversation_id ? (
@@ -2346,27 +2100,28 @@ const SideTab = ({
                           ) : (
                             <div
                               onClick={() => handleChatSelection(chat)}
-                              className="flex items-center justify-between"
+                              className="flex items-center justify-between min-w-0"
                             >
-                              <div className="flex items-center">
-                                <MessageCircle
-                                  size={14}
-                                  className={
-                                    theme === "dark"
-                                      ? "text-green-400 mr-2"
-                                      : "text-[#1a535c] mr-2"
-                                  }
-                                />
-                                <div className="flex flex-col flex-grow overflow-hidden">
-                                  <span
-                                    className={`text-sm ${
-                                      theme === "dark"
-                                        ? "text-gray-300"
-                                        : "text-[#1a535c] font-medium tracking-wide "
-                                    }`}
-                                  >
-                                    {chat.title || "Untitled Conversation"}
-                                  </span>
+                              <div className="flex items-center min-w-0 flex-1 mr-2"> {/* Add min-w-0, flex-1, and right margin */}
+    <MessageCircle
+      size={14}
+      className={
+        theme === "dark"
+          ? "text-green-400 mr-2 flex-shrink-0" 
+          : "text-[#1a535c] mr-2 flex-shrink-0"
+      }
+    />
+                               <div className="flex flex-col flex-grow overflow-hidden min-w-0"> {/* Add min-w-0 */}
+      <span
+        title={chat.title || "Untitled Conversation"} // This provides the hover tooltip
+        className={`truncate text-sm ${
+          theme === "dark"
+            ? "text-gray-300"
+            : "text-[#1a535c] font-medium tracking-wide"
+        }`}
+      >
+        {chat.title || "Untitled Conversation"} {/* Remove the manual truncation logic */}
+      </span>
                                   <span
                                     className={`text-sm ${
                                       theme === "dark"
@@ -2380,7 +2135,7 @@ const SideTab = ({
                               </div>
 
                               {/* Chat Management Actions */}
-                              <div className="hidden group-hover:flex items-center space-x-2">
+                              <div className="hidden group-hover:flex items-center space-x-2 flex-shrink-0">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2395,6 +2150,69 @@ const SideTab = ({
                                   title="Rename Chat"
                                 >
                                   <Edit2 size={16} />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newArchivedState = !chat.is_archived;
+                                    chatServiceNB
+                                      .archiveConversation(
+                                        chat.conversation_id,
+                                        newArchivedState,
+                                        chat.title
+                                      )
+                                      .then((response) => {
+                                        toast.success(
+                                          newArchivedState
+                                            ? "Chat archived"
+                                            : "Chat unarchived"
+                                        );
+                                        console.log(
+                                          "Archive response:",
+                                          response.data
+                                        );
+
+                                        // Immediately update the local state
+                                        setChatHistory((prevHistory) =>
+                                          prevHistory.map((c) =>
+                                            c.conversation_id ===
+                                            chat.conversation_id
+                                              ? {
+                                                  ...c,
+                                                  is_archived: newArchivedState,
+                                                }
+                                              : c
+                                          )
+                                        );
+
+                                        // Also fetch fresh data as backup
+                                        setTimeout(() => {
+                                          fetchChatHistory(
+                                            false,
+                                            showArchivedChats
+                                          );
+                                        }, 500);
+                                      })
+                                      .catch(() =>
+                                        toast.error(
+                                          "Failed to update archive status"
+                                        )
+                                      );
+                                  }}
+                                  className={`
+    ${theme === "dark" ? "text-yellow-400" : "text-[#a55233]"}
+  `}
+                                  title={
+                                    chat.is_archived
+                                      ? "Unarchive Chat"
+                                      : "Archive Chat"
+                                  }
+                                >
+                                  {chat.is_archived ? (
+                                    <Eye size={16} />
+                                  ) : (
+                                    <Archive size={16} />
+                                  )}
                                 </button>
                                 <button
                                   onClick={(e) => {
@@ -2462,6 +2280,28 @@ const SideTab = ({
       {/* Custom Scrollbar Styles */}
       {/* Custom Scrollbar Styles */}
       <style>{`
+
+      /* Chat list transition animations */
+.chat-list-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.chat-list-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: all 300ms ease-out;
+}
+
+.chat-item-hover {
+  transform: translateX(2px);
+  transition: all 200ms ease-out;
+}
+
+.archive-toggle-active {
+  transform: scale(0.95);
+  transition: transform 100ms ease-out;
+}
 /* Make loader visible on both light and dark modes */
 .idea-generator-loader {
   position: relative;

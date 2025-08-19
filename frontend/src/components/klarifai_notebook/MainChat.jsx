@@ -165,7 +165,7 @@ const MainChat = forwardRef(
 
     const [processingDocuments, setProcessingDocuments] = useState([]);
     //for response length
-    const [responseLength, setResponseLength] = useState("comprehensive");
+    const [responseLength, setResponseLength] = useState("short");
     const [responseFormat, setResponseFormat] = useState("auto-detect");
     const [hasUploadPermissions, setHasUploadPermissions] = useState(true);
 
@@ -281,6 +281,10 @@ const MainChat = forwardRef(
       }
       return () => clearInterval(intervalId);
     }, [isDocumentProcessing]);
+
+const dispatchRefreshEvent = () => {
+  document.dispatchEvent(new CustomEvent('queryComplete'));
+};
 
     const handleImageMessage = async (message, images, mode) => {
       if (!message.trim() && images.length === 0) return;
@@ -398,6 +402,7 @@ const MainChat = forwardRef(
           if (!conversationId && response.data.conversation_id) {
             setConversationId(response.data.conversation_id);
           }
+          dispatchRefreshEvent();
         }
       } catch (error) {
         console.error("\n❌ IMAGE CHAT ERROR OCCURRED:", error);
@@ -768,10 +773,12 @@ const MainChat = forwardRef(
               setFollowUpQuestions(validQuestions);
             }
           }
+          dispatchRefreshEvent();
           toast.success("Response regenerated successfully!", {
             isLoading: false,
             autoClose: 2000,
           });
+          dispatchRefreshEvent();
         }
       } catch (error) {
         console.error("Response regeneration error:", error);
@@ -2617,6 +2624,7 @@ const MainChat = forwardRef(
         });
 
         setEditingMessageId(null);
+        dispatchRefreshEvent();
 
         // Update follow-up questions if available
         if (response.data.follow_up_questions) {
@@ -2628,6 +2636,7 @@ const MainChat = forwardRef(
             setFollowUpQuestions(validQuestions);
           }
         }
+        dispatchRefreshEvent();
       } catch (error) {
         console.error("Failed to update message:", error);
         toast.error(

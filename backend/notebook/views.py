@@ -93,6 +93,8 @@ import json
 from typing import List, Dict, Tuple
 import yt_dlp
 from django.db import transaction
+import tempfile
+
 
 logger = logging.getLogger(__name__)
 
@@ -537,8 +539,6 @@ class DocumentProcessingMixin:
         except Exception as e:
             logger.error(f"Error generating content with GPT-4: {str(e)}")
             return self.format_error_message(file_name), []
-
-
     def format_summary_response(self, response_text):
         """Ensures proper HTML-like formatting in the summary response."""
         import re
@@ -576,7 +576,7 @@ class DocumentProcessingMixin:
         Args:
             video_path: Path to the video file
         """
-        import tempfile
+        
         from moviepy import VideoFileClip
         import logging
         
@@ -617,35 +617,30 @@ class DocumentProcessingMixin:
     def extract_text_from_video(self, file_path, user=None):
         """
         Extract text from video files by first converting to audio, then transcribing.
-        Stores results in Azure Blob Storage.
+        Returns the transcribed text.
         
         Args:
             file_path: Path to the video file
             user: Django user object to get API token
         """
-        import logging
-        import tempfile
-        import os
-        import uuid
-        from notebook.utils import upload_transcript_to_blob
         
         logger = logging.getLogger(__name__)
-        logger.info(f"Starting video-to-text extraction for: {file_path}")
+        print(f"Starting video-to-text extraction for: {file_path}")
         
         try:
             # First convert video to audio
-            logger.info("Attempting to convert video to audio...")
+            print("Attempting to convert video to audio...")
             audio_path = self.convert_video_to_audio(file_path)
             
             if not audio_path:
-                error_msg = f"Failed to convert video to audio: {file_path}"
-                logger.error(error_msg)
+                print(f"Failed to convert video to audio: {file_path}")
+                logger.error(f"Failed to convert video to audio: {file_path}")
                 return f"Error: Failed to extract audio from video file."
             
-            logger.info(f"Successfully converted video to audio: {audio_path}")
+            print(f"Successfully converted video to audio: {audio_path}")
             
             # Then extract text from the resulting audio file
-            logger.info(f"Starting audio transcription...")
+            print(f"Starting audio transcription...")
             extracted_text = self.extract_text_from_audio(audio_path, user=user)
             
             print(f"Audio transcription completed, text length: {len(extracted_text) if extracted_text else 0}")
@@ -666,11 +661,7 @@ class DocumentProcessingMixin:
         """
         Process document directly from provided text.
         For use with transcripts that are already extracted.
-        Saves to Azure Blob Storage.
         """
-        import numpy as np
-        import faiss
-        import uuid
         
         try:
             # Clean the text
@@ -709,8 +700,8 @@ class DocumentProcessingMixin:
             # Generate a unique session ID for this document
             session_id = uuid.uuid4().hex
             
-            # Save the index and chunks to Azure Blob Storage
-            index_file, pickle_file = self.save_faiss_index_to_blob(index, all_chunks, session_id)
+            # Save the index and chunks
+            index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
             
             print(f"Transcript processed successfully: {len(all_chunks)} chunks created")
             
@@ -735,13 +726,7 @@ class DocumentProcessingMixin:
             file_path: Path to the audio file
             user: Django user object to get API token
         """
-        import logging
-        import tempfile
-        import os
-        import uuid
-        import time
-        from notebook.utils import upload_transcript_to_blob
-        
+
         logger = logging.getLogger(__name__)
         
         # Set up the transcripts directory
@@ -868,10 +853,7 @@ class DocumentProcessingMixin:
                             """
                             
                             # Generate the transcription using new API
-                            response = client.models.generate_content(
-                                model=model,
-                                contents=[prompt, uploaded_file]
-                            )
+                            response = model.generate_content([prompt, uploaded_file])
                             chunk_transcription = response.text
                             
                             # Add a separator between chunks
@@ -1048,6 +1030,7 @@ class DocumentProcessingMixin:
         
         return text
 
+ 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_question_from_topic(request):
@@ -1384,358 +1367,330 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
 
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
-
-    
+   
     def post(self, request):
-        files = request.FILES.getlist('files')
-        user = request.user
-        main_project_id = request.data.get('main_project_id')
-        target_user_id = request.data.get('target_user_id')
-
-        if target_user_id and request.user.username == 'admin':
-            try:
-                user = User.objects.get(id=target_user_id)
-            except User.DoesNotExist:
-                return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
-        else:
+            files = request.FILES.getlist('files')
             user = request.user
+            main_project_id = request.data.get('main_project_id')
+            target_user_id = request.data.get('target_user_id')
 
-        try:
-            permissions = UserModulePermissions.objects.get(user=user)
-            if permissions.disabled_modules.get('document-upload', False):
-                return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-        except UserModulePermissions.DoesNotExist:
-            pass
-
-        try:
-            upload_permissions = UserUploadPermissions.objects.get(user=user)
-            if not upload_permissions.can_upload:
-                return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-        except UserUploadPermissions.DoesNotExist:
-            pass
-
-        try:
-            main_project = Project.objects.get(id=main_project_id, user=user)
-            uploaded_docs = []
-            last_processed_doc_id = None
-            processed_data = None
-
-            for file in files:
-                file_ext = os.path.splitext(file.name)[1].lower()
-                is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
-                is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
-                is_media_file = is_audio_file or is_video_file
-
-                # --- Status: Uploading ---
-                update_doc_status(user, file.name, "uploading", 10, "Uploading file...")
-
-                existing_doc = Document.objects.filter(
-                    user=user,
-                    filename=file.name,
-                    main_project=main_project
-                ).first()
-
-                # --- Status: Uploaded ---
-                update_doc_status(user, file.name, "uploaded", 20, "File uploaded, awaiting processing...")
-
+            if target_user_id and request.user.username == 'admin':
                 try:
-                    if is_media_file:
-                        # --- Status: Processing Media ---
-                        update_doc_status(user, file.name, "processing", 30, "Processing media file...")
+                    user = User.objects.get(id=target_user_id)
+                except User.DoesNotExist:
+                    return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                user = request.user
 
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
-                            for chunk in file.chunks():
-                                tmp_file.write(chunk)
-                            file_path = tmp_file.name
+            try:
+                permissions = UserModulePermissions.objects.get(user=user)
+                if permissions.disabled_modules.get('document-upload', False):
+                    return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
+            except UserModulePermissions.DoesNotExist:
+                pass
 
-                        try:
-                            if is_video_file:
-                                update_doc_status(user, file.name, "processing", 35, "Extracting audio from video...")
-                                extracted_text = self.extract_text_from_video(file_path, user=user)
-                            else:
-                                update_doc_status(user, file.name, "processing", 35, "Transcribing audio file...")
-                                extracted_text = self.extract_text_from_audio(file_path, user=user)
+            try:
+                upload_permissions = UserUploadPermissions.objects.get(user=user)
+                if not upload_permissions.can_upload:
+                    return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
+            except UserUploadPermissions.DoesNotExist:
+                pass
 
-                            if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
-                                update_doc_status(user, file.name, "error", 100, "Failed to extract text from media file.")
-                                return Response({'error': f'Failed to extract text from media file: {file.name}'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                main_project = Project.objects.get(id=main_project_id, user=user)
+                uploaded_docs = []
+                last_processed_doc_id = None
+                processed_data = None
 
-                            base_name = os.path.splitext(file.name)[0]
-                            file_type = "video" if is_video_file else "audio"
-                            transcript_filename = f"{base_name}_{file_type}_transcript.txt"
+                for file in files:
+                    file_ext = os.path.splitext(file.name)[1].lower()
+                    is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
+                    is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
+                    is_media_file = is_audio_file or is_video_file
 
-                            update_doc_status(user, file.name, "processing", 45, "Processing transcript...")
+                    # --- Status: Uploading ---
+                    update_doc_status(user, file.name, "uploading", 10, "Uploading file...")
 
-                            # Upload transcript to blob storage
-                            import uuid
-                            unique_id = uuid.uuid4().hex[:8]
-                            blob_transcript_filename = f"{base_name}_{file_type}_transcript_{unique_id}.txt"
-                            
-                            from notebook.utils import upload_transcript_to_blob
-                            blob_info = upload_transcript_to_blob(
-                                extracted_text, 
-                                blob_transcript_filename,
-                                is_video=is_video_file
-                            )
-                            
-                            if not blob_info:
-                                update_doc_status(user, file.name, "error", 100, "Failed to upload transcript to blob storage.")
-                                return Response({
-                                    'error': f'Failed to upload transcript to blob storage: {transcript_filename}'
-                                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    existing_doc = Document.objects.filter(
+                        user=user,
+                        filename=file.name,
+                        main_project=main_project
+                    ).first()
 
-                            # Create or update document record with transcript details
-                            if existing_doc:
-                                existing_doc.filename = transcript_filename
-                                existing_doc.file = blob_info['filename']  # Store the blob path
-                                existing_doc.save()
-                                document = existing_doc
-                                # Clear old embeddings
-                                DocumentEmbedding.objects.filter(document=document).delete()
-                            else:
-                                document = Document.objects.create(
-                                    user=user,
-                                    file=blob_info['filename'],  # Store the blob path
-                                    filename=transcript_filename,
-                                    main_project=main_project
-                                )
+                    # --- Status: Uploaded ---
+                    update_doc_status(user, file.name, "uploaded", 20, "File uploaded, awaiting processing...")
 
-                            # Process document with pgvector
-                            processed_data = self.process_document_from_text_pgvector(extracted_text, transcript_filename, document)
-
-                            # Create transaction record with page count
-                            file_size = file.size if hasattr(file, 'size') else None
-                            upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
-                            page_count = 1  # Transcripts are always single page
-                            self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size, page_count=page_count)
-
-                            # --- Status: Indexing ---
-                            update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
-
-                            # Create or update ProcessedIndex with pgvector
-                            ProcessedIndex.objects.update_or_create(
-                                document=document,
-                                defaults={
-                                    'storage_type': 'pgvector',
-                                    'chunks_count': processed_data['chunks_count'],
-                                    'summary': "",
-                                    'markdown_path': processed_data.get('markdown_path', '')
-                                }
-                            )
-
-                            uploaded_docs.append({
-                                'id': document.id,
-                                'filename': transcript_filename,
-                                'original_media_type': file_type,
-                                'transcript_blob_path': blob_info['filename']
-                            })
-                            last_processed_doc_id = document.id
-
-                            # --- Status: Complete ---
-                            update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
-
-                        finally:
-                            if os.path.exists(file_path):
-                                os.unlink(file_path)
-
-                    else:
-                        # --- Status: Processing Document ---
-                        update_doc_status(user, file.name, "processing", 30, "Processing document...")
-
-                        if existing_doc:
-                            try:
-                                processed_index = ProcessedIndex.objects.get(document=existing_doc)
-                                
-                                # If it's already processed with pgvector, just return it
-                                if processed_index.storage_type == 'pgvector' and \
-                                DocumentEmbedding.objects.filter(document=existing_doc).exists():
-                                    uploaded_docs.append({
-                                        'id': existing_doc.id,
-                                        'filename': existing_doc.filename
-                                    })
-                                    last_processed_doc_id = existing_doc.id
-                                    update_doc_status(user, file.name, "complete", 100, "Already processed!", doc_id=existing_doc.id)
-                                    continue
-                                    
-                            except ProcessedIndex.DoesNotExist:
-                                pass
-                                
-                            # Upload file to Azure Blob Storage FIRST
-                            from notebook.utils import upload_document_to_blob
-                            blob_info = upload_document_to_blob(file, main_project_id)
-                            
-                            if not blob_info:
-                                update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-                                return Response({
-                                    'error': f'Failed to upload file to blob storage: {file.name}'
-                                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                            
-                            # Update existing document with blob path
-                            existing_doc.file = blob_info['filename']
-                            existing_doc.save()
-                            
-                            # Clear old embeddings and reprocess with optimized processing
-                            DocumentEmbedding.objects.filter(document=existing_doc).delete()
-                            processed_data = self.process_document_pgvector_optimized(file, user, existing_doc)
-
-                            # Get page count from processed data
-                            page_count = processed_data.get('page_count', 1)
-                            file_size = file.size if hasattr(file, 'size') else None
-                            
-                            # Update transaction if it exists or create new one
-                            try:
-                                # Try to find existing transaction
-                                existing_transaction = DocumentTransaction.objects.filter(
-                                    user_transaction__document_id=existing_doc.id
-                                ).first()
-                                
-                                if existing_transaction:
-                                    existing_transaction.no_pages = page_count
-                                    existing_transaction.file_size = file_size
-                                    existing_transaction.save()
-                                else:
-                                    # Create new transaction if none exists
-                                    self.create_document_transaction(user, existing_doc, main_project, upload_method='regular', file_size=file_size, page_count=page_count)
-                            except Exception as e:
-                                print(f"Error updating transaction: {str(e)}")
-
-                            # --- Status: Indexing ---
-                            update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
-
-                            # Update ProcessedIndex with pgvector
-                            ProcessedIndex.objects.update_or_create(
-                                document=existing_doc,
-                                defaults={
-                                    'storage_type': 'pgvector',
-                                    'chunks_count': processed_data['chunks_count'],
-                                    'summary': "",
-                                    'markdown_path': processed_data.get('markdown_path', '')
-                                }
-                            )
-                            
-                            uploaded_docs.append({
-                                'id': existing_doc.id,
-                                'filename': existing_doc.filename
-                            })
-                            last_processed_doc_id = existing_doc.id
-
-                            # --- Status: Complete ---
-                            update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=existing_doc.id)
-                        else:
-                            # Upload file to Azure Blob Storage FIRST - CRITICAL FOR VIEWING
-                            from notebook.utils import upload_document_to_blob
-                            blob_info = upload_document_to_blob(file, main_project_id)
-                            
-                            if not blob_info:
-                                update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-                                return Response({
-                                    'error': f'Failed to upload file to blob storage: {file.name}'
-                                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                            
-                            # Create new document with blob path for ORIGINAL FILE
-                            document = Document.objects.create(
-                                user=user,
-                                file=blob_info['filename'],  # Store the ORIGINAL document blob path 
-                                filename=file.name,
-                                main_project=main_project
-                            )
-                            import tempfile
+                    try:
+                        if is_media_file:
+                            # --- Status: Processing Media ---
+                            update_doc_status(user, file.name, "processing", 30, "Processing media file...")
 
                             with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
                                 for chunk in file.chunks():
                                     tmp_file.write(chunk)
                                 file_path = tmp_file.name
 
-                            file_ext = os.path.splitext(file_path)[1].lower()
-                    
-                            # Count pages based on file type
-                            page_count = self.count_document_pages(file_path, file_ext)
-                            print(f"Detected {page_count} pages in {file.name}")
+                            try:
+                                if is_video_file:
+                                    update_doc_status(user, file.name, "processing", 35, "Extracting audio from video...")
+                                    extracted_text = self.extract_text_from_video(file_path, user=user)
+                                else:
+                                    update_doc_status(user, file.name, "processing", 35, "Transcribing audio file...")
+                                    extracted_text = self.extract_text_from_audio(file_path, user=user)
 
-                            file_size = file.size if hasattr(file, 'size') else None
+                                if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
+                                    update_doc_status(user, file.name, "error", 100, "Failed to extract text from media file.")
+                                    return Response({'error': f'Failed to extract text from media file: {file.name}'}, status=status.HTTP_400_BAD_REQUEST)
 
-                            # CHECK PAGE LIMIT BEFORE PROCESSING - MOVE THIS UP
-                            transaction_result = self.create_document_transaction(
-                                user, document, main_project, 
-                                upload_method='regular', 
-                                file_size=file_size, 
-                                page_count=page_count
-                            )
+                                base_name = os.path.splitext(file.name)[0]
+                                file_type = "video" if is_video_file else "audio"
+                                transcript_filename = f"{base_name}_{file_type}_transcript.txt"
+
+                                update_doc_status(user, file.name, "processing", 45, "Processing transcript...")
+
+                                # Create temporary transcript file for local storage
+                                transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
+                                with open(transcript_file_path, 'w', encoding='utf-8') as f:
+                                    f.write(extracted_text)
+
+                                try:
+                                    with open(transcript_file_path, 'rb') as f:
+                                        from django.core.files import File
+                                        django_file = File(f, name=transcript_filename)
+
+                                        if existing_doc:
+                                            existing_doc.filename = transcript_filename
+                                            existing_doc.file = django_file  # Store the local file
+                                            existing_doc.save()
+                                            document = existing_doc
+                                            # Clear old embeddings
+                                            DocumentEmbedding.objects.filter(document=document).delete()
+                                        else:
+                                            document = Document.objects.create(
+                                                user=user,
+                                                file=django_file,  # Store the local file
+                                                filename=transcript_filename,
+                                                main_project=main_project
+                                            )
+
+                                        # Process document with pgvector
+                                        processed_data = self.process_document_from_text_pgvector(extracted_text, transcript_filename, document)
+
+                                        # Create transaction record with page count
+                                        file_size = file.size if hasattr(file, 'size') else None
+                                        upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
+                                        page_count = 1  # Transcripts are always single page
+                                        self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size, page_count=page_count)
+
+                                finally:
+                                    if os.path.exists(transcript_file_path):
+                                        os.unlink(transcript_file_path)
+
+                                # --- Status: Indexing ---
+                                update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
+
+                                # Create or update ProcessedIndex with pgvector
+                                ProcessedIndex.objects.update_or_create(
+                                    document=document,
+                                    defaults={
+                                        'storage_type': 'pgvector',
+                                        'chunks_count': processed_data['chunks_count'],
+                                        'summary': "",
+                                        'markdown_path': processed_data.get('markdown_path', '')
+                                    }
+                                )
+
+                                uploaded_docs.append({
+                                    'id': document.id,
+                                    'filename': transcript_filename,
+                                    'original_media_type': file_type
+                                })
+                                last_processed_doc_id = document.id
+
+                                # --- Status: Complete ---
+                                update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
+
+                            finally:
+                                if os.path.exists(file_path):
+                                    os.unlink(file_path)
+
+                        else:
+                            # --- Status: Processing Document ---
+                            update_doc_status(user, file.name, "processing", 30, "Processing document...")
+
+                            if existing_doc:
+                                try:
+                                    processed_index = ProcessedIndex.objects.get(document=existing_doc)
                                     
-                            # Check if page limit was exceeded
-                            if isinstance(transaction_result, dict) and transaction_result.get('error'):
-                                # Delete the document we just created since we can't proceed
-                                document.delete()
+                                    # If it's already processed with pgvector, just return it
+                                    if processed_index.storage_type == 'pgvector' and \
+                                    DocumentEmbedding.objects.filter(document=existing_doc).exists():
+                                        uploaded_docs.append({
+                                            'id': existing_doc.id,
+                                            'filename': existing_doc.filename
+                                        })
+                                        last_processed_doc_id = existing_doc.id
+                                        update_doc_status(user, file.name, "complete", 100, "Already processed!", doc_id=existing_doc.id)
+                                        continue
                                         
+                                except ProcessedIndex.DoesNotExist:
+                                    pass
+                                    
+                                # Update existing document with local file storage
+                                existing_doc.file = file
+                                existing_doc.save()
+                                
+                                # Clear old embeddings and reprocess with optimized processing
+                                DocumentEmbedding.objects.filter(document=existing_doc).delete()
+                                processed_data = self.process_document_pgvector_optimized(file, user, existing_doc)
+
+                                # Get page count from processed data
+                                page_count = processed_data.get('page_count', 1)
+                                file_size = file.size if hasattr(file, 'size') else None
+                                
+                                # Update transaction if it exists or create new one
+                                try:
+                                    # Try to find existing transaction
+                                    existing_transaction = DocumentTransaction.objects.filter(
+                                        user_transaction__document_id=existing_doc.id
+                                    ).first()
+                                    
+                                    if existing_transaction:
+                                        existing_transaction.no_pages = page_count
+                                        existing_transaction.file_size = file_size
+                                        existing_transaction.save()
+                                    else:
+                                        # Create new transaction if none exists
+                                        self.create_document_transaction(user, existing_doc, main_project, upload_method='regular', file_size=file_size, page_count=page_count)
+                                except Exception as e:
+                                    print(f"Error updating transaction: {str(e)}")
+
+                                # --- Status: Indexing ---
+                                update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
+
+                                # Update ProcessedIndex with pgvector
+                                ProcessedIndex.objects.update_or_create(
+                                    document=existing_doc,
+                                    defaults={
+                                        'storage_type': 'pgvector',
+                                        'chunks_count': processed_data['chunks_count'],
+                                        'summary': "",
+                                        'markdown_path': processed_data.get('markdown_path', '')
+                                    }
+                                )
+                                
+                                uploaded_docs.append({
+                                    'id': existing_doc.id,
+                                    'filename': existing_doc.filename
+                                })
+                                last_processed_doc_id = existing_doc.id
+
+                                # --- Status: Complete ---
+                                update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=existing_doc.id)
+                            else:
+                                # Create new document with local file storage
+                                document = Document.objects.create(
+                                    user=user,
+                                    file=file,  # Store the local file directly
+                                    filename=file.name,
+                                    main_project=main_project
+                                )
+
+                             
+
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
+                                    for chunk in file.chunks():
+                                        tmp_file.write(chunk)
+                                    file_path = tmp_file.name
+
+                                file_ext = os.path.splitext(file_path)[1].lower()
+                
+                                # Count pages based on file type
+                                page_count = self.count_document_pages(file_path, file_ext)
+                                print(f"Detected {page_count} pages in {file.name}")
+
+                                file_size = file.size if hasattr(file, 'size') else None
+
+                                # CHECK PAGE LIMIT BEFORE PROCESSING - MOVE THIS UP
+                                transaction_result = self.create_document_transaction(
+                                    user, document, main_project, 
+                                    upload_method='regular', 
+                                    file_size=file_size, 
+                                    page_count=page_count
+                                )
+                                
+                                # Check if page limit was exceeded
+                                if isinstance(transaction_result, dict) and transaction_result.get('error'):
+                                    # Delete the document we just created since we can't proceed
+                                    document.delete()
+                                    
+                                    # Clean up temp file
+                                    if os.path.exists(file_path):
+                                        os.unlink(file_path)
+                                    
+                                    # Update status to failed
+                                    update_doc_status(user, file.name, "failed", 0, f"Upload failed: {transaction_result.get('message', 'Page limit exceeded')}")
+                                    
+                                    print(f"Page limit exceeded for ########################### {file.name}")
+                                    # Return error response - THIS WILL STOP THE PROCESSING
+                                    return Response(transaction_result, status=status.HTTP_429_TOO_MANY_REQUESTS)
+                                                
+                                # ONLY PROCESS IF PAGE LIMIT CHECK PASSED
+                                # Process the document with optimized pgvector processing
+                                processed_data = self.process_document_pgvector_optimized(file, user, document)
+                                
                                 # Clean up temp file
                                 if os.path.exists(file_path):
                                     os.unlink(file_path)
-                                        
-                                # Update status to failed
-                                update_doc_status(user, file.name, "failed", 0, f"Upload failed: {transaction_result.get('message', 'Page limit exceeded')}")
-                                        
-                                print(f"Page limit exceeded for ########################### {file.name}")
-                                # Return error response - THIS WILL STOP THE PROCESSING
-                                return Response(transaction_result, status=status.HTTP_429_TOO_MANY_REQUESTS)
-                                                    
-                            # ONLY PROCESS IF PAGE LIMIT CHECK PASSED
-                            # Process the document with optimized pgvector processing
-                            processed_data = self.process_document_pgvector_optimized(file, user, document)
-                                    
-                            # Clean up temp file
-                            if os.path.exists(file_path):
-                                os.unlink(file_path)
-                           
+                                # --- Status: Indexing ---
+                                update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
 
-                            # --- Status: Indexing ---
-                            update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
+                                # Create ProcessedIndex with pgvector
+                                ProcessedIndex.objects.create(
+                                    document=document,
+                                    storage_type='pgvector',
+                                    chunks_count=processed_data['chunks_count'],
+                                    summary="",
+                                    markdown_path=processed_data.get('markdown_path', '')
+                                )
+                                
+                                uploaded_docs.append({
+                                    'id': document.id,
+                                    'filename': document.filename
+                                })
+                                last_processed_doc_id = document.id
 
-                            # Create ProcessedIndex with pgvector
-                            ProcessedIndex.objects.create(
-                                document=document,
-                                storage_type='pgvector',
-                                chunks_count=processed_data['chunks_count'],
-                                summary="",
-                                markdown_path=processed_data.get('markdown_path', '')
-                            )
-                            
-                            uploaded_docs.append({
-                                'id': document.id,
-                                'filename': document.filename
-                            })
-                            last_processed_doc_id = document.id
+                                # --- Status: Complete ---
+                                update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
 
-                            # --- Status: Complete ---
-                            update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
+                    except Exception as e:
+                        update_doc_status(user, file.name, "error", 100, f"Error: {str(e)}")
+                        print(f"Error processing document: {str(e)}")
+                        return Response({
+                            'error': str(e),
+                            'detail': 'An error occurred while processing the document'
+                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-                except Exception as e:
-                    update_doc_status(user, file.name, "error", 100, f"Error: {str(e)}")
-                    print(f"Error processing document: {str(e)}")
-                    return Response({
-                        'error': str(e),
-                        'detail': 'An error occurred while processing the document'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                request.session['active_document_id'] = last_processed_doc_id
 
-            request.session['active_document_id'] = last_processed_doc_id
+                if processed_data is None:
+                    return Response({'error': 'No documents were successfully processed'}, status=status.HTTP_400_BAD_REQUEST)
 
-            if processed_data is None:
-                return Response({'error': 'No documents were successfully processed'}, status=status.HTTP_400_BAD_REQUEST)
+                update_project_timestamp(main_project_id, user)
 
-            update_project_timestamp(main_project_id, user)
+                return Response({
+                    'message': 'Documents uploaded successfully',
+                    'documents': uploaded_docs,
+                    'active_document_id': last_processed_doc_id
+                }, status=status.HTTP_201_CREATED)
 
-            return Response({
-                'message': 'Documents uploaded successfully',
-                'documents': uploaded_docs,
-                'active_document_id': last_processed_doc_id
-            }, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            print(f"Error processing document: {str(e)}")
-            return Response({
-                'error': str(e),
-                'detail': 'An error occurred while processing the document'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            except Exception as e:
+                print(f"Error processing document: {str(e)}")
+                return Response({
+                    'error': str(e),
+                    'detail': 'An error occurred while processing the document'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
     def create_document_transaction(self, user, document, main_project, upload_method, file_size=None, page_count=None):
         """Create transaction record for document upload with page limit validation"""
         try:
@@ -1796,7 +1751,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     }
                 }
             )
-           
+        
             # Create detailed document transaction with page count
             DocumentTransaction.objects.create(
                 user_transaction=user_transaction,
@@ -1806,7 +1761,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 upload_method=upload_method,
                 no_pages=page_count  # Store page count in the new field
             )
-           
+        
             print(f"Transaction recorded for document: {document.filename} with {page_count} pages")
             print(f"User total page usage: {new_total_pages}/{user_api_tokens.page_limit}")
             
@@ -1930,161 +1885,108 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     # -------------------------------
     # Replace process_pdf_document_optimized() with:
     def process_pdf_document_optimized_pgvector(self, file, user, document):
-
-        """
-
-        Optimized PDF processing with pgvector storage instead of FAISS
-
-        """
-        import fitz  # PyMuPDF
-        try:
-
-            # Save uploaded file to temporary location
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-
-                for chunk in file.chunks():
-
-                    tmp_file.write(chunk)
-
-                pdf_path = tmp_file.name
-
+            """
+            Optimized PDF processing with pgvector storage instead of FAISS
+            """
+            import fitz 
             try:
+                # Save uploaded file to temporary location
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                    for chunk in file.chunks():
+                        tmp_file.write(chunk)
+                    pdf_path = tmp_file.name
+                
+                try:
+                    # ... Keep all your existing optimization logic ...
+                    pdf_doc = fitz.open(pdf_path)
+                    total_pages = len(pdf_doc)
+                    print(f"Processing PDF with {total_pages} pages: {file.name}")
+                    
+                    # Keep all your parallel processing logic
+                    pages_with_images, pages_without_images = self._bulk_analyze_pages_for_images(pdf_doc)
+                    
+                    combined_markdown = ""
+                    page_results = {}
+                    
+                    # Process pages without images in parallel (fast)
+                    if pages_without_images:
+                        print("Processing text-only pages in parallel...")
+                        text_results = self._process_text_pages_parallel(pdf_doc, pages_without_images)
+                        page_results.update(text_results)
+                    
+                    # OPTIMIZATION 3: Batch process image pages if there are many
+                    if pages_with_images:
+                        if len(pages_with_images) > 5:  # If many image pages, use batch processing
+                            print(f"Batch processing {len(pages_with_images)} image pages...")
+                            image_results = self._batch_process_image_pages_pgvector(pdf_doc, pages_with_images, file.name, user, document)
+                        else:
+                            print(f"Processing {len(pages_with_images)} image pages individually...")
+                            image_results = self._process_image_pages_parallel_pgvector(pdf_doc, pages_with_images, file.name, user, document)
+                        page_results.update(image_results)
+                    
+                    pdf_doc.close()
+                    
+                    # Combine results in page order
+                    for page_num in range(total_pages):
+                        page_text = page_results.get(page_num, "[No extractable content]")
+                        combined_markdown += f"\n\n## Page {page_num + 1}\n\n{page_text.strip()}\n"
+                    
+                    if not combined_markdown.strip():
+                        raise ValueError("No content could be extracted from any page of the PDF")
+                    
+                    # Save markdown file locally instead of blob storage
+                    import uuid
+                    session_id = uuid.uuid4().hex
+                    markdown_filename = f"document_{session_id}.md"
+                    markdown_path = os.path.join(tempfile.gettempdir(), markdown_filename)
+                    
+                    with open(markdown_path, 'w', encoding='utf-8') as f:
+                        f.write(combined_markdown)
+                    
+                    print(f"Complete markdown saved to: {markdown_path}")
+                    
+                    # Process with pgvector instead of FAISS
+                    cleaned_text = self.clean_text(combined_markdown)
+                    chunks = self._smart_chunk_text(cleaned_text, target_chunk_size=2000)
+                    
+                    all_chunks = []
+                    for i, chunk in enumerate(chunks):
+                        all_chunks.append({
+                            'text': chunk,
+                            'source': file.name,
+                            'source_file': file.name,
+                            'chunk_id': i
+                        })
+                    
+                    # Batch embeddings
+                    text_chunks = [chunk['text'] for chunk in all_chunks]
+                    print(f"Getting embeddings for {len(text_chunks)} optimized chunks")
+                    embeddings = self._get_embeddings_batch(text_chunks, batch_size=50)
+                    
+                    if not embeddings:
+                        raise ValueError("Failed to generate embeddings for document chunks")
+                    
+                    # Save to pgvector instead of FAISS
+                    self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
+                    
+                    print(f"PDF processed successfully: {len(all_chunks)} chunks saved to pgvector from {total_pages} pages")
+                    
+                    return {
+                        'storage_type': 'pgvector',
+                        'chunks_count': len(all_chunks),
+                        'full_text': cleaned_text,
+                        'markdown_path': markdown_path,
+                        'page_count': total_pages
+                    }
+                    
+                finally:
+                    if os.path.exists(pdf_path):
+                        os.unlink(pdf_path)
+                        
+            except Exception as e:
+                print(f"Error in process_pdf_document_optimized_pgvector: {str(e)}")
+                raise
 
-                # ... Keep all your existing optimization logic ...
-
-                pdf_doc = fitz.open(pdf_path)
-
-                total_pages = len(pdf_doc)
-
-                print(f"Processing PDF with {total_pages} pages: {file.name}")
-
-                # Keep all your parallel processing logic
-
-                pages_with_images, pages_without_images = self._bulk_analyze_pages_for_images(pdf_doc)
-
-                combined_markdown = ""
-
-                page_results = {}
-
-                # Process pages (keep existing logic)
-
-                if pages_without_images:
-
-                    text_results = self._process_text_pages_parallel(pdf_doc, pages_without_images)
-
-                    page_results.update(text_results)
-
-                if pages_with_images:
-
-                    if len(pages_with_images) > 5:
-
-                        image_results = self._batch_process_image_pages_pgvector(pdf_doc, pages_with_images, file.name, user, document)
-
-                    else:
-
-                        image_results = self._process_image_pages_parallel_pgvector(pdf_doc, pages_with_images, file.name, user, document)
-
-                    page_results.update(image_results)
-
-                pdf_doc.close()
-
-                # Combine results in page order
-
-                for page_num in range(total_pages):
-
-                    page_text = page_results.get(page_num, "[No extractable content]")
-
-                    combined_markdown += f"\n\n## Page {page_num + 1}\n\n{page_text.strip()}\n"
-
-                if not combined_markdown.strip():
-
-                    raise ValueError("No content could be extracted from any page of the PDF")
-
-                # Upload markdown to blob storage instead of saving locally
-
-                from notebook.utils import upload_markdown_to_blob
-
-                import uuid
-
-                session_id = uuid.uuid4().hex
-
-                markdown_filename = f"document_{session_id}.md"
-
-                markdown_result = upload_markdown_to_blob(combined_markdown, markdown_filename)
-
-                if not markdown_result:
-
-                    raise ValueError("Failed to upload markdown file to blob storage")
-
-                markdown_path = markdown_result['filename']
-
-                print(f"Complete markdown uploaded to blob: {markdown_path}")
-
-                # Process with pgvector instead of FAISS
-
-                cleaned_text = self.clean_text(combined_markdown)
-
-                chunks = self._smart_chunk_text(cleaned_text, target_chunk_size=2000)
-
-                all_chunks = []
-
-                for i, chunk in enumerate(chunks):
-
-                    all_chunks.append({
-
-                        'text': chunk,
-
-                        'source': file.name,
-
-                        'source_file': file.name,
-
-                        'chunk_id': i
-
-                    })
-
-                # Batch embeddings
-
-                text_chunks = [chunk['text'] for chunk in all_chunks]
-
-                print(f"Getting embeddings for {len(text_chunks)} optimized chunks")
-
-                embeddings = self._get_embeddings_batch(text_chunks, batch_size=50)
-
-                if not embeddings:
-
-                    raise ValueError("Failed to generate embeddings for document chunks")
-
-                # Save to pgvector instead of FAISS
-
-                self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
-
-                print(f"PDF processed successfully: {len(all_chunks)} chunks saved to pgvector from {total_pages} pages")
-
-                return {
-
-                    'storage_type': 'pgvector',
-
-                    'chunks_count': len(all_chunks),
-
-                    'full_text': cleaned_text,
-
-                    'markdown_path': markdown_path,
-
-                    'page_count': total_pages
-                }
-
-            finally:
-
-                if os.path.exists(pdf_path):
-
-                    os.unlink(pdf_path)
-
-        except Exception as e:
-
-            print(f"Error in process_pdf_document_optimized_pgvector: {str(e)}")
-
-            raise
     def _bulk_analyze_pages_for_images(self, pdf_doc):
         """
         OPTIMIZATION: Analyze all pages for images in one pass
@@ -2443,15 +2345,12 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             raise
 
 
-    
     def process_complex_document_with_llamaparse_pgvector_blob(self, file_path, file_name, user, document):
         """
-        Process complex document using LlamaParse with user's API token, 
-        save to pgvector for embeddings, and save markdown to blob storage.
+        Process complex document using LlamaParse with user's API token and save to pgvector.
         """
         import tempfile
         from llama_parse import LlamaParse
-        from notebook.utils import upload_markdown_to_blob
        
         try:
             # Get the user's Llama API token
@@ -2492,24 +2391,19 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
            
             logger.info(f"Successfully extracted {len(full_text)} characters from document: {file_name}")
            
-            # Save markdown to blob storage (instead of local filesystem)
+            # Save markdown (adapted from Streamlit implementation)
             base_name = os.path.splitext(file_name)[0]
             safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
-            markdown_filename = f"{safe_name}_llamaparse.md"
-            
-            # Upload markdown to Azure Blob Storage
-            markdown_result = upload_markdown_to_blob(full_text, markdown_filename)
-            if not markdown_result:
-                raise ValueError("Failed to upload markdown file to blob storage")
-            
-            markdown_path = markdown_result['filename']
-            print(f"Uploaded markdown to blob storage: {markdown_path}")
+            md_path = os.path.join("markdown_files", f"{safe_name}.md")
+            os.makedirs("markdown_files", exist_ok=True)
+            with open(md_path, "w", encoding='utf-8') as f:
+                f.write(full_text)
            
             # Create chunks with overlap for better retrieval
             chunked_texts = []
             all_chunks = []
             chunk_id = 0
-           
+            
             for doc in parsed_documents:
                 # Skip documents with no meaningful content
                 if not doc.text or not doc.text.strip():
@@ -2551,10 +2445,10 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             # Get embeddings for all chunks
             print(f"Getting embeddings for {len(chunked_texts)} chunks")
             embeddings = self.get_embeddings(chunked_texts)
-           
+            
             if not embeddings:
                 raise ValueError("Failed to generate embeddings for document chunks")
-           
+            
             # Save to pgvector database
             self.save_embeddings_to_pgvector(all_chunks, embeddings, document)
            
@@ -2562,13 +2456,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 'storage_type': 'pgvector',
                 'chunks_count': len(all_chunks),
                 'full_text': full_text,
-                'markdown_path': markdown_path  # This is the blob storage path
+                'markdown_path': md_path  # Include the markdown path
             }
            
         except Exception as e:
             logger.error(f"Error in complex document processing for file '{file_name}': {str(e)}")
             print(f"Error in complex document processing: {str(e)}")
-            raise  
+            raise
 
     def count_document_pages(self, file_path, file_ext):
         """
@@ -2581,17 +2475,17 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 import fitz
                 pdf_doc = fitz.open(file_path)
                 pages_with_images = 0
-               
+                
                 for page_num in range(len(pdf_doc)):
                     page = pdf_doc[page_num]
                     # Get list of images on the page
                     image_list = page.get_images()
                     if image_list:  # If page has images
                         pages_with_images += 1
-               
+                
                 pdf_doc.close()
                 return pages_with_images
-               
+                
             elif file_ext == '.pptx':
                 # PowerPoint presentations - count only slides with images
                 import fitz
@@ -2599,26 +2493,26 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     # Convert PPTX to PDF in memory for image detection
                     pptx_doc = fitz.open(file_path)
                     slides_with_images = 0
-                   
+                    
                     for page_num in range(len(pptx_doc)):
                         page = pptx_doc[page_num]
                         # Get list of images on the page/slide
                         image_list = page.get_images()
                         if image_list:  # If slide has images
                             slides_with_images += 1
-                   
+                    
                     pptx_doc.close()
                     return slides_with_images
-                   
+                    
                 except Exception as pptx_error:
                     # Fallback to python-pptx if fitz fails
                     try:
                         from pptx import Presentation
                         from pptx.enum.shapes import MSO_SHAPE_TYPE
-                       
+                        
                         prs = Presentation(file_path)
                         slides_with_images = 0
-                       
+                        
                         for slide in prs.slides:
                             has_image = False
                             for shape in slide.shapes:
@@ -2627,11 +2521,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                     break
                             if has_image:
                                 slides_with_images += 1
-                       
+                        
                         return slides_with_images
                     except:
                         return 0  # Return 0 if we can't determine
-                   
+                    
             elif file_ext in ['.docx', '.doc']:
                 # Word documents
                 try:
@@ -2645,11 +2539,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     return estimated_pages
                 except:
                     return 1  # Default to 1 if we can't determine
-                   
+                    
             elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']:
                 # Image files - always 1 page
                 return 1
-               
+                
             elif file_ext == '.txt':
                 # Text files - estimate based on content
                 try:
@@ -2660,7 +2554,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                         return estimated_pages
                 except:
                     return 1
-                   
+                    
             elif file_ext in ['.xlsx', '.xls']:
                 # Excel files - count worksheets
                 try:
@@ -2669,15 +2563,15 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     return len(wb.worksheets)
                 except:
                     return 1
-                   
+                    
             else:
                 # For other file types, default to 1
                 return 1
-               
+                
         except Exception as e:
             print(f"Error counting pages for {file_path}: {str(e)}")
             return 1  # Default to 1 page if there's an error
-        
+    
 def update_doc_status(user, doc_name, status, progress=0, message="", doc_id=None):
     obj, _ = DocumentProcessingStatus.objects.get_or_create(
         user=user, document_name=doc_name,
@@ -2763,128 +2657,37 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
 
             all_summaries = []
             for document in documents:
-                # FIXED: Handle Azure Blob Storage files properly
                 try:
-                    # Check if the file is stored in Azure Blob storage
-                    if hasattr(document.file, 'name') and hasattr(document.file, 'storage'):
-                        # This is a Django FieldFile with Azure Blob Storage
-                        blob_path = document.file.name  # Get the blob path
-                        print(f"Document file is in blob storage: {blob_path}")
-                        
-                        # Download blob content directly
-                        from notebook.utils import get_blob_content
-                        
-                        # Try to get blob content
-                        content = get_blob_content(blob_path, 'uploadfiles')
-                        
-                        if content:
-                            # Create a temporary file with this content
-                            import tempfile
-                            import os
-                            
-                            # Determine file extension
-                            file_extension = os.path.splitext(document.filename)[1] or '.txt'
-                            
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
-                                temp_file.write(content)
-                                temp_path = temp_file.name
-                            
-                            try:
-                                # Extract text from the temporary file
-                                text = self.extract_text_from_file(temp_path, user)
-                                cleaned_text = self.clean_text(text)
-                                summary, key_points = self.generate_summary(cleaned_text, document.filename, user)
-                                
-                                # Save to database - update existing ProcessedIndex
-                                processed_index, created = ProcessedIndex.objects.get_or_create(
-                                    document=document,
-                                    defaults={
-                                        'summary': summary,
-                                        'key_points': key_points,
-                                        'faiss_index': '',
-                                        'metadata': '',
-                                        'markdown_path': ''
-                                    }
-                                )
-                                if not created:
-                                    processed_index.summary = summary
-                                    processed_index.key_points = key_points
-                                    processed_index.save()
-
-                                all_summaries.append({
-                                    'document_id': document.id,
-                                    'filename': document.filename,
-                                    'summary': summary,
-                                    'key_points': key_points,
-                                    'success': True
-                                })
-                                
-                            finally:
-                                # Clean up temp file
-                                if os.path.exists(temp_path):
-                                    os.unlink(temp_path)
-                        else:
-                            raise ValueError(f"Could not retrieve blob content for document {document.id}")
-                            
-                    elif isinstance(document.file, str):
-                        # Handle string paths (blob paths)
-                        from notebook.utils import get_blob_content
-                        
-                        content = get_blob_content(document.file, 'uploadfiles')
-                        if content:
-                            # Similar processing as above
-                            import tempfile
-                            import os
-                            
-                            file_extension = os.path.splitext(document.filename)[1] or '.txt'
-                            
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
-                                temp_file.write(content)
-                                temp_path = temp_file.name
-                            
-                            try:
-                                text = self.extract_text_from_file(temp_path, user)
-                                cleaned_text = self.clean_text(text)
-                                summary, key_points = self.generate_summary(cleaned_text, document.filename, user)
-                                
-                                processed_index, created = ProcessedIndex.objects.get_or_create(
-                                    document=document,
-                                    defaults={
-                                        'summary': summary,
-                                        'key_points': key_points,
-                                        'faiss_index': '',
-                                        'metadata': '',
-                                        'markdown_path': ''
-                                    }
-                                )
-                                if not created:
-                                    processed_index.summary = summary
-                                    processed_index.key_points = key_points
-                                    processed_index.save()
-
-                                all_summaries.append({
-                                    'document_id': document.id,
-                                    'filename': document.filename,
-                                    'summary': summary,
-                                    'key_points': key_points,
-                                    'success': True
-                                })
-                                
-                            finally:
-                                if os.path.exists(temp_path):
-                                    os.unlink(temp_path)
-                        else:
-                            raise ValueError(f"Could not retrieve content for document {document.id}")
+                    # Extract text from the document (your existing flow)
+                    text = self.extract_text_from_file(document.file.path, user)
+                    cleaned_text = self.clean_text(text)
                     
-                    else:
-                        # Fallback: try to handle as local file (though this shouldn't happen in Azure)
-                        if hasattr(document.file, 'path') and os.path.exists(document.file.path):
-                            with open(document.file.path, 'rb') as file:
-                                text = self.extract_text_from_file(file.name, user)
-                                cleaned_text = self.clean_text(text)
-                                summary, key_points = self.generate_summary(cleaned_text, document.filename, user)
-                        else:
-                            raise ValueError(f"Could not access file for document {document.id}: {document.filename}")
+                    # Generate summary and key points using NEW Gemini-based function
+                    summary, key_points = self.generate_summary(cleaned_text, document.filename, user)
+                    
+                    # Save to database - update existing ProcessedIndex
+                    processed_index, created = ProcessedIndex.objects.get_or_create(
+                        document=document,
+                        defaults={
+                            'summary': summary,
+                            'key_points': key_points,  # Store key points in new field
+                            'faiss_index': '',  # Set appropriate defaults for required fields
+                            'metadata': '',
+                            'markdown_path': ''
+                        }
+                    )
+                    if not created:
+                        processed_index.summary = summary
+                        processed_index.key_points = key_points  # Update key points
+                        processed_index.save()
+
+                    all_summaries.append({
+                        'document_id': document.id,
+                        'filename': document.filename,
+                        'summary': summary,
+                        'key_points': key_points,  # Include key points in response
+                        'success': True
+                    })
                         
                 except Exception as e:
                     logger.error(f"Error processing document {document.id}: {str(e)}")
@@ -2909,7 +2712,7 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
             logger.error(f"Error in GenerateDocumentSummaryView: {str(e)}")
             return Response({
                 'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)     
 
 
 class DeleteDocumentView(APIView):
@@ -2970,11 +2773,15 @@ class GetChatHistoryView(APIView):
                     'error': 'Main project ID is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            show_archived = request.query_params.get('archived', 'false').lower() == 'true'
+ 
             # Filter conversations by both user and main_project_id
             conversations = ChatHistory.objects.filter(
                 user=user,
                 main_project_id=main_project_id,
-                is_active=True
+
+                is_archived=show_archived
+
             ).order_by('-created_at')
             
             history = []
@@ -3006,7 +2813,11 @@ class GetChatHistoryView(APIView):
                     'messages': message_list,
                     'preview': message_list[0]['content'] if message_list else "",
                     'follow_up_questions': conversation.follow_up_questions or [],
-                    'selected_documents': [str(doc.id) for doc in conversation.documents.all()]
+
+                    'selected_documents': [str(doc.id) for doc in conversation.documents.all()],
+
+                    'is_archived': conversation.is_archived
+
                 })
             #print("##############################", history)
             return Response(history, status=status.HTTP_200_OK)
@@ -3017,8 +2828,59 @@ class GetChatHistoryView(APIView):
                 {'error': f'Failed to fetch chat history: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-        
+
+class ArchiveConversationView(APIView):
+    permission_classes = [IsAuthenticated]
+ 
+    def patch(self, request, conversation_id):
+        try:
+            conversation = ChatHistory.objects.get(conversation_id=conversation_id, user=request.user)
+            archive = request.data.get('archive', True)
+            conversation.is_archived = archive
+            conversation.save()
+            return Response({'success': True, 'is_archived': conversation.is_archived}, status=status.HTTP_200_OK)
+        except ChatHistory.DoesNotExist:
+            return Response({'error': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class GenerateTitleView(APIView):
+    permission_classes = [IsAuthenticated]
+   
+    def post(self, request):
+        message = request.data.get('message')
+        max_length = request.data.get('max_length', 40)
+       
+        try:
+            # Prompt engineering for better titles
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{
+                    "role": "system",
+                    "content": "Generate a concise, descriptive title (2-5 words) that captures the main topic or question. Make it clear and specific, like a document heading."
+                }, {
+                    "role": "user",
+                    "content": f"Generate a short title for this: {message}"
+                }],
+                max_tokens=max_length,
+                temperature=0.3
+            )
+           
+            title = response.choices[0].message.content.strip()
+           
+            return Response({
+                "success": True,
+                "title": title
+            })
+           
+        except Exception as e:
+            logger.error(f"Error generating title: {str(e)}")
+            return Response({
+                "success": False,
+                "error": "Failed to generate title"
+            }, status=500)
+ 
+
+
 class SetActiveDocumentView(APIView):
     def post(self, request):
         try:
@@ -7907,249 +7769,45 @@ class DeleteConversationView(APIView):
 class OriginalDocumentView(APIView):
     permission_classes = [IsAuthenticated]
     
-    # Fixed document viewing implementation for OriginalDocumentView.get method
-
-    # Update OriginalDocumentView.get in views.py
-
     def get(self, request, document_id):
-        """Fixed document viewing implementation with proper blob response handling"""
-        import os
-        import logging
-        from django.http import HttpResponse, FileResponse, JsonResponse
-        from notebook.utils import get_azure_settings, download_blob_to_temp_file, get_blob_content
-        
         try:
             # Get the document making sure it belongs to the user
             document = get_object_or_404(Document, id=document_id, user=request.user)
             
-            # Get main_project_id for blob path construction
-            main_project_id = document.main_project_id
+            # Get the file path
+            file_path = document.file.path
             
-            # CRITICAL: Always use document.file for the original document
-            file_path = document.file
-            print(f"=== DOCUMENT VIEW REQUEST ===")
-            print(f"Document ID: {document_id}")
-            print(f"Document filename: {document.filename}")
-            print(f"Document file path: {file_path}")
-            print(f"Main project ID: {main_project_id}")
-            print(f"File path type: {type(file_path)}")
+            # Check if file exists
+            if not os.path.exists(file_path):
+                return Response(
+                    {'error': 'Document file not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+            # Determine content type based on file extension
+            content_type = self.get_content_type(file_path)
             
-            # Handle different types of file_path values
-            # FIXED: Check if it's a FieldFile (Azure Blob Storage) first
-            if hasattr(file_path, 'name') and hasattr(file_path, 'storage'):
-                # This is a Django FieldFile with Azure Blob Storage
-                blob_path = file_path.name  # Get the blob path without trying to access .path
-                print(f"File is stored in Azure Blob Storage: {blob_path}")
-                
-                # Get Azure settings
-                account_name, _, _ = get_azure_settings()
-                container_name = 'uploadfiles'
-                
-                # Try to get blob content directly
-                print(f"Attempting to get blob content for: {blob_path}")
-                
-                try:
-                    # Get blob content as bytes
-                    blob_content = get_blob_content(blob_path, container_name)
-                    
-                    if blob_content and len(blob_content) > 0:
-                        print(f"✅ Successfully retrieved blob content: {len(blob_content)} bytes")
-                        
-                        # Determine content type
-                        content_type = self.get_content_type(document.filename)
-                        print(f"Content type: {content_type}")
-                        
-                        # Create HTTP response with the blob content
-                        response = HttpResponse(
-                            blob_content, 
-                            content_type=content_type
-                        )
-                        
-                        # Set headers for inline viewing
-                        response['Content-Disposition'] = f'inline; filename="{document.filename}"'
-                        response['Content-Length'] = str(len(blob_content))
-                        response['Cache-Control'] = 'no-cache'
-                        
-                        # Set CORS headers if needed for frontend
-                        response['Access-Control-Allow-Origin'] = '*'
-                        response['Access-Control-Allow-Methods'] = 'GET'
-                        response['Access-Control-Allow-Headers'] = 'Content-Type'
-                        
-                        print(f"✅ Successfully created HTTP response with {len(blob_content)} bytes")
-                        return response
-                    else:
-                        print(f"❌ No content or empty content for: {blob_path}")
-                        
-                except Exception as blob_error:
-                    print(f"❌ Error getting blob content: {str(blob_error)}")
-                    
-                    # Try with different path variations
-                    blob_paths_to_try = [
-                        blob_path,  # Original path as stored
-                    ]
-                    
-                    # Add variations if the path doesn't already contain certain prefixes
-                    if not blob_path.startswith('media/'):
-                        blob_paths_to_try.extend([
-                            f"media/documents/{blob_path}",
-                            f"media/documents/{main_project_id}/{blob_path}" if main_project_id else f"media/documents/{blob_path}",
-                            f"media/{blob_path}"
-                        ])
-                    
-                    # Add project-specific paths
-                    if main_project_id and f"/{main_project_id}/" not in blob_path:
-                        blob_paths_to_try.append(f"media/documents/{main_project_id}/{os.path.basename(blob_path)}")
-                    
-                    # Remove duplicates while preserving order
-                    seen = set()
-                    unique_paths = []
-                    for path in blob_paths_to_try:
-                        if path not in seen:
-                            seen.add(path)
-                            unique_paths.append(path)
-                    
-                    print(f"Trying {len(unique_paths)} blob path variations:")
-                    for i, path in enumerate(unique_paths):
-                        print(f"  {i+1}. {path}")
-                    
-                    # Try each path variation
-                    for i, blob_path_variant in enumerate(unique_paths):
-                        print(f"Attempt {i+1}: Getting blob content for: {blob_path_variant}")
-                        
-                        try:
-                            blob_content = get_blob_content(blob_path_variant, container_name)
-                            
-                            if blob_content and len(blob_content) > 0:
-                                print(f"✅ Successfully retrieved blob content: {len(blob_content)} bytes")
-                                
-                                # Determine content type
-                                content_type = self.get_content_type(document.filename)
-                                
-                                # Create HTTP response with the blob content
-                                response = HttpResponse(
-                                    blob_content, 
-                                    content_type=content_type
-                                )
-                                
-                                # Set headers for inline viewing
-                                response['Content-Disposition'] = f'inline; filename="{document.filename}"'
-                                response['Content-Length'] = str(len(blob_content))
-                                response['Cache-Control'] = 'no-cache'
-                                response['Access-Control-Allow-Origin'] = '*'
-                                response['Access-Control-Allow-Methods'] = 'GET'
-                                response['Access-Control-Allow-Headers'] = 'Content-Type'
-                                
-                                return response
-                            else:
-                                print(f"❌ No content for path: {blob_path_variant}")
-                                
-                        except Exception as variant_error:
-                            print(f"❌ Error with path {blob_path_variant}: {str(variant_error)}")
-                            continue
-                    
-                    # If all blob attempts failed, return direct URL
-                    normalized_path = blob_path
-                    if not normalized_path.startswith('media/'):
-                        normalized_path = f"media/documents/{normalized_path}"
-                        if main_project_id and f"/{main_project_id}/" not in normalized_path:
-                            normalized_path = f"media/documents/{main_project_id}/{os.path.basename(blob_path)}"
-                    
-                    direct_blob_url = f"https://{account_name}.blob.core.windows.net/{container_name}/{normalized_path}"
-                    print(f"Returning direct blob URL: {direct_blob_url}")
-                    
-                    return JsonResponse({
-                        'redirect_url': direct_blob_url,
-                        'filename': document.filename,
-                        'error': 'Could not retrieve blob content directly, using direct URL'
-                    })
+            # Create a file response
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type=content_type
+            )
             
-            elif isinstance(file_path, str):
-                # Handle string paths (blob paths)
-                print(f"File path is a string: {file_path}")
-                
-                # Check if it's a direct URL first
-                if file_path.startswith('http'):
-                    print(f"File path is a direct URL: {file_path}")
-                    return JsonResponse({
-                        'redirect_url': file_path,
-                        'filename': document.filename
-                    })
-                
-                # It's a blob path - get the blob content directly
-                print(f"File path is a blob path, attempting to get content...")
-                
-                # Get Azure settings
-                account_name, _, _ = get_azure_settings()
-                container_name = 'uploadfiles'
-                
-                # Try to get blob content directly
-                try:
-                    blob_content = get_blob_content(file_path, container_name)
-                    
-                    if blob_content and len(blob_content) > 0:
-                        print(f"✅ Successfully retrieved blob content: {len(blob_content)} bytes")
-                        
-                        # Determine content type
-                        content_type = self.get_content_type(document.filename)
-                        
-                        # Create HTTP response with the blob content
-                        response = HttpResponse(
-                            blob_content, 
-                            content_type=content_type
-                        )
-                        
-                        # Set headers for inline viewing
-                        response['Content-Disposition'] = f'inline; filename="{document.filename}"'
-                        response['Content-Length'] = str(len(blob_content))
-                        response['Cache-Control'] = 'no-cache'
-                        response['Access-Control-Allow-Origin'] = '*'
-                        response['Access-Control-Allow-Methods'] = 'GET'
-                        response['Access-Control-Allow-Headers'] = 'Content-Type'
-                        
-                        return response
-                        
-                except Exception as string_error:
-                    print(f"❌ Error getting blob content from string path: {str(string_error)}")
-                    
-                    # Return direct URL as fallback
-                    direct_blob_url = f"https://{account_name}.blob.core.windows.net/{container_name}/{file_path}"
-                    return JsonResponse({
-                        'redirect_url': direct_blob_url,
-                        'filename': document.filename,
-                        'error': 'Could not retrieve blob content, using direct URL'
-                    })
+            # Set content disposition to attachment with the original filename
+            response['Content-Disposition'] = f'inline; filename="{document.filename}"'
             
-            # If we reach here, all attempts have failed
-            print("❌ All document retrieval attempts failed")
-            return Response({
-                'error': 'Could not retrieve the document file - all methods failed',
-                'file_path': str(file_path),
-                'document_id': document_id,
-                'filename': document.filename,
-                'debug_info': {
-                    'file_path_type': type(file_path).__name__,
-                    'file_path_value': str(file_path),
-                    'main_project_id': main_project_id,
-                    'is_fieldfile': hasattr(file_path, 'name') and hasattr(file_path, 'storage'),
-                    'storage_backend': str(type(file_path.storage)) if hasattr(file_path, 'storage') else 'Unknown'
-                }
-            }, status=status.HTTP_404_NOT_FOUND)
+            # Log the file access
+            self.log_document_view(request.user, document)
             
-        except Document.DoesNotExist:
-            return Response({
-                'error': 'Document not found or access denied'
-            }, status=status.HTTP_404_NOT_FOUND)
+            return response
             
         except Exception as e:
-            import traceback
-            print(f"❌ Error serving document: {str(e)}")
-            print(traceback.format_exc())
-            
-            return Response({
-                'error': f'Failed to retrieve document: {str(e)}',
-                'document_id': document_id,
-                'traceback': traceback.format_exc()
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(f"Error serving original document: {str(e)}")
+            return Response(
+                {'error': f'Failed to retrieve document: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     def get_content_type(self, file_path):
         """Determine content type based on file extension"""
         extension = os.path.splitext(file_path)[1].lower()
@@ -8255,96 +7913,50 @@ class DocumentContentSearchView(APIView):
                     # Get the processed index for this document
                     processed_index = ProcessedIndex.objects.get(document=doc)
                     
-                    # First, check if this is a LlamaParse document with markdown
-                    markdown_content = None
-                    markdown_found = False
+                    # First, check if this is a LlamaParse document
+                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                        # This is a LlamaParse document, read the markdown content directly
+                        try:
+                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                                markdown_content = f.read()
+                            
+                            # Convert query to lowercase for case-insensitive search
+                            query_lower = query.lower()
+                            
+                            # Check if query exists in the markdown content
+                            if query_lower in markdown_content.lower():
+                                # Found a match - get the surrounding context
+                                index = markdown_content.lower().find(query_lower)
+                                start = max(0, index - 100)
+                                end = min(len(markdown_content), index + len(query) + 100)
+                                match_context = markdown_content[start:end]
+                                
+                                # Count occurrences
+                                match_count = markdown_content.lower().count(query_lower)
+                                
+                                search_results.append({
+                                    'id': doc.id,
+                                    'filename': doc.filename,
+                                    'match_count': match_count,
+                                    'match_context': match_context,
+                                    'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
+                                })
+                                
+                                # Continue to the next document
+                                continue
+                        except Exception as e:
+                            logger.error(f"Error searching in markdown file for document {doc.id}: {str(e)}")
+                            # Continue with the FAISS approach as fallback
                     
-                    if processed_index.markdown_path:
-                        try:
-                            # Check local file first
-                            if os.path.exists(processed_index.markdown_path):
-                                with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
-                                    markdown_content = f.read()
-                                logger.info(f"Read markdown from local file: {processed_index.markdown_path}")
-                            else:
-                                # Try blob storage
-                                from chat.utils import get_blob_content
-                                logger.info(f"Attempting to read markdown from blob: {processed_index.markdown_path}")
-                                markdown_bytes = get_blob_content(processed_index.markdown_path, 'uploadfiles')
-                                if markdown_bytes:
-                                    markdown_content = markdown_bytes.decode('utf-8')
-                                    logger.info(f"Successfully read markdown from blob storage")
-                                else:
-                                    logger.warning(f"Failed to read markdown from blob: {processed_index.markdown_path}")
-                                    
-                        except Exception as e:
-                            logger.error(f"Error reading markdown for document {doc.id}: {str(e)}")
-                            # Continue with FAISS approach as fallback
-                            
-                    # If we got markdown content, search in it
-                    if markdown_content:
-                        # Convert query to lowercase for case-insensitive search
-                        query_lower = query.lower()
-                        
-                        # Check if query exists in the markdown content
-                        if query_lower in markdown_content.lower():
-                            # Found a match - get the surrounding context
-                            index = markdown_content.lower().find(query_lower)
-                            start = max(0, index - 100)
-                            end = min(len(markdown_content), index + len(query) + 100)
-                            match_context = markdown_content[start:end]
-                            
-                            # Count occurrences
-                            match_count = markdown_content.lower().count(query_lower)
-                            
-                            search_results.append({
-                                'id': doc.id,
-                                'filename': doc.filename,
-                                'match_count': match_count,
-                                'match_context': match_context,
-                                'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M'),
-                                'source_type': 'markdown'
-                            })
-                            
-                            markdown_found = True
-                            # Continue to the next document
+                    # Standard FAISS approach for non-LlamaParse documents
+                    if processed_index.faiss_index and processed_index.metadata:
+                        # Check if the files exist
+                        if not os.path.exists(processed_index.faiss_index) or not os.path.exists(processed_index.metadata):
                             continue
-
-                    # If markdown search didn't find results, fall back to chunk search
-                    if not markdown_found and processed_index.faiss_index and processed_index.metadata:
-                        chunks = []
-                        
-                        # Try to load metadata from local file or blob storage
-                        try:
-                            if os.path.exists(processed_index.metadata):
-                                # Local file
-                                logger.info(f"Loading metadata from local file: {processed_index.metadata}")
-                                with open(processed_index.metadata, 'rb') as f:
-                                    chunks = pickle.load(f)
-                            else:
-                                # Try blob storage
-                                logger.info(f"Loading metadata from blob storage: {processed_index.metadata}")
-                                from chat.utils import get_blob_content
-                                metadata_content = get_blob_content(processed_index.metadata, 'uploadfiles')
-                                if metadata_content:
-                                    chunks = pickle.loads(metadata_content)
-                                    logger.info(f"Successfully loaded {len(chunks) if isinstance(chunks, list) else 'unknown'} chunks from blob")
-                                else:
-                                    logger.warning(f"Failed to retrieve metadata from blob storage: {processed_index.metadata}")
-                                    continue
-                                    
-                        except Exception as e:
-                            logger.error(f"Error loading metadata for document {doc.id}: {str(e)}")
-                            continue
-                        
-                        # Ensure chunks is a list
-                        if not isinstance(chunks, list):
-                            logger.warning(f"Chunks is not a list for document {doc.id}: {type(chunks)}")
-                            chunks = [chunks] if chunks else []
-                        
-                        if not chunks:
-                            logger.warning(f"No chunks found for document {doc.id}")
-                            continue
+                            
+                        # Load the metadata (chunks)
+                        with open(processed_index.metadata, 'rb') as f:
+                            chunks = pickle.load(f)
                         
                         # Convert query to lowercase for case-insensitive search
                         query_lower = query.lower()
@@ -8395,7 +8007,7 @@ class DocumentContentSearchView(APIView):
             return Response({
                 'error': f'An error occurred: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-  
+ 
 
 class ProcessCitationsView(APIView):
     """
@@ -9003,11 +8615,10 @@ class ChatExportView(APIView):
  
 class YouTubeUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
-
     def sanitize_filename(self, filename):
         """Sanitize filename to make it safe for file system"""
         import re
-        
+       
         # Remove or replace characters that are not allowed in filenames
         filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
         # Remove leading/trailing dots and spaces
@@ -9018,7 +8629,7 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
         # Limit length to avoid file system issues
         if len(filename) > 200:
             filename = filename[:200]
-        
+       
         return filename
    
     def is_valid_youtube_url(self, url):
@@ -9115,11 +8726,10 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
         """
         Process extracted text directly without file operations.
         Creates FAISS index and metadata from the provided text.
-        UPDATED: Now saves to Azure Blob Storage
         """
         import numpy as np
         import faiss
-        import uuid
+        import pickle
        
         try:
             # Clean the text
@@ -9149,8 +8759,8 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
             # Generate a unique session ID for this document
             session_id = uuid.uuid4().hex
            
-            # FIXED: Save the index and chunks to Azure Blob Storage
-            index_file, pickle_file = self.save_faiss_index_to_blob(index, all_chunks, session_id)
+            # Save the index and chunks
+            index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
            
             logger.info(f"Text processed successfully: {len(all_chunks)} chunks created")
            
@@ -9237,36 +8847,36 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
                     main_project=main_project
                 ).first()
                
-                # FIXED: Upload transcript to Azure Blob Storage
-                from notebook.utils import upload_transcript_to_blob
-                blob_info = upload_transcript_to_blob(
-                    extracted_text, 
-                    transcript_filename,
-                    is_video=True  # This is from a YouTube video
-                )
-                
-                if not blob_info:
-                    return Response({
-                        'error': f'Failed to upload transcript to blob storage: {transcript_filename}'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                # Create a temporary file with the transcript
+                transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
+                with open(transcript_file_path, 'w', encoding='utf-8') as f:
+                    f.write(extracted_text)
                
-                # Create or update document with transcript
-                if existing_doc:
-                    # Update existing document
-                    existing_doc.file = blob_info['filename']  # Store blob path
-                    existing_doc.filename = transcript_filename
-                    existing_doc.save()
-                    document = existing_doc
-                    logger.info(f"Updated existing document: {document.id}")
-                else:
-                    # Create new document with transcript
-                    document = Document.objects.create(
-                        user=user,
-                        file=blob_info['filename'],  # Store blob path
-                        filename=transcript_filename,
-                        main_project=main_project
-                    )
-                    logger.info(f"Created new document: {document.id}")
+                # Create a Django File object from the transcript
+                with open(transcript_file_path, 'rb') as f:
+                    from django.core.files import File
+                    django_file = File(f, name=transcript_filename)
+                   
+                    # Create or update document with transcript
+                    if existing_doc:
+                        # Update existing document
+                        existing_doc.file = django_file
+                        existing_doc.filename = transcript_filename
+                        existing_doc.save()
+                        document = existing_doc
+                        logger.info(f"Updated existing document: {document.id}")
+                    else:
+                        # Create new document with transcript
+                        document = Document.objects.create(
+                            user=user,
+                            file=django_file,
+                            filename=transcript_filename,
+                            main_project=main_project
+                        )
+                        logger.info(f"Created new document: {document.id}")
+               
+                # Delete the temporary transcript file
+                os.unlink(transcript_file_path)
                
                 # Process the document for RAG
                 processed_data = self.process_document_from_text(extracted_text, transcript_filename, user)
@@ -9301,8 +8911,7 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
                         'id': document.id,
                         'filename': transcript_filename,
                         'original_video_title': video_title,
-                        'youtube_url': youtube_url,
-                        'transcript_blob_path': blob_info['filename']
+                        'youtube_url': youtube_url
                     },
                     'active_document_id': document.id
                 }, status=status.HTTP_201_CREATED)
@@ -9323,6 +8932,8 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
                 'detail': 'An error occurred while processing the YouTube video'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
+    # Add this method to your YouTubeUploadView class
+
     def extract_text_from_youtube_audio(self, audio_file_path, user=None):
         """
         Extract text from audio file specifically for YouTube uploads using Google Gemini API.
@@ -9371,7 +8982,7 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
             
             # Check file format and size limitations
             file_extension = Path(audio_file_path).suffix.lower()
-            if file_size > 500 * 1024 * 1024:  # 500MB limit
+            if file_size > 500 * 1024 * 1024:  # 20MB limit
                 raise Exception(f"File too large: {file_size/(1024*1024):.2f}MB. Maximum size is 500MB.")
             
             # Upload the file with metadata
@@ -9384,13 +8995,14 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
                 )
             except Exception as upload_error:
                 logger.error(f"Upload failed: {upload_error}")
+                # Try different approach or return error
                 raise Exception(f"Failed to upload file to Google API: {upload_error}")
             
             logger.info(f"File uploaded successfully: {audio_file.name}")
             
             # Wait for the file to be processed with better error handling
             logger.info(f"Waiting for file {audio_file.name} to be processed...")
-            max_wait_time = 180  # 3 minutes max wait
+            max_wait_time = 180  # 3 minutes max wait (reduced from 5)
             wait_interval = 3    # Check every 3 seconds
             waited_time = 0
             
@@ -9445,7 +9057,7 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
             Provide proper punctuation and formatting.
             """
             
-            # Generate the transcription
+            # Generate the transcription with timeout
             logger.info("Starting transcription...")
             try:
                 response = model.generate_content([prompt, audio_file])
@@ -9472,9 +9084,10 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             logger.error(f"Error in extract_text_from_youtube_audio: {str(e)}")
             return f"Error transcribing audio: {str(e)}"
-
     def split_text_into_chunks(self, text, chunk_size=1000, overlap=200):
-        """Split text into overlapping chunks for processing."""
+        """
+        Split text into overlapping chunks for processing.
+        """
         if not text or len(text.strip()) == 0:
             return []
         
@@ -9490,7 +9103,9 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
         return chunks
 
     def clean_text(self, text):
-        """Clean and normalize text content."""
+        """
+        Clean and normalize text content.
+        """
         import re
         
         if not text:
@@ -9544,7 +9159,9 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
             return [[0.0] * 1536 for _ in texts]
 
     def create_faiss_index(self, embeddings):
-        """Create FAISS index from embeddings."""
+        """
+        Create FAISS index from embeddings.
+        """
         import numpy as np
         import faiss
         
@@ -9561,68 +9178,40 @@ class YouTubeUploadView(DocumentProcessingMixin, APIView):
         
         return index
 
-    def save_faiss_index_to_blob(self, index, chunks, session_id):
-        """Save FAISS index and metadata to Azure Blob Storage"""
+    def save_faiss_index(self, index, chunks, session_id):
+        """
+        Save FAISS index and metadata to files.
+        """
         import pickle
-        import faiss
-        import tempfile
         import os
-        from notebook.utils import upload_bytes_to_azure_blob
+        from django.conf import settings
         
         try:
-            # Create temporary files
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.faiss') as index_file:
-                index_file_path = index_file.name
+            # Create directory for indexes
+            index_dir = os.path.join(settings.MEDIA_ROOT, 'faiss_indexes')
+            os.makedirs(index_dir, exist_ok=True)
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as pickle_file:
-                pickle_file_path = pickle_file.name
+            # File paths
+            index_file = os.path.join(index_dir, f'index_{session_id}.faiss')
+            pickle_file = os.path.join(index_dir, f'metadata_{session_id}.pkl')
             
-            # Save index and chunks to temporary files
-            faiss.write_index(index, index_file_path)
+            # Save FAISS index
+            import faiss
+            faiss.write_index(index, index_file)
             
-            with open(pickle_file_path, "wb") as f:
+            # Save metadata
+            with open(pickle_file, 'wb') as f:
                 pickle.dump(chunks, f)
             
-            # Read the files as bytes
-            with open(index_file_path, "rb") as f:
-                index_bytes = f.read()
+            logger.info(f"Saved FAISS index to {index_file}")
+            logger.info(f"Saved metadata to {pickle_file}")
             
-            with open(pickle_file_path, "rb") as f:
-                pickle_bytes = f.read()
-            
-            # Upload to Azure Blob Storage
-            index_filename = f"{session_id}_index.faiss"
-            pickle_filename = f"{session_id}_chunks.pkl"
-            
-            folder_path = 'faissindex'
-            
-            index_result = upload_bytes_to_azure_blob(
-                index_bytes, 
-                index_filename, 
-                folder_path=folder_path,
-                container_name='uploadfiles'
-            )
-            
-            pickle_result = upload_bytes_to_azure_blob(
-                pickle_bytes, 
-                pickle_filename, 
-                folder_path=folder_path,
-                container_name='uploadfiles'
-            )
-            
-            # Clean up temp files
-            os.unlink(index_file_path)
-            os.unlink(pickle_file_path)
-            
-            if not index_result or not pickle_result:
-                raise ValueError("Failed to upload FAISS index to Azure Blob Storage")
-            
-            return f"{folder_path}/{index_filename}", f"{folder_path}/{pickle_filename}"
+            return index_file, pickle_file
             
         except Exception as e:
-            logger.error(f"Error saving FAISS index to blob: {str(e)}")
-            raise
-
+            logger.error(f"Error in save_faiss_index: {str(e)}")
+            raise Exception(f"Failed to save FAISS index: {str(e)}")
+  
 
 class NoteManagementView(DocumentUploadView, APIView):
     parser_classes = (JSONParser,)
@@ -9789,106 +9378,102 @@ class NoteManagementView(DocumentUploadView, APIView):
             # Clean and convert the content
             cleaned_content = self.clean_html_content(note.content)
            
-            # Prepare the content with title
-            full_content = ""
-            if note.title:
-                full_content += f"Title: {note.title}\n"
-                full_content += "=" * (len(note.title) + 7) + "\n\n"
-            full_content += cleaned_content
+            # Create temporary file with cleaned note content
+            temp_file_path = os.path.join(tempfile.gettempdir(), filename)
        
-            # BLOB INTEGRATION: Upload note content to Azure Blob Storage
-            from notebook.utils import upload_bytes_to_azure_blob
-            
-            # Convert content to bytes
-            content_bytes = full_content.encode('utf-8')
-            
-            # Upload to blob storage
-            blob_info = upload_bytes_to_azure_blob(
-                content_bytes,
-                filename,
-                folder_path=f'media/documents/{note.main_project.id}',
-                content_type='text/plain',
-                container_name='uploadfiles'
-            )
-            
-            if not blob_info:
-                return Response({
-                    'error': 'Failed to upload note content to blob storage'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-            # Use transaction to ensure data consistency
-            with transaction.atomic():
-                # Create document
-                document = Document.objects.create(
-                    user=user,
-                    file=blob_info['filename'],  # Store blob path
-                    filename=filename,
-                    main_project=note.main_project
-                )
-           
-                logger.info(f"Created document from note: {document.id}")
-           
-                # Process the document for RAG using the inherited method
-                try:
-                    # Prepare the content with title
-                    full_content = ""
+            try:
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    # Add title as header if available
                     if note.title:
-                        full_content += f"Title: {note.title}\n"
-                        full_content += "=" * (len(note.title) + 7) + "\n\n"
-                    full_content += cleaned_content
+                        f.write(f"Title: {note.title}\n")
+                        f.write("=" * (len(note.title) + 7) + "\n\n")
+                    f.write(cleaned_content)
+           
+                # Create Django File object
+                with open(temp_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+               
+                    # Use transaction to ensure data consistency
+                    with transaction.atomic():
+                        # Create document
+                        document = Document.objects.create(
+                            user=user,
+                            file=django_file,
+                            filename=filename,
+                            main_project=note.main_project
+                        )
                    
-                    # Use the process_document_from_text method from YouTubeUploadView
-                    processed_data = self.process_document_from_text_pgvector(full_content, filename, document)
+                        logger.info(f"Created document from note: {document.id}")
                    
-                    logger.info(f"Note processed successfully for RAG")
+                        # Process the document for RAG using the inherited method
+                        try:
+                            # Prepare the content with title
+                            full_content = ""
+                            if note.title:
+                                full_content += f"Title: {note.title}\n"
+                                full_content += "=" * (len(note.title) + 7) + "\n\n"
+                            full_content += cleaned_content
+                           
+                            # Use the process_document_from_text method from YouTubeUploadView
+                            processed_data = self.process_document_from_text_pgvector(full_content, filename, document)
+                           
+                            logger.info(f"Note processed successfully for RAG")
+                           
+                        except Exception as processing_error:
+                            logger.error(f"Error processing note for RAG: {str(processing_error)}")
+                            # If processing fails, still create the document but without processing
+                            processed_data = {
+                                'index_path': '',
+                                'metadata_path': '',
+                                'full_text': full_content
+                            }
                    
-                except Exception as processing_error:
-                    logger.error(f"Error processing note for RAG: {str(processing_error)}")
-                    # If processing fails, still create the document but without processing
-                    processed_data = {
-                        'index_path': '',
-                        'metadata_path': '',
-                        'full_text': full_content
-                    }
+                        # Create ProcessedIndex with pgvector metadata
+                        processed_index = ProcessedIndex.objects.create(
+                            document=document,
+                            storage_type='pgvector',
+                            chunks_count=processed_data.get('chunks_count', 0),
+                            summary="",
+                            markdown_path=processed_data.get('markdown_path', '')
+                        )
+                        logger.info(f"Created ProcessedIndex for document: {document.id} with pgvector storage")
+                   
+                        # Update note to mark as converted
+                        note.is_converted_to_document = True
+                        note.converted_document = document
+                        note.save()
+                   
+                        # Store the document ID in the session
+                        request.session['active_document_id'] = document.id
+                   
+                        # Update project timestamp
+                        update_project_timestamp(note.main_project.id, user)
            
-                # Create ProcessedIndex with pgvector metadata
-                processed_index = ProcessedIndex.objects.create(
-                    document=document,
-                    storage_type='pgvector',
-                    chunks_count=processed_data.get('chunks_count', 0),
-                    summary="",
-                    markdown_path=processed_data.get('markdown_path', '')
-                )
-                logger.info(f"Created ProcessedIndex for document: {document.id} with pgvector storage")
+                return Response({
+                    'message': 'Note converted to document successfully',
+                    'note': {
+                        'id': note.id,
+                        'title': note.title,
+                        'is_converted_to_document': True
+                    },
+                    'document': {
+                        'id': document.id,
+                        'filename': display_filename,  # Show without .txt extension
+                        'uploaded_at': document.uploaded_at,
+                        'file_type': 'text'  # Added file type for frontend
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
            
-                # Update note to mark as converted
-                note.is_converted_to_document = True
-                note.converted_document = document
-                note.save()
-           
-                # Store the document ID in the session
-                request.session['active_document_id'] = document.id
-           
-                # Update project timestamp
-                update_project_timestamp(note.main_project.id, user)
- 
-            return Response({
-                'message': 'Note converted to document successfully',
-                'note': {
-                    'id': note.id,
-                    'title': note.title,
-                    'is_converted_to_document': True
-                },
-                'document': {
-                    'id': document.id,
-                    'filename': display_filename,  # Show without .txt extension
-                    'uploaded_at': document.uploaded_at,
-                    'file_type': 'text',  # Added file type for frontend
-                    'blob_path': blob_info['filename']  # Include blob path info
-                },
-                'active_document_id': document.id
-            }, status=status.HTTP_201_CREATED)
-           
+            finally:
+                # Clean up temporary file
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+                        logger.info(f"Cleaned up temporary file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
+       
         except Note.DoesNotExist:
             return Response({
                 'error': 'Note not found'
@@ -10144,6 +9729,7 @@ class NoteManagementView(DocumentUploadView, APIView):
             filename = filename[:200]
        
         return filename
+
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -10401,7 +9987,7 @@ class WebsiteLinkUploadView(YouTubeUploadView):
     Extracts text content from website URLs using BeautifulSoup.
     """
     parser_classes = (JSONParser,)
-   
+    
     def is_valid_url(self, url):
         """Check if the provided URL is valid"""
         try:
@@ -10409,7 +9995,7 @@ class WebsiteLinkUploadView(YouTubeUploadView):
             return bool(parsed.netloc) and bool(parsed.scheme)
         except:
             return False
-   
+    
     def extract_text_from_website(self, url, timeout=30):
         """
         Extract text content from a website URL using BeautifulSoup.
@@ -10419,13 +10005,13 @@ class WebsiteLinkUploadView(YouTubeUploadView):
             # Validate URL
             if not self.is_valid_url(url):
                 raise ValueError("Invalid URL provided")
-           
+            
             # Add protocol if missing
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
-           
+            
             logger.info(f"Fetching content from: {url}")
-           
+            
             # Set up headers to mimic a real browser
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -10435,76 +10021,76 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
-           
+            
             # Make request with timeout
             response = requests.get(url, headers=headers, timeout=timeout, verify=True)
             response.raise_for_status()
-           
+            
             # Check content type
             content_type = response.headers.get('content-type', '').lower()
             if 'text/html' not in content_type:
                 raise ValueError(f"URL does not contain HTML content. Content-Type: {content_type}")
-           
+            
             # Parse HTML content
             soup = BeautifulSoup(response.content, 'html.parser')
-           
+            
             # Extract title
             title_tag = soup.find('title')
             page_title = title_tag.get_text().strip() if title_tag else 'Untitled Page'
-           
+            
             # Remove script and style elements
             for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
                 script.decompose()
-           
+            
             # Try to find main content areas first
             main_content = None
             content_selectors = [
-                'main', 'article', '[role="main"]', '.main-content',
+                'main', 'article', '[role="main"]', '.main-content', 
                 '.content', '.post-content', '.entry-content', '#content',
                 '.article-body', '.story-body', '.post-body'
             ]
-           
+            
             for selector in content_selectors:
                 main_content = soup.select_one(selector)
                 if main_content:
                     logger.info(f"Found main content using selector: {selector}")
                     break
-           
+            
             # If no main content found, use body
             if not main_content:
                 main_content = soup.find('body')
                 logger.info("Using body tag as main content")
-           
+            
             if not main_content:
                 raise ValueError("Could not find any content in the webpage")
-           
+            
             # Extract text content
             text_content = main_content.get_text(separator='\n', strip=True)
-           
+            
             # Clean up the text
             lines = text_content.split('\n')
             cleaned_lines = []
-           
+            
             for line in lines:
                 line = line.strip()
                 # Skip empty lines and very short lines (likely navigation/UI elements)
                 if len(line) > 3 and not line.isdigit():
                     cleaned_lines.append(line)
-           
+            
             cleaned_text = '\n'.join(cleaned_lines)
-           
+            
             # Remove excessive whitespace
             cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
             cleaned_text = re.sub(r' {2,}', ' ', cleaned_text)
-           
+            
             if len(cleaned_text.strip()) < 50:
                 raise ValueError("Extracted content is too short (less than 50 characters)")
-           
+            
             logger.info(f"Successfully extracted {len(cleaned_text)} characters from {url}")
             logger.info(f"Page title: {page_title}")
-           
+            
             return cleaned_text, page_title
-           
+            
         except requests.exceptions.Timeout:
             raise Exception(f"Request timeout while fetching URL: {url}")
         except requests.exceptions.ConnectionError:
@@ -10514,24 +10100,24 @@ class WebsiteLinkUploadView(YouTubeUploadView):
         except Exception as e:
             logger.error(f"Error extracting text from website: {str(e)}")
             raise Exception(f"Failed to extract text from website: {str(e)}")
-   
+    
     def post(self, request):
         website_url = request.data.get('website_url')
         user = request.user
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
         custom_title = request.data.get('custom_title', '')  # Optional custom title
-       
+        
         if not website_url:
             return Response({
                 'error': 'Website URL is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         if not main_project_id:
             return Response({
                 'error': 'Main project ID is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         # Handle admin uploading for another user
         if target_user_id and request.user.username == 'admin':
             try:
@@ -10540,7 +10126,7 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                 return Response({
                     'error': 'Target user not found'
                 }, status=status.HTTP_404_NOT_FOUND)
-       
+        
         # Check user permissions
         try:
             permissions = UserModulePermissions.objects.get(user=user)
@@ -10550,116 +10136,115 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                 }, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
             pass
-       
+        
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
-           
+            
             # Extract text from website
             logger.info(f"Processing website URL: {website_url}")
             extracted_text, page_title = self.extract_text_from_website(website_url)
-           
+            
             if not extracted_text or len(extracted_text.strip()) < 10:
                 return Response({
                     'error': f'Failed to extract meaningful content from website: {website_url}'
                 }, status=status.HTTP_400_BAD_REQUEST)
-           
+            
             # Use custom title if provided, otherwise use page title
             final_title = custom_title.strip() if custom_title.strip() else page_title
-           
+            
             # Create filename based on title
             safe_title = self.sanitize_filename(final_title)
             filename = f"{safe_title}_website_content.txt"
-           
+            
             # Check for existing document with similar name
             existing_doc = Document.objects.filter(
                 user=user,
                 filename__icontains=safe_title,
                 main_project=main_project
             ).first()
-           
-            # Prepare content with metadata
-            full_content = f"Website URL: {website_url}\n"
-            full_content += f"Title: {final_title}\n"
-            full_content += "=" * (len(final_title) + 7) + "\n\n"
-            full_content += extracted_text
-           
-            # FIXED: Upload website content to Azure Blob Storage
-            from notebook.utils import upload_bytes_to_azure_blob
             
-            # Convert content to bytes
-            content_bytes = full_content.encode('utf-8')
+            # Create temporary file with the extracted content
+            temp_file_path = os.path.join(tempfile.gettempdir(), filename)
             
-            # Upload to blob storage
-            blob_info = upload_bytes_to_azure_blob(
-                content_bytes,
-                filename,
-                folder_path=f'media/documents/{main_project_id}',
-                content_type='text/plain',
-                container_name='uploadfiles'
-            )
-            
-            if not blob_info:
+            try:
+                # Prepare content with metadata
+                full_content = f"Website URL: {website_url}\n"
+                full_content += f"Title: {final_title}\n"
+                full_content += "=" * (len(final_title) + 7) + "\n\n"
+                full_content += extracted_text
+                
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    f.write(full_content)
+                
+                # Create Django File object
+                with open(temp_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+                    
+                    # Use transaction to ensure data consistency
+                    with transaction.atomic():
+                        # Create or update document
+                        if existing_doc:
+                            existing_doc.file = django_file
+                            existing_doc.filename = filename
+                            existing_doc.save()
+                            document = existing_doc
+                            logger.info(f"Updated existing document: {document.id}")
+                        else:
+                            document = Document.objects.create(
+                                user=user,
+                                file=django_file,
+                                filename=filename,
+                                main_project=main_project
+                            )
+                            logger.info(f"Created new document: {document.id}")
+                
+                # Process the document for RAG
+                processed_data = self.process_document_from_text(full_content, filename, user)
+                
+                # Create or update ProcessedIndex
+                processed_index, created = ProcessedIndex.objects.get_or_create(
+                    document=document,
+                    defaults={
+                        'faiss_index': processed_data['index_path'],
+                        'metadata': processed_data['metadata_path'],
+                        'summary': "",
+                        'markdown_path': processed_data.get('markdown_path', '')
+                    }
+                )
+                
+                if not created:
+                    processed_index.faiss_index = processed_data['index_path']
+                    processed_index.metadata = processed_data['metadata_path']
+                    processed_index.markdown_path = processed_data.get('markdown_path', '')
+                    processed_index.save()
+                
+                # Store the document ID in the session
+                request.session['active_document_id'] = document.id
+                
+                # Update project timestamp
+                update_project_timestamp(main_project_id, user)
+                
                 return Response({
-                    'error': 'Failed to upload website content to blob storage'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-           
-            # Use transaction to ensure data consistency
-            with transaction.atomic():
-                # Create or update document
-                if existing_doc:
-                    existing_doc.file = blob_info['filename']  # Store blob path
-                    existing_doc.filename = filename
-                    existing_doc.save()
-                    document = existing_doc
-                    logger.info(f"Updated existing document: {document.id}")
-                else:
-                    document = Document.objects.create(
-                        user=user,
-                        file=blob_info['filename'],  # Store blob path
-                        filename=filename,
-                        main_project=main_project
-                    )
-                    logger.info(f"Created new document: {document.id}")
-           
-            # Process the document for RAG
-            processed_data = self.process_document_from_text(full_content, filename, user)
-           
-            # Create or update ProcessedIndex
-            processed_index, created = ProcessedIndex.objects.get_or_create(
-                document=document,
-                defaults={
-                    'faiss_index': processed_data['index_path'],
-                    'metadata': processed_data['metadata_path'],
-                    'summary': "",
-                    'markdown_path': processed_data.get('markdown_path', '')
-                }
-            )
-           
-            if not created:
-                processed_index.faiss_index = processed_data['index_path']
-                processed_index.metadata = processed_data['metadata_path']
-                processed_index.markdown_path = processed_data.get('markdown_path', '')
-                processed_index.save()
-           
-            # Store the document ID in the session
-            request.session['active_document_id'] = document.id
-           
-            # Update project timestamp
-            update_project_timestamp(main_project_id, user)
-           
-            return Response({
-                'message': 'Website content processed successfully',
-                'document': {
-                    'id': document.id,
-                    'filename': filename,
-                    'original_page_title': page_title,
-                    'website_url': website_url,
-                    'content_length': len(extracted_text),
-                    'blob_path': blob_info['filename']
-                },
-                'active_document_id': document.id
-            }, status=status.HTTP_201_CREATED)
-       
+                    'message': 'Website content processed successfully',
+                    'document': {
+                        'id': document.id,
+                        'filename': filename,
+                        'original_page_title': page_title,
+                        'website_url': website_url,
+                        'content_length': len(extracted_text)
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
+                
+            finally:
+                # Clean up temporary file
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+                        logger.info(f"Cleaned up temporary file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
+        
         except Exception as e:
             logger.error(f"Error processing website: {str(e)}")
             return Response({
@@ -10667,42 +10252,41 @@ class WebsiteLinkUploadView(YouTubeUploadView):
                 'detail': 'An error occurred while processing the website content'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class PlainTextUploadView(YouTubeUploadView):
     """
     Inherits from YouTubeUploadView to reuse document processing methods.
     Processes plain text content directly from frontend.
     """
     parser_classes = (JSONParser,)
-   
+    
     def post(self, request):
         text_content = request.data.get('text_content')
         user = request.user
         main_project_id = request.data.get('main_project_id')
         target_user_id = request.data.get('target_user_id')
         custom_title = request.data.get('title', '')  # Optional title for the text
-       
+        
         if not text_content or not text_content.strip():
             return Response({
                 'error': 'Text content is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         if not main_project_id:
             return Response({
                 'error': 'Main project ID is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         # Validate text length
         if len(text_content.strip()) < 10:
             return Response({
                 'error': 'Text content must be at least 10 characters long'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         if len(text_content) > 1000000:  # 1MB text limit
             return Response({
                 'error': 'Text content is too large (maximum 1MB)'
             }, status=status.HTTP_400_BAD_REQUEST)
-       
+        
         # Handle admin uploading for another user
         if target_user_id and request.user.username == 'admin':
             try:
@@ -10711,7 +10295,7 @@ class PlainTextUploadView(YouTubeUploadView):
                 return Response({
                     'error': 'Target user not found'
                 }, status=status.HTTP_404_NOT_FOUND)
-       
+        
         # Check user permissions
         try:
             permissions = UserModulePermissions.objects.get(user=user)
@@ -10721,10 +10305,10 @@ class PlainTextUploadView(YouTubeUploadView):
                 }, status=status.HTTP_403_FORBIDDEN)
         except UserModulePermissions.DoesNotExist:
             pass
-       
+        
         try:
             main_project = Project.objects.get(id=main_project_id, user=user)
-           
+            
             # Generate title if not provided
             if not custom_title.strip():
                 # Generate title from first 50 characters of content
@@ -10734,100 +10318,99 @@ class PlainTextUploadView(YouTubeUploadView):
                     custom_title += "..."
                 if not custom_title:
                     custom_title = "Plain Text Document"
-           
+            
             # Create filename based on title
             safe_title = self.sanitize_filename(custom_title)
             filename = f"{safe_title}_plain_text.txt"
-           
+            
             # Check for existing document with similar name
             existing_doc = Document.objects.filter(
                 user=user,
                 filename__icontains=safe_title,
                 main_project=main_project
             ).first()
-           
-            # Prepare content with title header
-            full_content = f"Title: {custom_title}\n"
-            full_content += "=" * (len(custom_title) + 7) + "\n\n"
-            full_content += text_content.strip()
-           
-            # FIXED: Upload plain text content to Azure Blob Storage
-            from notebook.utils import upload_bytes_to_azure_blob
             
-            # Convert content to bytes
-            content_bytes = full_content.encode('utf-8')
+            # Create temporary file with the text content
+            temp_file_path = os.path.join(tempfile.gettempdir(), filename)
             
-            # Upload to blob storage
-            blob_info = upload_bytes_to_azure_blob(
-                content_bytes,
-                filename,
-                folder_path=f'media/documents/{main_project_id}',
-                content_type='text/plain',
-                container_name='uploadfiles'
-            )
-            
-            if not blob_info:
+            try:
+                # Prepare content with title header
+                full_content = f"Title: {custom_title}\n"
+                full_content += "=" * (len(custom_title) + 7) + "\n\n"
+                full_content += text_content.strip()
+                
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    f.write(full_content)
+                
+                # Create Django File object
+                with open(temp_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+                    
+                    # Use transaction to ensure data consistency
+                    with transaction.atomic():
+                        # Create or update document
+                        if existing_doc:
+                            existing_doc.file = django_file
+                            existing_doc.filename = filename
+                            existing_doc.save()
+                            document = existing_doc
+                            logger.info(f"Updated existing document: {document.id}")
+                        else:
+                            document = Document.objects.create(
+                                user=user,
+                                file=django_file,
+                                filename=filename,
+                                main_project=main_project
+                            )
+                            logger.info(f"Created new document: {document.id}")
+                
+                # Process the document for RAG
+                processed_data = self.process_document_from_text(full_content, filename, user)
+                
+                # Create or update ProcessedIndex
+                processed_index, created = ProcessedIndex.objects.get_or_create(
+                    document=document,
+                    defaults={
+                        'faiss_index': processed_data['index_path'],
+                        'metadata': processed_data['metadata_path'],
+                        'summary': "",
+                        'markdown_path': processed_data.get('markdown_path', '')
+                    }
+                )
+                
+                if not created:
+                    processed_index.faiss_index = processed_data['index_path']
+                    processed_index.metadata = processed_data['metadata_path']
+                    processed_index.markdown_path = processed_data.get('markdown_path', '')
+                    processed_index.save()
+                
+                # Store the document ID in the session
+                request.session['active_document_id'] = document.id
+                
+                # Update project timestamp
+                update_project_timestamp(main_project_id, user)
+                
                 return Response({
-                    'error': 'Failed to upload plain text content to blob storage'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-           
-            # Use transaction to ensure data consistency
-            with transaction.atomic():
-                # Create or update document
-                if existing_doc:
-                    existing_doc.file = blob_info['filename']  # Store blob path
-                    existing_doc.filename = filename
-                    existing_doc.save()
-                    document = existing_doc
-                    logger.info(f"Updated existing document: {document.id}")
-                else:
-                    document = Document.objects.create(
-                        user=user,
-                        file=blob_info['filename'],  # Store blob path
-                        filename=filename,
-                        main_project=main_project
-                    )
-                    logger.info(f"Created new document: {document.id}")
-           
-            # Process the document for RAG
-            processed_data = self.process_document_from_text(full_content, filename, user)
-           
-            # Create or update ProcessedIndex
-            processed_index, created = ProcessedIndex.objects.get_or_create(
-                document=document,
-                defaults={
-                    'faiss_index': processed_data['index_path'],
-                    'metadata': processed_data['metadata_path'],
-                    'summary': "",
-                    'markdown_path': processed_data.get('markdown_path', '')
-                }
-            )
-           
-            if not created:
-                processed_index.faiss_index = processed_data['index_path']
-                processed_index.metadata = processed_data['metadata_path']
-                processed_index.markdown_path = processed_data.get('markdown_path', '')
-                processed_index.save()
-           
-            # Store the document ID in the session
-            request.session['active_document_id'] = document.id
-           
-            # Update project timestamp
-            update_project_timestamp(main_project_id, user)
-           
-            return Response({
-                'message': 'Plain text processed successfully',
-                'document': {
-                    'id': document.id,
-                    'filename': filename,
-                    'title': custom_title,
-                    'content_length': len(text_content),
-                    'word_count': len(text_content.split()),
-                    'blob_path': blob_info['filename']
-                },
-                'active_document_id': document.id
-            }, status=status.HTTP_201_CREATED)
-       
+                    'message': 'Plain text processed successfully',
+                    'document': {
+                        'id': document.id,
+                        'filename': filename,
+                        'title': custom_title,
+                        'content_length': len(text_content),
+                        'word_count': len(text_content.split())
+                    },
+                    'active_document_id': document.id
+                }, status=status.HTTP_201_CREATED)
+                
+            finally:
+                # Clean up temporary file
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+                        logger.info(f"Cleaned up temporary file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Cleanup error: {str(cleanup_error)}")
+        
         except Project.DoesNotExist:
             return Response({
                 'error': 'Project not found'
@@ -10841,7 +10424,7 @@ class PlainTextUploadView(YouTubeUploadView):
 
 
 import json
-import tempfile
+
 import os
 import re
 import time
@@ -11034,7 +10617,7 @@ class MindMapView(APIView):
  
             # Generate heading for the mindmap
             combined_text = "\n\n".join(all_text_chunks)
-            heading = self.generate_mindmap_heading(combined_text)
+            heading = self.generate_mindmap_heading(selected_documents=selected_documents,document_info=document_info)
             if heading:
                 mindmap_data['name'] = heading
             else:
@@ -11612,7 +11195,216 @@ class MindMapView(APIView):
             print(f"Error in hierarchical merging at depth {depth}: {e}")
             return existing_node if existing_node else new_node
 
-
+    def generate_mindmap_heading(self, selected_documents=None, document_info=None, api_key=None):
+ 
+        """
+ 
+        Use GPT-4o API to generate a meaningful mindmap heading based on selected document filenames.
+ 
+        Uses only the filenames of selected documents to create a descriptive title.
+ 
+        """
+ 
+        try:
+ 
+            import openai
+            load_dotenv()
+            api_key = os.getenv("OPENAI_API_KEY")
+            # Set API key
+ 
+            if api_key:
+ 
+                openai.api_key = api_key
+ 
+            else:
+ 
+                openai.api_key = OPENAI_API_KEY
+ 
+            # Extract raw filenames - no cleaning, let LLM handle everything
+ 
+            filenames = []
+ 
+            if document_info and isinstance(document_info, list):
+ 
+                filenames = [doc.get('filename', '') for doc in document_info if doc.get('filename')]
+ 
+            elif selected_documents and isinstance(selected_documents, list):
+ 
+                filenames = [f"Document_{doc_id}" for doc_id in selected_documents]
+ 
+            if not filenames:
+ 
+                filenames = ["untitled_document"]
+ 
+            # Just pass raw filenames to LLM
+ 
+            filenames_text = "\n".join([f"- {filename}" for filename in filenames])
+ 
+            # Let GPT-4o do everything - but MUST stay related to document names
+ 
+            if len(filenames) == 1:
+ 
+                prompt = f"""Generate a professional 7-8 word mindmap heading that is DIRECTLY RELATED to this document filename. The heading must reflect the actual content suggested by the filename.
+   
+    Document filename: {filenames[0]}
+   
+    CRITICAL REQUIREMENTS:
+ 
+    - The heading MUST be directly related to what this filename suggests
+ 
+    - Use keywords and concepts from the actual filename
+ 
+    - Create EXACTLY 7 or 8 words
+ 
+    - Make it professional but stay true to the document's apparent topic
+ 
+    - If filename mentions "sales" - heading must be about sales
+ 
+    - If filename mentions "marketing" - heading must be about marketing
+ 
+    - If filename mentions "technical" - heading must be about technical topics
+ 
+    - DO NOT create generic headings unrelated to the filename
+ 
+    - Extract the main subject from the filename and build around it
+   
+    Generate the professional mindmap heading that reflects this specific document:"""
+   
+            else:
+ 
+                prompt = f"""Generate a professional 7-8 word mindmap heading that is DIRECTLY RELATED to these specific document filenames. The heading must reflect the actual content suggested by ALL these filenames.
+   
+    Document filenames:
+ 
+    {filenames_text}
+   
+    CRITICAL REQUIREMENTS:
+ 
+    - The heading MUST be directly related to what these filenames suggest
+ 
+    - Use actual keywords and concepts from the filenames themselves
+ 
+    - Find the real common themes from the actual filenames (not generic themes)
+ 
+    - Create EXACTLY 7 or 8 words
+ 
+    - If filenames are about "budget" and "finance" - heading must be about financial topics
+ 
+    - If filenames are about "user guide" and "manual" - heading must be about documentation
+ 
+    - If filenames are about "research" and "data" - heading must be about research/data
+ 
+    - DO NOT create generic headings unrelated to the actual filename content
+ 
+    - The heading should make someone think "yes, this is exactly about those documents"
+   
+    Generate the professional mindmap heading that reflects these specific documents:"""
+   
+            # Call GPT-4o API with emphasis on staying document-relevant
+ 
+            response = openai.chat.completions.create(
+ 
+                model="gpt-4o",  # Latest GPT-4o model
+ 
+                messages=[
+ 
+                    {
+ 
+                        "role": "system",
+ 
+                        "content": "You are an expert at creating professional titles that are DIRECTLY related to document content. Never create generic titles. Always extract and use the actual subject matter from the filenames provided. The title must make it obvious what the documents are about."
+ 
+                    },
+ 
+                    {
+ 
+                        "role": "user",
+ 
+                        "content": prompt
+ 
+                    }
+ 
+                ],
+ 
+                max_tokens=50,
+ 
+                temperature=0.6,  # Slightly lower to stay more focused on actual content
+ 
+                top_p=0.85,
+ 
+                frequency_penalty=0.3,
+ 
+                presence_penalty=0.2
+ 
+            )
+ 
+            # Extract the generated title - minimal processing
+ 
+            title = response.choices[0].message.content.strip()
+ 
+            # Basic word count check - if wrong, try once more
+ 
+            word_count = len(title.split())
+ 
+            if word_count < 7 or word_count > 8:
+ 
+                # Retry with more specific instruction about staying document-relevant
+ 
+                retry_response = openai.chat.completions.create(
+ 
+                    model="gpt-4o",
+ 
+                    messages=[
+ 
+                        {
+ 
+                            "role": "system",
+ 
+                            "content": "Generate exactly 7 words that MUST relate to the specific document content. No generic titles allowed."
+ 
+                        },
+ 
+                        {
+ 
+                            "role": "user",
+ 
+                            "content": f"Based on these specific filenames: {', '.join(filenames[:3])}, create exactly 7 words that someone would recognize as being about these exact documents. Use actual keywords from the filenames."
+ 
+                        }
+ 
+                    ],
+ 
+                    max_tokens=30,
+ 
+                    temperature=0.4  # Lower temperature for more document-focused results
+ 
+                )
+ 
+                retry_title = retry_response.choices[0].message.content.strip()
+ 
+                retry_word_count = len(retry_title.split())
+ 
+                if 7 <= retry_word_count <= 8:
+ 
+                    title = retry_title
+ 
+            logger.info(f"Generated {len(title.split())}-word heading: '{title}' from {len(filenames)} files")
+ 
+            return title
+ 
+        except Exception as e:
+ 
+            logger.error(f"Error generating mindmap heading with GPT-4o: {e}")
+ 
+            # Simple fallback without any processing
+ 
+            if len(filenames) == 1:
+ 
+                return f"Professional Analysis of {filenames[0].split('.')[0]} Research Framework"
+ 
+            else:
+ 
+                return f"Integrated Analysis of {len(filenames)} Document Research Collection"
 
 
 # In your backend views.py, update the MindMapQuestionView:

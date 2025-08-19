@@ -1,3 +1,6 @@
+
+
+
 //IdeaForm.jsx
 import React, { useState, useCallback, useEffect, useRef, useContext } from "react";
 import { ideaService } from "../utils/axiosConfig";
@@ -122,29 +125,11 @@ const IdeaForm = () => {
   const { theme } = useContext(ThemeContext);
   const [versionHistories, setVersionHistories] = useState({});
   const [isSaving, setIsSaving] = useState(false);
-	const saveTimeoutRef = useRef(null);
-	const lastSavedDataRef = useRef(null);
+  const saveTimeoutRef = useRef(null);
+  const lastSavedDataRef = useRef(null);
   const [currentIdeaProgress, setCurrentIdeaProgress] = useState(0);
   const [totalIdeasExpected, setTotalIdeasExpected] = useState(0);
-   
-   // Helper function to determine correct image display
-const getImageSource = (imageUrl) => {
-  if (!imageUrl) return null;
-  
-  // Check if it's already a data URL (base64)
-  if (typeof imageUrl === 'string' && imageUrl.startsWith('data:image/')) {
-    return imageUrl;
-  }
-  
-  // Check if it's an Azure Blob URL
-  if (typeof imageUrl === 'string' && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
-    return imageUrl;
-  }
-  
-  // Default case for backward compatibility - assume it's base64 data without the prefix
-  return `data:image/png;base64,${imageUrl}`;
-};
-  
+    
 
   // Effect to scroll to top when ideas are generated or added
   useEffect(() => {
@@ -173,11 +158,10 @@ const getImageSource = (imageUrl) => {
           negative_prompt: "",
         }
       );
+      
       // Load dynamic fields
       const loadedDynamicFields = currentProject.dynamicFields || {};
       setDynamicFields(loadedDynamicFields);
-
-  
 
       // Load custom field types - Ensure proper array conversion
       if (currentProject.customFieldTypes) {
@@ -216,11 +200,10 @@ const getImageSource = (imageUrl) => {
 
         setCustomFieldTypes([...new Set(customTypes)]);
       }
+      
       // Preserve field activation state
-      // If fieldActivation is not set in the project, default to active
       const preservedActivation = Object.keys(loadedDynamicFields).reduce(
         (acc, fieldId) => {
-          // Only use stored activation if it explicitly exists, otherwise default to true
           acc[fieldId] = currentProject.fieldActivation?.[fieldId] ?? true;
           return acc;
         },
@@ -228,6 +211,7 @@ const getImageSource = (imageUrl) => {
       );
 
       setFieldActivation(preservedActivation);
+      
       // Load existing ideas
       const existingIdeas = currentProject.ideas || [];
       const maxSetNumber = currentProject.max_set_number || 0;
@@ -238,7 +222,7 @@ const getImageSource = (imageUrl) => {
         existingIdeas.some((idea) => idea.idea_id === accepted.idea_id)
       ).map(idea => ({
         ...idea,
-        visualization_prompt: idea.visualization_prompt, // Preserve visualization_prompt
+        visualization_prompt: idea.visualization_prompt,
       }));
 
       // Map metadata to ideas if not already present
@@ -249,15 +233,18 @@ const getImageSource = (imageUrl) => {
         visualization_prompt: idea.visualization_prompt,
         metadata: idea.metadata || currentProject.ideaMetadata?.[idea.idea_id],
       }));
+      
       setIdeas(ideasWithMetadata);
       setAcceptedIdeas(validAcceptedIdeas);
 
       // Combine existing and generated metadata
       setIdeaMetadata(currentProject.ideaMetadata || {});
+      
       // Preserve existing generated images
       if (currentProject.generatedImages) {
         setGeneratedImages(currentProject.generatedImages);
       }
+      
       setIdeaSetCounter(maxSetNumber + 1);
       setNegativePrompt(currentProject.formData?.negative_prompt || "");
 
@@ -267,6 +254,7 @@ const getImageSource = (imageUrl) => {
       }
     }
   }, [currentProject]);
+
 
   // Complete solution combining all fixes for IdeaForm.jsx
 
@@ -309,7 +297,6 @@ useEffect(() => {
   
   // Create a version without lastModified for comparison
   const dataForComparison = { ...dataToSave };
-  // Delete lastModified from the comparison data
   delete dataForComparison.lastModified;
   
   // Convert to JSON string for comparison
@@ -317,7 +304,6 @@ useEffect(() => {
   
   // Check if data has actually changed since last save
   if (dataString === lastSavedDataRef.current) {
-    // Data hasn't changed, don't save
     return;
   }
   
@@ -328,16 +314,12 @@ useEffect(() => {
   
   // Set a new timeout for debounced save
   saveTimeoutRef.current = setTimeout(() => {
-    // Mark as saving
     setIsSaving(true);
     
-    // Log that we're saving
     console.log("Auto-saving project changes...");
     
-    // Execute the save
     saveProject(dataToSave)
       .then(() => {
-        // Save successful, update the last saved data
         lastSavedDataRef.current = dataString;
         console.log("Project saved successfully");
       })
@@ -345,15 +327,12 @@ useEffect(() => {
         console.error("Error saving project:", error);
       })
       .finally(() => {
-        // Mark save as complete
         setIsSaving(false);
       });
       
-    // Clear the timeout reference
     saveTimeoutRef.current = null;
-  }, 3000); // Increase to 3 seconds to reduce chances of overlapping saves
+  }, 3000);
   
-  // Cleanup on unmount or when dependencies change
   return () => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -377,7 +356,11 @@ useEffect(() => {
   isSaving,
   currentProject,
   saveProject
-]);  // Add this function to fetch version history for all ideas
+]);
+
+
+
+// Add this function to fetch version history for all ideas
   const fetchAllVersionHistories = async () => {
     try {
       if (!currentProject?.ideas) {
@@ -433,14 +416,13 @@ useEffect(() => {
   };
 
   const handleImageVersionSelect = (imageVersion, fullVersion = null) => {
-  // Enhanced to handle Azure blob URLs
-  setSelectedImage(imageVersion);
+    setSelectedImage(imageVersion);
 
-  // If a full version is provided, store it for potential complete restoration
-  if (fullVersion) {
-    setSelectedVersion(fullVersion);
-  }
-};
+    // If a full version is provided, store it for potential complete restoration
+    if (fullVersion) {
+      setSelectedVersion(fullVersion);
+    }
+  };
 
   // Calculate suggested number of ideas based on form fields
   // First, update the useEffect for auto-calculating number of ideas
@@ -707,63 +689,53 @@ const handleDeleteIdea = async () => {
  
 
   const handleRegenerateImage = useCallback(
-  async (params) => {
-    // If params is not an object (old way), convert it to the expected format
-    const ideaId = typeof params === "object" ? params.idea_id : params;
+    async (params) => {
+      // If params is not an object (old way), convert it to the expected format
+      const ideaId = typeof params === "object" ? params.idea_id : params;
 
-    if (loadingStates[ideaId]) return;
+      if (loadingStates[ideaId]) return;
 
-    setLoadingStates((prev) => ({ ...prev, [ideaId]: true }));
-    setError(null);
+      setLoadingStates((prev) => ({ ...prev, [ideaId]: true }));
+      setError(null);
 
-    try {
-      // Find the idea from acceptedIdeas if not provided in params
-      const idea = acceptedIdeas.find((i) => i.idea_id === ideaId);
-      if (!idea) throw new Error("Idea not found");
+      try {
+        // Find the idea from acceptedIdeas if not provided in params
+        const idea = acceptedIdeas.find((i) => i.idea_id === ideaId);
+        if (!idea) throw new Error("Idea not found");
 
-      // Use visualization_prompt if available, otherwise construct fallback
-      const description = params.description || idea.visualization_prompt || `${idea.product_name}: ${idea.description}`;
-      console.log("Using prompt for image generation:", description);
+        // Use visualization_prompt if available, otherwise construct fallback
+        const description = params.description || idea.visualization_prompt || `${idea.product_name}: ${idea.description}`;
+        console.log("Using prompt for image generation:", description);
 
-      const response = await ideaService.regenerateProductImage({
-        description: description,
-        idea_id: ideaId,
-        size: params.size || 768,
-        steps: params.steps || 30,
-        guidance_scale: params.guidance_scale || 7.5,
-      });
+        const response = await ideaService.regenerateProductImage({
+          description: description,
+          idea_id: ideaId,
+          size: params.size || 768,
+          steps: params.steps || 30,
+          guidance_scale: params.guidance_scale || 7.5,
+        });
 
-      if (response.data.success) {
-        // Handle both Azure blob URL and base64 encoded image
-        if (response.data.image_url) {
-          // Store Azure blob URL directly
-          setGeneratedImages((prev) => ({
-            ...prev,
-            [ideaId]: response.data.image_url,
-          }));
-        } else if (response.data.image) {
-          // Handle base64 encoded image
+        if (response.data.success) {
           setGeneratedImages((prev) => ({
             ...prev,
             [ideaId]: `data:image/png;base64,${response.data.image}`,
           }));
+        } else {
+          throw new Error(response.data.error || "Failed to regenerate image");
         }
-      } else {
-        throw new Error(response.data.error || "Failed to regenerate image");
+      } catch (err) {
+        console.error("Image regeneration error:", err);
+        setError(
+          err.response?.data?.error ||
+            err.message ||
+            "Failed to regenerate image"
+        );
+      } finally {
+        setLoadingStates((prev) => ({ ...prev, [ideaId]: false }));
       }
-    } catch (err) {
-      console.error("Image regeneration error:", err);
-      setError(
-        err.response?.data?.error ||
-          err.message ||
-          "Failed to regenerate image"
-      );
-    } finally {
-      setLoadingStates((prev) => ({ ...prev, [ideaId]: false }));
-    }
-  },
-  [acceptedIdeas, loadingStates]
-);
+    },
+    [acceptedIdeas, loadingStates]
+  );
 
   const handleBaseFieldChange = (e) => {
     const { name, value } = e.target;
@@ -877,6 +849,20 @@ const handleDeleteIdea = async () => {
   // Update the handleSubmit function to properly store metadata for new ideas
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Limit number_of_ideas to 5
+    if (formData.number_of_ideas > 5) {
+      toast.error("You can generate a maximum of 5 ideas.", {
+        position: "bottom-right",
+        autoClose: 3500,
+      });
+      setFormData((prev) => ({
+        ...prev,
+        number_of_ideas: 5,
+      }));
+      return; // Prevent generation if above limit
+    }
+
     setIsLoading(true);
     setIsGenerating(true);
     setError(null);
@@ -894,7 +880,7 @@ const handleDeleteIdea = async () => {
         }),
         {}
       );
- 
+
     const submissionData = {
       ...formData,
       description_length: formData.description_length || 70,
@@ -984,7 +970,7 @@ const handleDeleteIdea = async () => {
             dynamicFields: stored_data.dynamic_fields,
             timestamp: new Date().toISOString(),
           };
- 
+
           return {
             ...idea,
             idea_set: currentSetNumber,
@@ -1000,12 +986,12 @@ const handleDeleteIdea = async () => {
           acc[idea.idea_id] = idea.metadata;
           return acc;
         }, {});
- 
+
         setIdeaMetadata((prev) => ({
           ...prev,
           ...newMetadata,
         }));
- 
+
         // Update ideas state
         setIdeas((prevIdeas) => {
           const uniqueNewIdeas = ideasWithMetadata.filter(
@@ -1014,24 +1000,22 @@ const handleDeleteIdea = async () => {
                 (existingIdea) => existingIdea.idea_id === newIdea.idea_id
               )
           );
-          const combinedIDeas = [...uniqueNewIdeas, ...prevIdeas];
-          return combinedIDeas;
+          const combinedIdeas = [...uniqueNewIdeas, ...prevIdeas];
+          return combinedIdeas;
         });
- 
+
         setIdeaSetCounter((prev) => prev + 1);
- 
+
         if (showForm) {
           setShowForm(false);
         }
-       
-        // ONLY reset hasFormChanged after successful idea generation
+      
         setHasFormChanged(false);
       } else {
         clearInterval(progressInterval);
         setError(response.data.error || "Failed to generate ideas");
       }
     } catch (err) {
-      // Clear interval in case of error
       clearInterval(progressInterval);
       setError(err.response?.data?.error || "Failed to connect to the server");
       console.error("Generation error:", err);
@@ -1101,112 +1085,77 @@ const handleDeleteIdea = async () => {
   }, [acceptedIdeas, imageGenerationInProgress, generatedImages]);
 
   const handleRestoreVersion = (restoredData) => {
-  // Handle both complete version restore and single image restore
-  const isImageOnlyRestore = selectedImage && !restoredData.product_name;
+    // Handle both complete version restore and single image restore
+    const isImageOnlyRestore = selectedImage && !restoredData.product_name;
 
-  if (isImageOnlyRestore) {
-    // Update just the image for the existing idea
-    setGeneratedImages((prev) => ({
-      ...prev,
-      [selectedIdeaForHistory.idea_id]: selectedImage.azure_url || 
-        (selectedImage.image_url.startsWith('data:') ? 
-          selectedImage.image_url : 
-          `data:image/png;base64,${selectedImage.image_url}`),
-    }));
-  } else {
-    // Update the full idea and its associated images
-    const updatedIdeas = ideas.map((idea) =>
-      idea.idea_id === selectedIdeaForHistory.idea_id
-        ? {
-            ...idea,
-            product_name: restoredData.product_name,
-            description: restoredData.description,
-            idea_id: restoredData.id || idea.idea_id, // Preserve ID if not provided
-          }
-        : idea
-    );
-    setIdeas(updatedIdeas);
+    if (isImageOnlyRestore) {
+      // Update just the image for the existing idea
+      setGeneratedImages((prev) => ({
+        ...prev,
+        [selectedIdeaForHistory.idea_id]: `data:image/png;base64,${selectedImage.image_url}`,
+      }));
+    } else {
+      // Update the full idea and its associated images
+      const updatedIdeas = ideas.map((idea) =>
+        idea.idea_id === selectedIdeaForHistory.idea_id
+          ? {
+              ...idea,
+              product_name: restoredData.product_name,
+              description: restoredData.description,
+              idea_id: restoredData.id || idea.idea_id, // Preserve ID if not provided
+            }
+          : idea
+      );
+      setIdeas(updatedIdeas);
 
-    const updatedAcceptedIdeas = acceptedIdeas.map((idea) =>
-      idea.idea_id === selectedIdeaForHistory.idea_id
-        ? {
-            ...idea,
-            product_name: restoredData.product_name,
-            description: restoredData.description,
-            idea_id: restoredData.id || idea.idea_id,
-          }
-        : idea
-    );
-    setAcceptedIdeas(updatedAcceptedIdeas);
+      const updatedAcceptedIdeas = acceptedIdeas.map((idea) =>
+        idea.idea_id === selectedIdeaForHistory.idea_id
+          ? {
+              ...idea,
+              product_name: restoredData.product_name,
+              description: restoredData.description,
+              idea_id: restoredData.id || idea.idea_id,
+            }
+          : idea
+      );
+      setAcceptedIdeas(updatedAcceptedIdeas);
 
-    // Update images if provided
-    if (restoredData.images && restoredData.images.length > 0) {
-      const ideaId = restoredData.id || selectedIdeaForHistory.idea_id;
-      // Handle both Azure blob URLs and base64 images
-      const imageUrl = restoredData.images[0].azure_url || 
-        (restoredData.images[0].image_url ? 
-          (restoredData.images[0].image_url.startsWith('data:') ? 
-            restoredData.images[0].image_url : 
-            `data:image/png;base64,${restoredData.images[0].image_url}`) : 
-          null);
-            
-      if (imageUrl) {
+      // Update images if provided
+      if (restoredData.images && restoredData.images.length > 0) {
+        const ideaId = restoredData.id || selectedIdeaForHistory.idea_id;
         setGeneratedImages((prev) => ({
           ...prev,
-          [ideaId]: imageUrl,
+          [ideaId]: `data:image/png;base64,${restoredData.images[0].image_url}`,
         }));
       }
     }
-  }
 
-  // Reset selection state
-  setShowVersionHistory(false);
-  setSelectedIdeaForHistory(null);
-  setSelectedImage(null);
-  setSelectedVersion(null);
-};
+    // Reset selection state
+    setShowVersionHistory(false);
+    setSelectedIdeaForHistory(null);
+    setSelectedImage(null);
+    setSelectedVersion(null);
+  };
   // Update the existing modal section in the return statement to include both image preview and version history
   const renderVersionHistoryModal = () => {
     if (!showVersionHistory || !selectedIdeaForHistory) return null;
-    const getImageDisplay = (imageData) => {
-    if (!imageData) return null;
-    
-    // Check if it's a base64 string or URL
-    if (typeof imageData === 'string' && (imageData.startsWith('data:image') || 
-                                         imageData.startsWith('http://') || 
-                                         imageData.startsWith('https://'))) {
-      // It's already a data URL or a URL
-      return imageData;
-    } else if (imageData.image_url) {
-      // It's an object with image_url property from version history
-      if (imageData.source === 'azure_blob' && imageData.blob_url) {
-        // Handle Azure blob URL
-        return imageData.blob_url;
-      } else {
-        // Handle base64 content
-        return `data:image/png;base64,${imageData.image_url}`;
-      }
-    }
-    
-    // Fallback for unknown format
-    return null;
-  };
+
     return (
-    <div className="fixed inset-0 bg-[#5e4636]/20 dark:bg-black/50 flex items-start justify-center pt-20 p-4 z-50">
+      <div className="fixed inset-0 bg-[#5e4636]/20 dark:bg-black/50 flex items-start justify-center pt-20 p-4 z-50">
       <div className="bg-[#faf4ee] dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[80vh] flex border border-[#d6cbbf] dark:border-gray-700">
-        {/* Version History Panel */}
-        <div className="flex-1 max-w-4xl">
-          <VersionHistory
-            idea={selectedIdeaForHistory}
-            onRestoreVersion={handleRestoreVersion}
-            onClose={() => {
-              setShowVersionHistory(false);
-              setSelectedIdeaForHistory(null);
-              setSelectedImage(null);
-            }}
-            onSelectImage={handleImageVersionSelect}
-          />
-        </div>
+          {/* Version History Panel */}
+          <div className="flex-1 max-w-4xl">
+            <VersionHistory
+              idea={selectedIdeaForHistory}
+              onRestoreVersion={handleRestoreVersion}
+              onClose={() => {
+                setShowVersionHistory(false);
+                setSelectedIdeaForHistory(null);
+                setSelectedImage(null);
+              }}
+              onSelectImage={handleImageVersionSelect}
+            />
+             </div>
           
 
           {/* Image Preview Panel */}
@@ -1227,11 +1176,7 @@ const handleDeleteIdea = async () => {
             <div className="flex-1 overflow-y-auto">
               <div className="aspect-square rounded-lg overflow-hidden bg-[#f5e6d8] dark:bg-gray-900 mb-4 border border-[#d6cbbf] dark:border-gray-700">
                 <img
-                  // Handle both base64 and Azure blob URL formats
-                  src={selectedImage.azure_url ? selectedImage.azure_url : 
-                      selectedImage.image_url.startsWith('data:') ? 
-                      selectedImage.image_url : 
-                      `data:image/png;base64,${selectedImage.image_url}`}
+                  src={`data:image/png;base64,${selectedImage.image_url}`}
                   alt="Selected version"
                   className="w-full h-full object-cover"
                 />
@@ -2003,15 +1948,15 @@ const fillFormWithDocParams = () => {
                             value={formData.number_of_ideas}
                             onChange={handleBaseFieldChange}
                             min="1"
-                            max="20"
+                            max="5"
                             required
                             className="w-full px-4 py-2 bg-white/80 dark:bg-gray-700 text-[#5e4636] dark:text-white rounded-lg border border-[#d6cbbf] dark:border-gray-600 focus:border-[#a55233] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#a55233]/50 dark:focus:ring-blue-500"
                           />
-                          {!hasManuallySetIdeas && (
+                          {/* {!hasManuallySetIdeas && (
                             <span className="text-xs text-[#5a544a] dark:text-gray-400">
                               Auto-calculated
                             </span>
-                          )}
+                          )} */}
                         </div>
                       </div>
   
@@ -2122,17 +2067,17 @@ const fillFormWithDocParams = () => {
               
             
              <input
-  type="checkbox"
-  checked={isAccepted}
-  onChange={() => {
-    if (isAccepted) {
-      handleUnaccept(idea.idea_id);
-    } else {
-      handleAccept(idea.idea_id);
-    }
-  }}
-  className="w-4 h-4 accent-[#ace000] dark:accent-emerald-600 mt-0 mb-1"
-/>
+                type="checkbox"
+                checked={isAccepted}
+                onChange={() => {
+                  if (isAccepted) {
+                    handleUnaccept(idea.idea_id);
+                  } else {
+                    handleAccept(idea.idea_id);
+                  }
+                }}
+                className="w-4 h-4 accent-[#ace000] dark:accent-emerald-600 mt-0 mb-1"
+              />
 
                      
                       <div className="flex-1 flex items-center mt-0.5">
@@ -2156,7 +2101,7 @@ const fillFormWithDocParams = () => {
               </div>
 
               <div className="flex flex-wrap gap-2">
-              <IdeaMetadata ideaMetadata={ideaMetadata[idea.idea_id]} />
+                <IdeaMetadata ideaMetadata={ideaMetadata[idea.idea_id]} />
                 <button
                   onClick={() => handleEdit(idea)}
                   className="px-4 py-2 bg-[#f8fbe5] hover:bg-[#ebf4b8] text-[#5e4636] border border-[#d6cbbf] dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors"
@@ -2299,7 +2244,6 @@ const fillFormWithDocParams = () => {
         </main>
       </div>
       <DocumentParamsModal />
-      <FaqButtonIdea />
       <style>{`
       .loader {
     animation: rotate 1s infinite;

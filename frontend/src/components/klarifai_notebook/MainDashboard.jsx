@@ -7,11 +7,9 @@ import React, {
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
-// import { Menu, ChevronRight, ChevronLeft, X, Brain } from 'lucide-react';
 import Header from "../dashboard/Header";
 import MainChat from "./MainChat";
 import backgroundImage from "../../assets/bg-main.jpg";
-import FaqButton from "../../components/faq/FaqButton";
 import { ThemeContext } from "../../context/ThemeContext";
 import SideTab from "./SideTab";
 import YouTubeUploadModal from "../klarifai_notebook/YouTubeUploadModal";
@@ -22,10 +20,8 @@ import ConfirmationModal from "../klarifai_notebook/ConfirmationModal";
 import MindMapViewer from "../klarifai_notebook/MindMapViewer";
 import RightPanel from "./RightPanel";
 import MindMapHistory from "../klarifai_notebook/MindMapHistory";
-import BrainLoadingAnimation from "../klarifai_notebook/BrainLoadingAnimation";
-import { toast } from "react-toastify";
-// import DocumentSelectionModal from "../klarifai_notebook/DocumentSelectionModal";
 
+import { CheckCircle, X,Loader2  } from 'lucide-react'; // Add to existing lucide imports
 const MainDashboard = () => {
   const { mainProjectId } = useParams();
   const navigate = useNavigate();
@@ -74,7 +70,12 @@ const MainDashboard = () => {
   const [hasImages, setHasImages] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const allowedExtensions = [".pdf", ".docx", ".txt", ".mp3", ".mp4"];
-
+const [toast, setToast] = useState(null);
+// Toast notification functions
+const showToast = (message, type = 'success') => {
+  setToast({ message, type });
+  setTimeout(() => setToast(null), 5000);
+};
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -85,56 +86,32 @@ const MainDashboard = () => {
     setIsDragOver(false);
   };
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
+const handleDrop = (e) => {
+  e.preventDefault();
+  setIsDragOver(false);
 
-    // Check upload permission from MainChat
-    if (
-      mainChatRef.current &&
-      mainChatRef.current.hasUploadPermissions === false
-    ) {
-      toast.warn("You do not have permission to upload documents.", {
-        position: "top-center",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "colored",
-      });
-      return;
-    }
+  // Check upload permission from MainChat
+  if (
+    mainChatRef.current &&
+    mainChatRef.current.hasUploadPermissions === false
+  ) {
+    // Optionally show a message to the user
+    alert("You do not have permission to upload documents.");
+    return;
+  }
 
-    let files = Array.from(e.dataTransfer.files);
+  let files = Array.from(e.dataTransfer.files);
 
-    // Filter files by allowed extensions
-    const validFiles = files.filter((file) => {
-      const ext = "." + file.name.split(".").pop().toLowerCase();
-      return allowedExtensions.includes(ext);
-    });
+  // Filter files by allowed extensions
+  files = files.filter(file => {
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    return allowedExtensions.includes(ext);
+  });
 
-    if (
-      validFiles.length > 0 &&
-      mainChatRef.current &&
-      mainChatRef.current.handleFileChange
-    ) {
-      mainChatRef.current.handleFileChange({ target: { files: validFiles } });
-    }
-
-    // Show toast if all dropped files are invalid
-    if (files.length > 0 && validFiles.length === 0) {
-      toast.warn("Only .pdf, .docx, .txt, .mp3, .mp4 files are allowed.", {
-        position: "top-center",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "colored",
-      });
-    }
-  };
+  if (files.length > 0 && mainChatRef.current && mainChatRef.current.handleFileChange) {
+    mainChatRef.current.handleFileChange({ target: { files } });
+  }
+};
 
   // NEW: Helper function to create document signature
   const createDocumentSignature = useCallback((documentIds) => {
@@ -423,67 +400,60 @@ const MainDashboard = () => {
   });
 
   const handleGenerateMindmap = async (forceDocuments = null) => {
-    const documentsToUse = forceDocuments || selectedDocuments;
+  const documentsToUse = forceDocuments || selectedDocuments;
 
-    // // If multiple documents selected, show selection modal
-    // if (documentsToUse.length > 1) {
-    //   setIsDocumentSelectionModalOpen(true);
-    //   return;
-    // }
+  if (documentsToUse.length === 0) {
+    alert("Please select at least one document to generate a mindmap");
+    return;
+  }
 
-    if (documentsToUse.length === 0) {
-      alert("Please select at least one document to generate a mindmap");
-      return;
-    }
+  setIsMindmapGenerating(true);
+  showToast('Generating mindmap in background...', 'success'); // ADD THIS LINE
 
-    setIsMindmapGenerating(true);
+  try {
+    const { mindmapServiceNB } = await import("../../utils/axiosConfig");
 
-    try {
-      const { mindmapServiceNB } = await import("../../utils/axiosConfig");
+    console.log("Generating mindmap for documents:", documentsToUse);
+    console.log("Main project ID:", mainProjectId);
 
-      console.log("Generating mindmap for documents:", documentsToUse);
-      console.log("Main project ID:", mainProjectId);
+    const response = await mindmapServiceNB.generateMindmap(
+      mainProjectId,
+      documentsToUse
+    );
 
-      const response = await mindmapServiceNB.generateMindmap(
-        mainProjectId,
-        documentsToUse
+    if (response.data && response.data.success) {
+      console.log("Mindmap generated successfully:", response.data);
+
+      showToast('Mindmap generated successfully!', 'success'); // ADD THIS LINE
+
+      const mindmapData = response.data.mindmap;
+      const mindmapStats = response.data.stats;
+      const mindmapId = response.data.mindmap_id;
+
+      setMindmapData(mindmapData);
+      setCurrentMindmapId(mindmapId);
+      setIsMindmapViewerOpen(true);
+
+      handleViewMindmap(
+        response.data.mindmap,
+        response.data.mindmap_id,
+        response.data.stats
       );
 
-      if (response.data && response.data.success) {
-        console.log("Mindmap generated successfully:", response.data);
-
-        const mindmapData = response.data.mindmap;
-        const mindmapStats = response.data.stats;
-        const mindmapId = response.data.mindmap_id;
-
-        setMindmapData(mindmapData);
-        setCurrentMindmapId(mindmapId);
-        setIsMindmapViewerOpen(true);
-
-        handleViewMindmap(
-          response.data.mindmap,
-          response.data.mindmap_id,
-          response.data.stats
-        );
-
-        console.log(
-          `Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`
-        );
-      } else {
-        console.error("Failed to generate mindmap:", response.data);
-        alert("Failed to generate mindmap. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error generating mindmap:", error);
-      alert(
-        `Error generating mindmap: ${
-          error.response?.data?.error || error.message
-        }`
+      console.log(
+        `Mindmap opened with ${mindmapStats.mindmap_nodes} nodes from ${mindmapStats.documents_processed} documents`
       );
-    } finally {
-      setIsMindmapGenerating(false);
+    } else {
+      console.error("Failed to generate mindmap:", response.data);
+      showToast('Failed to generate mindmap', 'error'); // ADD THIS LINE
     }
-  };
+  } catch (error) {
+    console.error("Error generating mindmap:", error);
+    showToast('Failed to generate mindmap', 'error'); // ADD THIS LINE
+  } finally {
+    setIsMindmapGenerating(false);
+  }
+};
 
   const handleOpenNoteViewer = (noteData) => {
     setModalViewerNoteData(noteData);
@@ -633,7 +603,36 @@ const MainDashboard = () => {
     },
     [selectedDocuments, handleDocumentContextChange]
   );
-
+// Add this Toast component before the main return
+const Toast = ({ message, type = 'success', onClose }) => (
+  <div className={`
+    fixed top-4 right-4 z-[60] flex items-center space-x-3 px-4 py-3 rounded-lg shadow-lg
+    ${type === 'success' 
+      ? theme === 'dark' 
+        ? 'bg-green-800 text-green-100 border border-green-700' 
+        : 'bg-green-100 text-green-800 border border-green-200'
+      : theme === 'dark'
+        ? 'bg-red-800 text-red-100 border border-red-700'
+        : 'bg-red-100 text-red-800 border border-red-200'
+    }
+    animate-in slide-in-from-right duration-300
+  `}>
+    {type === 'success' ? (
+      <CheckCircle className="w-5 h-5 text-green-500" />
+    ) : (
+      <AlertCircle className="w-5 h-5 text-red-500" />
+    )}
+    <span className="font-medium">{message}</span>
+    <button
+      onClick={onClose}
+      className={`ml-2 ${
+        type === 'success' ? 'text-green-600 hover:text-green-700' : 'text-red-600 hover:text-red-700'
+      }`}
+    >
+      <X className="w-4 h-4" />
+    </button>
+  </div>
+);
   // NEW: Add event listener for auto-expand functionality
   useEffect(() => {
     const handleRefresh = () => {
@@ -823,15 +822,20 @@ const MainDashboard = () => {
 
   return (
     <div
-      className={`flex flex-col min-h-screen ${
-        theme === "dark" ? "dark:bg-black" : "bg-[#f0efea]/50"
-      } overflow-hidden ${
-        isDragOver ? "border-2 border-blue-400 bg-blue-50" : ""
-      }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+  className={`flex flex-col min-h-screen ${
+    theme === "dark" ? "dark:bg-black" : "bg-[#f0efea]/50"
+  } overflow-hidden ${isDragOver ? "border-2 border-blue-400 bg-blue-50" : ""}`}
+  onDragOver={handleDragOver}
+  onDragLeave={handleDragLeave}
+  onDrop={handleDrop}
+>
+  {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)}
+      />
+    )}
       {/* Background for dark theme */}
       {theme === "dark" && (
         <>
@@ -1079,7 +1083,7 @@ const MainDashboard = () => {
   mainProjectId={mainProjectId}
 /> */}
 
-      {/* Brain Loading Modal */}
+      {/* Brain Loading Modal
       {isMindmapGenerating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
@@ -1097,7 +1101,7 @@ const MainDashboard = () => {
             <BrainLoadingAnimation theme={theme} />
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };

@@ -938,3 +938,122 @@ def update_user_upload_permissions(request, user_id):
     except Exception as e:
         print(f"Error updating upload permissions: {str(e)}")
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+
+
+ 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.db.models import Min
+from .models import Project
+from notebook.models import ChatHistory
+from ideaGen.models import ProductIdea2
+from notebook.models import UserTransaction, TransactionType
+@api_view(['GET'])
+def get_first_activities(request):
+    """Get timestamps of first activities across all modules"""
+   
+    # Get first project creation
+    first_project = Project.objects.select_related('user').order_by('created_at').first()
+   
+    # Get first notebook question using both transaction tables
+    first_conversation = UserTransaction.objects.filter(
+        transaction_type=TransactionType.CONVERSATION_CREATE,
+    ).select_related(
+        'user',
+        'notebook_conversation_details'  # Join with ConversationTransaction
+    ).order_by('created_at').first()
+   
+    # Get first idea generation
+    first_idea = ProductIdea2.objects.select_related('user').order_by('created_at').first()
+ 
+    return Response({
+        'first_project': {
+            'username': first_project.user.username if first_project else None,
+            'timestamp': first_project.created_at if first_project else None,
+            'project_name': first_project.name if first_project else None
+        },
+        'first_question': {
+            'username': first_conversation.user.username if first_conversation else None,
+            'timestamp': first_conversation.created_at if first_conversation else None,
+            'question_count': first_conversation.notebook_conversation_details.question_count if first_conversation and hasattr(first_conversation, 'notebook_conversation_details') else 0,
+            'conversation_title': first_conversation.conversation_title if first_conversation else None
+        },
+        'first_idea': {
+            'username': first_idea.user.username if first_idea else None,
+            'timestamp': first_idea.created_at if first_idea else None,
+            'idea_name': first_idea.product if first_idea else None
+        }
+    })
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_all_activities(request):
+    """Get all activities chronologically organized"""
+   
+    # Fetch all projects
+    projects = Project.objects.select_related('user').order_by('created_at')
+    
+    # Fetch all conversations with their details
+    conversations = UserTransaction.objects.filter(
+        transaction_type=TransactionType.CONVERSATION_CREATE,
+    ).select_related(
+        'user',
+        'notebook_conversation_details'
+    ).order_by('created_at')
+    
+    # Fetch all ideas
+    ideas = ProductIdea2.objects.select_related('user', 'project').order_by('created_at')
+   
+    activities = []
+   
+    # Add projects
+    for project in projects:
+        activities.append({
+            'type': 'Project Creation',
+            'username': project.user.username,
+            'details': f"Created project '{project.name}'",
+            'timestamp': project.created_at
+        })
+   
+    # Add conversations
+    for conv in conversations:
+        conv_details = getattr(conv, 'notebook_conversation_details', None)
+        activities.append({
+            'type': 'Notebook Question',
+            'username': conv.user.username,
+            'details': f"Started '{conv.conversation_title or 'Untitled'}' with {conv_details.question_count if conv_details else 0} questions",
+            'timestamp': conv.created_at,
+            'metadata': {
+                'question_count': conv_details.question_count if conv_details else 0,
+                'message_count': conv_details.message_count if conv_details else 0
+            }
+        })
+   
+    # Add ideas
+    for idea in ideas:
+        try:
+            project_name = idea.project.name if idea.project else "Unknown Project"
+            activities.append({
+                'type': 'Idea Generation',
+                'username': idea.user.username,
+                'details': f"Generated idea '{idea.product}' in project '{project_name}'",
+                'timestamp': idea.created_at
+            })
+        except Exception as e:
+            activities.append({
+                'type': 'Idea Generation',
+                'username': idea.user.username,
+                'details': f"Generated idea '{idea.product}'",
+                'timestamp': idea.created_at
+            })
+   
+    # Sort all activities by timestamp
+    activities.sort(key=lambda x: x['timestamp'], reverse=True)
+   
+    return Response({
+        'status': 'success',
+        'activities': activities
+    })

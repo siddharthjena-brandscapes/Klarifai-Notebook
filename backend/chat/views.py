@@ -1,3 +1,5 @@
+
+
 #views.py original
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
@@ -134,64 +136,66 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # )
 
 class SignupView(APIView):
-    # Explicitly set permission to allow any user (including unauthenticated)
     permission_classes = [AllowAny]
-    authentication_classes = []  # Disable authentication checks
-
+    authentication_classes = []
+ 
     def post(self, request):
-        # Extract data from request
+        from dotenv import load_dotenv
+        import os
+ 
+        load_dotenv()
+        # Extract form data
         username = request.data.get('username')
         email = request.data.get('email')
         password = request.data.get('password')
+ 
+        # Optional API tokens provided by user during signup
         nebius_token = request.data.get('nebius_token', '')
         gemini_token = request.data.get('gemini_token', '')
-        llama_token = request.data.get('llama_token', '')  # New field for Llama API token
-
-        # Validate input
+        llama_token = request.data.get('llama_token', '')
+        huggingface_token = request.data.get('huggingface_token', '')
+ 
         if not username or not email or not password:
             return Response({
                 'error': 'Please provide username, email, and password'
             }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Check if user already exists
+ 
         if User.objects.filter(username=username).exists():
             return Response({
                 'error': 'Username already exists'
             }, status=status.HTTP_400_BAD_REQUEST)
-
+ 
         # Create new user
         try:
+            # Create the user
             user = User.objects.create_user(
-                username=username, 
-                email=email, 
+                username=username,
+                email=email,
                 password=password
             )
-            
-            # Update the automatically created API tokens with provided values
-            # The post_save signal already created UserAPITokens with default values
-            api_tokens = user.api_tokens
-            if nebius_token:
-                api_tokens.nebius_token = nebius_token
-            if gemini_token:
-                api_tokens.gemini_token = gemini_token
-            if llama_token:
-                api_tokens.llama_token = llama_token
-            api_tokens.save()
-            
-            # Generate token for the new user
+ 
+            # Set user tokens: Use user input if available, otherwise fall back to env defaults
+            # ✅ Update the existing UserAPITokens created by signal
+            user.api_tokens.huggingface_token = huggingface_token or os.getenv("HUGGINGFACE_TOKEN", "")
+            user.api_tokens.gemini_token = gemini_token or os.getenv("GOOGLE_API_KEY", "")
+            user.api_tokens.nebius_token = nebius_token or os.getenv("NEBIUS_TOKEN", "")
+            user.api_tokens.llama_token = llama_token or os.getenv("LLAMA_TOKEN", "")
+            user.api_tokens.save()
+ 
+ 
+            # Generate token
             token, _ = Token.objects.get_or_create(user=user)
-            
             return Response({
                 'message': 'User created successfully',
                 'token': token.key,
                 'username': user.username
             }, status=status.HTTP_201_CREATED)
-
+ 
         except Exception as e:
             return Response({
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
 class LoginView(APIView):
     # Explicitly set permission to allow any user (including unauthenticated)
     permission_classes = [AllowAny]
@@ -222,10 +226,8 @@ class LoginView(APIView):
         return Response({
             'error': 'Invalid credentials'
         }, status=status.HTTP_401_UNAUTHORIZED)
+    
 
-# views.py
-
- 
 class MicrosoftSSOView(APIView):
     """Single view to handle Microsoft SSO - direct redirect approach"""
     permission_classes = [AllowAny]
@@ -298,6 +300,13 @@ class MicrosoftSSOCallbackView(APIView):
    
     def create_or_update_user(self, user_info):
         """Create or update user - they're already validated by Microsoft"""
+ 
+        from dotenv import load_dotenv
+        import os
+ 
+        load_dotenv()
+ 
+ 
         email = user_info.get('mail') or user_info.get('userPrincipalName')
         display_name = user_info.get('displayName', '')
         given_name = user_info.get('givenName', '')
@@ -337,6 +346,14 @@ class MicrosoftSSOCallbackView(APIView):
  
             logger.info(f"Created new user: {email}")
  
+ 
+            # ✅ Update the existing UserAPITokens created by signal
+            user.api_tokens.huggingface_token = os.getenv("HUGGINGFACE_TOKEN", "")
+            user.api_tokens.gemini_token =  os.getenv("GOOGLE_API_KEY", "")
+            user.api_tokens.nebius_token =  os.getenv("NEBIUS_TOKEN", "")
+            user.api_tokens.llama_token =   os.getenv("LLAMA_TOKEN", "")
+            user.api_tokens.save()
+ 
             # 🔒 Disable all modules for the new user
             try:
                 module_perm = user.module_permissions
@@ -344,13 +361,12 @@ class MicrosoftSSOCallbackView(APIView):
                 module_perm = UserModulePermissions.objects.create(user=user)
  
             # Assuming these are your modules (customize as needed)
-            all_modules = ["document-qa", "idea-generator", "ad-campaign-generator"]
+            all_modules = ["document-qa", "ad-campaign-generator"]
             module_perm.disabled_modules = {module: True for module in all_modules}
             module_perm.save()
  
         return user
-
-
+   
     def get(self, request):
         """Handle callback from Microsoft with authorization code"""
         code = request.GET.get('code')
@@ -425,7 +441,6 @@ class MicrosoftSSOCallbackView(APIView):
             logger.error(f"SSO callback exception: {str(e)}")
             return redirect(f"{settings.FRONTEND_URL}/login?error=sso_exception")
 
-            
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
  
@@ -512,6 +527,7 @@ class UserProfileView(APIView):
             'total_documents_uploaded': document_stats['total_documents'],
             'token_limit': api_tokens.token_limit if api_tokens and api_tokens.token_limit is not None else None,
             'page_limit': (api_tokens.page_limit) if api_tokens and api_tokens.page_limit is not None else None,
+
         }, status=status.HTTP_200_OK)
  
     def get_user_token_stats(self, user):
@@ -582,42 +598,39 @@ class UserProfileView(APIView):
            
             # Get or create profile
             profile, created = UserProfile.objects.get_or_create(user=user)
-
-            # Delete old profile picture from blob storage if it exists
-            if profile.profile_picture and not created:
+           
+            # Delete old profile picture if it exists
+            if profile.profile_picture:
                 try:
-                    profile.delete_old_profile_picture()
-                    logger.info(f"Deleted old profile picture for user {user.username}")
+                    old_file_path = profile.profile_picture.path
+                    if os.path.exists(old_file_path):
+                        os.remove(old_file_path)
                 except Exception as e:
-                    logger.warning(f"Failed to delete old profile picture for user {user.username}: {str(e)}")
-
-            # Upload new profile picture to Azure Blob Storage
-            from chat.utils import upload_profile_picture_to_blob
-            upload_result = upload_profile_picture_to_blob(profile_picture, user.username)
-
-            if not upload_result:
-                return Response({
-                    'error': 'Failed to upload profile picture to cloud storage'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            # Save the blob path to the profile
-            profile.profile_picture = upload_result['filename']  # Store the blob path
-            profile.save()
-
-            # Return the full URL for the frontend
-            profile_picture_url = upload_result['url']
-
+                    print(f"Error deleting old profile picture: {e}")
+           
+            # Generate unique filename
+            file_extension = os.path.splitext(profile_picture.name)[1]
+            unique_filename = f"{user.username}_{uuid.uuid4().hex[:8]}{file_extension}"
+           
+            # Save the new profile picture
+            profile.profile_picture.save(
+                unique_filename,
+                profile_picture,
+                save=True
+            )
+           
+            # Build the full URL
+            profile_picture_url = request.build_absolute_uri(profile.profile_picture.url)
+           
             return Response({
                 'message': 'Profile picture updated successfully',
                 'profile_picture': profile_picture_url
             }, status=status.HTTP_200_OK)
            
         except Exception as e:
-            logger.error(f"Error updating profile picture for user {user.username}: {str(e)}", exc_info=True)
             return Response({
-                'error': f'Failed to update profile picture: {str(e)}'
+                'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
- 
 
 class GetUserDocumentsView(APIView):
     def get(self, request):
@@ -755,9 +768,7 @@ class DocumentProcessingMixin:
                 "format_type": "error"
             }
 
-   
-    
-    
+
     def convert_video_to_audio(self, video_path):
         """
         Convert video files to audio format using MoviePy.
@@ -804,39 +815,33 @@ class DocumentProcessingMixin:
         except Exception as e:
             logger.error(f"Error during video-to-audio conversion: {str(e)}")
             return None
-
     def extract_text_from_video(self, file_path, user=None):
         """
         Extract text from video files by first converting to audio, then transcribing.
-        Stores results in Azure Blob Storage.
+        Returns the transcribed text.
         
         Args:
             file_path: Path to the video file
             user: Django user object to get API token
         """
-        import logging
-        import tempfile
-        import os
-        import uuid
-        from chat.utils import upload_transcript_to_blob
         
         logger = logging.getLogger(__name__)
-        logger.info(f"Starting video-to-text extraction for: {file_path}")
+        print(f"Starting video-to-text extraction for: {file_path}")
         
         try:
             # First convert video to audio
-            logger.info("Attempting to convert video to audio...")
+            print("Attempting to convert video to audio...")
             audio_path = self.convert_video_to_audio(file_path)
             
             if not audio_path:
-                error_msg = f"Failed to convert video to audio: {file_path}"
-                logger.error(error_msg)
+                print(f"Failed to convert video to audio: {file_path}")
+                logger.error(f"Failed to convert video to audio: {file_path}")
                 return f"Error: Failed to extract audio from video file."
             
-            logger.info(f"Successfully converted video to audio: {audio_path}")
+            print(f"Successfully converted video to audio: {audio_path}")
             
             # Then extract text from the resulting audio file
-            logger.info(f"Starting audio transcription...")
+            print(f"Starting audio transcription...")
             extracted_text = self.extract_text_from_audio(audio_path, user=user)
             
             print(f"Audio transcription completed, text length: {len(extracted_text) if extracted_text else 0}")
@@ -847,7 +852,7 @@ class DocumentProcessingMixin:
                 os.remove(audio_path)
             
             return extracted_text
-            
+        
         except Exception as e:
             print(f"Exception in extract_text_from_video: {str(e)}")
             logger.error(f"Error extracting text from video: {str(e)}")
@@ -857,11 +862,7 @@ class DocumentProcessingMixin:
         """
         Process document directly from provided text.
         For use with transcripts that are already extracted.
-        Saves to Azure Blob Storage.
         """
-        import numpy as np
-        import faiss
-        import uuid
         
         try:
             # Clean the text
@@ -900,8 +901,8 @@ class DocumentProcessingMixin:
             # Generate a unique session ID for this document
             session_id = uuid.uuid4().hex
             
-            # Save the index and chunks to Azure Blob Storage
-            index_file, pickle_file = self.save_faiss_index_to_blob(index, all_chunks, session_id)
+            # Save the index and chunks
+            index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
             
             print(f"Transcript processed successfully: {len(all_chunks)} chunks created")
             
@@ -915,6 +916,7 @@ class DocumentProcessingMixin:
             print(f"Error in process_document_from_text: {str(e)}")
             raise
 
+
     def extract_text_from_audio(self, file_path, user=None):
         """
         Extract text from audio files using Google's Gemini API.
@@ -925,13 +927,7 @@ class DocumentProcessingMixin:
             file_path: Path to the audio file
             user: Django user object to get API token
         """
-        import logging
-        import tempfile
-        import os
-        import uuid
-        import time
-        from chat.utils import upload_transcript_to_blob
-        
+
         logger = logging.getLogger(__name__)
         
         # Set up the transcripts directory
@@ -1152,7 +1148,6 @@ class DocumentProcessingMixin:
         """Extract text from different file types."""
         from pathlib import Path
         ext = Path(file_path).suffix.lower()
-        
         if ext == '.pdf':
             return self.extract_text_from_pdf(file_path)
         elif ext == '.docx':
@@ -1474,7 +1469,9 @@ class DocumentProcessingMixin:
             <li>Insufficient context extracted</li>
         </ul>
         """
+    
 from rest_framework.parsers import JSONParser
+
 
 
 
@@ -1483,7 +1480,10 @@ from rest_framework.parsers import JSONParser
 class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
     parser_classes = (JSONParser,)
 
+
+
     def load_faiss_index(self, session_id):
+    
         try:
             index_file = f"faiss_indexes/{session_id}_index.faiss"
             pickle_file = f"faiss_indexes/{session_id}_chunks.pkl"
@@ -1772,26 +1772,12 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
             # Format the summary with HTML-like tags
             formatted_summary = self.format_summary_response(consolidated_summary)
 
-            # Save the consolidated summary to Azure Blob Storage
-            blob_name = self.save_consolidated_summary_to_blob(
-                user_id=user.id,
-                project_id=main_project_id,
-                document_ids=document_ids,
-                summary_content=formatted_summary
-            )
-
             # Update project timestamp to track activity
             update_project_timestamp(main_project_id, user)
             
-            response_data = {
+            return Response({
                 'consolidated_summary': formatted_summary
-            }
-            
-            # Include blob reference if successfully saved
-            if blob_name:
-                response_data['blob_reference'] = blob_name
-            
-            return Response(response_data, status=status.HTTP_200_OK)
+            }, status=status.HTTP_200_OK)
             
         except Exception as e:
             print(f"Error generating consolidated summary: {str(e)}")
@@ -1800,353 +1786,9 @@ class ConsolidatedSummaryView(DocumentProcessingMixin, APIView):
                 'detail': 'An error occurred while generating the consolidated summary'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
 class DocumentUploadView(DocumentProcessingMixin, APIView):
     parser_classes = (MultiPartParser, FormParser)
    
-    # def post(self, request):
-    #     files = request.FILES.getlist('files')
-    #     user = request.user
-    #     main_project_id = request.data.get('main_project_id')
-    #     target_user_id = request.data.get('target_user_id')
- 
-    #     # ...existing code...
-    #     if target_user_id and request.user.username == 'admin':
-    #         try:
-    #             user = User.objects.get(id=target_user_id)
-    #         except User.DoesNotExist:
-    #             return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
-    #         skip_permission_checks = True
-    #     else:
-    #         user = request.user
-    #         skip_permission_checks = False
- 
-    #     if not skip_permission_checks:
-    #         try:
-    #             permissions = UserModulePermissions.objects.get(user=user)
-    #             if permissions.disabled_modules.get('document-upload', False):
-    #                 return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-    #         except UserModulePermissions.DoesNotExist:
-    #             pass
- 
-    #         try:
-    #             upload_permissions = UserUploadPermissions.objects.get(user=user)
-    #             if not upload_permissions.can_upload:
-    #                 return Response({'error': 'Document uploads are disabled for this user'}, status=status.HTTP_403_FORBIDDEN)
-    #         except UserUploadPermissions.DoesNotExist:
-    #             pass
-    #     # ...existing code...
- 
-    #     try:
-    #         main_project = Project.objects.get(id=main_project_id, user=user)
-    #         uploaded_docs = []
-    #         last_processed_doc_id = None
-    #         processed_data = None
- 
-    #         for file in files:
-    #             file_ext = os.path.splitext(file.name)[1].lower()
-    #             is_audio_file = file_ext in ['.mp3', '.wav', '.mpeg', '.m4a', '.aac', '.flac']
-    #             is_video_file = file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv', '.flv', '.webm', '.mts']
-    #             is_media_file = is_audio_file or is_video_file
- 
-    #             # --- Status: Uploading ---
-    #             update_doc_status(user, file.name, "uploading", 10, "Uploading file...")
- 
-    #             existing_doc = Document.objects.filter(
-    #                 user=user,
-    #                 filename=file.name,
-    #                 main_project=main_project
-    #             ).first()
- 
-    #             # --- Status: Uploaded ---
-    #             update_doc_status(user, file.name, "uploaded", 20, "File uploaded, awaiting processing...")
- 
-    #             try:
-    #                 if is_media_file:
-    #                     # --- Status: Processing Media ---
-    #                     update_doc_status(user, file.name, "processing", 30, "Processing media file...")
- 
-    #                     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
-    #                         for chunk in file.chunks():
-    #                             tmp_file.write(chunk)
-    #                         file_path = tmp_file.name
- 
-    #                     try:
-    #                         if is_video_file:
-    #                             update_doc_status(user, file.name, "processing", 35, "Extracting audio from video...")
-    #                             extracted_text = self.extract_text_from_video(file_path, user=user)
-    #                         else:
-    #                             update_doc_status(user, file.name, "processing", 35, "Transcribing audio file...")
-    #                             extracted_text = self.extract_text_from_audio(file_path, user=user)
- 
-    #                         if not extracted_text or (isinstance(extracted_text, str) and extracted_text.startswith("Error")):
-    #                             update_doc_status(user, file.name, "error", 100, "Failed to extract text from media file.")
-    #                             return Response({'error': f'Failed to extract text from media file: {file.name}'}, status=status.HTTP_400_BAD_REQUEST)
- 
-    #                         base_name = os.path.splitext(file.name)[0]
-    #                         file_type = "video" if is_video_file else "audio"
-    #                         transcript_filename = f"{base_name}_{file_type}_transcript.txt"
- 
-    #                         update_doc_status(user, file.name, "processing", 45, "Processing transcript...")
- 
-    #                         # The transcript is already uploaded to blob storage by extract methods
-    #                         # We need to get the blob path for storing in the database
-    #                         import uuid
-    #                         unique_id = uuid.uuid4().hex[:8]
-    #                         blob_transcript_filename = f"{base_name}_{file_type}_transcript_{unique_id}.txt"
-                            
-    #                         # Upload transcript to blob storage with proper path
-    #                         from notebook.utils import upload_transcript_to_blob
-    #                         blob_info = upload_transcript_to_blob(
-    #                             extracted_text, 
-    #                             blob_transcript_filename,
-    #                             is_video=is_video_file
-    #                         )
-                            
-    #                         if not blob_info:
-    #                             update_doc_status(user, file.name, "error", 100, "Failed to upload transcript to blob storage.")
-    #                             return Response({
-    #                                 'error': f'Failed to upload transcript to blob storage: {transcript_filename}'
-    #                             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    #                         # Process the document for RAG using the extracted text
-    #                         processed_data = self.process_document_from_text(extracted_text, transcript_filename, user)
-
-    #                         # Create or update document record with transcript details
-    #                         if existing_doc:
-    #                             # Update existing document
-    #                             existing_doc.filename = transcript_filename
-    #                             existing_doc.file = blob_info['filename']  # Store the blob path
-    #                             existing_doc.save()
-    #                             document = existing_doc
-    #                         else:
-    #                             # Create new document with transcript
-    #                             document = Document.objects.create(
-    #                                 user=user,
-    #                                 file=blob_info['filename'],  # Store the blob path
-    #                                 filename=transcript_filename,
-    #                                 main_project=main_project
-    #                             )
-    #                             file_size = file.size if hasattr(file, 'size') else None
-    #                             upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
-    #                             print(f"##################Upload method: {upload_method}")
-    #                             print(f"### Inside post, about to call create_document_transaction for {file.name}")
-    #                             self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size)
-    #                             print(f"### Finished create_document_transaction for {file.name}")
- 
-    #                         # --- Status: Indexing ---
-    #                         update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
- 
-    #                         ProcessedIndex.objects.create(
-    #                             document=document,
-    #                             faiss_index=processed_data['index_path'],
-    #                             metadata=processed_data['metadata_path'],
-    #                             summary="",
-    #                             markdown_path=processed_data.get('markdown_path', '')
-    #                         )
- 
-    #                         # Only for admin uploads
-    #                         if target_user_id and request.user.username == 'admin':
-    #                             notebook_doc = NotebookDocument.objects.create(
-    #                                 user=user,
-    #                                 file=document.file,
-    #                                 filename=document.filename,
-    #                                 main_project=main_project
-    #                             )
-    #                             NotebookProcessedIndex.objects.create(
-    #                                 document=notebook_doc,
-    #                                 faiss_index=processed_data['index_path'],
-    #                                 metadata=processed_data['metadata_path'],
-    #                                 summary="",
-    #                                 markdown_path=processed_data.get('markdown_path', '')
-    #                             )
- 
-    #                         uploaded_docs.append({
-    #                             'id': document.id,
-    #                             'filename': transcript_filename,
-    #                             'original_media_type': file_type,
-    #                             'transcript_blob_path': blob_info['filename']
-    #                         })
-    #                         last_processed_doc_id = document.id
- 
-    #                         # --- Status: Complete ---
-    #                         update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
- 
-    #                     finally:
-    #                         if os.path.exists(file_path):
-    #                             os.unlink(file_path)
- 
-    #                 else:
-    #                     # --- Status: Processing Document ---
-    #                     update_doc_status(user, file.name, "processing", 30, "Processing document...")
- 
-    #                     if existing_doc:
-    #                         try:
-    #                             processed_index = ProcessedIndex.objects.get(document=existing_doc)
-    #                             uploaded_docs.append({
-    #                                 'id': existing_doc.id,
-    #                                 'filename': existing_doc.filename
-    #                             })
-    #                             last_processed_doc_id = existing_doc.id
-    #                             update_doc_status(user, file.name, "complete", 100, "Already processed!", doc_id=existing_doc.id)
-    #                         except ProcessedIndex.DoesNotExist:
-    #                             # Upload file to Azure Blob Storage FIRST
-    #                             from notebook.utils import upload_document_to_blob
-    #                             blob_info = upload_document_to_blob(file, main_project_id)
-                                
-    #                             if not blob_info:
-    #                                 update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-    #                                 return Response({
-    #                                     'error': f'Failed to upload file to blob storage: {file.name}'
-    #                                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                                
-    #                             # Update existing document with blob path
-    #                             existing_doc.file = blob_info['filename']
-    #                             existing_doc.save()
-                                
-    #                             # Process the document
-    #                             processed_data = self.process_document(file, user)
- 
-    #                             # --- Status: Indexing ---
-    #                             update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
- 
-    #                             ProcessedIndex.objects.create(
-    #                                 document=existing_doc,
-    #                                 faiss_index=processed_data['index_path'],
-    #                                 metadata=processed_data['metadata_path'],
-    #                                 summary="",
-    #                                 markdown_path=processed_data.get('markdown_path', '')
-    #                             )
-    #                             # Only for admin uploads
-    #                             if target_user_id and request.user.username == 'admin':
-    #                                 notebook_doc = NotebookDocument.objects.create(
-    #                                     user=user,
-    #                                     file=document.file,
-    #                                     filename=document.filename,
-    #                                     main_project=main_project
-    #                                 )
-    #                                 NotebookProcessedIndex.objects.create(
-    #                                     document=notebook_doc,
-    #                                     faiss_index=processed_data['index_path'],
-    #                                     metadata=processed_data['metadata_path'],
-    #                                     summary="",
-    #                                     markdown_path=processed_data.get('markdown_path', '')
-    #                                 )
-    #                             uploaded_docs.append({
-    #                                 'id': existing_doc.id,
-    #                                 'filename': existing_doc.filename
-    #                             })
-    #                             last_processed_doc_id = existing_doc.id
- 
-    #                             # --- Status: Complete ---
-    #                             update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=existing_doc.id)
-    #                     else:
-    #                         # Upload file to Azure Blob Storage FIRST - CRITICAL FOR VIEWING
-    #                         from notebook.utils import upload_document_to_blob
-    #                         blob_info = upload_document_to_blob(file, main_project_id)
-                            
-    #                         if not blob_info:
-    #                             update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-    #                             return Response({
-    #                                 'error': f'Failed to upload file to blob storage: {file.name}'
-    #                             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                            
-    #                         # Process the document
-    #                         processed_data = self.process_document(file, user)
-
-    #                         # Create new document with blob path for ORIGINAL FILE
-    #                         document = Document.objects.create(
-    #                             user=user,
-    #                             file=blob_info['filename'],  # Store the ORIGINAL document blob path 
-    #                             filename=file.name,
-    #                             main_project=main_project
-    #                         )
-    #                         file_size = file.size if hasattr(file, 'size') else None
-    #                         upload_method = 'regular'
-    #                         print(f"##################Upload method: {upload_method}")
-    #                         print(f"### Inside post, about to call create_document_transaction for {file.name}")
-    #                         self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
-    #                         print(f"### Finished create_document_transaction for {file.name}")
-
-    #                         print(f"Created document with original file path: {blob_info['filename']}")
- 
-    #                         # --- Status: Indexing ---
-    #                         update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
-
-    #                         # Create ProcessedIndex with processed file paths (separate from original)
-    #                         ProcessedIndex.objects.create(
-    #                             document=document,
-    #                             faiss_index=processed_data['index_path'],
-    #                             metadata=processed_data['metadata_path'],
-    #                             summary="",
-    #                             markdown_path=processed_data.get('markdown_path', '')
-    #                         )
-    #                         # Only for admin uploads
-    #                         if target_user_id and request.user.username == 'admin':
-    #                             notebook_doc = NotebookDocument.objects.create(
-    #                                 user=user,
-    #                                 file=blob_info['filename'],
-    #                                 filename=file.name,
-    #                                 main_project=main_project
-    #                             )
-    #                             NotebookProcessedIndex.objects.create(
-    #                                 document=notebook_doc,
-    #                                 faiss_index=processed_data['index_path'],
-    #                                 metadata=processed_data['metadata_path'],
-    #                                 summary="",
-    #                                 markdown_path=processed_data.get('markdown_path', '')
-    #                             )
-    #                         uploaded_docs.append({
-    #                             'id': document.id,
-    #                             'filename': document.filename
-    #                         })
-    #                         last_processed_doc_id = document.id
-
-    #                         print(f"Uploaded Document - ID: {document.id}")
-    #                         print(f"Filename: {document.filename}")
-    #                         print(f"Original file blob path: {document.file}")
-    #                         print(f"Processed markdown path: {processed_data.get('markdown_path', 'None')}")
- 
-    #                         # --- Status: Complete ---
-    #                         update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
- 
-    #             except Exception as e:
-    #                 update_doc_status(user, file.name, "error", 100, f"Error: {str(e)}")
-    #                 import logging
-    #                 logger = logging.getLogger(__name__)
-    #                 logger.error(f"Error processing document: {str(e)}", exc_info=True)
-    #                 return Response({
-    #                     'error': str(e),
-    #                     'detail': 'An error occurred while processing the document'
-    #                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    #         # Store the last processed document ID in the session
-    #         request.session['active_document_id'] = last_processed_doc_id
-
-    #         # Ensure we have processed_data before using it
-    #         if processed_data is None:
-    #             return Response({'error': 'No documents were successfully processed'}, status=status.HTTP_400_BAD_REQUEST)
-
-    #         # Update project timestamp to track activity
-    #         update_project_timestamp(main_project_id, user)
- 
-    #         return Response({
-    #             'message': 'Documents uploaded successfully',
-    #             'documents': uploaded_docs,
-    #             'active_document_id': last_processed_doc_id
-    #         }, status=status.HTTP_201_CREATED)
- 
-    #     except Exception as e:
-    #         import logging
-    #         logger = logging.getLogger(__name__)
-    #         logger.error(f"Error processing document: {str(e)}", exc_info=True)
-    #         return Response({
-    #             'error': str(e),
-    #             'detail': 'An error occurred while processing the document'
-    #         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    
     def post(self, request):
         files = request.FILES.getlist('files')
         user = request.user
@@ -2232,53 +1874,39 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
 
                             update_doc_status(user, file.name, "processing", 45, "Processing transcript...")
 
-                            # Upload transcript to blob storage
-                            import uuid
-                            unique_id = uuid.uuid4().hex[:8]
-                            blob_transcript_filename = f"{base_name}_{file_type}_transcript_{unique_id}.txt"
-                            
-                            from notebook.utils import upload_transcript_to_blob
-                            blob_info = upload_transcript_to_blob(
-                                extracted_text, 
-                                blob_transcript_filename,
-                                is_video=is_video_file
-                            )
-                            
-                            if not blob_info:
-                                update_doc_status(user, file.name, "error", 100, "Failed to upload transcript to blob storage.")
-                                return Response({
-                                    'error': f'Failed to upload transcript to blob storage: {transcript_filename}'
-                                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                            processed_data = self.process_document_from_text(extracted_text, transcript_filename)
 
-                            # Process the document for RAG using the extracted text
-                            processed_data = self.process_document_from_text(extracted_text, transcript_filename, user)
+                            transcript_file_path = os.path.join(tempfile.gettempdir(), transcript_filename)
+                            with open(transcript_file_path, 'w', encoding='utf-8') as f:
+                                f.write(extracted_text)
 
-                            # Create or update document record with transcript details
-                            if existing_doc:
-                                # Update existing document
-                                existing_doc.filename = transcript_filename
-                                existing_doc.file = blob_info['filename']
-                                existing_doc.save()
-                                document = existing_doc
-                            else:
-                                # Create new document with transcript
-                                document = Document.objects.create(
-                                    user=user,
-                                    file=blob_info['filename'],
-                                    filename=transcript_filename,
-                                    main_project=main_project
-                                )
-                                file_size = file.size if hasattr(file, 'size') else None
-                                upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
-                                print(f"##################Upload method: {upload_method}")
-                                print(f"### Inside post, about to call create_document_transaction for {file.name}")
-                                self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size)
-                                print(f"### Finished create_document_transaction for {file.name}")
+                            try:
+                                with open(transcript_file_path, 'rb') as f:
+                                    from django.core.files import File
+                                    django_file = File(f, name=transcript_filename)
+
+                                    if existing_doc:
+                                        existing_doc.file = django_file
+                                        existing_doc.filename = transcript_filename
+                                        existing_doc.save()
+                                        document = existing_doc
+                                    else:
+                                        document = Document.objects.create(
+                                            user=user,
+                                            file=django_file,
+                                            filename=transcript_filename,
+                                            main_project=main_project
+                                        )
+                                        file_size = file.size if hasattr(file, 'size') else None
+                                        upload_method = 'video_transcript' if is_video_file else 'audio_transcript'
+                                        self.create_document_transaction(user, document, main_project, upload_method=upload_method, file_size=file_size)
+                            finally:
+                                if os.path.exists(transcript_file_path):
+                                    os.unlink(transcript_file_path)
 
                             # --- Status: Indexing ---
                             update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
 
-                            # Create ProcessedIndex for main document
                             ProcessedIndex.objects.create(
                                 document=document,
                                 faiss_index=processed_data['index_path'],
@@ -2287,41 +1915,26 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 markdown_path=processed_data.get('markdown_path', '')
                             )
 
-                            # FIXED: Only for admin uploads - create notebook records
+                            # Only for admin uploads
                             if target_user_id and request.user.username == 'admin':
-                                # Check if notebook document already exists
-                                existing_notebook_doc = NotebookDocument.objects.filter(
+                                notebook_doc = NotebookDocument.objects.create(
                                     user=user,
-                                    filename=transcript_filename,
+                                    file=document.file,
+                                    filename=document.filename,
                                     main_project=main_project
-                                ).first()
-                                
-                                if not existing_notebook_doc:
-                                    notebook_doc = NotebookDocument.objects.create(
-                                        user=user,
-                                        file=document.file,  # Use the same blob path as main document
-                                        filename=document.filename,
-                                        main_project=main_project
-                                    )
-                                    
-                                    # Create notebook transaction record
-                                    self.create_document_transaction(user, notebook_doc, main_project, upload_method=upload_method, file_size=file_size)
-                                    
-                                    # Create notebook processed index
-                                    NotebookProcessedIndex.objects.create(
-                                        document=notebook_doc,
-                                        faiss_index=processed_data['index_path'],
-                                        metadata=processed_data['metadata_path'],
-                                        summary="",
-                                        markdown_path=processed_data.get('markdown_path', '')
-                                    )
-                                    print(f"Created notebook document and index for admin upload: {transcript_filename}")
+                                )
+                                NotebookProcessedIndex.objects.create(
+                                    document=notebook_doc,
+                                    faiss_index=processed_data['index_path'],
+                                    metadata=processed_data['metadata_path'],
+                                    summary="",
+                                    markdown_path=processed_data.get('markdown_path', '')
+                                )
 
                             uploaded_docs.append({
                                 'id': document.id,
                                 'filename': transcript_filename,
-                                'original_media_type': file_type,
-                                'transcript_blob_path': blob_info['filename']
+                                'original_media_type': file_type
                             })
                             last_processed_doc_id = document.id
 
@@ -2346,28 +1959,13 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 last_processed_doc_id = existing_doc.id
                                 update_doc_status(user, file.name, "complete", 100, "Already processed!", doc_id=existing_doc.id)
                             except ProcessedIndex.DoesNotExist:
-                                # Upload file to Azure Blob Storage FIRST
-                                from notebook.utils import upload_document_to_blob
-                                blob_info = upload_document_to_blob(file, main_project_id)
-                                
-                                if not blob_info:
-                                    update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-                                    return Response({
-                                        'error': f'Failed to upload file to blob storage: {file.name}'
-                                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                                
-                                # Update existing document with blob path
-                                existing_doc.file = blob_info['filename']
-                                existing_doc.save()
-                                document = existing_doc  # FIXED: Set document variable
-                                
-                                # Process the document
                                 processed_data = self.process_document(file, user)
+                                existing_doc.file = file
+                                existing_doc.save()
 
                                 # --- Status: Indexing ---
                                 update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
 
-                                # Create ProcessedIndex for main document
                                 ProcessedIndex.objects.create(
                                     document=existing_doc,
                                     faiss_index=processed_data['index_path'],
@@ -2375,38 +1973,21 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                     summary="",
                                     markdown_path=processed_data.get('markdown_path', '')
                                 )
-                                
-                                # FIXED: Only for admin uploads - create notebook records
+                                # Only for admin uploads
                                 if target_user_id and request.user.username == 'admin':
-                                    # Check if notebook document already exists
-                                    existing_notebook_doc = NotebookDocument.objects.filter(
+                                    notebook_doc = NotebookDocument.objects.create(
                                         user=user,
+                                        file=document.file,
                                         filename=document.filename,
                                         main_project=main_project
-                                    ).first()
-                                    
-                                    if not existing_notebook_doc:
-                                        notebook_doc = NotebookDocument.objects.create(
-                                            user=user,
-                                            file=document.file,
-                                            filename=document.filename,
-                                            main_project=main_project
-                                        )
-                                        
-                                        # Create notebook transaction record
-                                        file_size = file.size if hasattr(file, 'size') else None
-                                        self.create_document_transaction(user, notebook_doc, main_project, upload_method='regular', file_size=file_size)
-                                        
-                                        # Create notebook processed index
-                                        NotebookProcessedIndex.objects.create(
-                                            document=notebook_doc,
-                                            faiss_index=processed_data['index_path'],
-                                            metadata=processed_data['metadata_path'],
-                                            summary="",
-                                            markdown_path=processed_data.get('markdown_path', '')
-                                        )
-                                        print(f"Created notebook document and index for admin upload: {document.filename}")
-                                
+                                    )
+                                    NotebookProcessedIndex.objects.create(
+                                        document=notebook_doc,
+                                        faiss_index=processed_data['index_path'],
+                                        metadata=processed_data['metadata_path'],
+                                        summary="",
+                                        markdown_path=processed_data.get('markdown_path', '')
+                                    )
                                 uploaded_docs.append({
                                     'id': existing_doc.id,
                                     'filename': existing_doc.filename
@@ -2416,39 +1997,21 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 # --- Status: Complete ---
                                 update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=existing_doc.id)
                         else:
-                            # Upload file to Azure Blob Storage FIRST - CRITICAL FOR VIEWING
-                            from notebook.utils import upload_document_to_blob
-                            blob_info = upload_document_to_blob(file, main_project_id)
-                            
-                            if not blob_info:
-                                update_doc_status(user, file.name, "error", 100, "Failed to upload file to blob storage.")
-                                return Response({
-                                    'error': f'Failed to upload file to blob storage: {file.name}'
-                                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                            
-                            # Process the document
                             processed_data = self.process_document(file, user)
 
-                            # Create new document with blob path for ORIGINAL FILE
                             document = Document.objects.create(
                                 user=user,
-                                file=blob_info['filename'],
+                                file=file,
                                 filename=file.name,
                                 main_project=main_project
                             )
                             file_size = file.size if hasattr(file, 'size') else None
                             upload_method = 'regular'
-                            print(f"##################Upload method: {upload_method}")
-                            print(f"### Inside post, about to call create_document_transaction for {file.name}")
                             self.create_document_transaction(user, document, main_project, upload_method='regular', file_size=file_size)
-                            print(f"### Finished create_document_transaction for {file.name}")
-
-                            print(f"Created document with original file path: {blob_info['filename']}")
 
                             # --- Status: Indexing ---
                             update_doc_status(user, file.name, "indexing", 60, "Indexing document...")
 
-                            # Create ProcessedIndex with processed file paths (separate from original)
                             ProcessedIndex.objects.create(
                                 document=document,
                                 faiss_index=processed_data['index_path'],
@@ -2456,69 +2019,43 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                                 summary="",
                                 markdown_path=processed_data.get('markdown_path', '')
                             )
-                            
-                            # FIXED: Only for admin uploads - create notebook records
+                            # Only for admin uploads
                             if target_user_id and request.user.username == 'admin':
-                                # Check if notebook document already exists
-                                existing_notebook_doc = NotebookDocument.objects.filter(
+                                notebook_doc = NotebookDocument.objects.create(
                                     user=user,
+                                    file=document.file,
                                     filename=document.filename,
                                     main_project=main_project
-                                ).first()
-                                
-                                if not existing_notebook_doc:
-                                    notebook_doc = NotebookDocument.objects.create(
-                                        user=user,
-                                        file=document.file,
-                                        filename=document.filename,
-                                        main_project=main_project
-                                    )
-                                    
-                                    # Create notebook transaction record
-                                    self.create_document_transaction(user, notebook_doc, main_project, upload_method='regular', file_size=file_size)
-                                    
-                                    # Create notebook processed index
-                                    NotebookProcessedIndex.objects.create(
-                                        document=notebook_doc,
-                                        faiss_index=processed_data['index_path'],
-                                        metadata=processed_data['metadata_path'],
-                                        summary="",
-                                        markdown_path=processed_data.get('markdown_path', '')
-                                    )
-                                    print(f"Created notebook document and index for admin upload: {document.filename}")
-                            
+                                )
+                                NotebookProcessedIndex.objects.create(
+                                    document=notebook_doc,
+                                    faiss_index=processed_data['index_path'],
+                                    metadata=processed_data['metadata_path'],
+                                    summary="",
+                                    markdown_path=processed_data.get('markdown_path', '')
+                                )
                             uploaded_docs.append({
                                 'id': document.id,
                                 'filename': document.filename
                             })
                             last_processed_doc_id = document.id
 
-                            print(f"Uploaded Document - ID: {document.id}")
-                            print(f"Filename: {document.filename}")
-                            print(f"Original file blob path: {document.file}")
-                            print(f"Processed markdown path: {processed_data.get('markdown_path', 'None')}")
-
                             # --- Status: Complete ---
                             update_doc_status(user, file.name, "complete", 100, "Processing complete!", doc_id=document.id)
 
                 except Exception as e:
                     update_doc_status(user, file.name, "error", 100, f"Error: {str(e)}")
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"Error processing document: {str(e)}", exc_info=True)
+                    print(f"Error processing document: {str(e)}")
                     return Response({
                         'error': str(e),
                         'detail': 'An error occurred while processing the document'
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # Store the last processed document ID in the session
             request.session['active_document_id'] = last_processed_doc_id
 
-            # Ensure we have processed_data before using it
             if processed_data is None:
                 return Response({'error': 'No documents were successfully processed'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Update project timestamp to track activity
             update_project_timestamp(main_project_id, user)
 
             return Response({
@@ -2528,15 +2065,14 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error processing document: {str(e)}", exc_info=True)
+            print(f"Error processing document: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while processing the document'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+    
+ 
+ 
     def create_document_transaction(self, user, document, main_project, upload_method, file_size=None):
         """Create transaction record for document upload"""
         try:
@@ -2567,9 +2103,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             print(f"Transaction recorded for document: {document.filename}")
            
         except Exception as e:
-            print(f"Error creating document transaction: {str(e)}")   # -------------------------------
-    
-    
+            print(f"Error creating document transaction: {str(e)}")
     # -------------------------------
     # Keep the complexity detection from original code
     # -------------------------------
@@ -2586,11 +2120,11 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error detecting images in PDF: {e}")
             return False
+    
+    # Add LlamaParse integration from Streamlit code
     def process_complex_document_with_llamaparse(self, file_path, file_name, user):
         """
-        Process complex document using LlamaParse with user's API token
-        and save results to Azure Blob Storage.
-        IMPORTANT: This method creates processed files but does NOT modify the original document path.
+        Process complex document using LlamaParse with user's API token.
         """
         import tempfile
         import uuid
@@ -2598,35 +2132,31 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         import faiss
         import pickle
         from llama_parse import LlamaParse
-        from notebook.utils import upload_bytes_to_azure_blob, upload_markdown_to_blob
-        
+       
         try:
             # Get the user's Llama API token
             try:
                 user_api_tokens = UserAPITokens.objects.get(user=user)
                 llama_api_key = user_api_tokens.llama_token
-                
+               
                 # If no token is saved for the user, use a fallback mechanism or raise an error
                 if not llama_api_key:
                     logger.warning(f"No Llama API token found for user {user.username}")
+                    # Optional: You could implement a fallback or raise an error
                     raise ValueError("Llama API token is required for processing complex documents")
-                    
+                   
             except UserAPITokens.DoesNotExist:
                 logger.error(f"No API tokens record found for user {user.username}")
                 raise ValueError("User API tokens not configured")
-            
-            # Configure Llama Parse
+           
             parser = LlamaParse(
-                api_key=llama_api_key,
+                api_key=llama_api_key,  # Use the user's Llama API token
                 result_type="markdown",
                 verbose=True,
                 images=True,
                 premium_mode=True
             )
-            
-            print(f"Processing complex document with LlamaParse: {file_name}")
-            
-            # Parse the document
+           
             parsed_documents = parser.load_data(file_path)
             full_text = '\n'.join([doc.text for doc in parsed_documents])
            
@@ -2645,22 +2175,17 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             # Save markdown (adapted from Streamlit implementation)
             base_name = os.path.splitext(file_name)[0]
             safe_name = re.sub(r'[^\w\-_.]', '_', base_name)
-            markdown_filename = f"{safe_name}_llamaparse.md"
-            
-            # Upload markdown to Azure Blob Storage
-            markdown_result = upload_markdown_to_blob(full_text, markdown_filename)
-            if not markdown_result:
-                raise ValueError("Failed to upload markdown file to blob storage")
-            
-            markdown_path = markdown_result['filename']
-            print(f"Uploaded markdown to: {markdown_path}")
-            
+            md_path = os.path.join("markdown_files", f"{safe_name}.md")
+            os.makedirs("markdown_files", exist_ok=True)
+            with open(md_path, "w", encoding='utf-8') as f:
+                f.write(full_text)
+           
             # Create FAISS index
             text_embedding_dim = 1536  # OpenAI embedding dimension
             faiss_index = faiss.IndexFlatL2(text_embedding_dim)
             metadata_store = []
-            
-            # Create chunks with overlap for better retrieval
+           
+            # Create chunks with overlap for better retrieval (from Streamlit implementation)
             chunked_texts = []
             for doc in parsed_documents:
                 # Skip documents with no meaningful content
@@ -2671,15 +2196,14 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 chunked_texts.append(doc.text)
                 metadata_store.append({
                     "content": doc.text,
-                    "source_file": file_name,
-                    "text": doc.text  # Ensure 'text' key exists
+                    "source_file": file_name
                 })
-                
+               
                 # Create additional smaller chunks for better retrieval
                 words = doc.text.split()
-                chunk_size = 200  # Smaller chunk size
+                chunk_size = 200  # Smaller chunk size as in Streamlit
                 stride = 100      # With overlap
-                
+               
                 if len(words) > chunk_size:
                     for i in range(0, len(words) - chunk_size, stride):
                         chunk = " ".join(words[i:i+chunk_size])
@@ -2687,8 +2211,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                             chunked_texts.append(chunk)
                             metadata_store.append({
                                 "content": chunk,
-                                "source_file": file_name,
-                                "text": chunk  # Ensure 'text' key exists
+                                "source_file": file_name
                             })
            
             # Final check to ensure we have chunks to process
@@ -2697,37 +2220,31 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 raise ValueError(f"Unable to create text chunks from document '{file_name}'. The document content may be insufficient or invalid.")
            
             # Process in batches to avoid API limitations
-           
             batch_size = 50  # Adjust based on API limits
             for i in range(0, len(chunked_texts), batch_size):
                 batch = chunked_texts[i:i+batch_size]
                 embeddings = self.get_embeddings(batch)
-                
+               
                 if embeddings:
                     faiss_index.add(np.array(embeddings).astype('float32'))
-                    print(f"Added batch {i//batch_size + 1} embeddings to FAISS index")
                 else:
                     print(f"Failed to generate embeddings for a batch in {file_name}. Continuing with next batch...")
-        
-            # Save index and metadata to Azure Blob Storage
+           
+            # Save index and metadata
             session_id = uuid.uuid4().hex
-            index_file, pickle_file = self.save_faiss_index_to_blob(faiss_index, metadata_store, session_id)
-            
-            print(f"Saved FAISS index: {index_file}")
-            print(f"Saved metadata: {pickle_file}")
-            
+            index_file, pickle_file = self.save_faiss_index(faiss_index, metadata_store, session_id)
+           
             return {
                 'index_path': index_file,
                 'metadata_path': pickle_file,
                 'full_text': full_text,
-                'markdown_path': markdown_path  # This is SEPARATE from the original document
+                'markdown_path': md_path  # Include the markdown path
             }
-            
+           
         except Exception as e:
+            logger.error(f"Error in complex document processing for file '{file_name}': {str(e)}")
             print(f"Error in complex document processing: {str(e)}")
-            logger.error(f"Error in process_complex_document_with_llamaparse: {str(e)}", exc_info=True)
             raise
-
     def split_text_into_chunks(self, text, chunk_size=1500, chunk_overlap=300):
         """
         Splits text into chunks while attempting to preserve sentence and paragraph structure.
@@ -2759,6 +2276,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
             start = end - chunk_overlap if end < text_length else text_length
         return chunks
     
+    
     # Clean text function (from Streamlit)
     def clean_text(self, text):
         """Clean extracted text by removing extra whitespace and special characters."""
@@ -2781,6 +2299,10 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         except Exception as e:
             print(f"Error getting embeddings: {str(e)}")
             return []
+
+    # -------------------------------
+    # FAISS functions for persistence from Streamlit
+    # -------------------------------
     def create_faiss_index(self, embeddings):
         import numpy as np
         import faiss
@@ -2791,219 +2313,31 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
         index.add(vectors)
         return index
 
-    def save_faiss_index_to_blob(self, index, chunks, session_id):
-        """Save FAISS index and chunks to Azure Blob Storage with consistent pathing"""
+    def save_faiss_index(self, index, chunks, session_id):
         import pickle
         import faiss
-        import tempfile
-        import logging
-        import os
-        from chat.utils import upload_bytes_to_azure_blob
         
-        logger = logging.getLogger(__name__)
-        
-        try:
-            logger.info(f"Starting to save FAISS index for session {session_id}")
-            
-            # Create temporary files
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.faiss') as index_file:
-                index_file_path = index_file.name
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as pickle_file:
-                pickle_file_path = pickle_file.name
-            
-            # Check if FAISS index is valid
-            if index.ntotal == 0:
-                logger.warning(f"FAISS index has 0 vectors - possible error in embedding generation")
-            
-            # Check if chunks is a valid list
-            if not isinstance(chunks, list) or len(chunks) == 0:
-                logger.warning(f"Chunks is not a valid list or is empty: {type(chunks)}, length: {len(chunks) if hasattr(chunks, '__len__') else 'unknown'}")
-            
-            # Save index and chunks to temporary files
-            logger.info(f"Writing FAISS index to temporary file: {index_file_path}")
-            faiss.write_index(index, index_file_path)
-            
-            logger.info(f"Writing chunks to temporary file: {pickle_file_path}")
-            with open(pickle_file_path, "wb") as f:
-                pickle.dump(chunks, f)
-            
-            # Get file sizes to verify data was written
-            index_size = os.path.getsize(index_file_path)
-            pickle_size = os.path.getsize(pickle_file_path)
-            logger.info(f"Index file size: {index_size} bytes, Pickle file size: {pickle_size} bytes")
-            
-            # Read the files as bytes
-            with open(index_file_path, "rb") as f:
-                index_bytes = f.read()
-            
-            with open(pickle_file_path, "rb") as f:
-                pickle_bytes = f.read()
-            
-            # Upload to Azure Blob Storage - using a consistent, predictable path format
-            # Always store in the faissindex folder with session_id prefix
-            index_filename = f"{session_id}_index.faiss"
-            pickle_filename = f"{session_id}_chunks.pkl"
-            
-            # Use the faissindex folder prefix for consistency
-            folder_path = 'faissindex'  # IMPORTANT: Always use this exact path
-            
-            logger.info(f"Uploading index file to Azure Blob Storage: {index_filename}")
-            index_result = upload_bytes_to_azure_blob(
-                index_bytes, 
-                index_filename, 
-                folder_path=folder_path,
-                container_name='uploadfiles'  # Explicitly set the container name
-            )
-            
-            if not index_result:
-                logger.error(f"Failed to upload index file to Azure Blob Storage")
-                raise ValueError("Failed to upload index file to Azure Blob Storage")
-            
-            logger.info(f"Uploading pickle file to Azure Blob Storage: {pickle_filename}")
-            pickle_result = upload_bytes_to_azure_blob(
-                pickle_bytes, 
-                pickle_filename, 
-                folder_path=folder_path,
-                container_name='uploadfiles'  # Explicitly set the container name
-            )
-            
-            if not pickle_result:
-                logger.error(f"Failed to upload pickle file to Azure Blob Storage")
-                raise ValueError("Failed to upload pickle file to Azure Blob Storage")
-            
-            # Clean up temp files
-            logger.info(f"Cleaning up temporary files")
-            os.unlink(index_file_path)
-            os.unlink(pickle_file_path)
-            
-            logger.info(f"Successfully saved FAISS index to Azure Blob Storage")
-            
-            # Use the exact paths as they were stored
-            return f"{folder_path}/{index_filename}", f"{folder_path}/{pickle_filename}"
-            
-        except Exception as e:
-            logger.error(f"Error saving FAISS index to blob: {str(e)}", exc_info=True)
-            # Clean up temp files if they exist
-            try:
-                if 'index_file_path' in locals() and os.path.exists(index_file_path):
-                    os.unlink(index_file_path)
-                if 'pickle_file_path' in locals() and os.path.exists(pickle_file_path):
-                    os.unlink(pickle_file_path)
-            except Exception as cleanup_e:
-                logger.error(f"Error cleaning up temp files: {str(cleanup_e)}")
-            raise
+        os.makedirs("faiss_indexes", exist_ok=True)
+        index_file = f"faiss_indexes/{session_id}_index.faiss"
+        pickle_file = f"faiss_indexes/{session_id}_chunks.pkl"
+        faiss.write_index(index, index_file)
+        with open(pickle_file, "wb") as f:
+            pickle.dump(chunks, f)
+        return index_file, pickle_file
 
-    def load_faiss_index_from_blob(self, index_path, metadata_path):
-        """
-        Load FAISS index and metadata from Azure Blob Storage
-        
-        Args:
-            index_path: Path to the index file in blob storage
-            metadata_path: Path to the metadata file in blob storage
-            
-        Returns:
-            tuple: (index, chunks)
-        """
+    def load_faiss_index(self, session_id):
         import faiss
         import pickle
-        import tempfile
-        import os
-        import logging
-        from chat.utils import download_blob_to_temp_file, get_blob_content, get_azure_settings
-        
-        logger = logging.getLogger(__name__)
-        logger.info(f"Loading FAISS index from blob - Index: {index_path}, Metadata: {metadata_path}")
         
         try:
-            # Try to ensure we're using the correct container
-            container_name = 'uploadfiles'  # Always use this container
-            
-            # Extract just the filenames if we have full paths
-            index_filename = os.path.basename(index_path)
-            metadata_filename = os.path.basename(metadata_path)
-            
-            # Log the extracted filenames
-            logger.info(f"Extracted filenames - Index: {index_filename}, Metadata: {metadata_filename}")
-            
-            # Try to find exact path pattern in the database
-            # Look at other successful indexes to see the pattern
-            try:
-                from chat.models import ProcessedIndex
-                sample_index = ProcessedIndex.objects.exclude(faiss_index='').exclude(faiss_index__isnull=True).first()
-                if sample_index:
-                    logger.info(f"Sample successful index path pattern: {sample_index.faiss_index}")
-            except Exception as sample_err:
-                logger.warning(f"Could not find sample index pattern: {str(sample_err)}")
-            
-            # First try with original paths
-            index_temp = download_blob_to_temp_file(index_path, container_name)
-            if not index_temp:
-                # If that fails, try with just the filename in the faissindex folder
-                logger.info(f"Trying alternative path for index in faissindex folder")
-                index_temp = download_blob_to_temp_file(f"faissindex/{index_filename}", container_name)
-                
-            if not index_temp:
-                logger.error(f"Failed to download index file after multiple attempts")
-                return None, []
-                
-            # Load index
-            logger.info(f"Successfully downloaded index to {index_temp}, now loading...")
-            index = faiss.read_index(index_temp)
-            logger.info(f"Successfully loaded FAISS index: {index.ntotal} vectors, dim={index.d}")
-            
-            # Clean up temp file
-            os.unlink(index_temp)
-            
-            # Get metadata content - try multiple paths
-            metadata_content = get_blob_content(metadata_path, container_name)
-            if not metadata_content:
-                logger.info(f"Trying alternative path for metadata in faissindex folder")
-                metadata_content = get_blob_content(f"faissindex/{metadata_filename}", container_name)
-                
-            if not metadata_content:
-                # One more attempt - try listing and finding similar files
-                try:
-                    logger.info("Last resort: Trying to find metadata by listing blobs")
-                    account_name, _, _ = get_azure_settings()
-                    blob_service_client = get_blob_service_client()
-                    
-                    if blob_service_client:
-                        container_client = blob_service_client.get_container_client(container_name)
-                        blobs = list(container_client.list_blobs(name_starts_with="faissindex/"))
-                        
-                        # Look for a metadata file with similar name to our index file
-                        for blob in blobs:
-                            if 'chunks' in blob.name.lower() and metadata_filename.split('_')[0] in blob.name:
-                                logger.info(f"Found potential metadata match: {blob.name}")
-                                metadata_content = get_blob_content(blob.name, container_name)
-                                if metadata_content:
-                                    logger.info(f"Successfully retrieved metadata from {blob.name}")
-                                    break
-                except Exception as list_err:
-                    logger.error(f"Error listing blobs to find metadata: {str(list_err)}")
-                
-            if not metadata_content:
-                logger.error(f"Failed to get metadata content after multiple attempts")
-                return index, []  # Return just the index if we can't get metadata
-            
-            # Load metadata
-            try:
-                chunks = pickle.loads(metadata_content)
-                logger.info(f"Successfully loaded metadata: {len(chunks) if isinstance(chunks, list) else 'unknown format'} chunks")
-                
-                # Ensure chunks is a list
-                if not isinstance(chunks, list):
-                    logger.warning(f"Chunks is not a list, type: {type(chunks)}")
-                    chunks = [chunks] if chunks else []
-                    
-                return index, chunks
-            except Exception as pickle_err:
-                logger.error(f"Error unpickling metadata: {str(pickle_err)}")
-                return index, []
-                
+            index_file = f"faiss_indexes/{session_id}_index.faiss"
+            pickle_file = f"faiss_indexes/{session_id}_chunks.pkl"
+            index = faiss.read_index(index_file)
+            with open(pickle_file, "rb") as f:
+                chunks = pickle.load(f)
+            return index, chunks
         except Exception as e:
-            logger.error(f"Error loading FAISS index from blob: {str(e)}", exc_info=True)
+            print(f"Error loading FAISS index: {str(e)}")
             return None, []
 
     # -------------------------------
@@ -3012,16 +2346,15 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
     def process_document(self, file, user):
         """
         Process documents: extraction, chunking, embeddings, FAISS creation
-        while using Azure Blob Storage for persistence.
+        While maintaining compatibility with the Django database structure.
+        Now integrates complex document handling with LlamaParse and user-specific API tokens.
         """
         import tempfile
         import uuid
         import numpy as np
         import faiss
-        import pickle
         
         try:
-            # Create a temporary file to work with the uploaded file
             with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
                 for chunk in file.chunks():
                     tmp_file.write(chunk)
@@ -3041,7 +2374,7 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 
 
                 # Special handling for audio files
-                if file_ext in ['.mp3', '.mp4', '.wav', '.mpeg']:
+                if file_ext in ['.mp3', '.wav', '.mpeg']:
                     print(f"Audio file detected: {file.name}. Using Gemini for transcription...")
                     extracted_text = self.extract_text_from_audio(file_path, user)
                     
@@ -3118,14 +2451,14 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                     'name': file.name
                 }
                 
-                # Split text into chunks
                 all_chunks = []
+                # Split text into chunks
                 chunks = self.split_text_into_chunks(doc['text'])
                 for i, chunk in enumerate(chunks):
                     all_chunks.append({
-                        'text': chunk,
+                        'text': chunk,  # Consistent key name 'text' for all chunks
                         'source': doc['name'],
-                        'source_file': doc['name'],
+                        'source_file': doc['name'],  # Add source_file for consistency with LlamaParse
                         'chunk_id': i
                     })
                 
@@ -3143,8 +2476,8 @@ class DocumentUploadView(DocumentProcessingMixin, APIView):
                 # Generate a unique session ID for this document
                 session_id = uuid.uuid4().hex
                 
-                # Save the index and chunks to Azure Blob Storage
-                index_file, pickle_file = self.save_faiss_index_to_blob(index, all_chunks, session_id)
+                # Save the index and chunks
+                index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
                 
                 print(f"Document processed successfully: {len(all_chunks)} chunks created")
                 
@@ -3178,7 +2511,7 @@ def update_doc_status(user, doc_name, status, progress=0, message="", doc_id=Non
 
 class DocumentProcessingStatusView(APIView):
     permission_classes = [IsAuthenticated]
- 
+
     def get(self, request):
         statuses = DocumentProcessingStatus.objects.filter(user=request.user)
         return Response([
@@ -3212,52 +2545,11 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
 
             all_summaries = []
             for document in documents:
-                # FIXED: Here's the problematic part - we need to handle files from blob storage
-                try:
-                    # If the file is stored in Azure Blob storage
-                    if isinstance(document.file, str) or not hasattr(document.file, 'path'):
-                        # Handle blob storage case - download to temp file or use API
-                        from chat.utils import download_blob_to_temp_file, get_blob_content
-                        
-                        print(f"Document file appears to be in blob storage: {document.file}")
-                        
-                        # Try downloading to a temp file
-                        temp_file_path = download_blob_to_temp_file(document.file)
-                        
-                        if temp_file_path:
-                            # Use the temp file
-                            with open(temp_file_path, 'rb') as temp_file:
-                                text = self.extract_text_from_file(temp_file_path)
-                                cleaned_text = self.clean_text(text)
-                                summary, _ = self.generate_summary(cleaned_text, document.filename)
-                            
-                            # Clean up temp file
-                            import os
-                            os.unlink(temp_file_path)
-                        else:
-                            # Try to get content directly
-                            content = get_blob_content(document.file)
-                            if content:
-                                # Create a temporary file with this content
-                                import tempfile
-                                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(document.filename)[1]) as temp_file:
-                                    temp_file.write(content)
-                                    temp_path = temp_file.name
-                                
-                                text = self.extract_text_from_file(temp_path)
-                                cleaned_text = self.clean_text(text)
-                                summary, _ = self.generate_summary(cleaned_text, document.filename)
-                                
-                                # Clean up
-                                os.unlink(temp_path)
-                            else:
-                                raise ValueError(f"Could not retrieve content for document {document.id}: {document.filename}")
-                    else:
-                        # Regular file case - it has a path
-                        with open(document.file.path, 'rb') as file:
-                            text = self.extract_text_from_file(file.name)
-                            cleaned_text = self.clean_text(text)
-                            summary, _ = self.generate_summary(cleaned_text, document.filename)
+                with open(document.file.path, 'rb') as file:
+                    # Using inherited methods from the mixin
+                    text = self.extract_text_from_file(file.name)
+                    cleaned_text = self.clean_text(text)
+                    summary, _ = self.generate_summary(cleaned_text, document.filename)
                     
                     processed_index, created = ProcessedIndex.objects.get_or_create(
                         document=document,
@@ -3274,12 +2566,6 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
                         'filename': document.filename,
                         'summary': summary
                     })
-                    
-                except Exception as e:  # <-- ADD THIS MISSING EXCEPT BLOCK
-                    logger.error(f"Error processing document {document.id}: {str(e)}")
-                    # Skip this document and continue with the next one
-                    continue
-                    
             if main_project_id:
                 update_project_timestamp(main_project_id, user)        
 
@@ -3291,7 +2577,7 @@ class GenerateDocumentSummaryView(DocumentProcessingMixin, APIView):
         except Exception as e:
             return Response({
                 'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)     
 class DeleteDocumentView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -3313,9 +2599,9 @@ class DeleteDocumentView(APIView):
             except ProcessedIndex.DoesNotExist:
                 pass
             
-            # Use the document's delete method which will handle blob deletion
+            # Delete the document
             document.delete()
-            
+
             # Update project timestamp to track activity
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
@@ -3335,6 +2621,7 @@ class DeleteDocumentView(APIView):
                 {'error': f'Failed to delete document: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class GetChatHistoryView(APIView):
     def get(self, request):
@@ -3360,7 +2647,7 @@ class GetChatHistoryView(APIView):
             for conversation in conversations:
                 messages = conversation.messages.all().order_by('created_at')
                 message_list = [
-                    {
+                    {   
                         'id': message.id,
                         'role': message.role,
                         'content': message.content,
@@ -3449,7 +2736,6 @@ class SetActiveDocumentView(APIView):
                 {'error': f'An unexpected error occurred: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 def post_process_response(response_text):
     """
     Post-process the generated response to improve formatting and readability
@@ -3518,7 +2804,7 @@ logger = logging.getLogger(__name__)
 
 class ChatView(APIView):
     permission_classes = [IsAuthenticated]
-
+ 
     def __init__(self, post_process_func=post_process_response):
         self.post_process_func = post_process_func
         self.agent = Agent(
@@ -3593,621 +2879,638 @@ class ChatView(APIView):
 
         return text
  
-    
-    #new code with pgvector
-
     def post(self, request):
-            user = request.user
-            try:
-                # Extract data with more robust handling
-                message = request.data.get('message')
-                conversation_id = request.data.get('conversation_id')
-                main_project_id = request.data.get('main_project_id')
-                selected_documents = request.data.get('selected_documents', [])
-            
-                # Extract web_mode flag from request
-                use_web_knowledge = request.data.get('use_web_knowledge', False)
-            
-                # Extract general_chat_mode flag
-                general_chat_mode = request.data.get('general_chat_mode', False)
-    
-                # Extract response_length preference
-                response_length = request.data.get('response_length', 'comprehensive')
-            
-                # Extract response_format parameter or default to 'natural'
-                response_format = request.data.get('response_format', 'natural')
-    
-                if not main_project_id:
-                    return Response({
-                        'error': 'Main project ID is required'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-                # Validate message
-                if not message:
+        user = request.user
+        try:
+            # Extract data with more robust handling
+            message = request.data.get('message')
+            conversation_id = request.data.get('conversation_id')
+            main_project_id = request.data.get('main_project_id')
+            selected_documents = request.data.get('selected_documents', [])
+           
+            # Extract web_mode flag from request
+            use_web_knowledge = request.data.get('use_web_knowledge', False)
+           
+            # Extract general_chat_mode flag
+            general_chat_mode = request.data.get('general_chat_mode', False)
+ 
+            # Extract response_length preference
+            response_length = request.data.get('response_length', 'comprehensive')
+           
+            # Extract response_format parameter or default to 'natural'
+            response_format = request.data.get('response_format', 'natural')
+ 
+            if not main_project_id:
+                return Response({
+                    'error': 'Main project ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+           
+            # Validate message
+            if not message:
+                return Response(
+                    {'error': 'Message is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            # Process URLs in the query - new feature
+            modified_message, url_context, extracted_urls = self.process_urls_in_query(message)
+            has_url_content = bool(url_context)
+           
+            # Log URL processing results
+            if has_url_content:
+                print(f"URLs detected in query: {extracted_urls}")
+                print(f"Modified query: {modified_message}")
+                print(f"URL context size: {len(url_context)} characters")
+ 
+            conversation_context = ""
+            if conversation_id:
+                try:
+                    # Try to get existing conversation
+                    conversation = ChatHistory.objects.get(
+                        conversation_id=conversation_id,
+                        user=user
+                    )
+                   
+                    # Get last 5 conversation messages (max 10 messages = 5 turns)
+                    recent_messages = ChatMessage.objects.filter(
+                        chat_history=conversation
+                    ).order_by('-created_at')[:10]
+                   
+                    # Format for context
+                    if recent_messages:
+                        context_messages = []
+                        for msg in recent_messages:
+                            prefix = "User: " if msg.role == 'user' else "Assistant: "
+                            context_messages.append(f"{prefix}{msg.content[:400]}...")
+                       
+                        conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
+                   
+                    # Try to get memory buffer
+                    try:
+                        memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
+                        if memory_buffer.context_summary:
+                            conversation_context += f"\n\nConversation Summary: {memory_buffer.context_summary}"
+                    except ConversationMemoryBuffer.DoesNotExist:
+                        # No memory buffer yet, that's fine
+                        pass
+                       
+                except ChatHistory.DoesNotExist:
+                    # No conversation yet, that's fine
+                    pass
+           
+            # Skip document validation if in general chat mode or if URLs are present
+            if not general_chat_mode and not has_url_content:
+                # First, check for active document in session
+                active_document_id = request.session.get('active_document_id')
+               
+                if not selected_documents:
+                    active_document_id = request.session.get('active_document_id')
+                    if active_document_id:
+                        selected_documents = [active_document_id]
+               
+                # Validate document selection only when not in general chat mode and no URLs are provided
+                if not selected_documents:
                     return Response(
-                        {'error': 'Message is required'},
+                        {'error': 'Please select at least one document or set an active document'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-    
-                # Process URLs in the query - new feature
-                modified_message, url_context, extracted_urls = self.process_urls_in_query(message)
-                has_url_content = bool(url_context)
-            
-                # Log URL processing results
-                if has_url_content:
-                    print(f"URLs detected in query: {extracted_urls}")
-                    print(f"Modified query: {modified_message}")
-                    print(f"URL context size: {len(url_context)} characters")
-    
-                conversation_context = ""
-                if conversation_id:
-                    try:
-                        # Try to get existing conversation
-                        conversation = ChatHistory.objects.get(
-                            conversation_id=conversation_id,
-                            user=user
-                        )
-                    
-                        # Get last 5 conversation messages (max 10 messages = 5 turns)
-                        recent_messages = ChatMessage.objects.filter(
-                            chat_history=conversation
-                        ).order_by('-created_at')[:10]
-                    
-                        # Format for context
-                        if recent_messages:
-                            context_messages = []
-                            for msg in recent_messages:
-                                prefix = "User: " if msg.role == 'user' else "Assistant: "
-                                context_messages.append(f"{prefix}{msg.content[:400]}...")
-                        
-                            conversation_context = "Previous conversation:\n" + "\n".join(reversed(context_messages))
-                    
-                        # Try to get memory buffer
-                        try:
-                            memory_buffer = ConversationMemoryBuffer.objects.get(conversation=conversation)
-                            if memory_buffer.context_summary:
-                                conversation_context += f"\n\nConversation Summary: {memory_buffer.context_summary}"
-                        except ConversationMemoryBuffer.DoesNotExist:
-                            # No memory buffer yet, that's fine
-                            pass
-                        
-                    except ChatHistory.DoesNotExist:
-                        # No conversation yet, that's fine
-                        pass
-            
-                # Skip document validation if in general chat mode or if URLs are present
-                if not general_chat_mode and not has_url_content:
-                    # First, check for active document in session
-                    active_document_id = request.session.get('active_document_id')
-                
-                    if not selected_documents:
-                        active_document_id = request.session.get('active_document_id')
-                        if active_document_id:
-                            selected_documents = [active_document_id]
-                
-                    # Validate document selection only when not in general chat mode and no URLs are provided
-                    if not selected_documents:
+ 
+            # Log the inputs for debugging
+            print(f"Chat request received")
+            print(f"Message: {message}")
+            print(f"General chat mode: {general_chat_mode}")
+            print(f"Use web knowledge: {use_web_knowledge}")
+            print(f"Selected documents: {selected_documents}")
+            print(f"Response format: {response_format}")
+            print(f"Response length: {response_length}")
+            print(f"Has conversation context: {bool(conversation_context)}")
+            print(f"Has URL content: {has_url_content}")
+ 
+            # Process document search early to get context for format detection
+            all_chunks = []
+            content_sources = []
+            similar_contents = []  # Store document content separately
+            citation_sources = {}  # Initialize citation sources dict
+           
+            if not general_chat_mode:
+                try:
+                    processed_docs = ProcessedIndex.objects.filter(
+                        document_id__in=selected_documents,
+                        document__user=user
+                    )
+                   
+                    if not processed_docs.exists() and not has_url_content:
                         return Response(
-                            {'error': 'Please select at least one document or set an active document'},
+                            {'error': 'No valid documents found'},
+                            status=status.HTTP_404_NOT_FOUND
+                        )
+                       
+                    # Log the processed docs for debugging
+                    print(f"Found {processed_docs.count()} processed documents")
+                    for doc in processed_docs:
+                        print(f"Document: {doc.document.filename}")
+                        print(f"FAISS index path: {doc.faiss_index}")
+                        print(f"Metadata path: {doc.metadata}")
+                        print(f"Markdown path: {doc.markdown_path}")
+                       
+                except Exception as e:
+                    print(f"Error fetching documents: {str(e)}")
+                    if not has_url_content:
+                        return Response(
+                            {'error': f'Document retrieval error: {str(e)}'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-    
-                # Log the inputs for debugging
-                print(f"Chat request received")
-                print(f"Message: {message}")
-                print(f"General chat mode: {general_chat_mode}")
-                print(f"Use web knowledge: {use_web_knowledge}")
-                print(f"Selected documents: {selected_documents}")
-                print(f"Response format: {response_format}")
-                print(f"Response length: {response_length}")
-                print(f"Has conversation context: {bool(conversation_context)}")
-                print(f"Has URL content: {has_url_content}")
-    
-                # Process document search early to get context for format detection
-                all_chunks = []
-                content_sources = []
-                similar_contents = []  # Store document content separately
-                citation_sources = {}  # Initialize citation sources dict
-            
-                if not general_chat_mode:
-                    try:
-                        processed_docs = ProcessedIndex.objects.filter(
-                            document_id__in=selected_documents,
-                            document__user=user
-                        )
-                    
-                        if not processed_docs.exists() and not has_url_content:
-                            return Response(
-                                {'error': 'No valid documents found'},
-                                status=status.HTTP_404_NOT_FOUND
-                            )
-                        
-                        # Log the processed docs for debugging
-                        print(f"Found {processed_docs.count()} processed documents")
-                        for doc in processed_docs:
-                            print(f"Document: {doc.document.filename}")
-                            print(f"Storage type: {doc.storage_type}")
-                            print(f"Chunks count: {doc.chunks_count}")
-                            if doc.storage_type == 'faiss':
-                                print(f"FAISS index path: {doc.faiss_index}")
-                                print(f"Metadata path: {doc.metadata}")
-                            print(f"Markdown path: {doc.markdown_path}")
-                        
-                    except Exception as e:
-                        print(f"Error fetching documents: {str(e)}")
-                        if not has_url_content:
-                            return Response(
-                                {'error': f'Document retrieval error: {str(e)}'},
-                                status=status.HTTP_400_BAD_REQUEST
-                            )
-    
-                    # Updated document processing for pgvector compatibility
-                    all_metadata_store = []
-                
-                    # Check storage types and process accordingly
-                    pgvector_docs = []
-                    faiss_docs = []
-                
-                    for proc_doc in processed_docs:
-                        if proc_doc.storage_type == 'pgvector':
-                            # Check if embeddings exist in database
-                            embeddings_exist = DocumentEmbedding.objects.filter(document=proc_doc.document).exists()
-                            if embeddings_exist:
-                                pgvector_docs.append(proc_doc)
-                                print(f"Added pgvector document: {proc_doc.document.filename}")
-                            else:
-                                print(f"Warning: pgvector document {proc_doc.document.filename} has no embeddings")
-                        else:
-                            # FAISS document - check for file existence
-                            if (proc_doc.faiss_index and proc_doc.metadata and
-                                os.path.exists(proc_doc.faiss_index) and os.path.exists(proc_doc.metadata)):
-                                faiss_docs.append(proc_doc)
-                                print(f"Added FAISS document: {proc_doc.document.filename}")
-                            else:
-                                print(f"Warning: FAISS files missing for {proc_doc.document.filename}")
-                
-                    # Process search based on available storage types
-                    if pgvector_docs or faiss_docs:
-                        print(f"Searching in {len(pgvector_docs)} pgvector docs and {len(faiss_docs)} FAISS docs")
-                    
-                        # Use the updated search function that handles both storage types
-                        similar_contents, content_sources, chunk_citation_sources = self.search_similar_content(
-                            modified_message if has_url_content else message,
-                            processed_docs,  # Pass all processed docs, function will handle different storage types
-                            None  # metadata_store not needed for pgvector
-                        )
-                    
-                        # Store citation sources
-                        citation_sources = chunk_citation_sources
-                    
-                        if similar_contents:
-                            print(f"Found {len(similar_contents)} relevant content chunks")
-                            all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
-                        else:
-                            print("No relevant content found in documents")
-                            all_chunks = []
-                        
-                            # If pgvector search failed, try fallback text search
-                            if pgvector_docs:
-                                print("Attempting fallback text search in pgvector documents...")
-                                fallback_results = self.fallback_text_search_pgvector(
-                                    modified_message if has_url_content else message,
-                                    pgvector_docs
-                                )
-                                if fallback_results:
-                                    similar_contents, content_sources, citation_sources = fallback_results
-                                    all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
-                                    print(f"Fallback search found {len(similar_contents)} results")
-                    else:
-                        print("No valid documents found for search")
-                        all_chunks = []
-            
-                # Check if we should auto-detect the response format
-                if response_format == 'auto_detect':
-                    context_snippets = [chunk.get('text', '') for chunk in all_chunks[:5]] if all_chunks else []
-                    detected_format, secondary_format, confidence = self.detect_question_format(modified_message if has_url_content else message, context_snippets)
-                
-                    # Use the detected format if confidence is reasonable, otherwise default to 'natural'
-                    if confidence >= 5.0:
-                        response_format = detected_format
-                        print(f"Auto-detected format: {response_format} (confidence: {confidence})")
-                    else:
-                        response_format = 'natural'
-                        print(f"Low confidence in format detection ({confidence}), defaulting to 'natural'")
-            
-                # Get answer based on mode
-                web_knowledge_response = None
-                web_sources = []
-                doc_citation_sources = {}
-            
-                # Get answer based on mode
-                if general_chat_mode:
-                    # For general chat mode, consider URL content if available
-                    if has_url_content:
-                        # Create a hybrid prompt that includes the URL content
-                        augmented_query = f"""
-                        Please answer this question: {modified_message}
-                    
-                        The question references content from URLs, which is provided here:
-                    
-                        {url_context}
-                    
-                        Based on this URL content, answer the user's question.
-                        """
-                    
-                        # Use the existing general chat function but with our augmented query
-                        answer = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format, user=user)
-                        print("Generated response using general chat mode with URL content")
-                    else:
-                        # Standard general chat response without URL content
-                        answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format, user=user)
-                        print("Generated response using general chat mode")
-                else:
-                    # Document chat mode - now handles URL content too
-                    document_content_exists = bool(all_chunks)
-                
-                    if document_content_exists or has_url_content:
-                        # If we have URL content, add it to the context
-                        if has_url_content:
-                            # Add URL context to similar_contents and content_sources
-                            combined_contents = similar_contents.copy() if similar_contents else []
-                            combined_contents.append(url_context)
-                        
-                            combined_sources = content_sources.copy() if content_sources else []
-                            combined_sources.append("URL Content")
-                        
-                            # Add URL to citation sources
-                            if citation_sources:
-                                url_citation_key = max(citation_sources.keys()) + 1 if citation_sources else 1
-                                citation_sources[url_citation_key] = {
-                                    'source_file': 'URL Content',
-                                    'text': url_context[:500] + "..." if len(url_context) > 500 else url_context,
-                                    'document_id': 'url_content',
-                                    'score': 0.9,  # High score for URL content
-                                    'display_num': url_citation_key
-                                }
-                        
-                            # Generate response using combined context with citation sources
-                            if response_length == 'short':
-                                document_answer, doc_citation_sources = self.generate_short_response(
-                                    modified_message,
-                                    combined_contents,
-                                    combined_sources,
-                                    False,
-                                    response_format,
-                                    conversation_context
-                                )
-                            else:  # Default to comprehensive
-                                document_answer, doc_citation_sources = self.generate_response(
-                                    modified_message,
-                                    combined_contents,
-                                    combined_sources,
-                                    False,
-                                    response_format,
-                                    conversation_context
-                                )
-                        
-                            print(f"Generated document-based answer with URL content using {response_length} response length")
-                        else:
-                            # Standard document-based response without URL content
-                            if response_length == 'short':
-                                document_answer, doc_citation_sources = self.generate_short_response(
-                                    message,
-                                    similar_contents,
-                                    content_sources,
-                                    False,
-                                    response_format,
-                                    conversation_context
-                                )
-                            else:  # Default to comprehensive
-                                document_answer, doc_citation_sources = self.generate_response(
-                                    message,
-                                    similar_contents,
-                                    content_sources,
-                                    False,
-                                    response_format,
-                                    conversation_context
-                                )
-                        
-                            print(f"Generated document-based answer using {response_length} response length")
-                    
-                        # If web knowledge is requested, get web response using document context to enhance the query
-                        if use_web_knowledge:
-                            web_response_data = self.get_web_knowledge_response(
-                                modified_message if has_url_content else message,
-                                user=user,
-                                document_context=similar_contents  # Pass document context to enhance web search  
-                            )
-    
-                            # Extract the components from the JSON response
-                            if isinstance(web_response_data, dict):
-                                web_knowledge_response = web_response_data.get("content", "No web response received")
-                                web_sources = web_response_data.get("web_sources", [])
-                            else:
-                                # Fallback for backward compatibility
-                                web_knowledge_response = str(web_response_data)
-                                web_sources = []
-                            print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
-                        
-                            # Combine document and web responses
-                    
-                            combined_response_data, combined_citation_sources = self.combine_document_and_web_responses(
-                                modified_message if has_url_content else message,
-                                document_answer,
-                                web_knowledge_response,
-                                combined_sources if has_url_content else content_sources,
-                                web_sources,
-                                response_format,
-                                conversation_context,
-                                original_doc_context=similar_contents,
-                            )
-    
-                            # Extract the answer from the JSON response
-                            if isinstance(combined_response_data, dict):
-                                answer = combined_response_data.get("content", "Error combining responses")
-                            else:
-                                answer = str(combined_response_data)
-                            print("Combined document and web responses")
-                        
-                            # Update citation sources with combined sources
-                            doc_citation_sources = combined_citation_sources
-                        else:
-                            # Just use document answer
-                            answer = document_answer
-                    else:
-                        # No document content found
-                        if use_web_knowledge:
-                            # Only web knowledge available
-                            web_response_data = self.get_web_knowledge_response(
-                                modified_message if has_url_content else message,
-                                user=user
-                            )
-    
-                            if isinstance(web_response_data, dict):
-                                answer = web_response_data.get("content", "No web response received")
-                                web_sources = web_response_data.get("web_sources", [])
-                            else:
-                                answer = str(web_response_data)
-                                web_sources = []
-                            print("Using web knowledge response as document search returned no results")
-                        else:
-                            print("No document content found and web knowledge not enabled")
-                            answer = "I couldn't find any relevant information in the documents."
-            
-                # Extract main response and citation info (if any)
-                if "\n\n*Sources:" in answer:
-                    parts = answer.split("\n\n*Sources:")
-                    clean_response = parts[0]
-                    source_info = parts[1].split('*\n')[0] if len(parts) > 1 else ""
-                else:
-                    clean_response = answer
-                    source_info = "Web search results" if use_web_knowledge else ""
-                
-                    # Add URL sources if applicable
-                    if has_url_content:
-                        urls_domains = [self.extract_domain(url) for url in extracted_urls]
-                        url_sources = ", ".join(urls_domains)
-                        if source_info:
-                            source_info += f", URLs: {url_sources}"
-                        else:
-                            source_info = f"URLs: {url_sources}"
-    
-                clean_response = self.normalize_citation_markers(clean_response)
-            
-                # Generate follow-up questions (either from documents or general chat)
-                if general_chat_mode:
-                    follow_up_questions = self.generate_general_follow_up_questions(
-                        modified_message if has_url_content else message,
-                        clean_response,
-                        user=user
-                    )
-                else:
-                    if all_chunks:
-                        context_texts = [chunk.get('text', '') for chunk in all_chunks[:3]]
-                        follow_up_questions = self.generate_follow_up_questions(context_texts, user=user)
-                    else:
-                        follow_up_questions = [
-                            "What else would you like to know about this content?",
-                            "Would you like me to elaborate on any specific point?",
-                            "Do you have any other questions I can help with?"
-                        ]
-            
-                # Create citations from chunks and citation sources
-                citations = []
-                if not general_chat_mode:
-                    # First add citations from doc_citation_sources (our enhanced citations)
-                    for citation_num, citation_info in doc_citation_sources.items():
-                        # Format the snippet to properly handle tables
-                        formatted_snippet = self.format_citation_content(citation_info.get('snippet', ''))
-                        citations.append({
-                            'source_file': citation_info.get('source_file', 'Unknown'),
-                            'page_number': citation_info.get('page_number', 'Unknown'),
-                            'section_title': citation_info.get('section_title', 'Unknown'),
-                            'snippet': formatted_snippet,
-                            'document_id': citation_info.get('document_id', 'Unknown')
+ 
+                # Create a merged metadata store from all selected documents
+                all_metadata_store = []
+               
+                # Load FAISS indices and chunks for all selected documents
+                for proc_doc in processed_docs:
+                    if not proc_doc.faiss_index or not proc_doc.metadata:
+                        print(f"Missing index or metadata for {proc_doc.document.filename}")
+                        continue
+                   
+                    if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
+                        print(f"Index or metadata file does not exist for {proc_doc.document.filename}")
+                        continue
+                   
+                    # Check if this is a LlamaParse document with direct markdown access
+                    if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+                        print(f"Found LlamaParse markdown for {proc_doc.document.filename}")
+                        # Add dummy entry that will be handled by search_similar_content
+                        all_metadata_store.append({
+                            'is_llamaparse': True,
+                            'source_file': proc_doc.document.filename,
+                            'document_id': proc_doc.document.id
                         })
-                
-                    # If no enhanced citations, fall back to chunk-based citations (original method)
-                    if not citations:
-                        for chunk in all_chunks:
-                            chunk_text = chunk.get('text', '')
-                            formatted_snippet = self.format_citation_content(chunk_text)
-                            citations.append({
-                                'source_file': chunk.get('source', 'Unknown'),
-                                'page_number': chunk.get('chunk_id', 'Unknown'),
-                                'section_title': 'Unknown',
-                                'snippet': formatted_snippet[:200] + "..." if len(formatted_snippet) > 200 else formatted_snippet,
-                                'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
-                            })
-                
-                    # Add URL citations if applicable
-                    if has_url_content:
-                        for idx, url in enumerate(extracted_urls):
-                            domain = self.extract_domain(url)
-                            citations.append({
-                                'source_file': domain,
-                                'page_number': 'URL',
-                                'section_title': 'URL Content',
-                                'snippet': f"Content from {domain}",
-                                'document_id': f"url_{idx}",
-                                'url': url
-                            })
-                
-                    # Add web citations if applicable
-                    if use_web_knowledge and web_sources:
-                        for idx, source in enumerate(web_sources):
-                            citations.append({
-                                'source_file': source.get('title', 'Web Source'),
-                                'page_number': 'Web',
-                                'section_title': 'Web Search Result',
-                                'snippet': source.get('snippet', '')[:200] + "..." if source.get('snippet', '') else "Web content",
-                                'document_id': f"web_{idx}",
-                                'url': source.get('url', '')
-                            })
-    
-                # Prepare conversation details
-                conversation_id = conversation_id or str(uuid.uuid4())
-                title = f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    
-                # Create or retrieve conversation
-                if conversation_id:
-                    conversation, created = ChatHistory.objects.get_or_create(
-                        user=user,
-                        conversation_id=conversation_id,
-                        main_project_id=main_project_id,
-                        defaults={
-                            'title': f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                            'is_active': True,
-                            'follow_up_questions': follow_up_questions,
-                        }
+                   
+                    # Load metadata - this is needed for both LlamaParse and simple documents
+                    try:
+                        with open(proc_doc.metadata, 'rb') as f:
+                            chunks = pickle.load(f)
+                       
+                        # Validate the chunks format
+                        if not isinstance(chunks, list):
+                            print(f"Warning: chunks is not a list for {proc_doc.document.filename}, type: {type(chunks)}")
+                            if chunks:  # If it's a non-empty object, try to adapt it
+                                chunks = [chunks]
+                            else:
+                                chunks = []
+                       
+                        # Add document source information to each chunk
+                        for chunk in chunks:
+                            if isinstance(chunk, dict):
+                                if 'source_file' not in chunk:
+                                    chunk['source_file'] = proc_doc.document.filename
+                               
+                                # Ensure 'text' key exists
+                                if 'text' not in chunk:
+                                    for key in ['content', 'document_content', 'chunk_text']:
+                                        if key in chunk:
+                                            chunk['text'] = chunk[key]
+                                            break
+                                           
+                        # Add to all metadata store
+                        print(f"Adding {len(chunks)} chunks from {proc_doc.document.filename}")
+                        all_metadata_store.extend(chunks)
+                       
+                    except Exception as e:
+                        print(f"Error loading metadata for {proc_doc.document.filename}: {str(e)}")
+                        continue
+               
+                # Now search using the improved approach
+                if all_metadata_store:
+                    print(f"Searching in {len(all_metadata_store)} chunks across all documents")
+                    # Get relevant content based on query - use modified_message if URLs detected
+                    # Use updated search_similar_content that returns citation_sources
+                    similar_contents, content_sources, chunk_citation_sources = self.search_similar_content(
+                        modified_message if has_url_content else message,
+                        processed_docs,
+                        all_metadata_store
                     )
-    
-                if created:
-                    # Create conversation transaction
-                    self.create_conversation_transaction(
-                        user, conversation, main_project_id,
-                        use_web_knowledge, response_format, response_length
-                    )
+                   
+                    # Store citation sources
+                    citation_sources = chunk_citation_sources
+                   
+                    if similar_contents:
+                        print(f"Found {len(similar_contents)} relevant content chunks")
+                        all_chunks = [{'text': content, 'source': source} for content, source in zip(similar_contents, content_sources)]
+                    else:
+                        print("No relevant content found in documents")
+                        all_chunks = []
                 else:
-                    # Update existing conversation transaction
-                    self.update_conversation_transaction(conversation, use_web_knowledge)
-    
-                # Create user message
-                user_message = ChatMessage.objects.create(
-                    chat_history=conversation,
-                    role='user',
-                    content=message
-                )
-    
-                # Create AI response message
-                ai_message = ChatMessage.objects.create(
-                    chat_history=conversation,
-                    role='assistant',
-                    content=clean_response,
-                    sources=source_info,
-                    citations=citations,
-                    use_web_knowledge=use_web_knowledge,
-                    response_length=response_length,
-                    response_format=response_format,
-                )
-    
-                # Update or create memory buffer
-                memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
-                    conversation=conversation
-                )
-            
-                # Get all messages for this conversation
-                all_messages = ChatMessage.objects.filter(
-                    chat_history=conversation
-                ).order_by('created_at')
-            
-                # Update memory with all messages
-                memory_buffer.update_memory(all_messages)
-    
-                # Add selected documents to the conversation (skip if general chat mode)
-                if selected_documents and not general_chat_mode:
-                    documents = Document.objects.filter(
-                        id__in=selected_documents,
-                        user=user
-                    )
-                    conversation.documents.set(documents)
-    
-                # Update project timestamp to track activity
-                if main_project_id:
-                    update_project_timestamp(main_project_id, request.user)
-    
-                # Update conversation details
-                conversation.title = title
-                conversation.follow_up_questions = follow_up_questions
-                conversation.save()
-    
-                # Use citation_sources in the response data if available
-                response_data = {
-                    'response': clean_response,
-                    'follow_up_questions': follow_up_questions,
-                    'conversation_id': str(conversation.conversation_id),
-                    'citations': citations,
-                    'active_document_id': request.session.get('active_document_id') if not general_chat_mode else None,
-                    'sources_info': source_info,
-                    'use_web_knowledge': use_web_knowledge,
-                    'general_chat_mode': general_chat_mode,
-                    'response_length': response_length,  # Include in response for tracking
-                    'response_format': response_format,   # Include detected/used format in response
-                    'url_content_used': has_url_content,  # Flag if URL content was used
-                    'extracted_urls': extracted_urls if has_url_content else [],  # List of extracted URLs
-                    'storage_types_used': self.get_storage_types_used(processed_docs) if not general_chat_mode else []  # Debug info
-                }
-    
-                # Print detailed chat response information
-                print("\n--- Chat Interaction Logged ---")
-                print(f"User Question: {message}")
-                print(f"Mode: {'Web Knowledge' if use_web_knowledge else 'General Chat' if general_chat_mode else 'Document Chat'}")
-                print(f"Format: {response_format}")
-                print(f"Length: {response_length}")
-                print(f"URL content used: {has_url_content}")
+                    print("No metadata found for any document")
+                    all_chunks = []
+           
+            # Check if we should auto-detect the response format
+            if response_format == 'auto_detect':
+                context_snippets = [chunk.get('text', '') for chunk in all_chunks[:5]] if all_chunks else []
+                detected_format, secondary_format, confidence = self.detect_question_format(modified_message if has_url_content else message, context_snippets)
+               
+                # Use the detected format if confidence is reasonable, otherwise default to 'natural'
+                if confidence >= 5.0:
+                    response_format = detected_format
+                    print(f"Auto-detected format: {response_format} (confidence: {confidence})")
+                else:
+                    response_format = 'natural'
+                    print(f"Low confidence in format detection ({confidence}), defaulting to 'natural'")
+           
+            # Get answer based on mode
+            web_knowledge_response = None
+            web_sources = []
+            doc_citation_sources = {}
+           
+            # Get answer based on mode
+            if general_chat_mode:
+                # For general chat mode, consider URL content if available
                 if has_url_content:
-                    print(f"Extracted URLs: {extracted_urls}")
-                if not general_chat_mode:
-                    storage_types = self.get_storage_types_used(processed_docs)
-                    print(f"Storage types used: {storage_types}")
-                print(f"Assistant Response: {clean_response[:500]}...")  # First 500 chars
-                print(f"Citation count: {len(citations)}")
-                print(f"Follow-up Questions: {len(follow_up_questions)}")
-                print("-----------------------------\n")
-    
-                # Get all messages for this conversation (with IDs)
-                all_messages = ChatMessage.objects.filter(
-                    chat_history=conversation
-                ).order_by('created_at')
-    
-                message_list = []
-                for message in all_messages:
-                    message_data = {
-                        'id': message.id,
-                        'role': message.role,
-                        'content': message.content,
-                        'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
-                        'citations': message.citations or [],
-                        'sources_info': getattr(message, 'sources', ''),  # Add this line
-                        'extracted_urls': getattr(message, 'extracted_urls', []),  # Add this line
-                    }
-                    # Add badge properties for assistant messages
-                    if message.role == 'assistant':
-                        message_data['use_web_knowledge'] = getattr(message, 'use_web_knowledge', False)
-                        message_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
-                        message_data['response_format'] = getattr(message, 'response_format', 'natural')
-                    message_list.append(message_data)
-    
-                response_data['messages'] = message_list
-    
-                return Response(response_data, status=status.HTTP_200_OK)
-    
-            except Exception as e:
-                logger.error(f"Unexpected error in ChatView: {str(e)}", exc_info=True)
-                return Response(
-                    {'error': f'An unexpected error occurred: {str(e)}'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    # Create a hybrid prompt that includes the URL content
+                    augmented_query = f"""
+                    Please answer this question: {modified_message}
+                   
+                    The question references content from URLs, which is provided here:
+                   
+                    {url_context}
+                   
+                    Based on this URL content, answer the user's question.
+                    """
+                   
+                    # Use the existing general chat function but with our augmented query
+                    answer = self.get_general_chat_answer(augmented_query, use_web_knowledge, response_length, response_format, user=user)
+                    print("Generated response using general chat mode with URL content")
+                else:
+                    # Standard general chat response without URL content
+                    answer = self.get_general_chat_answer(message, use_web_knowledge, response_length, response_format, user=user)
+                    print("Generated response using general chat mode")
+            else:
+                # Document chat mode - now handles URL content too
+                document_content_exists = bool(all_chunks)
+               
+                if document_content_exists or has_url_content:
+                    # If we have URL content, add it to the context
+                    if has_url_content:
+                        # Add URL context to similar_contents and content_sources
+                        combined_contents = similar_contents.copy() if similar_contents else []
+                        combined_contents.append(url_context)
+                       
+                        combined_sources = content_sources.copy() if content_sources else []
+                        combined_sources.append("URL Content")
+                       
+                        # Add URL to citation sources
+                        if citation_sources:
+                            url_citation_key = max(citation_sources.keys()) + 1 if citation_sources else 1
+                            citation_sources[url_citation_key] = {
+                                'source_file': 'URL Content',
+                                'text': url_context[:500] + "..." if len(url_context) > 500 else url_context,
+                                'document_id': 'url_content',
+                                'score': 0.9,  # High score for URL content
+                                'display_num': url_citation_key
+                            }
+                       
+                        # Generate response using combined context with citation sources
+                        if response_length == 'short':
+                            document_answer, doc_citation_sources = self.generate_short_response(
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
+                                conversation_context
+                            )
+                        else:  # Default to comprehensive
+                            document_answer, doc_citation_sources = self.generate_response(
+                                modified_message,
+                                combined_contents,
+                                combined_sources,
+                                False,
+                                response_format,
+                                conversation_context
+                            )
+                       
+                        print(f"Generated document-based answer with URL content using {response_length} response length")
+                    else:
+                        # Standard document-based response without URL content
+                        if response_length == 'short':
+                            document_answer, doc_citation_sources = self.generate_short_response(
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
+                                conversation_context
+                            )
+                        else:  # Default to comprehensive
+                            document_answer, doc_citation_sources = self.generate_response(
+                                message,
+                                similar_contents,
+                                content_sources,
+                                False,
+                                response_format,
+                                conversation_context
+                            )
+                       
+                        print(f"Generated document-based answer using {response_length} response length")
+                   
+                    # If web knowledge is requested, get web response using document context to enhance the query
+                    if use_web_knowledge:
+                        web_response_data = self.get_web_knowledge_response(
+                            modified_message if has_url_content else message,
+                            user=user,
+                            document_context=similar_contents  # Pass document context to enhance web search  
+                        )
+ 
+                        # Extract the components from the JSON response
+                        if isinstance(web_response_data, dict):
+                            web_knowledge_response = web_response_data.get("content", "No web response received")
+                            web_sources = web_response_data.get("web_sources", [])
+                        else:
+                            # Fallback for backward compatibility
+                            web_knowledge_response = str(web_response_data)
+                            web_sources = []
+                        print(f"Web knowledge response received with document context, source count: {len(web_sources)}")
+                       
+                        # Combine document and web responses
+                   
+                        combined_response_data, combined_citation_sources = self.combine_document_and_web_responses(
+                            modified_message if has_url_content else message,
+                            document_answer,
+                            web_knowledge_response,
+                            combined_sources if has_url_content else content_sources,
+                            web_sources,
+                            response_format,
+                            conversation_context,
+                            original_doc_context=similar_contents,
+                        )
+ 
+                        # Extract the answer from the JSON response
+                        if isinstance(combined_response_data, dict):
+                            answer = combined_response_data.get("content", "Error combining responses")
+                        else:
+                            answer = str(combined_response_data)
+                        print("Combined document and web responses")
+                       
+                        # Update citation sources with combined sources
+                        doc_citation_sources = combined_citation_sources
+                    else:
+                        # Just use document answer
+                        answer = document_answer
+                else:
+                    # No document content found
+                    if use_web_knowledge:
+                        # Only web knowledge available
+                        web_response_data = self.get_web_knowledge_response(
+                            modified_message if has_url_content else message,
+                            user=user
+                        )
+ 
+                        if isinstance(web_response_data, dict):
+                            answer = web_response_data.get("content", "No web response received")
+                            web_sources = web_response_data.get("web_sources", [])
+                        else:
+                            answer = str(web_response_data)
+                            web_sources = []
+                        print("Using web knowledge response as document search returned no results")
+                    else:
+                        print("No document content found and web knowledge not enabled")
+                        answer = "I couldn't find any relevant information in the documents."
+           
+            # Extract main response and citation info (if any)
+            if "\n\n*Sources:" in answer:
+                parts = answer.split("\n\n*Sources:")
+                clean_response = parts[0]
+                source_info = parts[1].split('*\n')[0] if len(parts) > 1 else ""
+            else:
+                clean_response = answer
+                source_info = "Web search results" if use_web_knowledge else ""
+               
+                # Add URL sources if applicable
+                if has_url_content:
+                    urls_domains = [self.extract_domain(url) for url in extracted_urls]
+                    url_sources = ", ".join(urls_domains)
+                    if source_info:
+                        source_info += f", URLs: {url_sources}"
+                    else:
+                        source_info = f"URLs: {url_sources}"
+
+            clean_response = self.normalize_citation_markers(clean_response)
+           
+            # Generate follow-up questions (either from documents or general chat)
+            if general_chat_mode:
+                follow_up_questions = self.generate_general_follow_up_questions(
+                    modified_message if has_url_content else message,
+                    clean_response,
+                    user=user
                 )
+            else:
+                if all_chunks:
+                    context_texts = [chunk.get('text', '') for chunk in all_chunks[:3]]
+                    follow_up_questions = self.generate_follow_up_questions(context_texts, user=user)
+                else:
+                    follow_up_questions = [
+                        "What else would you like to know about this content?",
+                        "Would you like me to elaborate on any specific point?",
+                        "Do you have any other questions I can help with?"
+                    ]
+           
+            # Create citations from chunks and citation sources
+            citations = []
+            if not general_chat_mode:
+                # First add citations from doc_citation_sources (our enhanced citations)
+                for citation_num, citation_info in doc_citation_sources.items():
+                    # Format the snippet to properly handle tables
+                    formatted_snippet = self.format_citation_content(citation_info.get('snippet', ''))
+                    citations.append({
+                        'source_file': citation_info.get('source_file', 'Unknown'),
+                        'page_number': citation_info.get('page_number', 'Unknown'),
+                        'section_title': citation_info.get('section_title', 'Unknown'),
+                        'snippet': formatted_snippet,
+                        'document_id': citation_info.get('document_id', 'Unknown')
+                    })
+               
+                # If no enhanced citations, fall back to chunk-based citations (original method)
+                if not citations:
+                    for chunk in all_chunks:
+                        chunk_text = chunk.get('text', '')
+                        formatted_snippet = self.format_citation_content(chunk_text)
+                        citations.append({
+                            'source_file': chunk.get('source', 'Unknown'),
+                            'page_number': chunk.get('chunk_id', 'Unknown'),
+                            'section_title': 'Unknown',
+                            'snippet': formatted_snippet[:200] + "..." if len(formatted_snippet) > 200 else formatted_snippet,
+                            'document_id': next((str(doc.document.id) for doc in processed_docs if doc.document.filename == chunk.get('source')), 'Unknown')
+                        })
+               
+                # Add URL citations if applicable
+                if has_url_content:
+                    for idx, url in enumerate(extracted_urls):
+                        domain = self.extract_domain(url)
+                        citations.append({
+                            'source_file': domain,
+                            'page_number': 'URL',
+                            'section_title': 'URL Content',
+                            'snippet': f"Content from {domain}",
+                            'document_id': f"url_{idx}",
+                            'url': url
+                        })
+               
+                # Add web citations if applicable
+                if use_web_knowledge and web_sources:
+                    for idx, source in enumerate(web_sources):
+                        citations.append({
+                            'source_file': source.get('title', 'Web Source'),
+                            'page_number': 'Web',
+                            'section_title': 'Web Search Result',
+                            'snippet': source.get('snippet', '')[:200] + "..." if source.get('snippet', '') else "Web content",
+                            'document_id': f"web_{idx}",
+                            'url': source.get('url', '')
+                        })
+ 
+            # Prepare conversation details
+            conversation_id = conversation_id or str(uuid.uuid4())
+            title = f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+ 
+            # Create or retrieve conversation
+            if conversation_id:
+                conversation, created = ChatHistory.objects.get_or_create(
+                    user=user,
+                    conversation_id=conversation_id,
+                    main_project_id=main_project_id,
+                    defaults={
+                        'title': f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                        'is_active': True,
+                        'follow_up_questions': follow_up_questions,
+                    }
+                )
+ 
+            if created:
+                # Create conversation transaction
+                self.create_conversation_transaction(
+                    user, conversation, main_project_id,
+                    use_web_knowledge, response_format, response_length
+                )
+            else:
+                # Update existing conversation transaction
+                self.update_conversation_transaction(conversation, use_web_knowledge)
+ 
+            # Create user message
+            user_message = ChatMessage.objects.create(
+                chat_history=conversation,
+                role='user',
+                content=message
+            )
+ 
+            # Create AI response message
+            ai_message = ChatMessage.objects.create(
+                chat_history=conversation,
+                role='assistant',
+                content=clean_response,
+                sources=source_info,
+                citations=citations,
+                use_web_knowledge=use_web_knowledge,
+                response_length=response_length,
+                response_format=response_format,
+            )
+ 
+            # Update or create memory buffer
+            memory_buffer, created = ConversationMemoryBuffer.objects.get_or_create(
+                conversation=conversation
+            )
+           
+            # Get all messages for this conversation
+            all_messages = ChatMessage.objects.filter(
+                chat_history=conversation
+            ).order_by('created_at')
+           
+            # Update memory with all messages
+            memory_buffer.update_memory(all_messages)
+ 
+            # Add selected documents to the conversation (skip if general chat mode)
+            if selected_documents and not general_chat_mode:
+                documents = Document.objects.filter(
+                    id__in=selected_documents,
+                    user=user
+                )
+                conversation.documents.set(documents)
+ 
+            # Update project timestamp to track activity
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
+ 
+            # Update conversation details
+            conversation.title = title
+            conversation.follow_up_questions = follow_up_questions
+            conversation.save()
+ 
+            # Use citation_sources in the response data if available
+            response_data = {
+                'response': clean_response,
+                'follow_up_questions': follow_up_questions,
+                'conversation_id': str(conversation.conversation_id),
+                'citations': citations,
+                'active_document_id': request.session.get('active_document_id') if not general_chat_mode else None,
+                'sources_info': source_info,
+                'use_web_knowledge': use_web_knowledge,
+                'general_chat_mode': general_chat_mode,
+                'response_length': response_length,  # Include in response for tracking
+                'response_format': response_format,   # Include detected/used format in response
+                'url_content_used': has_url_content,  # Flag if URL content was used
+                'extracted_urls': extracted_urls if has_url_content else [],  # List of extracted URLs
+                'storage_types_used': self.get_storage_types_used(processed_docs) if not general_chat_mode else []  # Debug info
+            }
+ 
+            # Print detailed chat response information
+            print("\n--- Chat Interaction Logged ---")
+            print(f"User Question: {message}")
+            print(f"Mode: {'Web Knowledge' if use_web_knowledge else 'General Chat' if general_chat_mode else 'Document Chat'}")
+            print(f"Format: {response_format}")
+            print(f"Length: {response_length}")
+            print(f"URL content used: {has_url_content}")
+            if has_url_content:
+                print(f"Extracted URLs: {extracted_urls}")
+            if not general_chat_mode:
+                    storage_types = self.get_storage_types_used(processed_docs)
+            print(f"Storage types used: {storage_types}")
+            print(f"Assistant Response: {clean_response[:500]}...")  # First 500 chars
+            print(f"Citation count: {len(citations)}")
+            print(f"Follow-up Questions: {len(follow_up_questions)}")
+            print("-----------------------------\n")
+
+            # Get all messages for this conversation (with IDs)
+            all_messages = ChatMessage.objects.filter(
+                chat_history=conversation
+            ).order_by('created_at')
+
+            message_list = []
+            for message in all_messages:
+                message_data = {
+                    'id': message.id,
+                    'role': message.role,
+                    'content': message.content,
+                    'created_at': message.created_at.strftime('%Y-%m-%d %H:%M'),
+                    'citations': message.citations or [],
+                    'sources_info': getattr(message, 'sources', ''),  # Add this line
+                    'extracted_urls': getattr(message, 'extracted_urls', []),  # Add this line
+                   
+                
+
+                }
+                # Add badge properties for assistant messages
+                if message.role == 'assistant':
+                    message_data['use_web_knowledge'] = getattr(message, 'use_web_knowledge', False)
+                    message_data['response_length'] = getattr(message, 'response_length', 'comprehensive')
+                    message_data['response_format'] = getattr(message, 'response_format', 'natural')
+                message_list.append(message_data)
+
+            response_data['messages'] = message_list
+ 
+            return Response(response_data, status=status.HTTP_200_OK)
+ 
+        except Exception as e:
+            logger.error(f"Unexpected error in ChatView: {str(e)}", exc_info=True)
+            return Response(
+                {'error': f'An unexpected error occurred: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
  
     # ===================================================================
     # Helper methods for pgvector integration
@@ -4322,7 +3625,8 @@ class ChatView(APIView):
                
         except Exception as e:
             print(f"Error updating conversation transaction: {str(e)}")
-   
+ 
+
     def _parse_json_response(self, response_content, fallback_message="Error processing response"):
         """Helper method to safely parse JSON responses from LLM"""
         try:
@@ -4723,6 +4027,7 @@ class ChatView(APIView):
         
         # If no special formatting needed, just return the original table lines
         return table_lines
+
 
     
     def scrape_webpage(self, url):
@@ -6431,6 +5736,7 @@ class ChatView(APIView):
         # First extract ALL citations from the text
         citation_pattern = r'\[(\d+)\]'
         all_citations = re.findall(citation_pattern, response_text)
+        
         # Get unique citations while preserving order of first appearance
         unique_citations = []
         seen = set()
@@ -6438,15 +5744,19 @@ class ChatView(APIView):
             if cite.isdigit() and int(cite) in citation_sources and cite not in seen:
                 seen.add(cite)
                 unique_citations.append(cite)
+        
         # Create mapping from original to sequential numbers (1,2,3...)
         citation_mapping = {int(old): new for new, old in enumerate(unique_citations, 1)}
+        
         # Replace ALL citations in the text with sequential numbers
         def replace_citation(match):
             old_num = match.group(1)
             if old_num.isdigit() and int(old_num) in citation_mapping:
                 return f'[{citation_mapping[int(old_num)]}]'
             return match.group(0)
+        
         processed_text = re.sub(citation_pattern, replace_citation, response_text)
+        
         # Create new citation sources with sequential numbers
         display_citation_sources = {}
         for display_num, original_num in enumerate(unique_citations, 1):
@@ -6462,6 +5772,7 @@ class ChatView(APIView):
                     'snippet': snippet[:snippet_length] + "..." if len(snippet) > snippet_length else snippet,
                     'document_id': source_info.get('document_id', 'Unknown')
                 }
+        
         return processed_text, display_citation_sources
 
     def _remove_consecutive_duplicate_citations(self, text):
@@ -6517,7 +5828,7 @@ class ChatView(APIView):
         """
         Generate a response using the provided context and sources with web search capability.
         Enhanced to handle URL content in context. Also Enhanced with accurate citation
-       
+        
         Args:
             query (str): User's original query
             context (list): List of context chunks
@@ -6525,52 +5836,52 @@ class ChatView(APIView):
             use_web_knowledge (bool): Whether to use web search in addition to documents
             response_format (str): Format style for the response
             conversation_context (str): Previous conversation history context
-           
+            
         Returns:
             str: Generated response based on the context and/or web search
         """
         # Check if the query is a simple greeting
         greeting_keywords = [
             # Basic greetings
-            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning",
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
             "good afternoon", "good evening", "what's up", "sup", "hiya",
-           
+            
             # Variations with repeated letters
             "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
-           
+            
             # Short forms/abbreviations
-            "hlw", "g'day", "yo", "heya",
-           
+            "hlw", "g'day", "yo", "heya", 
+            
             # Informal greetings
             "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
             "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
-           
+            
             # Time-specific with variations
             "morning", "afternoon", "evening", "gm", "ga", "ge",
-           
+            
             # Other languages and cultural greetings
             "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
-           
+            
             # Casual text-style greetings
             "sup", "yo yo", "hiya", "hai", "hullo"
         ]
-       
+        
         # Convert to lowercase and strip to properly detect greetings
         query_lower = query.lower().strip()
-       
+        
         # Check if the query is just a greeting or a greeting followed by a name/simple phrase
         is_greeting = False
-       
+        
         # Exact matches
         if query_lower in greeting_keywords:
             is_greeting = True
-       
+        
         # Starting with a greeting
         for greeting in greeting_keywords:
             if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:  # Limit to short phrases
                 is_greeting = True
                 break
-       
+        
         # If it's a greeting, respond directly without using more complex logic
         if is_greeting:
             greeting_responses = [
@@ -6583,17 +5894,17 @@ class ChatView(APIView):
             # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
             return greeting_responses[response_index], {}
-       
+        
         # If not a greeting, proceed with the regular flow
         if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents.", {}
-       
+        
         # Check for URL content in the context
         url_context = ""
         document_context = []
         document_sources = []
         url_sources = []
-       
+        
         # Separate URL content from document content
         for i, content_item in enumerate(context):
             if i < len(sources) and sources[i] == "URL Content" and "CONTENT FROM URLS IN QUERY:" in content_item:
@@ -6603,11 +5914,11 @@ class ChatView(APIView):
                 document_context.append(content_item)
                 if i < len(sources):
                     document_sources.append(sources[i])
-       
+        
         # Updated context preparation with citation mapping
         citation_sources = {}
         selected_context, selected_sources = self._prepare_context(document_context, document_sources)
-       
+        
         # Create context with source information
         contextualized_content = []
         for i, (content, source) in enumerate(zip(selected_context, selected_sources), 1):
@@ -6620,7 +5931,7 @@ class ChatView(APIView):
                 "display_num": i
             }
             contextualized_content.append(f"Source {i}:\n{content}")
-           
+            
         if url_context:
             citation_count = len(contextualized_content) + 1
             contextualized_content.append(f"Source {citation_count}:\n{url_context}")
@@ -6632,53 +5943,53 @@ class ChatView(APIView):
                 "score": 0.8,  # Fixed score for URL content
                 "display_num": citation_count
             }
- 
+
         full_context = "\n\n".join(contextualized_content)
- 
+
         # Get format-specific guidance
         format_guidance = self._get_format_guidance(response_format, 'comprehensive')
-       
+        
         # Include conversation context if available
         conversation_prompt = ""
         if conversation_context:
             conversation_prompt = f"""
             RECENT CONVERSATION HISTORY:
             {conversation_context}
-           
-            The above messages are the previous parts of the same ongoing conversation with the user.
+            
+            The above messages are the previous parts of the same ongoing conversation with the user. 
             When generating your response:
             - Assume that the user may be referring back to earlier topics or questions from this history.
             - Resolve any references, clarifications, or follow-up questions based on this conversation history.
             - Maintain consistency with the user's earlier context, assumptions, and preferred response style if any.
             - If something from the conversation history clearly answers or helps answer the current question, incorporate it thoughtfully.
             - If there is ambiguity, prefer interpretations that align with prior conversation context.
-           
+            
             Please use this conversation history to maintain continuity, relevance, and coherence in your response.
             """
- 
+
         # Get project description if available
         project_description = self._get_project_description(query)
- 
+
         project_guidance = ""
         if project_description and len(project_description.strip()) > 5:
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
- 
+
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
- 
+
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
- 
+
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
- 
+
         # Updated system message for JSON response
-        system_message = """You are a document analysis expert with conversation memory.
+        system_message = """You are a document analysis expert with conversation memory. 
         You must respond in JSON format with the following structure:
         {
             "content": "Your detailed response content here with proper HTML formatting and citations",
@@ -6686,23 +5997,23 @@ class ChatView(APIView):
             "format_type": "response_format_used",
             "sources_referenced": ["list", "of", "source", "names"]
         }
-       
+        
         In the content field, use HTML tags for formatting (<b>, <p>, <ul>, <li>, <table>, etc.).
         Use source citations [n] for all information from the documents.
         Provide a comprehensive and detailed answer while maintaining conversation continuity."""
- 
+
         # Define the user prompt for JSON response
         user_prompt = f"""
         Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
- 
+
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
- 
+
         {format_guidance}
- 
+
         {conversation_prompt}
- 
+
         {project_guidance}
- 
+
         RESPONSE GENERATION GUIDELINES:
         - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
         - Previous conversation context should only inform your response when directly relevant to the current query.
@@ -6716,12 +6027,12 @@ class ChatView(APIView):
         - If URL content is present, specifically address content from URLs that is relevant to the query.
         - If the document does NOT contain relevant information, explicitly state that and summarize related available content instead.
         - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
- 
+
         DOCUMENT AND URL CONTEXT:
         {full_context}
- 
+
         USER QUERY: {query}
- 
+
         CRITICAL: Your response MUST be a valid JSON object with this exact structure:
         {{
             "content": "Your comprehensive response with HTML formatting and [n] citations",
@@ -6729,7 +6040,7 @@ class ChatView(APIView):
             "format_type": "{response_format}",
             "sources_referenced": ["list of source names referenced"]
         }}
- 
+
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document and URL context.
         - DO NOT generate speculative or external information.
@@ -6739,7 +6050,7 @@ class ChatView(APIView):
         - Use <b> tags for key section headings.
         - If the context contains URL content, clearly attribute information from URLs in your response.
         """
-       
+        
         try:
             # Call the OpenAI chat completion API with JSON format
             completion = client.chat.completions.create(
@@ -6749,7 +6060,7 @@ class ChatView(APIView):
                     {"role": "user", "content": user_prompt}
                 ],
                 response_format={"type": "json_object"},  # Force JSON response
-             
+              
                
             )
              # ===== LOG RAW LLM RESPONSE =====
@@ -6767,22 +6078,22 @@ class ChatView(APIView):
             # ===== END LOG RAW LLM RESPONSE =====
             # Parse the JSON response
             json_response = self._parse_json_response(completion.choices[0].message.content)
-           
+            
             if json_response.get("error"):
                 # If JSON parsing failed, return the fallback message
                 answer = json_response.get("content", "An error occurred while generating the response.")
             else:
                 # Extract the content from JSON response
                 answer = json_response.get("content", "No response content found.")
- 
+
             # Clean and process citations in the answer
             answer = self._clean_citations(answer, citation_sources)
             answer = self._ensure_separate_citation_brackets(answer)
             processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
-           
+            
             # If answer seems too short, try to generate a more detailed one
             if len(answer.split()) < 100:  # If less than ~100 words
-                enhanced_system_message = """You are a document analysis expert with conversation memory.
+                enhanced_system_message = """You are a document analysis expert with conversation memory. 
                 You must respond in JSON format with the following structure:
                 {
                     "content": "Your EXTREMELY DETAILED and COMPREHENSIVE response with proper HTML formatting and citations",
@@ -6790,9 +6101,9 @@ class ChatView(APIView):
                     "format_type": "response_format_used",
                     "sources_referenced": ["list", "of", "source", "names"]
                 }
-               
+                
                 Provide an EXTREMELY DETAILED and COMPREHENSIVE response including ALL information from the context while maintaining conversational continuity. Use source citations [n] for all information from the documents."""
-               
+                
                 completion = client.chat.completions.create(
                     model="o3-mini",
                     messages=[
@@ -6803,14 +6114,14 @@ class ChatView(APIView):
                    
                    
                 )
-               
+                
                 # Parse the enhanced JSON response
                 json_response = self._parse_json_response(completion.choices[0].message.content)
                 answer = json_response.get("content", answer)  # Use original if parsing fails
                 answer = self._clean_citations(answer, citation_sources)
                 answer = self._ensure_separate_citation_brackets(answer)
                 processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
-               
+                
         except Exception as e:
             # If there's an error (e.g., token limit), try with fewer context chunks
             reduced_context = "\n\n".join(contextualized_content[:8])
@@ -6818,15 +6129,15 @@ class ChatView(APIView):
             short_conv_context = ""
             if conversation_context:
                 short_conv_context = f"Previous conversation context: {conversation_context[:300]}..."
-               
+                
             fallback_prompt = f"""
             Based ONLY on the following context, provide a comprehensive answer to the question: {query}
-           
+            
             {short_conv_context}
-           
+            
             CONTEXT:
             {reduced_context}
-           
+            
             CRITICAL: Respond in JSON format:
             {{
                 "content": "Your detailed response with HTML formatting",
@@ -6835,7 +6146,7 @@ class ChatView(APIView):
                 "sources_referenced": []
             }}
             """
-           
+            
             try:
                 fallback_completion = client.chat.completions.create(
                     model="o3-mini",
@@ -6844,10 +6155,10 @@ class ChatView(APIView):
                         {"role": "user", "content": fallback_prompt}
                     ],
                     response_format={"type": "json_object"},  # Force JSON response
-                   
-                 
+                    
+                  
                 )
-               
+                
                 json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
                 answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
@@ -6858,17 +6169,17 @@ class ChatView(APIView):
                 answer = f"An error occurred while generating the response: {str(e)}. Please try a more specific question or with fewer documents."
                 processed_answer = answer
                 processed_citations = {}
- 
+
         # Add source information
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
- 
+
     def generate_short_response(self, query, context, sources, use_web_knowledge=False, response_format='natural', conversation_context=""):
         """
         Generate a shorter, concise response using the provided context with web search capability.
         Enhanced to handle URL content in context.
-       
+        
         Args:
             query (str): User's original query
             context (list): List of context chunks
@@ -6876,34 +6187,34 @@ class ChatView(APIView):
             use_web_knowledge (bool): Whether to use web search in addition to documents
             response_format (str): Format style for the response
             conversation_context (str): Previous conversation history context
-           
+            
         Returns:
             str: Generated response based on the context and/or web search
         """
         # Check if the query is a simple greeting (same logic as above)
         greeting_keywords = [
-            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning",
+            "hi", "hello", "hey", "greetings", "howdy", "hola", "good morning", 
             "good afternoon", "good evening", "what's up", "sup", "hiya",
             "hiii", "hiiii", "hiiiii", "helloooo", "hellooo", "heyyy", "heyyyy",
-            "hlw", "g'day", "yo", "heya",
+            "hlw", "g'day", "yo", "heya", 
             "wassup", "whats up", "whatcha up to", "how's it going", "how are you",
             "how r u", "how r you", "how are ya", "how ya doin", "how you doing",
             "morning", "afternoon", "evening", "gm", "ga", "ge",
             "namaste", "bonjour", "ciao", "konnichiwa", "aloha", "salut", "hallo",
             "sup", "yo yo", "hiya", "hai", "hullo"
         ]
-       
+        
         query_lower = query.lower().strip()
         is_greeting = False
-       
+        
         if query_lower in greeting_keywords:
             is_greeting = True
-       
+        
         for greeting in greeting_keywords:
             if query_lower.startswith(greeting) and len(query_lower) < len(greeting) + 15:
                 is_greeting = True
                 break
-       
+        
         if is_greeting:
             greeting_responses = [
                 f"Hello! How can I assist you today?",
@@ -6914,16 +6225,16 @@ class ChatView(APIView):
             ]
             response_index = hash(query_lower) % len(greeting_responses)
             return greeting_responses[response_index], {}
-       
+        
         if not context and not use_web_knowledge:
             return "I cannot answer this question based on the provided documents."
-       
+        
         # [Same URL and context processing logic as in generate_response]
         url_context = ""
         document_context = []
         document_sources = []
         url_sources = []
-       
+        
         for i, content_item in enumerate(context):
             if i < len(sources) and sources[i] == "URL Content" and "CONTENT FROM URLS IN QUERY:" in content_item:
                 url_context = content_item
@@ -6932,10 +6243,10 @@ class ChatView(APIView):
                 document_context.append(content_item)
                 if i < len(sources):
                     document_sources.append(sources[i])
-       
+        
         citation_sources = {}
         selected_context, selected_sources = self._prepare_context(document_context, document_sources)
-       
+        
         contextualized_content = []
         for i, (content, source) in enumerate(zip(selected_context, selected_sources), 1):
             citation_sources[i] = {
@@ -6946,7 +6257,7 @@ class ChatView(APIView):
                 "display_num": i
             }
             contextualized_content.append(f"Source {i}:\n{content}")
- 
+
         if url_context:
             citation_count = len(contextualized_content) + 1
             contextualized_content.append(f"Source {citation_count}:\n{url_context}")
@@ -6958,53 +6269,53 @@ class ChatView(APIView):
                 "score": 0.8,
                 "display_num": citation_count
             }
- 
+
         full_context = "\n\n".join(contextualized_content)
- 
+
         # Get format-specific guidance for short responses
         format_guidance = self._get_format_guidance(response_format, 'short')
-       
+        
         # Include conversation context if available (same as above)
         conversation_prompt = ""
         if conversation_context:
             conversation_prompt = f"""
             RECENT CONVERSATION HISTORY:
             {conversation_context}
-           
-            The above messages are the previous parts of the same ongoing conversation with the user.
+            
+            The above messages are the previous parts of the same ongoing conversation with the user. 
             When generating your response:
             - Assume that the user may be referring back to earlier topics or questions from this history.
             - Resolve any references, clarifications, or follow-up questions based on this conversation history.
             - Maintain consistency with the user's earlier context, assumptions, and preferred response style if any.
             - If something from the conversation history clearly answers or helps answer the current question, incorporate it thoughtfully.
             - If there is ambiguity, prefer interpretations that align with prior conversation context.
-           
+            
             Please use this conversation history to maintain continuity, relevance, and coherence in your response.
             """
- 
+
         # Get project description if available
         project_description = self._get_project_description(query)
-       
+        
         project_guidance = ""
         if project_description and len(project_description.strip()) > 5:
             project_guidance = f"""
             PROJECT CONTEXT:
             {project_description}
-           
+            
             IMPORTANT: This project context is only to help you understand the domain and purpose of this project. Your responses MUST be derived exclusively from the uploaded documents provided in the document context.
-           
+            
             When formulating your response:
             1. Use this project context solely to understand the general domain and focus of the project
             2. Draw ALL factual information, data, and specific content ONLY from the uploaded documents
             3. Shape your response style and tone to align with this project's domain, but never invent content
             4. DO NOT add information from your general knowledge even if relevant to the project description
             5. If the documents don't contain information relevant to the query, clearly state this limitation
-           
+            
             Remember: The project description helps you understand the context, but all response content must come from the uploaded documents.
             """
- 
+
         # Updated system message for JSON response
-        system_message = """You are a document analysis expert with conversation memory.
+        system_message = """You are a document analysis expert with conversation memory. 
         You must respond in JSON format with the following structure:
         {
             "content": "Your concise yet informative response with proper HTML formatting and citations",
@@ -7012,21 +6323,21 @@ class ChatView(APIView):
             "format_type": "response_format_used",
             "sources_referenced": ["list", "of", "source", "names"]
         }
-       
+        
         Provide a concise yet informative response that maintains conversation continuity. Use source citations [n] for information from the documents."""
- 
+
         # Define the user prompt for short response with conversation context
         user_prompt = f"""
         Based ONLY on the following context from multiple documents and URLs, answer the question. If relevant details are not fully available, provide the information that is present and kindly note any specific information that is missing. Be helpful by mentioning related information that may assist in answering the question, and offer to expand on available details if useful. Additionally, provide quantitative details where needed.
- 
+
         RESPONSE FORMAT: {response_format.replace('_', ' ').title()}
- 
+
         {format_guidance}
- 
+
         {conversation_prompt}
- 
+
         {project_guidance}
- 
+
         RESPONSE GENERATION GUIDELINES:
         - PRIORITIZE the current user query over previous conversation context - focus primarily on answering the current question.
         - Previous conversation context should only inform your response when directly relevant to the current query.
@@ -7039,12 +6350,12 @@ class ChatView(APIView):
         - If URL content is present, specifically address content from URLs that is relevant to the query.
         - If the document does NOT contain relevant information, explicitly state that.
         - Consider the conversation history to maintain continuity only when it adds valuable context to the current query.
- 
+
         DOCUMENT AND URL CONTEXT:
         {full_context}
- 
+
         USER QUERY: {query}
- 
+
         CRITICAL: Your response MUST be a valid JSON object with this exact structure:
         {{
             "content": "Your concise response with HTML formatting and [n] citations",
@@ -7052,7 +6363,7 @@ class ChatView(APIView):
             "format_type": "{response_format}",
             "sources_referenced": ["list of source names referenced"]
         }}
- 
+
         CRITICAL CONSTRAINTS:
         - Use ONLY information from the provided document and URL context.
         - DO NOT generate speculative or external information.
@@ -7060,7 +6371,7 @@ class ChatView(APIView):
         - Ensure clarity, accuracy, and comprehensive coverage of key relevant details.
         - If the context contains URL content, clearly attribute information from URLs in your response.
         """
-       
+        
         try:
             # Call the OpenAI chat completion API for short response with JSON format
             completion = client.chat.completions.create(
@@ -7092,16 +6403,16 @@ class ChatView(APIView):
             answer = self._clean_citations(answer, citation_sources)
             answer = self._ensure_separate_citation_brackets(answer)
             processed_answer, processed_citations = self._format_citations_for_response(answer, citation_sources)
-               
+                
         except Exception as e:
             # If there's an error, try with even fewer context chunks
             reduced_context = "\n\n".join(contextualized_content[:5])
             fallback_prompt = f"""
             Based ONLY on the following context, provide a brief answer to the question: {query}
-           
+            
             CONTEXT:
             {reduced_context}
-           
+            
             CRITICAL: Respond in JSON format:
             {{
                 "content": "Your brief response with HTML formatting",
@@ -7110,7 +6421,7 @@ class ChatView(APIView):
                 "sources_referenced": []
             }}
             """
-           
+            
             try:
                 fallback_completion = client.chat.completions.create(
                     model="gpt-4o",
@@ -7122,7 +6433,7 @@ class ChatView(APIView):
                     temperature=0.4,
                     max_tokens=1024
                 )
-               
+                
                 json_response = self._parse_json_response(fallback_completion.choices[0].message.content)
                 answer = json_response.get("content", "An error occurred while generating the response.")
                 answer = self._clean_citations(answer, citation_sources)
@@ -7133,13 +6444,12 @@ class ChatView(APIView):
                 answer = f"An error occurred while generating the response. Please try a more specific question."
                 processed_answer = answer
                 processed_citations = {}
- 
+
         # Add source information
         source_list = list(set(selected_sources))
         source_info = ", ".join(source_list)
         return f"{processed_answer}\n\n*Sources: {source_info}*", processed_citations
- 
-    
+
     def _get_project_description(self, query):
         """
         Get the project description for the current main project
@@ -7523,205 +6833,440 @@ class ChatView(APIView):
             logger.error(f"Error getting embeddings: {str(e)}")
             return []
     
-   
+    # # Improved search_similar_content with TF-IDF ranking from Streamlit
+    # def search_similar_content(self, query, processed_docs, metadata_store, k=40):
+    #     """
+    #     Enhanced search function that handles both LlamaParse and local document parsing
+    #     """
+    #     # Get embeddings for the query
+    #     query_embedding = self.get_embeddings([query])
+    #     if not query_embedding:
+    #         return [], [], {}  # Return empty citation mapping to
         
-    def search_similar_content(self, query, processed_docs, metadata_store=None, k=80):
-            """
-            Enhanced search function using pgvector for similarity search
-            Maintains the same return structure as the original FAISS version
-            """
-            print(f"\n🔍 SEARCH DEBUG: Starting pgvector search for query: '{query}'")
-            print(f"🔍 SEARCH DEBUG: Number of processed docs: {len(processed_docs)}")
+    #     # Search each document's FAISS index separately
+    #     all_results = []
+    #     all_distances = []
+    #     all_sources = []
+    #     citation_mapping = {}  # Add citation mapping
+    #     citation_count = 0
         
-            # Get embeddings for the query
-            query_embedding = self.get_embeddings([query])
-            if not query_embedding:
-                print("❌ SEARCH DEBUG: Failed to get query embedding")
-                return [], [], {}
+    #     # Track content to avoid duplicates
+    #     seen_content_hashes = set()
         
-            print("✅ SEARCH DEBUG: Got query embedding")
+    #     # Check if we have any valid documents to search
+    #     valid_docs_found = False
         
-            # Search results storage
-            all_results = []
-            all_distances = []
-            all_sources = []
-            citation_mapping = {}
-            citation_count = 0
-            seen_content_hashes = set()
-            valid_docs_found = False
-        
-            for i, proc_doc in enumerate(processed_docs):
-                print(f"\n🔍 SEARCH DEBUG: Processing document {i+1}: {proc_doc.document.filename}")
+    #     for proc_doc in processed_docs:
+    #         # Skip documents without FAISS indices
+    #         if not proc_doc.faiss_index or not proc_doc.metadata:
+    #             continue
             
-                # Skip if not using pgvector or no embeddings exist
-                if proc_doc.storage_type != 'pgvector':
-                    print(f"❌ SEARCH DEBUG: Document {proc_doc.document.filename} not using pgvector storage")
-                    continue
+    #         # Skip if files don't exist
+    #         if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
+    #             continue
             
-                # Check if embeddings exist for this document
-                embeddings_exist = DocumentEmbedding.objects.filter(document=proc_doc.document).exists()
-                if not embeddings_exist:
-                    print(f"❌ SEARCH DEBUG: No embeddings found for {proc_doc.document.filename}")
-                    continue
+    #         # First check if this is a LlamaParse document with markdown
+    #         markdown_content = None
+    #         if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+    #             try:
+    #                 with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+    #                     markdown_content = f.read()
+    #                 # If we have markdown content, we'll use it later in our results
+    #                 valid_docs_found = True
+    #             except Exception as e:
+    #                 logger.error(f"Error reading markdown file for {proc_doc.document.filename}: {str(e)}")
             
-                valid_docs_found = True
-            
-                try:
-                    # Perform pgvector similarity search
-                    from pgvector.django import CosineDistance
+    #         # Load metadata for both document types
+    #         try:
+    #             with open(proc_doc.metadata, 'rb') as f:
+    #                 chunks = pickle.load(f)
                 
-                    # Calculate search limit per document
-                    search_k = min(k // len(processed_docs) + 10, proc_doc.chunks_count or 50)
+    #             # Make sure chunks is a list - sometimes it might be empty or None
+    #             if not chunks:
+    #                 logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
+    #                 chunks = []
+    #             elif not isinstance(chunks, list):
+    #                 logger.warning(f"Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
+    #                 chunks = []
                 
-                    # Query embeddings using pgvector
-                    similar_embeddings = DocumentEmbedding.objects.filter(
-                        document=proc_doc.document
-                    ).annotate(
-                        distance=CosineDistance('embedding', query_embedding[0])
-                    ).order_by('distance')[:search_k]
+    #             # Add document source information to each chunk if missing
+    #             for chunk in chunks:
+    #                 if isinstance(chunk, dict) and 'source_file' not in chunk:
+    #                     chunk['source_file'] = proc_doc.document.filename
+    #                 # Ensure 'text' field exists in chunk
+    #                 if isinstance(chunk, dict) and not chunk.get('text'):
+    #                     # Try alternate field names
+    #                     for field in ['content', 'document_content', 'chunk_text']:
+    #                         if field in chunk:
+    #                             chunk['text'] = chunk[field]
+    #                             break
                 
-                    print(f"✅ SEARCH DEBUG: pgvector search returned {len(similar_embeddings)} results")
-                
-                    # Process results
-                    doc_results_count = 0
-                    for embedding_obj in similar_embeddings:
-                        distance = float(embedding_obj.distance)
+    #             # Try vector search with FAISS index
+    #             valid_docs_found = True
+    #             try:
+    #                 index = faiss.read_index(proc_doc.faiss_index)
+    #                 # Search this index with increased k for better diversity
+    #                 distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
                     
-                        # Filter by distance threshold
-                        if distance < 0.8:  # Cosine distance threshold (lower is better)
-                            content = embedding_obj.content
+    #                 # Extract results for this document
+    #                 for i, idx in enumerate(indices[0]):
+    #                     if idx < len(chunks):
+    #                         content = chunks[idx].get('text', '')
+    #                         # Only add non-empty content
+    #                         if content and content.strip():
+    #                             # Add numbered citation
+    #                             citation_count += 1
+    #                             citation_key = citation_count
+
+    #                             # Store citation mapping with metadata
+    #                             citation_mapping[citation_key] = {
+    #                                 'source': proc_doc.document.filename,
+    #                                 'text': content,
+    #                                 'relevance_score': float(distances[0][i]),
+    #                                 'document_id': proc_doc.document.id,
+    #                                 'chunk_idx': idx
+    #                             }
+    #                             all_results.append(content)
+    #                             all_distances.append(distances[0][i])
+    #                             all_sources.append(proc_doc.document.filename)
+    #             except Exception as e:
+    #                 logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
+                    
+    #                 # Fallback to basic text search for simple documents if vector search fails
+    #                 if chunks:
+    #                     # Use TF-IDF for matching if FAISS fails
+    #                     query_lower = query.lower()
+    #                     matched_chunks = []
                         
+    #                     for chunk in chunks:
+    #                         if isinstance(chunk, dict):
+    #                             chunk_text = chunk.get('text', '')
+    #                             if chunk_text and query_lower in chunk_text.lower():
+    #                                 matched_chunks.append(chunk)
+                        
+    #                     # Sort by simple text similarity
+    #                     if matched_chunks:
+    #                         logger.info(f"Found {len(matched_chunks)} text matches for {proc_doc.document.filename}")
+    #                         for chunk in matched_chunks[:5]:  # Limit to top 5 matches
+    #                             all_results.append(chunk.get('text', ''))
+    #                             all_distances.append(0.5)  # Middle value since we don't have real distances
+    #                             all_sources.append(proc_doc.document.filename)
+                
+    #             # If we have markdown content but no vector results, do fallback text search on whole content
+    #             if markdown_content and not all_results:
+    #                 query_lower = query.lower()
+    #                 if query_lower in markdown_content.lower():
+    #                     # Split into paragraphs and find matching ones
+    #                     paragraphs = markdown_content.split('\n\n')
+    #                     for para in paragraphs:
+    #                         if query_lower in para.lower():
+    #                             all_results.append(para)
+    #                             all_distances.append(0.5)  # Middle value since we don't have real distances
+    #                             all_sources.append(proc_doc.document.filename)
+                    
+    #         except Exception as e:
+    #             logger.error(f"Error processing metadata for {proc_doc.document.filename}: {str(e)}")
+    #             continue
+        
+    #     # Combine and sort results by similarity score
+    #     if not all_results:
+    #         if valid_docs_found:
+    #             logger.warning(f"No matching content found in documents for query: {query}")
+    #         else:
+    #             logger.warning(f"No valid documents found to search")
+    #         return [], []
+            
+    #     # Apply TF-IDF ranking using the Streamlit approach
+    #     try:
+    #         from sklearn.feature_extraction.text import TfidfVectorizer
+            
+    #         # Create a TF-IDF vectorizer with increased max_features
+    #         vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+    #         try:
+    #             tfidf_matrix = vectorizer.fit_transform([query] + all_results)
+                
+    #             # Calculate similarity scores
+    #             tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
+                
+    #             # Convert embedding distances to similarity scores
+    #             similarity_scores = [1 / (1 + dist) for dist in all_distances]
+                
+    #             # Combine scores with same weighting (70% TF-IDF, 30% embedding)
+    #             combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
+                
+    #             # Re-sort results by combined score
+    #             combined_results = list(zip(all_results, all_sources, combined_scores))
+    #             sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
+                
+    #             # Extract sorted content and sources
+    #             results = [res[0] for res in sorted_results]
+    #             sources = [res[1] for res in sorted_results]
+
+    #              # Update citation mapping with new ranking
+    #             reordered_citation_mapping = {}
+    #             for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+    #                 if old_key in citation_mapping:
+    #                     reordered_citation_mapping[new_idx] = citation_mapping[old_key]
+    #                     reordered_citation_mapping[new_idx]['display_num'] = new_idx
+                
+    #             citation_mapping = reordered_citation_mapping
+    #         except Exception as e:
+    #             logger.error(f"Error in TF-IDF processing: {str(e)}")
+    #             # Fallback to original results if TF-IDF fails
+    #             results = all_results
+    #             sources = all_sources
+    #     except Exception as e:
+    #         logger.error(f"Error applying TF-IDF ranking: {str(e)}")
+    #         # Fall back to basic distance-based ranking
+    #         combined_results = list(zip(all_results, all_sources, all_distances))
+    #         # Note: In the fallback, we sort by distance (smaller is better) so no reverse=True
+    #         sorted_results = sorted(combined_results, key=lambda x: x[2])
+            
+    #         results = [res[0] for res in sorted_results]
+    #         sources = [res[1] for res in sorted_results]
+
+    #         # Update citation mapping with new ranking
+    #         reordered_citation_mapping = {}
+    #         for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+    #             if old_key in citation_mapping:
+    #                 reordered_citation_mapping[new_idx] = citation_mapping[old_key]
+    #                 reordered_citation_mapping[new_idx]['display_num'] = new_idx
+            
+    #         citation_mapping = reordered_citation_mapping
+        
+    #     # Remove duplicates while preserving order
+    #     seen_content = set()
+    #     filtered_results = []
+    #     filtered_sources = []
+    #     filtered_citation_mapping = {}
+    #     new_citation_count = 0
+        
+    #     for content, source in zip(results, sources):
+    #         # Use first 100 chars as a content signature
+    #         content_hash = content[:100] if content else ""
+    #         if content_hash and content_hash not in seen_content:
+    #             seen_content.add(content_hash)
+    #             filtered_results.append(content)
+    #             filtered_sources.append(source)
+
+    #             # Update citation mapping
+    #             new_citation_count += 1
+    #             old_idx = i + 1
+    #             if old_idx in citation_mapping:
+    #                 filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx]
+    #                 filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
+        
+    #     # Return top matches (limit to 15 most relevant)
+    #     max_results = min(len(filtered_results), 15)
+    #     return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
+    
+    def search_similar_content(self, query, processed_docs, metadata_store, k=40):
+        """
+        Enhanced search function that handles both LlamaParse and local document parsing
+        with improved citation deduplication
+        """
+        # Get embeddings for the query
+        query_embedding = self.get_embeddings([query])
+        if not query_embedding:
+            return [], [], {}
+        
+        # Search each document's FAISS index separately
+        all_results = []
+        all_distances = []
+        all_sources = []
+        citation_mapping = {}
+        citation_count = 0
+        
+        # Track content to avoid duplicates
+        seen_content_hashes = set()
+        
+        # Check if we have any valid documents to search
+        valid_docs_found = False
+        
+        for proc_doc in processed_docs:
+            # Skip documents without FAISS indices
+            if not proc_doc.faiss_index or not proc_doc.metadata:
+                continue
+            
+            # Skip if files don't exist
+            if not os.path.exists(proc_doc.faiss_index) or not os.path.exists(proc_doc.metadata):
+                continue
+            
+            # First check if this is a LlamaParse document with markdown
+            markdown_content = None
+            if proc_doc.markdown_path and os.path.exists(proc_doc.markdown_path):
+                try:
+                    with open(proc_doc.markdown_path, 'r', encoding='utf-8') as f:
+                        markdown_content = f.read()
+                    valid_docs_found = True
+                except Exception as e:
+                    logger.error(f"Error reading markdown file for {proc_doc.document.filename}: {str(e)}")
+            
+            # Load metadata for both document types
+            try:
+                with open(proc_doc.metadata, 'rb') as f:
+                    chunks = pickle.load(f)
+                
+                if not chunks:
+                    logger.warning(f"No chunks found in metadata for {proc_doc.document.filename}")
+                    chunks = []
+                elif not isinstance(chunks, list):
+                    logger.warning(f"Unexpected chunks format for {proc_doc.document.filename}: {type(chunks)}")
+                    chunks = []
+                
+                # Add document source information to each chunk if missing
+                for chunk in chunks:
+                    if isinstance(chunk, dict) and 'source_file' not in chunk:
+                        chunk['source_file'] = proc_doc.document.filename
+                    if isinstance(chunk, dict) and not chunk.get('text'):
+                        for field in ['content', 'document_content', 'chunk_text']:
+                            if field in chunk:
+                                chunk['text'] = chunk[field]
+                                break
+                
+                # Try vector search with FAISS index
+                valid_docs_found = True
+                try:
+                    index = faiss.read_index(proc_doc.faiss_index)
+                    distances, indices = index.search(np.array([query_embedding[0]]).astype('float32'), min(k, index.ntotal))
+                    
+                    # Extract results for this document
+                    for i, idx in enumerate(indices[0]):
+                        if idx < len(chunks):
+                            content = chunks[idx].get('text', '')
                             if content and content.strip():
-                                # Duplicate detection
-                                content_hash = hash(content[:150])
-                            
+                                # Create content hash to check for duplicates
+                                content_hash = hash(content[:200])  # Use first 200 chars for hash
+                                
                                 if content_hash not in seen_content_hashes:
                                     seen_content_hashes.add(content_hash)
-                                    doc_results_count += 1
+                                    
+                                    # Add numbered citation
                                     citation_count += 1
-                                
-                                    # Store citation mapping
-                                    citation_mapping[citation_count] = {
+                                    citation_key = citation_count
+
+                                    # Store citation mapping with metadata
+                                    citation_mapping[citation_key] = {
                                         'source': proc_doc.document.filename,
                                         'text': content,
-                                        'relevance_score': distance,
+                                        'relevance_score': float(distances[0][i]),
                                         'document_id': proc_doc.document.id,
-                                        'chunk_idx': embedding_obj.chunk_id,
-                                        'display_num': citation_count
+                                        'chunk_idx': idx
                                     }
-                                
                                     all_results.append(content)
-                                    all_distances.append(distance)
+                                    all_distances.append(distances[0][i])
                                     all_sources.append(proc_doc.document.filename)
-                                
-                                    print(f"   ✅ Added result {citation_count}: distance={distance:.4f}, content='{content[:100]}...'")
-                
-                    print(f"✅ SEARCH DEBUG: Added {doc_results_count} results from {proc_doc.document.filename}")
-                
+                                    
                 except Exception as e:
-                    print(f"❌ SEARCH DEBUG: Error searching embeddings for {proc_doc.document.filename}: {str(e)}")
-                
-                    # Fallback to text search
-                    try:
-                        print(f"🔄 SEARCH DEBUG: Falling back to text search for {proc_doc.document.filename}")
+                    logger.error(f"Error searching FAISS index for {proc_doc.document.filename}: {str(e)}")
+                    # Fallback logic here...
+                    # Fallback to basic text search for simple documents if vector search fails
+                    if chunks:
+                        # Use TF-IDF for matching if FAISS fails
                         query_lower = query.lower()
-                    
-                        text_matches = DocumentEmbedding.objects.filter(
-                            document=proc_doc.document,
-                            content__icontains=query_lower
-                        )[:10]
-                    
-                        print(f"   Found {len(text_matches)} text matches")
-                    
-                        for embedding_obj in text_matches:
-                            content = embedding_obj.content
-                            content_hash = hash(content[:150])
+                        matched_chunks = []
                         
-                            if content_hash not in seen_content_hashes:
-                                seen_content_hashes.add(content_hash)
-                                citation_count += 1
-                            
-                                citation_mapping[citation_count] = {
-                                    'source': proc_doc.document.filename,
-                                    'text': content,
-                                    'relevance_score': 0.5,
-                                    'document_id': proc_doc.document.id,
-                                    'chunk_idx': embedding_obj.chunk_id,
-                                    'display_num': citation_count
-                                }
-                            
-                                all_results.append(content)
-                                all_distances.append(0.5)
+                        for chunk in chunks:
+                            if isinstance(chunk, dict):
+                                chunk_text = chunk.get('text', '')
+                                if chunk_text and query_lower in chunk_text.lower():
+                                    matched_chunks.append(chunk)
+                        
+                        # Sort by simple text similarity
+                        if matched_chunks:
+                            logger.info(f"Found {len(matched_chunks)} text matches for {proc_doc.document.filename}")
+                            for chunk in matched_chunks[:5]:  # Limit to top 5 matches
+                                all_results.append(chunk.get('text', ''))
+                                all_distances.append(0.5)  # Middle value since we don't have real distances
                                 all_sources.append(proc_doc.document.filename)
-                            
-                                print(f"   ✅ Added text match {citation_count}: '{content[:100]}...'")
-                            
-                    except Exception as fallback_error:
-                        print(f"❌ SEARCH DEBUG: Fallback search failed: {str(fallback_error)}")
-                        continue
+                
+                # If we have markdown content but no vector results, do fallback text search on whole content
+                if markdown_content and not all_results:
+                    query_lower = query.lower()
+                    if query_lower in markdown_content.lower():
+                        # Split into paragraphs and find matching ones
+                        paragraphs = markdown_content.split('\n\n')
+                        for para in paragraphs:
+                            if query_lower in para.lower():
+                                all_results.append(para)
+                                all_distances.append(0.5)  # Middle value since we don't have real distances
+                                all_sources.append(proc_doc.document.filename)
+                    
+            except Exception as e:
+                logger.error(f"Error processing metadata for {proc_doc.document.filename}: {str(e)}")
+                continue
         
-            print(f"\n🔍 SEARCH DEBUG: Search completed. Found {len(all_results)} total results")
+        # Rest of the method remains the same but with improved deduplication
+        if not all_results:
+            if valid_docs_found:
+                logger.warning(f"No matching content found in documents for query: {query}")
+            else:
+                logger.warning(f"No valid documents found to search")
+            return [], [], {}
         
-            if not all_results:
-                if valid_docs_found:
-                    print(f"⚠️ SEARCH DEBUG: No matching content found in documents for query: {query}")
-                else:
-                    print(f"❌ SEARCH DEBUG: No valid documents found to search")
-                return [], [], {}
+        # Apply TF-IDF ranking and final deduplication
+        try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            
+            vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+            try:
+                tfidf_matrix = vectorizer.fit_transform([query] + all_results)
+                tfidf_scores = tfidf_matrix[0].dot(tfidf_matrix.T).toarray().flatten()[1:]
+                similarity_scores = [1 / (1 + dist) for dist in all_distances]
+                combined_scores = [0.7 * tf + 0.3 * sim for tf, sim in zip(tfidf_scores, similarity_scores)]
+                
+                # Combine results with citation keys for proper tracking
+                combined_results = list(zip(all_results, all_sources, combined_scores, range(1, len(all_results) + 1)))
+                sorted_results = sorted(combined_results, key=lambda x: x[2], reverse=True)
+                
+                results = [res[0] for res in sorted_results]
+                sources = [res[1] for res in sorted_results]
+                
+                # Update citation mapping with new ranking
+                reordered_citation_mapping = {}
+                for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
+                    if old_key in citation_mapping:
+                        reordered_citation_mapping[new_idx] = citation_mapping[old_key]
+                        reordered_citation_mapping[new_idx]['display_num'] = new_idx
+                
+                citation_mapping = reordered_citation_mapping
+                
+            except Exception as e:
+                logger.error(f"Error in TF-IDF processing: {str(e)}")
+                results = all_results
+                sources = all_sources
+                
+        except Exception as e:
+            logger.error(f"Error applying TF-IDF ranking: {str(e)}")
+            # Fallback processing...
+            results = all_results
+            sources = all_sources
         
-            # Sort results by distance (lower is better for cosine distance)
-            combined_results = list(zip(all_results, all_sources, all_distances, range(1, len(all_results) + 1)))
-            sorted_results = sorted(combined_results, key=lambda x: x[2])
+        # Final deduplication while preserving order
+        seen_content = set()
+        filtered_results = []
+        filtered_sources = []
+        filtered_citation_mapping = {}
+        new_citation_count = 0
         
-            print(f"🔍 SEARCH DEBUG: Sorted results by distance")
-            for i, (content, source, distance, _) in enumerate(sorted_results[:5]):
-                print(f"   Result {i+1}: distance={distance:.4f}, source='{source}', content='{content[:100]}...'")
+        for i, (content, source) in enumerate(zip(results, sources)):
+            content_hash = content[:100] if content else ""
+            if content_hash and content_hash not in seen_content:
+                seen_content.add(content_hash)
+                filtered_results.append(content)
+                filtered_sources.append(source)
+
+                new_citation_count += 1
+                old_idx = i + 1
+                if old_idx in citation_mapping:
+                    filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx]
+                    filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
         
-            # Extract sorted results
-            results = [res[0] for res in sorted_results]
-            sources = [res[1] for res in sorted_results]
-        
-            # Update citation mapping with new ranking
-            reordered_citation_mapping = {}
-            for new_idx, (_, _, _, old_key) in enumerate(sorted_results, 1):
-                if old_key in citation_mapping:
-                    reordered_citation_mapping[new_idx] = citation_mapping[old_key].copy()
-                    reordered_citation_mapping[new_idx]['display_num'] = new_idx
-        
-            citation_mapping = reordered_citation_mapping
-        
-            # Final deduplication and filtering
-            seen_content = set()
-            filtered_results = []
-            filtered_sources = []
-            filtered_citation_mapping = {}
-            new_citation_count = 0
-        
-            for i, (content, source) in enumerate(zip(results, sources)):
-                content_hash = content[:80] if content else ""
-                if content_hash and content_hash not in seen_content:
-                    seen_content.add(content_hash)
-                    filtered_results.append(content)
-                    filtered_sources.append(source)
+        # Return top matches (limit to 15 most relevant)
+        max_results = min(len(filtered_results), 40)
+        return filtered_results[:max_results], filtered_sources[:max_results], filtered_citation_mapping
     
-                    new_citation_count += 1
-                    old_idx = i + 1
-                    if old_idx in citation_mapping:
-                        filtered_citation_mapping[new_citation_count] = citation_mapping[old_idx].copy()
-                        filtered_citation_mapping[new_citation_count]['display_num'] = new_citation_count
-        
-            # Return final results (limit to 30 for comprehensive responses)
-            max_results = min(len(filtered_results), 30)
-            final_results = filtered_results[:max_results]
-            final_sources = filtered_sources[:max_results]
-            final_citations = {k: v for k, v in filtered_citation_mapping.items() if k <= max_results}
-        
-            print(f"\n✅ SEARCH DEBUG: Final results: {len(final_results)} items")
-            for i, (content, source) in enumerate(zip(final_results[:5], final_sources[:5])):
-                print(f"   Final {i+1}: source='{source}', content='{content[:100]}...'")
-        
-            return final_results, final_sources, final_citations
-        
+    # Helper method to prepare context for response generation
     def _prepare_context(self, context, sources):
         """
         Helper method to prepare context for response generation
@@ -7763,21 +7308,21 @@ class ChatView(APIView):
     # Keep general follow-up question generation as is
     def generate_general_follow_up_questions(self, question, answer, user=None):
         system_message = "You are an expert at generating relevant follow-up questions. Always respond with valid JSON format."
-    
+       
         user_prompt = f"""
         Based on this user question and your answer, suggest 3 relevant follow-up questions that the user might want to ask next.
         The questions should be short, interesting, and directly related to the topic.
-    
+       
         User Question: {question}
         Your Answer (abbreviated): {answer[:500]}...
-    
+       
         CRITICAL: Your response MUST be a valid JSON object with this structure:
         {{
             "questions": ["question1", "question2", "question3"],
             "topic": "main_topic_discussed"
         }}
         """
-    
+       
         try:            
             completion = client.chat.completions.create(
                 model="gpt-4o",
@@ -7789,12 +7334,12 @@ class ChatView(APIView):
                 temperature=0.3,
                 max_tokens=500
             )
-        
+           
             # Parse JSON response
             json_response = json.loads(completion.choices[0].message.content)
             questions = json_response.get("questions", [])
             return questions[:3]
-        
+           
         except Exception as e:
             logger.error(f"Error generating follow-up questions: {str(e)}")
             return [
@@ -7844,38 +7389,38 @@ class ChatView(APIView):
                 "Would you like me to elaborate on any specific point?",
                 "How can I help clarify this information further?"
             ]
- 
+
 class DeleteMessagePairView(APIView):
     permission_classes = [IsAuthenticated]
- 
+
     def post(self, request):
         print("DeleteMessagePairView POST data:", request.data)
         user = request.user
         user_message_id = request.data.get('user_message_id')
         assistant_message_id = request.data.get('assistant_message_id')
         conversation_id = request.data.get('conversation_id')
- 
- 
+
+
         if not (user_message_id and assistant_message_id and conversation_id):
             return Response({"error": "Missing required parameters."}, status=status.HTTP_400_BAD_REQUEST)
- 
+
         try:
             with transaction.atomic():
                 # Ensure both messages belong to the user and conversation
                 chat_history = ChatHistory.objects.get(conversation_id=conversation_id, user=user)
                 user_msg = ChatMessage.objects.get(id=user_message_id, chat_history=chat_history, role="user")
                 assistant_msg = ChatMessage.objects.get(id=assistant_message_id, chat_history=chat_history, role="assistant")
- 
+
                 user_msg.delete()
                 assistant_msg.delete()
- 
+
             return Response({"success": True}, status=status.HTTP_200_OK)
         except ChatHistory.DoesNotExist:
             return Response({"error": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND)
         except ChatMessage.DoesNotExist:
             return Response({"error": "Message not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
 
 class GetConversationView(APIView):
     permission_classes = [IsAuthenticated]
@@ -7896,6 +7441,8 @@ class GetConversationView(APIView):
                     messages = conversation.messages.all().order_by('created_at')
                     
                     # Prepare message list - UPDATED to include all badge properties
+                   
+
                     message_list = []
                     for message in messages:
                         message_data = {
@@ -7913,6 +7460,7 @@ class GetConversationView(APIView):
                             message_data['sources_info'] = getattr(message, 'sources', "")  # ✅ NEW LINE
                        
                         message_list.append(message_data)
+ 
                     
                     return Response({
                         'conversation_id': str(conversation.conversation_id),
@@ -8056,7 +7604,6 @@ class GenerateIdeaContextView(APIView):
     """
     API endpoint to extract structured idea generation parameters
     from documents or query results.
-    FIXED: Now properly handles both PDF and DOCX files with blob storage
     """
    
     def post(self, request):
@@ -8103,48 +7650,36 @@ class GenerateIdeaContextView(APIView):
                         })
                    
                     # If no parameters yet, extract them from the document
-                    # FIXED: Get index and metadata paths from processed_index
                     index_file = processed_index.faiss_index
                     metadata_file = processed_index.metadata
-                    markdown_path = processed_index.markdown_path
                     
                     # First check if the document has a markdown path (LlamaParse document)
-                    if markdown_path:
+                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                        # This is a LlamaParse document, read the markdown content directly
                         try:
-                            # FIXED: Handle blob storage for markdown files
-                            if os.path.exists(markdown_path):
-                                # Local file
-                                with open(markdown_path, 'r', encoding='utf-8') as f:
-                                    full_text = f.read()
-                            else:
-                                # Try blob storage
-                                from chat.utils import get_blob_content
-                                markdown_content_bytes = get_blob_content(markdown_path)
-                                if markdown_content_bytes:
-                                    full_text = markdown_content_bytes.decode('utf-8')
-                                    logger.info(f"Successfully retrieved markdown from blob ({len(full_text)} chars)")
-                                    
-                            if full_text:
-                                # Extract parameters from markdown content
-                                idea_params = self.extract_idea_parameters(full_text)
+                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                                full_text = f.read()
                                 
-                                # Save the parameters for future use
-                                processed_index.idea_parameters = idea_params
-                                processed_index.save()
-                                
-                                return Response({
-                                    'document_id': document_id,
-                                    'document_name': document.filename,
-                                    'document_name_no_ext': document_name_no_ext,
-                                    'idea_parameters': idea_params,
-                                    'suggested_project_name': suggested_project_name
-                                })
+                            # Extract parameters from markdown content
+                            idea_params = self.extract_idea_parameters(full_text)
+                            
+                            # Save the parameters for future use
+                            processed_index.idea_parameters = idea_params
+                            processed_index.save()
+                            
+                            return Response({
+                                'document_id': document_id,
+                                'document_name': document.filename,
+                                'document_name_no_ext': document_name_no_ext,
+                                'idea_parameters': idea_params,
+                                'suggested_project_name': suggested_project_name
+                            })
                         except Exception as e:
-                            logger.error(f"Error reading markdown file: {str(e)}")
+                            print(f"Error reading markdown file: {str(e)}")
                             # Continue with FAISS approach as fallback
                    
-                    # FIXED: Load index and metadata with proper blob storage handling
-                    index, chunks = self.load_faiss_index_from_paths_with_blob_support(index_file, metadata_file)
+                    # Load index and metadata
+                    index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
                     
                     if not chunks:
                         return Response({
@@ -8162,6 +7697,7 @@ class GenerateIdeaContextView(APIView):
                     if main_project_id:
                         update_project_timestamp(main_project_id, user)
             
+                   
                     return Response({
                         'document_id': document_id,
                         'document_name': document.filename,
@@ -8199,40 +7735,32 @@ class GenerateIdeaContextView(APIView):
                         # Log the error but continue with the default name
                         print(f"Error generating unique project name: {str(e)}")
                 
-                # FIXED: Handle markdown path with blob storage
-                full_text = None
-                if processed_index.markdown_path:
+                # First check if the document has a markdown path (LlamaParse document)
+                if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                    # This is a LlamaParse document, read the markdown content directly
                     try:
-                        if os.path.exists(processed_index.markdown_path):
-                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
-                                full_text = f.read()
-                        else:
-                            # Try blob storage
-                            from chat.utils import get_blob_content
-                            markdown_content_bytes = get_blob_content(processed_index.markdown_path)
-                            if markdown_content_bytes:
-                                full_text = markdown_content_bytes.decode('utf-8')
-                                
-                        if full_text:
-                            # Extract parameters from markdown content
-                            idea_params = self.extract_idea_parameters(query, None, full_text)
+                        with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                            full_text = f.read()
                             
-                            return Response({
-                                'document_id': active_doc_id,
-                                'document_name': document.filename,
-                                'document_name_no_ext': document_name_no_ext,
-                                'query': query,
-                                'idea_parameters': idea_params,
-                                'suggested_project_name': suggested_project_name
-                            })
+                        # Extract parameters from markdown content
+                        idea_params = self.extract_idea_parameters(query, None, full_text)
+                        
+                        return Response({
+                            'document_id': active_doc_id,
+                            'document_name': document.filename,
+                            'document_name_no_ext': document_name_no_ext,
+                            'query': query,
+                            'idea_parameters': idea_params,
+                            'suggested_project_name': suggested_project_name
+                        })
                     except Exception as e:
-                        logger.error(f"Error reading markdown file: {str(e)}")
+                        print(f"Error reading markdown file: {str(e)}")
                         # Continue with FAISS approach as fallback
                
-                # FIXED: Load index and metadata for FAISS approach with blob support
+                # Load index and metadata for FAISS approach
                 index_file = processed_index.faiss_index
                 metadata_file = processed_index.metadata
-                index, chunks = self.load_faiss_index_from_paths_with_blob_support(index_file, metadata_file)
+                index, chunks = self.load_faiss_index_from_paths(index_file, metadata_file)
                
                 # Get embedding for query
                 query_embedding = self.get_query_embedding(query)
@@ -8246,6 +7774,7 @@ class GenerateIdeaContextView(APIView):
                 if main_project_id:
                     update_project_timestamp(main_project_id, user)
             
+               
                 return Response({
                     'document_id': active_doc_id,
                     'document_name': document.filename,
@@ -8256,7 +7785,7 @@ class GenerateIdeaContextView(APIView):
                 })
                
         except Exception as e:
-            logger.error(f"Error generating idea context: {str(e)}", exc_info=True)
+            print(f"Error generating idea context: {str(e)}")
             return Response({
                 'error': str(e),
                 'detail': 'An error occurred while generating idea context'
@@ -8291,66 +7820,18 @@ class GenerateIdeaContextView(APIView):
             
         return project_name
    
-    def load_faiss_index_from_paths_with_blob_support(self, index_file, metadata_file):
-        """
-        FIXED: Load FAISS index and metadata from file paths with Azure Blob Storage support
-        """
+    def load_faiss_index_from_paths(self, index_file, metadata_file):
+        """Load FAISS index and metadata from file paths"""
         import faiss
         import pickle
-        import tempfile
-        import os
-        from chat.utils import download_blob_to_temp_file, get_blob_content
-        
-        logger.info(f"Loading FAISS index: {index_file}, metadata: {metadata_file}")
        
         try:
-            index = None
-            chunks = []
-            
-            # Load FAISS index
-            if index_file:
-                if os.path.exists(index_file):
-                    # Local file
-                    logger.info(f"Loading index from local file: {index_file}")
-                    index = faiss.read_index(index_file)
-                else:
-                    # Try blob storage
-                    logger.info(f"Attempting to load index from blob storage: {index_file}")
-                    temp_index_file = download_blob_to_temp_file(index_file, 'uploadfiles')
-                    if temp_index_file:
-                        index = faiss.read_index(temp_index_file)
-                        os.unlink(temp_index_file)  # Clean up
-                        logger.info(f"Successfully loaded index from blob storage")
-                    else:
-                        logger.warning(f"Could not load index from blob storage: {index_file}")
-            
-            # Load metadata
-            if metadata_file:
-                if os.path.exists(metadata_file):
-                    # Local file
-                    logger.info(f"Loading metadata from local file: {metadata_file}")
-                    with open(metadata_file, "rb") as f:
-                        chunks = pickle.load(f)
-                else:
-                    # Try blob storage
-                    logger.info(f"Attempting to load metadata from blob storage: {metadata_file}")
-                    metadata_content = get_blob_content(metadata_file, 'uploadfiles')
-                    if metadata_content:
-                        chunks = pickle.loads(metadata_content)
-                        logger.info(f"Successfully loaded {len(chunks) if isinstance(chunks, list) else 'unknown'} chunks from blob")
-                    else:
-                        logger.warning(f"Could not load metadata from blob storage: {metadata_file}")
-            
-            # Ensure chunks is a list
-            if not isinstance(chunks, list):
-                logger.warning(f"Chunks is not a list, converting: {type(chunks)}")
-                chunks = [chunks] if chunks else []
-                
-            logger.info(f"Loaded index: {index is not None}, chunks: {len(chunks)}")
+            index = faiss.read_index(index_file)
+            with open(metadata_file, "rb") as f:
+                chunks = pickle.load(f)
             return index, chunks
-            
         except Exception as e:
-            logger.error(f"Error loading FAISS index: {str(e)}", exc_info=True)
+            print(f"Error loading FAISS index: {str(e)}")
             return None, []
    
     def get_query_embedding(self, query):
@@ -8365,7 +7846,7 @@ class GenerateIdeaContextView(APIView):
             )
             return response.data[0].embedding
         except Exception as e:
-            logger.error(f"Error getting embedding for query: {str(e)}")
+            print(f"Error getting embedding for query: {str(e)}")
             raise
    
     def search_faiss_index(self, index, chunks, query_embedding, k=5):
@@ -8374,28 +7855,21 @@ class GenerateIdeaContextView(APIView):
        
         # Check if index is None
         if index is None:
-            logger.warning("FAISS index is None, returning empty results")
             return []
             
-        try:
-            # Convert embedding to numpy array
-            query_vector = np.array([query_embedding]).astype('float32')
-           
-            # Search index
-            distances, indices = index.search(query_vector, k=k)
-           
-            # Get relevant chunks
-            results = []
-            for i in indices[0]:
-                if i < len(chunks) and i >= 0:
-                    results.append(chunks[i])
-            
-            logger.info(f"Found {len(results)} relevant chunks from FAISS search")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error searching FAISS index: {str(e)}", exc_info=True)
-            return []
+        # Convert embedding to numpy array
+        query_vector = np.array([query_embedding]).astype('float32')
+       
+        # Search index
+        distances, indices = index.search(query_vector, k=k)
+       
+        # Get relevant chunks
+        results = []
+        for i in indices[0]:
+            if i < len(chunks):
+                results.append(chunks[i])
+       
+        return results
    
     def extract_idea_parameters(self, context, relevant_chunks=None, full_text=None):
         """
@@ -8459,12 +7933,11 @@ class GenerateIdeaContextView(APIView):
            
             # Parse JSON response
             extracted_params = json.loads(response.choices[0].message.content)
-            
-            logger.info(f"Successfully extracted idea parameters: {extracted_params}")
+           
             return extracted_params
        
         except Exception as e:
-            logger.error(f"Error extracting idea parameters: {str(e)}", exc_info=True)
+            print(f"Error extracting idea parameters: {str(e)}")
             # Return empty structure if extraction fails
             return {
                 "Brand_Name": "",
@@ -8478,8 +7951,6 @@ class GenerateIdeaContextView(APIView):
                 "Demographics": ""
             }
 
-
-            
 from django.db import transaction
 from .models import UserAPITokens
 
@@ -8529,6 +8000,7 @@ class AdminUserStatsView(APIView):
  
 from django.db import transaction
 from .models import UserAPITokens
+
  
 class AdminUserManagementView(APIView):
     def get(self, request):
@@ -8541,10 +8013,10 @@ class AdminUserManagementView(APIView):
                 return Response({
                     'error': 'Unauthorized. Only admin users can access this endpoint'
                 }, status=status.HTTP_403_FORBIDDEN)
-                   
+                    
             # Get all users with their API tokens
             users = User.objects.all()
-                   
+                    
             user_data = []
             for user in users:
                 # Get API tokens if they exist
@@ -8553,7 +8025,7 @@ class AdminUserManagementView(APIView):
                     api_tokens = user.api_tokens
                 except UserAPITokens.DoesNotExist:
                     pass
-                 
+                  
                 # Get disabled modules
                 try:
                     module_permissions = user.module_permissions.disabled_modules
@@ -8561,7 +8033,7 @@ class AdminUserManagementView(APIView):
                     module_permissions = {}
                     # Create module permissions if they don't exist
                     UserModulePermissions.objects.create(user=user, disabled_modules={})
-                 
+                  
                 # Get upload permissions
                 try:
                     upload_permissions = UserUploadPermissions.objects.get(user=user)
@@ -8571,12 +8043,12 @@ class AdminUserManagementView(APIView):
                     can_upload = True
                     # Create default permissions
                     UserUploadPermissions.objects.create(user=user, can_upload=True)
-                           
+                            
                 user_info = {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
-                    'tokens_used': user.tokens_used if hasattr(user, 'tokens_used') else 0,                
+                    'tokens_used': user.tokens_used if hasattr(user, 'tokens_used') else 0,                 
                     'token_limit': api_tokens.token_limit if api_tokens and api_tokens.token_limit is not None else None,
                     'page_limit': api_tokens.page_limit if api_tokens and api_tokens.page_limit is not None else None,
                     'disabled_modules': module_permissions,
@@ -8594,16 +8066,16 @@ class AdminUserManagementView(APIView):
                 }
                 user_data.append(user_info)
                 print("##############################:", user_data)  # Log user info for debugging
-                   
+                    
             return Response(user_data, status=status.HTTP_200_OK)
-                     
+                      
         except Exception as e:
             print(f"Error in AdminUserManagementView.get: {str(e)}")
             return Response(
                 {'error': f'Failed to fetch user data: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
- 
+
     def put(self, request):
         """Update user tokens - ADD THIS METHOD"""
         print(f"AdminUserManagementView PUT data: {request.data}")
@@ -8613,23 +8085,23 @@ class AdminUserManagementView(APIView):
                 return Response({
                     'error': 'Unauthorized. Only admin users can access this endpoint'
                 }, status=status.HTTP_403_FORBIDDEN)
- 
+
             user_id = request.data.get('user_id')
             if not user_id:
                 return Response({
                     'error': 'user_id is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
- 
+
             try:
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
                 return Response({
                     'error': 'User not found'
                 }, status=status.HTTP_404_NOT_FOUND)
- 
+
             # Get or create API tokens for the user
             api_tokens, created = UserAPITokens.objects.get_or_create(user=user)
- 
+
             # Update tokens
             if 'nebius_token' in request.data:
                 api_tokens.nebius_token = request.data['nebius_token']
@@ -8639,7 +8111,7 @@ class AdminUserManagementView(APIView):
                 api_tokens.llama_token = request.data['llama_token']
             # if 'token_limit' in request.data:
             #     api_tokens.token_limit = request.data['token_limit'] if request.data['token_limit'] else None
- 
+
             if 'token_limit' in request.data:
                 token_limit = request.data['token_limit']
                 api_tokens.token_limit = int(token_limit) if token_limit not in [None, ""] else 1_000_000
@@ -8647,26 +8119,32 @@ class AdminUserManagementView(APIView):
             if 'page_limit' in request.data:
                 page_limit = request.data['page_limit']
                 api_tokens.page_limit = int(page_limit) if page_limit not in [None, ""] else 20
- 
+
             api_tokens.save()
- 
+
             return Response({
                 'success': True,
                 'message': 'User tokens updated successfully'
             }, status=status.HTTP_200_OK)
- 
+
         except Exception as e:
             print(f"Error in AdminUserManagementView.put: {str(e)}")
             return Response(
                 {'error': f'Failed to update user tokens: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
- 
+
     def post(self, request):
-        """Create new user - ADD THIS METHOD"""
+        """Create new user - Admin only"""
+
+        from dotenv import load_dotenv
+        import os
+ 
+        load_dotenv()
+        
         try:
-            # Check if the requesting user is an admin
-            if not request.user.username == 'admin':
+            # Restrict to admin only
+            if request.user.username != 'admin':
                 return Response({
                     'error': 'Unauthorized. Only admin users can access this endpoint'
                 }, status=status.HTTP_403_FORBIDDEN)
@@ -8674,53 +8152,46 @@ class AdminUserManagementView(APIView):
             username = request.data.get('username')
             email = request.data.get('email')
             password = request.data.get('password')
+            nebius_token = request.data.get('nebius_token', '')
+            gemini_token = request.data.get('gemini_token', '')
+            llama_token = request.data.get('llama_token', '')
+            huggingface_token = request.data.get('huggingface_token', '')
  
             if not all([username, email, password]):
                 return Response({
                     'error': 'username, email, and password are required'
                 }, status=status.HTTP_400_BAD_REQUEST)
  
-            # Check if user already exists
+            # Check duplicates
             if User.objects.filter(username=username).exists():
-                return Response({
-                    'error': 'Username already exists'
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
  
             if User.objects.filter(email=email).exists():
-                return Response({
-                    'error': 'Email already exists'
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Email already exists'}, status=status.HTTP_400_BAD_REQUEST)
  
-            # Create new user
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password
-            )
+            # Create the user
+            user = User.objects.create_user(username=username, email=email, password=password)
  
-            # Create API tokens if provided
-            if any([request.data.get('nebius_token'), request.data.get('gemini_token'), request.data.get('llama_token')]):
-                UserAPITokens.objects.create(
-                    user=user,
-                    nebius_token=request.data.get('nebius_token', ''),
-                    gemini_token=request.data.get('gemini_token', ''),
-                    llama_token=request.data.get('llama_token', ''),
-                    token_limit=request.data.get('token_limit') if request.data.get('token_limit') else None
-                )
+            # ✅ Update the existing UserAPITokens created by signal
+            user.api_tokens.huggingface_token = huggingface_token or os.getenv("HUGGINGFACE_TOKEN", "")
+            user.api_tokens.gemini_token = gemini_token or os.getenv("GOOGLE_API_KEY", "")
+            user.api_tokens.nebius_token = nebius_token or os.getenv("NEBIUS_TOKEN", "")
+            user.api_tokens.llama_token = llama_token or os.getenv("LLAMA_TOKEN", "")
+            user.api_tokens.save()
  
             return Response({
                 'success': True,
                 'message': 'User created successfully',
                 'user_id': user.id
             }, status=status.HTTP_201_CREATED)
- 
+
         except Exception as e:
             print(f"Error in AdminUserManagementView.post: {str(e)}")
             return Response(
                 {'error': f'Failed to create user: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
- 
+
     def delete(self, request):
         """Delete user - ADD THIS METHOD"""
         try:
@@ -8729,41 +8200,41 @@ class AdminUserManagementView(APIView):
                 return Response({
                     'error': 'Unauthorized. Only admin users can access this endpoint'
                 }, status=status.HTTP_403_FORBIDDEN)
- 
+
             user_id = request.GET.get('user_id')
             if not user_id:
                 return Response({
                     'error': 'user_id is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
- 
+
             try:
                 user = User.objects.get(id=user_id)
-               
+                
                 # Prevent deletion of admin user
                 if user.username == 'admin':
                     return Response({
                         'error': 'Cannot delete admin user'
                     }, status=status.HTTP_400_BAD_REQUEST)
-               
+                
                 user.delete()
-               
+                
                 return Response({
                     'success': True,
                     'message': 'User deleted successfully'
                 }, status=status.HTTP_200_OK)
- 
+
             except User.DoesNotExist:
                 return Response({
                     'error': 'User not found'
                 }, status=status.HTTP_404_NOT_FOUND)
- 
+
         except Exception as e:
             print(f"Error in AdminUserManagementView.delete: {str(e)}")
             return Response(
                 {'error': f'Failed to delete user: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
- 
+
     # Token Usage Tracking Methods (keep these the same)
     @staticmethod
     def check_token_limit(user):
@@ -8777,7 +8248,7 @@ class AdminUserManagementView(APIView):
             return True, None
         except UserAPITokens.DoesNotExist:
             return True, None  # No limit set, allow usage
- 
+
     @staticmethod
     def increment_token_usage(user, tokens_used):
         """Increment user's token usage"""
@@ -8789,7 +8260,7 @@ class AdminUserManagementView(APIView):
         except Exception as e:
             print(f"Error incrementing token usage: {str(e)}")
             return False
- 
+
     @staticmethod
     def get_remaining_tokens(user):
         """Get remaining tokens for a user"""
@@ -8801,7 +8272,6 @@ class AdminUserManagementView(APIView):
             return None  # Unlimited
         except UserAPITokens.DoesNotExist:
             return None  # Unlimited
- 
 
 
 class AdminUserModuleView(APIView):
@@ -8867,246 +8337,43 @@ class OriginalDocumentView(APIView):
     # Update OriginalDocumentView.get in views.py
 
     def get(self, request, document_id):
-        """Fixed document viewing implementation with proper blob response handling"""
-        import os
-        import logging
-        from django.http import HttpResponse, FileResponse, JsonResponse
-        from chat.utils import get_azure_settings, download_blob_to_temp_file, get_blob_content
-        
         try:
             # Get the document making sure it belongs to the user
             document = get_object_or_404(Document, id=document_id, user=request.user)
             
-            # Get main_project_id for blob path construction
-            main_project_id = document.main_project_id
+            # Get the file path
+            file_path = document.file.path
             
-            # CRITICAL: Always use document.file for the original document
-            file_path = document.file
-            print(f"=== DOCUMENT VIEW REQUEST ===")
-            print(f"Document ID: {document_id}")
-            print(f"Document filename: {document.filename}")
-            print(f"Document file path: {file_path}")
-            print(f"Main project ID: {main_project_id}")
-            print(f"File path type: {type(file_path)}")
-            
-            # Handle different types of file_path values
-            if isinstance(file_path, str):
-                # Check if it's a direct URL first
-                if file_path.startswith('http'):
-                    print(f"File path is a direct URL: {file_path}")
-                    return JsonResponse({
-                        'redirect_url': file_path,
-                        'filename': document.filename
-                    })
-                
-                # It's a blob path - get the blob content directly
-                print(f"File path is a blob path, attempting to get content...")
-                
-                # Get Azure settings
-                account_name, _, _ = get_azure_settings()
-                container_name = 'uploadfiles'
-                
-                # Try different blob path variations for the ORIGINAL document
-                blob_paths_to_try = [
-                    file_path,  # Original path as stored
-                ]
-                
-                # Add variations if the path doesn't already contain certain prefixes
-                if not file_path.startswith('media/'):
-                    blob_paths_to_try.extend([
-                        f"media/documents/{file_path}",
-                        f"media/documents/{main_project_id}/{file_path}" if main_project_id else f"media/documents/{file_path}",
-                        f"media/{file_path}"
-                    ])
-                
-                # Add project-specific paths
-                if main_project_id and f"/{main_project_id}/" not in file_path:
-                    blob_paths_to_try.append(f"media/documents/{main_project_id}/{os.path.basename(file_path)}")
-                
-                # Remove duplicates while preserving order
-                seen = set()
-                unique_paths = []
-                for path in blob_paths_to_try:
-                    if path not in seen:
-                        seen.add(path)
-                        unique_paths.append(path)
-                
-                print(f"Trying {len(unique_paths)} blob path variations:")
-                for i, path in enumerate(unique_paths):
-                    print(f"  {i+1}. {path}")
-                
-                # Try to get blob content directly (more reliable than temp files)
-                for i, blob_path in enumerate(unique_paths):
-                    print(f"Attempt {i+1}: Getting blob content for: {blob_path}")
-                    
-                    try:
-                        # Get blob content as bytes
-                        blob_content = get_blob_content(blob_path, container_name)
-                        
-                        if blob_content and len(blob_content) > 0:
-                            print(f"✅ Successfully retrieved blob content: {len(blob_content)} bytes")
-                            
-                            # Determine content type
-                            content_type = self.get_content_type(document.filename)
-                            print(f"Content type: {content_type}")
-                            
-                            # Create HTTP response with the blob content
-                            response = HttpResponse(
-                                blob_content, 
-                                content_type=content_type
-                            )
-                            
-                            # Set headers for inline viewing
-                            response['Content-Disposition'] = f'inline; filename="{document.filename}"'
-                            response['Content-Length'] = str(len(blob_content))
-                            response['Cache-Control'] = 'no-cache'
-                            
-                            # IMPORTANT: Set CORS headers if needed for frontend
-                            response['Access-Control-Allow-Origin'] = '*'
-                            response['Access-Control-Allow-Methods'] = 'GET'
-                            response['Access-Control-Allow-Headers'] = 'Content-Type'
-                            
-                            print(f"✅ Successfully created HTTP response with {len(blob_content)} bytes")
-                            print(f"Response headers: Content-Type={content_type}, Content-Length={len(blob_content)}")
-                            
-                            return response
-                        else:
-                            print(f"❌ No content or empty content for: {blob_path}")
-                            
-                    except Exception as blob_error:
-                        print(f"❌ Error getting blob content for {blob_path}: {str(blob_error)}")
-                        continue
-                
-                # If direct blob content failed, try temp file approach as fallback
-                print(f"Direct blob content failed, trying temp file approach...")
-                
-                for i, blob_path in enumerate(unique_paths):
-                    print(f"Temp file attempt {i+1}: {blob_path}")
-                    temp_file_path = download_blob_to_temp_file(blob_path, container_name)
-                    
-                    if temp_file_path and os.path.exists(temp_file_path):
-                        try:
-                            file_size = os.path.getsize(temp_file_path)
-                            print(f"✅ Downloaded temp file: {file_size} bytes")
-                            
-                            if file_size == 0:
-                                print("❌ Temp file is empty")
-                                os.unlink(temp_file_path)
-                                continue
-                            
-                            content_type = self.get_content_type(temp_file_path)
-                            
-                            # Read file content and create response
-                            with open(temp_file_path, 'rb') as f:
-                                file_content = f.read()
-                            
-                            response = HttpResponse(file_content, content_type=content_type)
-                            response['Content-Disposition'] = f'inline; filename="{document.filename}"'
-                            response['Content-Length'] = str(len(file_content))
-                            response['Cache-Control'] = 'no-cache'
-                            
-                            # Set CORS headers
-                            response['Access-Control-Allow-Origin'] = '*'
-                            response['Access-Control-Allow-Methods'] = 'GET'
-                            response['Access-Control-Allow-Headers'] = 'Content-Type'
-                            
-                            # Clean up temp file
-                            os.unlink(temp_file_path)
-                            
-                            print(f"✅ Successfully created response from temp file with {len(file_content)} bytes")
-                            return response
-                            
-                        except Exception as temp_error:
-                            print(f"❌ Error processing temp file: {str(temp_error)}")
-                            if os.path.exists(temp_file_path):
-                                os.unlink(temp_file_path)
-                            continue
-                    else:
-                        print(f"❌ Failed to download temp file for: {blob_path}")
-                
-                # If all attempts failed, try direct blob URL as last resort
-                print(f"All blob retrieval attempts failed, constructing direct URL...")
-                
-                # Use the most likely blob path for direct URL
-                if file_path.startswith('media/'):
-                    normalized_path = file_path
-                else:
-                    normalized_path = f"media/documents/{file_path}"
-                    if main_project_id and f"/{main_project_id}/" not in normalized_path:
-                        normalized_path = f"media/documents/{main_project_id}/{os.path.basename(file_path)}"
-                
-                direct_blob_url = f"https://{account_name}.blob.core.windows.net/{container_name}/{normalized_path}"
-                print(f"Returning direct blob URL: {direct_blob_url}")
-                
-                return JsonResponse({
-                    'redirect_url': direct_blob_url,
-                    'filename': document.filename,
-                    'attempted_paths': unique_paths,
-                    'final_direct_url': direct_blob_url,
-                    'error': 'Could not retrieve blob content directly'
-                })
-                
-            elif hasattr(file_path, 'path'):
-                # It's a FileField or similar Django file object
-                print(f"File path is a FileField: {file_path.path}")
-                
-                if os.path.exists(file_path.path):
-                    content_type = self.get_content_type(file_path.path)
-                    
-                    # Use FileResponse for local files
-                    response = FileResponse(
-                        file_path.open('rb'),
-                        content_type=content_type
-                    )
-                    response['Content-Disposition'] = f'inline; filename="{document.filename}"'
-                    return response
-                else:
-                    print(f"❌ Local file does not exist: {file_path.path}")
-                    
-            elif hasattr(file_path, 'read'):
-                # It's a file-like object
-                print(f"File path is a file-like object")
-                content_type = self.get_content_type(getattr(file_path, 'name', document.filename))
-                
-                response = FileResponse(
-                    file_path,
-                    content_type=content_type
+            # Check if file exists
+            if not os.path.exists(file_path):
+                return Response(
+                    {'error': 'Document file not found'},
+                    status=status.HTTP_404_NOT_FOUND
                 )
-                response['Content-Disposition'] = f'inline; filename="{document.filename}"'
-                return response
+                
+            # Determine content type based on file extension
+            content_type = self.get_content_type(file_path)
             
-            # If we reach here, all attempts have failed
-            print("❌ All document retrieval attempts failed")
-            return Response({
-                'error': 'Could not retrieve the document file - all methods failed',
-                'file_path': str(file_path),
-                'document_id': document_id,
-                'filename': document.filename,
-                'attempted_paths': unique_paths if 'unique_paths' in locals() else [],
-                'debug_info': {
-                    'file_path_type': type(file_path).__name__,
-                    'file_path_value': str(file_path),
-                    'main_project_id': main_project_id,
-                    'container_name': container_name,
-                    'account_name': account_name
-                }
-            }, status=status.HTTP_404_NOT_FOUND)
+            # Create a file response
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type=content_type
+            )
             
-        except Document.DoesNotExist:
-            return Response({
-                'error': 'Document not found or access denied'
-            }, status=status.HTTP_404_NOT_FOUND)
+            # Set content disposition to attachment with the original filename
+            response['Content-Disposition'] = f'inline; filename="{document.filename}"'
+            
+            # Log the file access
+            self.log_document_view(request.user, document)
+            
+            return response
             
         except Exception as e:
-            import traceback
-            print(f"❌ Error serving document: {str(e)}")
-            print(traceback.format_exc())
-            
-            return Response({
-                'error': f'Failed to retrieve document: {str(e)}',
-                'document_id': document_id,
-                'traceback': traceback.format_exc()
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(f"Error serving original document: {str(e)}")
+            return Response(
+                {'error': f'Failed to retrieve document: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def get_content_type(self, file_path):
         """Determine content type based on file extension"""
@@ -9184,6 +8451,8 @@ class DocumentViewLogView(APIView):
             }, status=status.HTTP_200_OK)
 
 
+
+
 class DocumentContentSearchView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -9212,96 +8481,50 @@ class DocumentContentSearchView(APIView):
                     # Get the processed index for this document
                     processed_index = ProcessedIndex.objects.get(document=doc)
                     
-                    # First, check if this is a LlamaParse document with markdown
-                    markdown_content = None
-                    markdown_found = False
+                    # First, check if this is a LlamaParse document
+                    if processed_index.markdown_path and os.path.exists(processed_index.markdown_path):
+                        # This is a LlamaParse document, read the markdown content directly
+                        try:
+                            with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
+                                markdown_content = f.read()
+                            
+                            # Convert query to lowercase for case-insensitive search
+                            query_lower = query.lower()
+                            
+                            # Check if query exists in the markdown content
+                            if query_lower in markdown_content.lower():
+                                # Found a match - get the surrounding context
+                                index = markdown_content.lower().find(query_lower)
+                                start = max(0, index - 100)
+                                end = min(len(markdown_content), index + len(query) + 100)
+                                match_context = markdown_content[start:end]
+                                
+                                # Count occurrences
+                                match_count = markdown_content.lower().count(query_lower)
+                                
+                                search_results.append({
+                                    'id': doc.id,
+                                    'filename': doc.filename,
+                                    'match_count': match_count,
+                                    'match_context': match_context,
+                                    'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
+                                })
+                                
+                                # Continue to the next document
+                                continue
+                        except Exception as e:
+                            logger.error(f"Error searching in markdown file for document {doc.id}: {str(e)}")
+                            # Continue with the FAISS approach as fallback
                     
-                    if processed_index.markdown_path:
-                        try:
-                            # Check local file first
-                            if os.path.exists(processed_index.markdown_path):
-                                with open(processed_index.markdown_path, 'r', encoding='utf-8') as f:
-                                    markdown_content = f.read()
-                                logger.info(f"Read markdown from local file: {processed_index.markdown_path}")
-                            else:
-                                # Try blob storage
-                                from chat.utils import get_blob_content
-                                logger.info(f"Attempting to read markdown from blob: {processed_index.markdown_path}")
-                                markdown_bytes = get_blob_content(processed_index.markdown_path, 'uploadfiles')
-                                if markdown_bytes:
-                                    markdown_content = markdown_bytes.decode('utf-8')
-                                    logger.info(f"Successfully read markdown from blob storage")
-                                else:
-                                    logger.warning(f"Failed to read markdown from blob: {processed_index.markdown_path}")
-                                    
-                        except Exception as e:
-                            logger.error(f"Error reading markdown for document {doc.id}: {str(e)}")
-                            # Continue with FAISS approach as fallback
-                            
-                    # If we got markdown content, search in it
-                    if markdown_content:
-                        # Convert query to lowercase for case-insensitive search
-                        query_lower = query.lower()
-                        
-                        # Check if query exists in the markdown content
-                        if query_lower in markdown_content.lower():
-                            # Found a match - get the surrounding context
-                            index = markdown_content.lower().find(query_lower)
-                            start = max(0, index - 100)
-                            end = min(len(markdown_content), index + len(query) + 100)
-                            match_context = markdown_content[start:end]
-                            
-                            # Count occurrences
-                            match_count = markdown_content.lower().count(query_lower)
-                            
-                            search_results.append({
-                                'id': doc.id,
-                                'filename': doc.filename,
-                                'match_count': match_count,
-                                'match_context': match_context,
-                                'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M'),
-                                'source_type': 'markdown'
-                            })
-                            
-                            markdown_found = True
-                            # Continue to the next document
+                    # Standard FAISS approach for non-LlamaParse documents
+                    if processed_index.faiss_index and processed_index.metadata:
+                        # Check if the files exist
+                        if not os.path.exists(processed_index.faiss_index) or not os.path.exists(processed_index.metadata):
                             continue
-
-                    # If markdown search didn't find results, fall back to chunk search
-                    if not markdown_found and processed_index.faiss_index and processed_index.metadata:
-                        chunks = []
-                        
-                        # Try to load metadata from local file or blob storage
-                        try:
-                            if os.path.exists(processed_index.metadata):
-                                # Local file
-                                logger.info(f"Loading metadata from local file: {processed_index.metadata}")
-                                with open(processed_index.metadata, 'rb') as f:
-                                    chunks = pickle.load(f)
-                            else:
-                                # Try blob storage
-                                logger.info(f"Loading metadata from blob storage: {processed_index.metadata}")
-                                from chat.utils import get_blob_content
-                                metadata_content = get_blob_content(processed_index.metadata, 'uploadfiles')
-                                if metadata_content:
-                                    chunks = pickle.loads(metadata_content)
-                                    logger.info(f"Successfully loaded {len(chunks) if isinstance(chunks, list) else 'unknown'} chunks from blob")
-                                else:
-                                    logger.warning(f"Failed to retrieve metadata from blob storage: {processed_index.metadata}")
-                                    continue
-                                    
-                        except Exception as e:
-                            logger.error(f"Error loading metadata for document {doc.id}: {str(e)}")
-                            continue
-                        
-                        # Ensure chunks is a list
-                        if not isinstance(chunks, list):
-                            logger.warning(f"Chunks is not a list for document {doc.id}: {type(chunks)}")
-                            chunks = [chunks] if chunks else []
-                        
-                        if not chunks:
-                            logger.warning(f"No chunks found for document {doc.id}")
-                            continue
+                            
+                        # Load the metadata (chunks)
+                        with open(processed_index.metadata, 'rb') as f:
+                            chunks = pickle.load(f)
                         
                         # Convert query to lowercase for case-insensitive search
                         query_lower = query.lower()
@@ -9309,7 +8532,7 @@ class DocumentContentSearchView(APIView):
                         
                         # Search in each chunk
                         for chunk in chunks:
-                            chunk_text = chunk.get('text', '') if isinstance(chunk, dict) else str(chunk)
+                            chunk_text = chunk.get('text', '')
                             if chunk_text and query_lower in chunk_text.lower():
                                 # Found a match, add the context
                                 matches.append(chunk_text)
@@ -9322,13 +8545,11 @@ class DocumentContentSearchView(APIView):
                                 'filename': doc.filename,
                                 'match_count': len(matches),
                                 'match_context': matches[0] if matches else "",
-                                'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M'),
-                                'source_type': 'chunks'
+                                'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M')
                             })
-                            
+                                
                 except ProcessedIndex.DoesNotExist:
                     # Skip documents that haven't been processed
-                    logger.info(f"No processed index found for document {doc.id}")
                     continue
                 except Exception as e:
                     logger.error(f"Error searching document {doc.id}: {str(e)}")
@@ -9337,27 +8558,20 @@ class DocumentContentSearchView(APIView):
             # Sort results by number of matches (most relevant first)
             search_results.sort(key=lambda x: x['match_count'], reverse=True)
             
-            # Update project timestamp
-            if main_project_id:
-                update_project_timestamp(main_project_id, user)
-            
             return Response({
                 'results': search_results,
-                'total_count': len(search_results),
-                'query': query
+                'total_count': len(search_results)
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error in document content search: {str(e)}", exc_info=True)
+            logger.error(f"Error in document content search: {str(e)}")
             return Response({
                 'error': f'An error occurred: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        
 
 class AdminUserProjectsView(APIView):
     permission_classes = [IsAuthenticated]
-    
-
     
     def get(self, request, user_id):
         """Get all projects for a specific user"""
@@ -9517,7 +8731,6 @@ class CheckUploadPermissionsView(APIView):
                 'error': f'Failed to check upload permissions: {str(e)}',
                 'can_upload': False  # Default to disallowing upload on error
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class ProcessCitationsView(APIView):
     """
@@ -9710,7 +8923,6 @@ class ProcessCitationsView(APIView):
 
 # codes for chat download
 
-
 class ChatExportView(APIView):
     permission_classes = [IsAuthenticated]
  
@@ -9736,26 +8948,26 @@ class ChatExportView(APIView):
             date_range = request.data.get('date_range')
             main_project_id = request.data.get('main_project_id')
             options = request.data.get('options', {})
-            
+           
             # Validate inputs
             if not chats and not (date_range and main_project_id):
                 return Response({
                     'error': 'Either chat data or date_range with main_project_id is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+           
             # Default options
             include_timestamps = options.get('includeTimestamps', True)
             include_metadata = options.get('includeChatMetadata', True)
             include_follow_ups = options.get('includeFollowUpQuestions', True)
             format_code = options.get('formatCode', True)
-            
+           
             # If we have date_range but no chats, fetch the chats from database
             if date_range and main_project_id and not chats:
                 try:
                     start_date = datetime.fromisoformat(date_range.get('startDate').replace('Z', '+00:00'))
                     end_date = datetime.fromisoformat(date_range.get('endDate').replace('Z', '+00:00'))
                     end_date = end_date + timedelta(days=1)  # Include the entire end day
-                    
+                   
                     # Fetch conversations from database
                     conversations = ChatHistory.objects.filter(
                         user=request.user,
@@ -9763,12 +8975,12 @@ class ChatExportView(APIView):
                         created_at__gte=start_date,
                         created_at__lt=end_date
                     ).order_by('-created_at')
-                    
+                   
                     if not conversations:
                         return Response({
                             'error': 'No conversations found in the specified date range'
                         }, status=status.HTTP_404_NOT_FOUND)
-                    
+                   
                     # Convert to the same format as frontend-processed chats
                     chats = [{
                         'conversation_id': conv.conversation_id,
@@ -9781,45 +8993,45 @@ class ChatExportView(APIView):
                         } for msg in conv.messages.all().order_by('created_at')],
                         'follow_up_questions': conv.follow_up_questions or []
                     } for conv in conversations]
-                    
+                   
                 except Exception as e:
                     return Response({
                         'error': f'Invalid date format: {str(e)}'
                     }, status=status.HTTP_400_BAD_REQUEST)
-            
+           
             # Create a DOCX file in memory
             doc = DocxDocument()
-            
+           
             # Set document styles
             styles = doc.styles
-            
+           
             # Heading styles
             heading1_style = styles['Heading 1']
             heading1_style.font.size = Pt(16)
             heading1_style.font.bold = True
             heading1_style.font.color.rgb = RGBColor(0, 0, 139)  # Dark blue
-            
+           
             heading2_style = styles['Heading 2']
             heading2_style.font.size = Pt(14)
             heading2_style.font.bold = True
             heading2_style.font.color.rgb = RGBColor(0, 0, 100)  # Slightly darker blue
-            
+           
             # Normal style
             normal_style = styles['Normal']
             normal_style.font.size = Pt(11)
             normal_style.font.name = 'Calibri'
-            
+           
             # List styles
             if 'List Bullet' in styles:
                 bullet_style = styles['List Bullet']
                 bullet_style.paragraph_format.left_indent = Inches(0.25)
                 bullet_style.paragraph_format.first_line_indent = Inches(-0.25)
-                
+               
             if 'List Number' in styles:
                 number_style = styles['List Number']
                 number_style.paragraph_format.left_indent = Inches(0.25)
                 number_style.paragraph_format.first_line_indent = Inches(-0.25)
-            
+           
             # Code style
             if 'Code' not in styles:
                 code_style = styles.add_style('Code', WD_STYLE_TYPE.PARAGRAPH)
@@ -9829,7 +9041,7 @@ class ChatExportView(APIView):
                 code_style.paragraph_format.space_after = Pt(6)
                 code_style.paragraph_format.left_indent = Inches(0.25)
                 code_style.font.color.rgb = RGBColor(50, 50, 50)
-            
+           
             # Set document margins
             sections = doc.sections
             for section in sections:
@@ -9837,8 +9049,8 @@ class ChatExportView(APIView):
                 section.right_margin = Inches(1.0)
                 section.top_margin = Inches(1.0)
                 section.bottom_margin = Inches(1.0)
-            
-            # Document title 
+           
+            # Document title
             if len(chats) == 1:
                 doc.add_heading(f"Chat Conversation: {chats[0]['title']}", level=0)
             else:
@@ -9846,35 +9058,35 @@ class ChatExportView(APIView):
                 start_date_str = date_range.get('startDate').split('T')[0] if date_range else chats[-1]['created_at'].split(' ')[0]
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d') + timedelta(days=1)
                 start_date_str = start_date.strftime('%Y-%m-%d')
-                
-                # Get the end date and add one day 
+               
+                # Get the end date and add one day
                 end_date_str = date_range.get('endDate').split('T')[0] if date_range else chats[0]['created_at'].split(' ')[0]
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1)
                 end_date_str = end_date.strftime('%Y-%m-%d')
-                
+               
                 doc.add_heading(f"Chat Conversations: {start_date_str} to {end_date_str}", level=0)
-            
+           
             # Process each conversation
             for i, chat in enumerate(chats):
                 # Add conversation title
                 section_heading = doc.add_heading(chat['title'], level=1)
-                
+               
                 # Add metadata if requested
                 if include_metadata:
                     metadata_para = doc.add_paragraph(style='Intense Quote')
                     metadata_para.add_run(f"Created: {chat['created_at']}")
-                
+               
                 # Process each message
                 for message in chat['messages']:
                     # Message role as heading
                     role_heading = "User Question:" if message['role'] == 'user' else "Assistant Answer:"
                     doc.add_heading(role_heading, level=2)
-                    
+                   
                     # Add timestamp if requested
                     if include_timestamps:
                         timestamp = doc.add_paragraph(style='Subtitle')
                         timestamp.add_run(f"{message['created_at']}")
-                    
+                   
                     content = message['content']
                     if message['role'] == 'assistant':
                         content = self.remove_citations_from_html(content)
@@ -9888,20 +9100,20 @@ class ChatExportView(APIView):
                     for question in chat['follow_up_questions']:
                         p = doc.add_paragraph(style='List Bullet')
                         p.add_run(question)
-                
+               
                 # Add page break between conversations if multiple
                 if i < len(chats) - 1:
                     doc.add_page_break()
-            
+           
             # Save document to a BytesIO object
             docx_file = BytesIO()
             doc.save(docx_file)
             docx_file.seek(0)
-
+ 
             # Update project timestamp if needed
             if main_project_id:
                 update_project_timestamp(main_project_id, request.user)
-            
+           
             # Create response with file
             if len(chats) == 1:
                 safe_title = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in chat['title'])
@@ -9911,25 +9123,25 @@ class ChatExportView(APIView):
                 start_date = date_range.get('startDate').split('T')[0] if date_range else chats[-1]['created_at'].split(' ')[0]
                 end_date = date_range.get('endDate').split('T')[0] if date_range else chats[0]['created_at'].split(' ')[0]
                 filename = f"Chats_{start_date.replace('-', '')}_to_{end_date.replace('-', '')}.docx"
-            
+           
             response = HttpResponse(
                 docx_file.getvalue(),
                 content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             )
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
-            
+           
             return response
-            
+           
         except Exception as e:
             logger.error(f"Error exporting chat: {str(e)}", exc_info=True)
             return Response({
                 'error': f'Failed to export chat: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+   
     def add_html_to_docx(self, doc, html_content, format_code=True):
         """Parse HTML content and add it to the document with proper formatting."""
         soup = BeautifulSoup(html_content, "html.parser")
-        
+       
         # Process each top-level element
         for elem in soup.children:
             if isinstance(elem, NavigableString) and elem.strip():
@@ -9937,75 +9149,75 @@ class ChatExportView(APIView):
                 doc.add_paragraph(elem.strip())
             elif elem.name:
                 self.process_element(doc, elem, format_code, list_level=0)
-    
+   
     def process_element(self, doc, element, format_code=True, list_level=0):
         """Process a single HTML element and add it to the document."""
         # Handle different element types
         if element.name == 'p':
             p = doc.add_paragraph()
             self.process_inline_elements(p, element)
-        
+       
         elif element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
             level = int(element.name[1])
             doc.add_heading(element.get_text(), level=min(level, 9))
-        
+       
         elif element.name == 'ul':
             for li in element.find_all('li', recursive=False):
                 p = doc.add_paragraph(style='List Bullet')
                 p.paragraph_format.left_indent = Inches(0.25 + (0.25 * list_level))
                 p.paragraph_format.first_line_indent = Inches(-0.25)
-                
+               
                 has_nested_list = False
                 nested_list = None
-                
+               
                 for child in li.children:
                     if child.name in ['ul', 'ol']:
                         has_nested_list = True
                         nested_list = child
                         break
-                
+               
                 if has_nested_list and nested_list:
                     nested_list.extract()
-                
+               
                 self.process_inline_elements(p, li)
-                
+               
                 if has_nested_list and nested_list:
                     self.process_element(doc, nested_list, format_code, list_level + 1)
-        
+       
         elif element.name == 'ol':
             for i, li in enumerate(element.find_all('li', recursive=False), 1):
                 p = doc.add_paragraph(style='List Number')
                 p.paragraph_format.left_indent = Inches(0.25 + (0.25 * list_level))
                 p.paragraph_format.first_line_indent = Inches(-0.25)
-                
+               
                 has_nested_list = False
                 nested_list = None
-                
+               
                 for child in li.children:
                     if child.name in ['ul', 'ol']:
                         has_nested_list = True
                         nested_list = child
                         break
-                
+               
                 if has_nested_list and nested_list:
                     nested_list.extract()
-                
+               
                 self.process_inline_elements(p, li)
-                
+               
                 if has_nested_list and nested_list:
                     self.process_element(doc, nested_list, format_code, list_level + 1)
-        
+       
         elif element.name == 'pre' and format_code:
             code_element = element.find('code')
             code_text = code_element.get_text() if code_element else element.get_text()
             doc.add_paragraph(code_text, style='Code')
-        
+       
         elif element.name == 'code' and element.parent.name != 'pre' and format_code:
             p = doc.add_paragraph()
             code_run = p.add_run(element.get_text())
             code_run.font.name = 'Consolas'
             code_run.font.size = Pt(10)
-            
+           
         elif element.name == 'table':
             rows = element.find_all('tr')
             if rows:
@@ -10013,7 +9225,7 @@ class ChatExportView(APIView):
                 if max_cols > 0:
                     table = doc.add_table(rows=len(rows), cols=max_cols)
                     table.style = 'Table Grid'
-                    
+                   
                     for i, row in enumerate(rows):
                         cells = row.find_all(['td', 'th'])
                         for j, cell in enumerate(cells):
@@ -10024,28 +9236,28 @@ class ChatExportView(APIView):
                                     run.bold = True
                                 else:
                                     self.process_inline_elements(cell_para, cell)
-        
+       
         elif element.name == 'blockquote':
             p = doc.add_paragraph(style='Quote')
             self.process_inline_elements(p, element)
-        
+       
         elif element.name == 'div':
             for child in element.children:
                 if isinstance(child, NavigableString) and child.strip():
                     doc.add_paragraph(child.strip())
                 elif child.name:
                     self.process_element(doc, child, format_code)
-        
+       
         else:
             text = element.get_text(strip=True)
             if text:
                 doc.add_paragraph(text)
-    
+   
     def process_inline_elements(self, paragraph, element):
         """Process inline elements like bold, italic, etc. within a paragraph."""
         if element is None:
             return
-            
+           
         for child in element.children:
             if isinstance(child, NavigableString):
                 if str(child).strip():
@@ -10072,116 +9284,4 @@ class ChatExportView(APIView):
             elif child.name not in ['ul', 'ol']:
                 self.process_inline_elements(paragraph, child)
 
-# Add this new view class to views.py
-
-class TranscriptView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, document_id=None):
-        """
-        Retrieve transcript from Azure Blob Storage
-        
-        Args:
-            document_id: ID of the document to get transcript for
-        """
-        try:
-            if document_id:
-                # Get specific document transcript
-                document = get_object_or_404(Document, id=document_id, user=request.user)
-                
-                # Check if this is a transcript document
-                if not ('transcript' in document.filename.lower() or 
-                       document.filename.endswith('_transcript.txt')):
-                    return Response({
-                        'error': 'This document is not a transcript'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Get transcript content from blob storage
-                from chat.utils import get_transcript_from_blob
-                transcript_content = get_transcript_from_blob(document.file)
-                
-                if transcript_content:
-                    return Response({
-                        'document_id': document_id,
-                        'filename': document.filename,
-                        'transcript': transcript_content,
-                        'uploaded_at': document.uploaded_at.strftime('%Y-%m-%d %H:%M:%S')
-                    }, status=status.HTTP_200_OK)
-                else:
-                    return Response({
-                        'error': 'Failed to retrieve transcript content'
-                    }, status=status.HTTP_404_NOT_FOUND)
-            
-            else:
-                # List all transcripts for the user
-                main_project_id = request.query_params.get('main_project_id')
-                
-                if not main_project_id:
-                    return Response({
-                        'error': 'Main project ID is required'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Get all transcript documents for this user and project
-                transcript_docs = Document.objects.filter(
-                    user=request.user,
-                    main_project_id=main_project_id,
-                    filename__icontains='transcript'
-                ).order_by('-uploaded_at')
-                
-                transcript_list = []
-                for doc in transcript_docs:
-                    # Determine if it's audio or video transcript
-                    is_video = 'video' in doc.filename.lower()
-                    
-                    transcript_list.append({
-                        'id': doc.id,
-                        'filename': doc.filename,
-                        'type': 'video' if is_video else 'audio',
-                        'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M:%S'),
-                        'blob_path': doc.file
-                    })
-                
-                return Response({
-                    'transcripts': transcript_list,
-                    'total_count': len(transcript_list)
-                }, status=status.HTTP_200_OK)
-                
-        except Exception as e:
-            logger.error(f"Error in TranscriptView: {str(e)}", exc_info=True)
-            return Response({
-                'error': f'Failed to retrieve transcript: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def delete(self, request, document_id):
-        """
-        Delete transcript from both database and blob storage
-        """
-        try:
-            document = get_object_or_404(Document, id=document_id, user=request.user)
-            
-            # Check if this is a transcript document
-            if not ('transcript' in document.filename.lower() or 
-                   document.filename.endswith('_transcript.txt')):
-                return Response({
-                    'error': 'This document is not a transcript'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Delete from blob storage
-            from chat.utils import delete_blob
-            blob_deleted = delete_blob(document.file, container_name='uploadfiles')
-            
-            if not blob_deleted:
-                logger.warning(f"Failed to delete transcript blob: {document.file}")
-            
-            # Delete from database (this will also delete related ProcessedIndex)
-            document.delete()
-            
-            return Response({
-                'message': 'Transcript deleted successfully'
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Error deleting transcript: {str(e)}", exc_info=True)
-            return Response({
-                'error': f'Failed to delete transcript: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+  

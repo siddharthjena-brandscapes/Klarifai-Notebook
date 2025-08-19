@@ -1,0 +1,31 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: ankane/pgvector
+    container_name: pgvector-db
+    environment:
+      POSTGRES_DB: klarifai-dockerdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    ports:
+      - "6432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
+
+
+

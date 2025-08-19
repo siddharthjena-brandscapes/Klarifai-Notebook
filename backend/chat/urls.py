@@ -81,9 +81,9 @@ urlpatterns = [
     path('documents/<int:document_id>/original/', OriginalDocumentView.as_view(), name='original_document'),
     path('user/profile/', UserProfileView.as_view(), name='user_profile'),
     path('check-upload-permissions/', CheckUploadPermissionsView.as_view(), name='check_upload_permissions'),
-    path('transcripts/', views.TranscriptView.as_view(), name='list_transcripts'),
-    path('transcripts/<int:document_id>/', views.TranscriptView.as_view(), name='get_transcript'),
-    path('transcripts/<int:document_id>/delete/', views.TranscriptView.as_view(), name='delete_transcript'),
+#     path('transcripts/', views.TranscriptView.as_view(), name='list_transcripts'),
+#     path('transcripts/<int:document_id>/', views.TranscriptView.as_view(), name='get_transcript'),
+#     path('transcripts/<int:document_id>/delete/', views.TranscriptView.as_view(), name='delete_transcript'),
     path('api/admin/user-stats/', AdminUserStatsView.as_view(), name='admin-user-stats'),
      # Microsoft SSO endpoints
     path('microsoft-sso/', MicrosoftSSOView.as_view(), name='microsoft_sso'),

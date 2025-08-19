@@ -2,7 +2,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
-import LoginSignup from '../pages/LoginSignup/LoginSignup';
+// import LoginSignup from '../pages/LoginSignup/LoginSignup';
 import Dashboard from '../pages/Dashboard/Dashboard';
 import LandingPage from '../components/LandingPage';
 import ForgotPasswordForm from '../components/auth/ForgotPasswordForm';
@@ -14,6 +14,7 @@ import MainDashboard from '../components/klarifai_notebook/MainDashboard';
 import SSOCallback from '../components/auth/SSOCallback';
 import SignupForm from '../components/auth/SignupForm';
 import WelcomeScreen from '../components/WelcomeScreen';
+import AdminLoginForm from '../components/auth/AdminLoginForm';
  
 const AppRoutes = () => {
   return (
@@ -21,11 +22,12 @@ const AppRoutes = () => {
       <Routes>
         {/* Auth Routes */}
         <Route path="/welcome" element={<WelcomeScreen />} />
-        <Route path="/auth" element={<LoginSignup />} />
+        {/* <Route path="/auth" element={<LoginSignup />} /> */}
         <Route path="/forgot-password" element={<ForgotPasswordForm />} />
         <Route path="/reset-password" element={<ResetPasswordForm />} />
         <Route path="/sso-callback" element={<SSOCallback />} />
         <Route path="/auth/signup" element={<SignupForm />} />
+        <Route path="/auth/login" element={<AdminLoginForm />} />
  
        
         {/* Main Landing Page */}

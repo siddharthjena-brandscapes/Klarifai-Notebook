@@ -28,6 +28,9 @@ from .views import ( DocumentUploadView,
     DocumentProcessingStatusView,
     DeleteMessagePairView,
     generate_question_from_topic,
+    ArchiveConversationView,
+    GenerateTitleView
+    
     
 )
 
@@ -79,4 +82,7 @@ urlpatterns = [
     path('delete-message-pair-NB/', DeleteMessagePairView.as_view(), name='delete_message_pair'),
     path('api/generate-question-from-topic/', generate_question_from_topic, name='generate_question_from_topic'),
     path('chat-image/', GPTImageChatView.as_view(), name='gpt_image_chat'),
+    path('conversations-NB/<uuid:conversation_id>/archive/', ArchiveConversationView.as_view()),
+    # Add to urls.py
+ path('generate-title-NB/', GenerateTitleView.as_view(), name='generate-title'),
 ]

@@ -252,7 +252,7 @@ const NoteViewerModal = ({
                 {note.content ? note.content.replace(/<[^>]*>/g, '').length : 0} characters • {getWordCount(note.content)} words
               </span>
               <span>
-                Press Esc to close • Edit to modify
+                Press Esc to close
               </span>
             </div>
           </div>

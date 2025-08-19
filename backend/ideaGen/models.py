@@ -81,11 +81,6 @@ class Idea(models.Model):
     class Meta:
         app_label = 'ideaGen'
 
-# Update to models.py - Adding blob_url and blob_path fields to GeneratedImage2 model
-
-# Update to models.py - Make sure GeneratedImage2 model has blob_url and blob_path fields
-
-# Model update in models.py
 class GeneratedImage2(models.Model):
     idea = models.ForeignKey(Idea, related_name='images', on_delete=models.CASCADE, null=True)
     prompt = models.TextField()
@@ -95,10 +90,6 @@ class GeneratedImage2(models.Model):
         null=True, 
         blank=True
     )
-    # New field to store Azure Blob Storage URL
-    azure_blob_url = models.URLField(max_length=500, null=True, blank=True)
-    # New field to store Azure Blob Storage path
-    azure_blob_path = models.CharField(max_length=500, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     parameters = models.JSONField(null=True, blank=True)
     generation_status = models.CharField(
@@ -114,7 +105,7 @@ class GeneratedImage2(models.Model):
     retry_count = models.IntegerField(default=0)
     original_parameters = models.JSONField(null=True, blank=True)
     final_parameters = models.JSONField(null=True, blank=True)
-    
+
     class Meta:
         ordering = ['-created_at']
         app_label = 'ideaGen'
@@ -124,13 +115,7 @@ class GeneratedImage2(models.Model):
     
     def delete(self, *args, **kwargs):
         # Delete the file when the model is deleted
-        from ideaGen.utils import delete_image_from_azure
-        
-        if self.azure_blob_path:
-            # Delete from Azure Blob Storage
-            delete_image_from_azure(self.azure_blob_path)
-        elif self.image:
-            # Delete from local storage if no Azure blob path
+        if self.image:
             storage, path = self.image.storage, self.image.path
             super().delete(*args, **kwargs)
             storage.delete(path)

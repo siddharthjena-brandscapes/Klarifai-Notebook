@@ -74,22 +74,33 @@ const Header = () => {
   const isKlarifaiNotebook = location.pathname.includes("/klarifai-notebook");
   const isTokenLimitHit =
     userDetails.token_limit &&
-    userDetails.total_tokens_used >= userDetails.token_limit;
+    Math.round(
+      (userDetails.total_tokens_used / userDetails.token_limit) * 100
+    ) >= 100;
 
   const isTokenLimitNearing =
     userDetails.token_limit &&
-    userDetails.total_tokens_used >= 0.8 * userDetails.token_limit && // 80% threshold
-    userDetails.total_tokens_used < userDetails.token_limit;
+    Math.round(
+      (userDetails.total_tokens_used / userDetails.token_limit) * 100
+    ) >= 80 &&
+    Math.round(
+      (userDetails.total_tokens_used / userDetails.token_limit) * 100
+    ) < 100;
 
   const isPageLimitHit =
     userDetails.page_limit &&
-    userDetails.total_pages_processed >= userDetails.page_limit;
+    Math.round(
+      (userDetails.total_pages_processed / userDetails.page_limit) * 100
+    ) >= 100;
 
   const isPageLimitNearing =
     userDetails.page_limit &&
-    userDetails.total_pages_processed >= 0.8 * userDetails.page_limit &&
-    userDetails.total_pages_processed < userDetails.page_limit;
-
+    Math.round(
+      (userDetails.total_pages_processed / userDetails.page_limit) * 100
+    ) >= 80 &&
+    Math.round(
+      (userDetails.total_pages_processed / userDetails.page_limit) * 100
+    ) < 100;
   const [showLimitWarning, setShowLimitWarning] = useState(true);
 
   // Reset warning if limits change (optional: so it shows again if user refreshes or new session)
@@ -706,64 +717,65 @@ const Header = () => {
                 <AlertTriangle className="w-3 h-3" />
               )}
             </div>
-
             {/* Content */}
             <div className="flex-1 min-w-0">
               <span
                 className={`
-        font-medium
-        ${
-          isTokenLimitHit || isPageLimitHit
-            ? "text-red-800 dark:text-red-400"
-            : "text-amber-800 dark:text-yellow-400"
-        }
-      `}
+      font-medium
+      ${
+        isTokenLimitHit || isPageLimitHit
+          ? "text-red-800 dark:text-red-400"
+          : "text-amber-800 dark:text-yellow-400"
+      }
+    `}
               >
-                {isTokenLimitHit && "Token Limit Reached!"}
-                {isTokenLimitNearing &&
-                  !isTokenLimitHit &&
+                {isTokenLimitHit && "Token Limit Hit!"}
+                {!isTokenLimitHit &&
+                  isTokenLimitNearing &&
+                  Math.round(
+                    (userDetails.total_tokens_used / userDetails.token_limit) *
+                      100
+                  ) < 100 &&
                   "Token Limit Warning!"}
-                {isPageLimitHit &&
-                  !isTokenLimitHit &&
-                  !isTokenLimitNearing &&
-                  "Page Limit Reached!"}
+                {isPageLimitHit && !isTokenLimitHit && "Page Limit Hit!"}
                 {isPageLimitNearing &&
-                  !isTokenLimitHit &&
-                  !isTokenLimitNearing &&
                   !isPageLimitHit &&
+                  !isTokenLimitHit &&
                   "Page Limit Warning!"}
               </span>
               <span
                 className={`
-        ml-2 text-sm
-        ${
-          isTokenLimitHit || isPageLimitHit
-            ? "text-red-600 dark:text-red-300"
-            : "text-amber-600 dark:text-yellow-300"
-        }
-      `}
+      ml-2 text-sm
+      ${
+        isTokenLimitHit || isPageLimitHit
+          ? "text-red-600 dark:text-red-300"
+          : "text-amber-600 dark:text-yellow-300"
+      }
+    `}
               >
                 {isTokenLimitHit &&
-                  "You may not receive responses until reset."}
-                {isTokenLimitNearing &&
-                  !isTokenLimitHit &&
+                  "You've used 100% of your token quota. Please contact contact@klarifai.ai to request a reset."}
+                {!isTokenLimitHit &&
+                  isTokenLimitNearing &&
+                  Math.round(
+                    (userDetails.total_tokens_used / userDetails.token_limit) *
+                      100
+                  ) < 100 &&
                   `${Math.round(
                     (userDetails.total_tokens_used / userDetails.token_limit) *
                       100
-                  )}% used. Some responses may be limited soon.`}
+                  )}% You're nearing the limit. Responses may be restricted soon. Contact contact@klarifai.ai for help.`}
                 {isPageLimitHit &&
                   !isTokenLimitHit &&
-                  !isTokenLimitNearing &&
-                  "You may not be able to process documents until reset."}
+                  "You've used 100% of your page quota. Please contact contact@klarifai.ai to request a reset."}
                 {isPageLimitNearing &&
-                  !isTokenLimitHit &&
-                  !isTokenLimitNearing &&
                   !isPageLimitHit &&
+                  !isTokenLimitHit &&
                   `${Math.round(
                     (userDetails.total_pages_processed /
                       userDetails.page_limit) *
                       100
-                  )}% used. Some documents may not be processed soon.`}
+                  )}% You're close to the limit. You may not be able to process some documents. Contact contact@klarifai.ai for help.`}
               </span>
             </div>
 

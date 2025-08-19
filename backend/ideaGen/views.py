@@ -1,8 +1,4 @@
-
-
-
-
-
+# views.py
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse,HttpResponse, StreamingHttpResponse
 
@@ -30,7 +26,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from chat.models import UserAPITokens
-from ideaGen.utils import update_project_timestamp
+from core.utils import update_project_timestamp
 
 
 # HF_API_TOKEN = "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"
@@ -338,7 +334,6 @@ def generate_ideas_stream(request):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def generate_ideas(request):
-     
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
@@ -366,7 +361,7 @@ def generate_ideas(request):
             brand = data.get('brand')
             category = data.get('category')
             number_of_ideas = int(data.get('number_of_ideas', 1))
-            description_length = int(data.get('description_length', 70))  # New field with default value of 70
+            description_length = int(data.get('description_length', 70))
             dynamic_fields = data.get('dynamicFields', {})
             negative_prompt = data.get('negative_prompt', '')
 
@@ -381,7 +376,7 @@ def generate_ideas(request):
                 brand=brand,
                 category=category,
                 number_of_ideas=number_of_ideas,
-                description_length=description_length,  # New field
+                description_length=description_length,
                 dynamic_fields=dynamic_fields,
                 negative_prompt=negative_prompt
             )
@@ -569,8 +564,6 @@ def generate_ideas(request):
             }
 
             print("Sending response:", json.dumps(response_data, indent=2))
-            
-            
             return JsonResponse(response_data)
             
         except Exception as e:
@@ -579,7 +572,6 @@ def generate_ideas(request):
                 "success": False,
                 "error": str(e)
             }, status=500)
-
 
 
 @api_view(['POST', 'GET', 'DELETE', 'PUT'])
@@ -975,7 +967,7 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
     """
     Enhanced image generation with sophisticated retry and fallback mechanism
     Modified to work with Nebius API
-   
+    
     Args:
         client: OpenAI client configured for Nebius
         prompt (str): Fully enhanced image generation prompt from enhance_prompt
@@ -999,22 +991,22 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
     
     last_error = None
     current_config_index = 0
-   
+    
     while current_config_index < len(fallback_configs):
         config = fallback_configs[current_config_index]
         current_size = config["size"]
         current_steps = config["steps"]
-       
+        
         for attempt in range(max_retries):
             try:
                 # Validate and clean the prompt
                 cleaned_prompt = re.sub(r'\s+', ' ', prompt).strip()
-               
+                
                 # Truncate extremely long prompts
                 max_prompt_length = 1000
                 if len(cleaned_prompt) > max_prompt_length:
                     cleaned_prompt = cleaned_prompt[:max_prompt_length] + "..."
-               
+                
                 # Image generation attempt using Nebius API
                 response = client.images.generate(
                     model="black-forest-labs/flux-schnell",
@@ -1029,22 +1021,22 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
                     },
                     prompt=cleaned_prompt
                 )
-               
+                
                 # Extract base64 image data and convert to PIL Image
                 image_data = response.data[0].b64_json
                 image_bytes = base64.b64decode(image_data)
                 image = Image.open(io.BytesIO(image_bytes))
-               
+                
                 # Log successful generation parameters
                 print(f"Successfully generated image with size={current_size}, steps={current_steps} on attempt {attempt + 1}")
-               
+                
                 return image, None
                 
             except Exception as e:
                 last_error = str(e)
-               
+                
                 # Calculate exponential backoff with jitter
-                delay = initial_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                delay = initial_delay * (2 ** attempt) + random.uniform(0, 1)
                 
                 # If not the last retry of current config, wait and try again
                 if attempt < max_retries - 1:
@@ -1055,12 +1047,12 @@ def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50
                 # If all retries failed with current config, try next fallback
                 print(f"Failed with size={current_size}, steps={current_steps}. Trying next fallback configuration...")
                 break
-       
+        
         current_config_index += 1
-   
+    
     return None, f"Image generation failed after all fallback attempts. Last error: {last_error}"
 
-
+# In views.py - Update generate_product_image function to use Nebius client
 
 @api_view(['POST', 'GET', 'DELETE'])
 @authentication_classes([TokenAuthentication])
@@ -1079,31 +1071,31 @@ def generate_product_image(request):
                     "success": False,
                     "error": "Invalid idea ID"
                 }, status=404)
-           
+            
             # Ensure visualization prompt exists
             if not idea.visualization_prompt:
                 return JsonResponse({
                     "success": False,
                     "error": "No visualization prompt found for this idea"
                 }, status=400)
- 
+
             print("Using stored visualization prompt for image generation:", idea.visualization_prompt)
             
             # Get generation parameters
             initial_size = min(max(data.get('size', 1024), 512), 1024)  # Default to 1024 for Nebius
             initial_steps = min(max(data.get('steps', 4), 2), 10)       # Default to 4 for Flux Schnell
             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
- 
+
             # Get user's Nebius API token
             user_tokens = UserAPITokens.objects.get(user=request.user)
             NEBIUS_API_KEY = user_tokens.nebius_token  # Assuming you add this field to UserAPITokens
-           
+            
             # Create Nebius client
             nebius_client = OpenAI(
                 base_url="https://api.studio.nebius.com/v1/",
                 api_key=NEBIUS_API_KEY
             )
-           
+            
             # Generate image using stored visualization_prompt
             try:
                 image, error = generate_image_with_retry(
@@ -1130,17 +1122,16 @@ def generate_product_image(request):
                 image.save(img_buffer, format="PNG")
                 img_buffer.seek(0)
                 
-                # Generate unique filename
-                import uuid
-                filename = f"{uuid.uuid4()}.png"
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.join(settings.MEDIA_ROOT, 'generated_images'), exist_ok=True)
                 
-                # CRITICAL FIX: Ensure correct blob path with media/ prefix
-                blob_path = f"media/generated_images/{filename}"
+                # Generate unique filename
+                filename = f"product_image_{idea_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 
                 # Create GeneratedImage2 instance
                 generated_image = GeneratedImage2.objects.create(
                     idea=idea,
-                    prompt=idea.visualization_prompt,
+                    prompt=idea.visualization_prompt,  # Store the visualization prompt
                     generation_status='pending',
                     parameters=json.dumps({
                         'size': initial_size,
@@ -1149,70 +1140,15 @@ def generate_product_image(request):
                     })
                 )
                 
-                # DIRECT AZURE UPLOAD (bypassing potentially broken utils)
-                try:
-                    from azure.storage.blob import BlobServiceClient
-                    from django.conf import settings
-                    
-                    # Get Azure credentials
-                    account_name = settings.AZURE_STORAGE_ACCOUNT_NAME
-                    account_key = settings.AZURE_STORAGE_ACCOUNT_KEY
-                    container_name = settings.AZURE_STORAGE_CONTAINER_NAME
-                    
-                    if not all([account_name, account_key, container_name]):
-                        raise Exception("Missing Azure Storage credentials")
-                    
-                    # Create blob service client
-                    blob_service_client = BlobServiceClient(
-                        account_url=f"https://{account_name}.blob.core.windows.net",
-                        credential=account_key
-                    )
-                    
-                    # Upload directly with correct path
-                    blob_client = blob_service_client.get_blob_client(
-                        container=container_name,
-                        blob=blob_path  # This will be: media/generated_images/uuid.png
-                    )
-                    
-                    # Upload the image
-                    blob_client.upload_blob(
-                        img_buffer.getvalue(),
-                        content_type='image/png',
-                        overwrite=True
-                    )
-                    
-                    # Construct the correct URL
-                    azure_url = f"https://{account_name}.blob.core.windows.net/{container_name}/{blob_path}"
-                    
-                    print(f"✅ Successfully uploaded to Azure:")
-                    print(f"   Blob path: {blob_path}")
-                    print(f"   Full URL: {azure_url}")
-                    
-                    # Save to database with correct URLs
-                    generated_image.azure_blob_url = azure_url
-                    generated_image.azure_blob_path = blob_path
-                    generated_image.generation_status = 'success'
-                    generated_image.save()
-                    
-                    # Test the URL immediately
-                    try:
-                        import requests
-                        test_response = requests.head(azure_url, timeout=10)
-                        if test_response.status_code == 200:
-                            print(f"✅ URL is accessible: {azure_url}")
-                        else:
-                            print(f"⚠️ URL returns status {test_response.status_code}: {azure_url}")
-                    except Exception as url_test_error:
-                        print(f"⚠️ Could not test URL: {url_test_error}")
-                    
-                except Exception as azure_error:
-                    print(f"❌ Azure upload failed: {str(azure_error)}")
-                    # Fallback to local storage
-                    os.makedirs(os.path.join(settings.MEDIA_ROOT, 'generated_images'), exist_ok=True)
-                    generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
-                    generated_image.generation_status = 'success'
-                    generated_image.save()
-                    azure_url = None
+                # Save image file
+                generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
+                generated_image.generation_status = 'success'
+                generated_image.save()
+
+                # Get project_id for updating timestamp
+                project_id = idea.product_idea.project_id
+                
+                update_project_timestamp(project_id, request.user)
                 
                 # Convert to base64 for response
                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
@@ -1222,25 +1158,16 @@ def generate_product_image(request):
                     "image": img_str,
                     "idea_id": idea_id,
                     "generated_image_id": generated_image.id,
-                    "prompt_used": idea.visualization_prompt,
+                    "prompt_used": idea.visualization_prompt,  # Include the prompt used
                     "parameters": {
                         'size': initial_size,
                         'steps': initial_steps,
                         'guidance_scale': guidance_scale
-                    },
-                    "image_url": azure_url or (generated_image.image.url if generated_image.image else None),
-                    "debug_info": {
-                        "blob_path": blob_path,
-                        "azure_url": azure_url,
-                        "filename": filename
                     }
                 })
                 
             except Exception as e:
                 print(f"Error saving generated image: {str(e)}")
-                import traceback
-                print(f"Full traceback: {traceback.format_exc()}")
-                
                 if 'generated_image' in locals():
                     generated_image.generation_status = 'failed'
                     generated_image.save()
@@ -1256,22 +1183,18 @@ def generate_product_image(request):
                 "error": str(e)
             }, status=500)
 
-
-# Update your regenerate_product_image function in views.py
+# In views.py - Update regenerate_product_image function
 
 @api_view(['POST', 'GET', 'DELETE'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def regenerate_product_image(request):
-    """
-    Enhanced image regeneration endpoint with proper Azure path handling.
-    """
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             idea_id = data.get('idea_id')
             custom_prompt = data.get('description')  # Get custom prompt if provided
-           
+            
             try:
                 idea = get_object_or_404(Idea, id=idea_id)
             except Idea.DoesNotExist:
@@ -1288,25 +1211,25 @@ def regenerate_product_image(request):
                     "success": False,
                     "error": "No visualization prompt found for this idea"
                 }, status=400)
- 
+
             print("Using prompt for regeneration:", prompt_to_use)
-           
+            
             # Get generation parameters
             size = min(max(data.get('size', 1024), 512), 1024)  # Default to 1024 for Nebius
             steps = min(max(data.get('steps', 4), 2), 10)       # Default to 4 for Flux Schnell
             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
             negative_prompt = data.get('negative_prompt', '')
- 
+
             # Get user's Nebius API token
             user_tokens = UserAPITokens.objects.get(user=request.user)
             NEBIUS_API_KEY = user_tokens.nebius_token  # Assuming you add this field to UserAPITokens
-           
+            
             # Create Nebius client
             nebius_client = OpenAI(
                 base_url="https://api.studio.nebius.com/v1/",
                 api_key=NEBIUS_API_KEY
             )
-           
+            
             # Generate image using the selected prompt
             try:
                 image, error = generate_image_with_retry(
@@ -1319,7 +1242,7 @@ def regenerate_product_image(request):
                 
                 if error or not image:
                     raise Exception(error or "Failed to generate image")
-               
+                
             except Exception as e:
                 print(f"Image regeneration error: {str(e)}")
                 return JsonResponse({
@@ -1333,15 +1256,12 @@ def regenerate_product_image(request):
                 image.save(img_buffer, format="PNG")
                 img_buffer.seek(0)
                 
-                # Generate unique filename
-                import uuid
-                filename = f"{uuid.uuid4()}.png"
-                blob_path = f"media/generated_images/{filename}"
+                filename = f"product_image_regen_{idea_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 
                 # Create GeneratedImage2 instance
                 generated_image = GeneratedImage2.objects.create(
                     idea=idea,
-                    prompt=prompt_to_use,
+                    prompt=prompt_to_use,  # Store the actual prompt used
                     generation_status='pending',
                     parameters=json.dumps({
                         'size': size,
@@ -1353,73 +1273,16 @@ def regenerate_product_image(request):
                     })
                 )
                 
-                print(f"Created GeneratedImage2 instance with ID: {generated_image.id}")
+                generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
+                generated_image.generation_status = 'success'
+                generated_image.save()
+
+                # Get project_id for updating timestamp
+                project_id = idea.product_idea.project_id
                 
-                # DIRECT AZURE UPLOAD with correct path
-                try:
-                    from azure.storage.blob import BlobServiceClient
-                    from django.conf import settings
-                    
-                    # Get Azure credentials
-                    account_name = settings.AZURE_STORAGE_ACCOUNT_NAME
-                    account_key = settings.AZURE_STORAGE_ACCOUNT_KEY
-                    container_name = settings.AZURE_STORAGE_CONTAINER_NAME
-                    
-                    if not all([account_name, account_key, container_name]):
-                        raise Exception("Missing Azure Storage credentials")
-                    
-                    print("Uploading to Azure Blob Storage")
-                    
-                    # Create blob service client
-                    blob_service_client = BlobServiceClient(
-                        account_url=f"https://{account_name}.blob.core.windows.net",
-                        credential=account_key
-                    )
-                    
-                    # Upload with correct path
-                    blob_client = blob_service_client.get_blob_client(
-                        container=container_name,
-                        blob=blob_path  # media/generated_images/filename.png
-                    )
-                    
-                    blob_client.upload_blob(
-                        img_buffer.getvalue(),
-                        content_type='image/png',
-                        overwrite=True
-                    )
-                    
-                    # Construct the correct URL
-                    azure_url = f"https://{account_name}.blob.core.windows.net/{container_name}/{blob_path}"
-                    
-                    print(f"✅ Successfully uploaded to Azure:")
-                    print(f"   Blob path: {blob_path}")
-                    print(f"   Full URL: {azure_url}")
-                    
-                    # Save to database
-                    generated_image.azure_blob_url = azure_url
-                    generated_image.azure_blob_path = blob_path
-                    generated_image.generation_status = 'success'
-                    generated_image.save()
-                    
-                except Exception as azure_error:
-                    print(f"Azure upload error: {str(azure_error)}")
-                    
-                    # Fallback to local storage
-                    try:
-                        print("Saving to local storage as fallback")
-                        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'generated_images'), exist_ok=True)
-                        generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
-                        generated_image.generation_status = 'success'
-                        generated_image.save()
-                        azure_url = None
-                        print(f"Successfully saved to local storage: {generated_image.image.path}")
-                    except Exception as local_error:
-                        print(f"Error saving to local storage: {str(local_error)}")
-                        azure_url = None
+                update_project_timestamp(project_id, request.user)
                 
-                # Convert to base64 for response
                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
-                print("Successfully encoded image as base64")
                 
                 return JsonResponse({
                     "success": True,
@@ -1434,22 +1297,14 @@ def regenerate_product_image(request):
                         'negative_prompt': negative_prompt,
                         'is_regenerated': True,
                         'used_custom_prompt': bool(custom_prompt)
-                    },
-                    "image_url": azure_url or (generated_image.image.url if hasattr(generated_image, 'image') and generated_image.image else None),
-                    "debug_info": {
-                        "blob_path": blob_path,
-                        "azure_url": azure_url,
-                        "filename": filename
                     }
                 })
                 
             except Exception as e:
                 print(f"Error saving regenerated image: {str(e)}")
-                if 'generated_image' in locals() and generated_image:
+                if 'generated_image' in locals():
                     generated_image.generation_status = 'failed'
                     generated_image.save()
-                    
-                        
                 return JsonResponse({
                     "success": False,
                     "error": f"Failed to save regenerated image: {str(e)}"
@@ -1463,46 +1318,368 @@ def regenerate_product_image(request):
             }, status=500)
         
 
+
+#####################################################################################################################
+
+# Old code for image generation using huggingface
+
+
+# def generate_image_with_retry(client, prompt, initial_size=768, initial_steps=50, guidance_scale=7.5, max_retries=3, initial_delay=1):
+#     """
+#     Enhanced image generation with sophisticated retry and fallback mechanism
+    
+#     Args:
+#         client: HuggingFace inference client
+#         prompt (str): Fully enhanced image generation prompt from enhance_prompt
+#         initial_size (int): Initial image size (default: 768)
+#         initial_steps (int): Initial inference steps (default: 50)
+#         guidance_scale (float): Guidance scale for generation (default: 7.5)
+#         max_retries (int): Maximum number of retry attempts (default: 3)
+#         initial_delay (int): Initial delay between retries in seconds (default: 1)
+    
+#     Returns:
+#         tuple: (PIL.Image or None, error message or None)
+#     """
+#     # Fallback configurations ordered by priority
+#     fallback_configs = [
+#         {"size": 768, "steps": 50},    # First attempt - highest quality
+#         {"size": 768, "steps": 40},    # First fallback - reduce steps
+#         {"size": 768, "steps": 45},    # Second fallback - reduce size
+#         {"size": 768, "steps": 40},    # Third fallback - reduce both
+#         {"size": 512, "steps": 30}     # Last resort - minimum viable config
+#     ]
+    
+#     last_error = None
+#     current_config_index = 0
+    
+#     while current_config_index < len(fallback_configs):
+#         config = fallback_configs[current_config_index]
+#         current_size = config["size"]
+#         current_steps = config["steps"]
+        
+#         # Prepare parameters for image generation
+#         parameters = {
+#             "width": current_size,
+#             "height": current_size,
+#             "num_inference_steps": current_steps,
+#             "guidance_scale": guidance_scale
+#         }
+        
+#         for attempt in range(max_retries):
+#             try:
+#                 # Validate and clean the prompt
+#                 cleaned_prompt = re.sub(r'\s+', ' ', prompt).strip()
+                
+#                 # Truncate extremely long prompts
+#                 max_prompt_length = 1000
+#                 if len(cleaned_prompt) > max_prompt_length:
+#                     cleaned_prompt = cleaned_prompt[:max_prompt_length] + "..."
+                
+#                 # Image generation attempt
+#                 response = client.post(
+#                     json={"inputs": cleaned_prompt, "parameters": parameters}
+#                 )
+                
+#                 image = Image.open(io.BytesIO(response))
+                
+#                 # Log successful generation parameters
+#                 print(f"Successfully generated image with size={current_size}, steps={current_steps} on attempt {attempt + 1}")
+                
+#                 return image, None
+                
+#             except Exception as e:
+#                 last_error = str(e)
+                
+#                 # Calculate exponential backoff with jitter
+#                 delay = initial_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                
+#                 # If not the last retry of current config, wait and try again
+#                 if attempt < max_retries - 1:
+#                     time.sleep(delay)
+#                     print(f"Retrying with same parameters after {delay:.2f}s delay...")
+#                     continue
+                
+#                 # If all retries failed with current config, try next fallback
+#                 print(f"Failed with size={current_size}, steps={current_steps}. Trying next fallback configuration...")
+#                 break
+        
+#         current_config_index += 1
+    
+#     return None, f"Image generation failed after all fallback attempts. Last error: {last_error}"
+
+# # In views.py - Update generate_product_image function to use stored visualization_prompt
+
+# @api_view(['POST', 'GET', 'DELETE'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
+# def generate_product_image(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             idea_id = data.get('idea_id')
+            
+#             # Get the idea instance
+#             try:
+#                 idea = get_object_or_404(Idea, id=idea_id)
+#             except Idea.DoesNotExist:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "Invalid idea ID"
+#                 }, status=404)
+            
+#             # Ensure visualization prompt exists
+#             if not idea.visualization_prompt:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "No visualization prompt found for this idea"
+#                 }, status=400)
+
+#             print("Using stored visualization prompt for image generation:", idea.visualization_prompt)
+            
+#             # Get generation parameters
+#             initial_size = min(max(data.get('size', 768), 512), 1024)
+#             initial_steps = min(max(data.get('steps', 50), 20), 100)
+#             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
+
+
+#             user_tokens = UserAPITokens.objects.get(user=request.user)
+
+#             HF_API_TOKEN = user_tokens.huggingface_token
+            
+#             hf_client = InferenceClient(
+#                 model="black-forest-labs/FLUX.1-schnell",
+#                 token=HF_API_TOKEN
+#             )
+            
+#             # Generate image using stored visualization_prompt
+#             try:
+#                 image, error = generate_image_with_retry(
+#                     hf_client,
+#                     idea.visualization_prompt,  # Use stored prompt directly
+#                     initial_size=initial_size,
+#                     initial_steps=initial_steps,
+#                     guidance_scale=guidance_scale
+#                 )
+                
+#                 if error or not image:
+#                     raise Exception(error or "Failed to generate image")
+                
+#             except Exception as e:
+#                 print(f"Image generation error: {str(e)}")
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Image generation failed: {str(e)}"
+#                 }, status=500)
+            
+#             # Process and save the generated image
+#             try:
+#                 img_buffer = io.BytesIO()
+#                 image.save(img_buffer, format="PNG")
+#                 img_buffer.seek(0)
+                
+#                 # Create directory if it doesn't exist
+#                 os.makedirs(os.path.join(settings.MEDIA_ROOT, 'generated_images'), exist_ok=True)
+                
+#                 # Generate unique filename
+#                 filename = f"product_image_{idea_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                
+#                 # Create GeneratedImage2 instance
+#                 generated_image = GeneratedImage2.objects.create(
+#                     idea=idea,
+#                     prompt=idea.visualization_prompt,  # Store the visualization prompt
+#                     generation_status='pending',
+#                     parameters=json.dumps({
+#                         'size': initial_size,
+#                         'steps': initial_steps,
+#                         'guidance_scale': guidance_scale
+#                     })
+#                 )
+                
+#                 # Save image file
+#                 generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
+#                 generated_image.generation_status = 'success'
+#                 generated_image.save()
+
+#                 # Get project_id for updating timestamp
+#                 project_id = idea.product_idea.project_id
+                
+                
+#                 update_project_timestamp(project_id, request.user)
+                
+#                 # Convert to base64 for response
+#                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
+                
+#                 return JsonResponse({
+#                     "success": True,
+#                     "image": img_str,
+#                     "idea_id": idea_id,
+#                     "generated_image_id": generated_image.id,
+#                     "prompt_used": idea.visualization_prompt,  # Include the prompt used
+#                     "parameters": {
+#                         'size': initial_size,
+#                         'steps': initial_steps,
+#                         'guidance_scale': guidance_scale
+#                     }
+#                 })
+                
+#             except Exception as e:
+#                 print(f"Error saving generated image: {str(e)}")
+#                 if 'generated_image' in locals():
+#                     generated_image.generation_status = 'failed'
+#                     generated_image.save()
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Failed to save generated image: {str(e)}"
+#                 }, status=500)
+            
+#         except Exception as e:
+#             print(f"Unexpected error in generate_product_image: {str(e)}")
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": str(e)
+#             }, status=500)
+
+# # In views.py
+
+# @api_view(['POST', 'GET', 'DELETE'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
+# def regenerate_product_image(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             idea_id = data.get('idea_id')
+#             custom_prompt = data.get('description')  # Get custom prompt if provided
+            
+#             try:
+#                 idea = get_object_or_404(Idea, id=idea_id)
+#             except Idea.DoesNotExist:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "Invalid idea ID"
+#                 }, status=404)
+            
+#             # Use custom prompt if provided, otherwise fallback to stored prompt
+#             prompt_to_use = custom_prompt if custom_prompt else idea.visualization_prompt
+            
+#             if not prompt_to_use:
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": "No visualization prompt found for this idea"
+#                 }, status=400)
+
+#             print("Using prompt for regeneration:", prompt_to_use)
+            
+#             # Get generation parameters
+#             size = min(max(data.get('size', 768), 512), 1024)
+#             steps = min(max(data.get('steps', 30), 20), 100)
+#             guidance_scale = min(max(data.get('guidance_scale', 7.5), 1.0), 20.0)
+#             negative_prompt = data.get('negative_prompt', '')
+
+
+#             user_tokens = UserAPITokens.objects.get(user=request.user)
+
+#             HF_API_TOKEN = user_tokens.huggingface_token
+            
+#             hf_client = InferenceClient(
+#                 model="black-forest-labs/FLUX.1-schnell",
+#                 token=HF_API_TOKEN
+#             )
+            
+#             # Generate image using the selected prompt
+#             try:
+#                 image, error = generate_image_with_retry(
+#                     hf_client,
+#                     prompt_to_use,  # Use either custom or stored prompt
+#                     initial_size=size,
+#                     initial_steps=steps,
+#                     guidance_scale=guidance_scale
+#                 )
+                
+#                 if error or not image:
+#                     raise Exception(error or "Failed to generate image")
+                
+#             except Exception as e:
+#                 print(f"Image regeneration error: {str(e)}")
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Image regeneration failed: {str(e)}"
+#                 }, status=500)
+            
+#             # Process and save the generated image
+#             try:
+#                 img_buffer = io.BytesIO()
+#                 image.save(img_buffer, format="PNG")
+#                 img_buffer.seek(0)
+                
+#                 filename = f"product_image_regen_{idea_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                
+#                 # Create GeneratedImage2 instance
+#                 generated_image = GeneratedImage2.objects.create(
+#                     idea=idea,
+#                     prompt=prompt_to_use,  # Store the actual prompt used
+#                     generation_status='pending',
+#                     parameters=json.dumps({
+#                         'size': size,
+#                         'steps': steps,
+#                         'guidance_scale': guidance_scale,
+#                         'negative_prompt': negative_prompt,
+#                         'is_regenerated': True,
+#                         'used_custom_prompt': bool(custom_prompt)
+#                     })
+#                 )
+                
+#                 generated_image.image.save(filename, ContentFile(img_buffer.getvalue()))
+#                 generated_image.generation_status = 'success'
+#                 generated_image.save()
+
+#                 # Get project_id for updating timestamp
+#                 project_id = idea.product_idea.project_id
+                
+#                 update_project_timestamp(project_id, request.user)
+                
+#                 img_str = base64.b64encode(img_buffer.getvalue()).decode()
+                
+#                 return JsonResponse({
+#                     "success": True,
+#                     "image": img_str,
+#                     "idea_id": idea_id,
+#                     "generated_image_id": generated_image.id,
+#                     "prompt_used": prompt_to_use,
+#                     "parameters": {
+#                         'size': size,
+#                         'steps': steps,
+#                         'guidance_scale': guidance_scale,
+#                         'negative_prompt': negative_prompt,
+#                         'is_regenerated': True,
+#                         'used_custom_prompt': bool(custom_prompt)
+#                     }
+#                 })
+                
+#             except Exception as e:
+#                 print(f"Error saving regenerated image: {str(e)}")
+#                 if 'generated_image' in locals():
+#                     generated_image.generation_status = 'failed'
+#                     generated_image.save()
+#                 return JsonResponse({
+#                     "success": False,
+#                     "error": f"Failed to save regenerated image: {str(e)}"
+#                 }, status=500)
+            
+#         except Exception as e:
+#             print(f"Unexpected error in regenerate_product_image: {str(e)}")
+#             return JsonResponse({
+#                 "success": False,
+#                 "error": str(e)
+#             }, status=500)
+        
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_idea_details(request, idea_id):
-    """Fetch idea details including visualization prompt and associated images"""
+    """Fetch idea details including visualization prompt"""
     try:
         idea = get_object_or_404(Idea, id=idea_id)
-        
-        # Get images for this idea, ordered by most recent first
-        images = GeneratedImage2.objects.filter(idea=idea).order_by('-created_at')
-        
-        # Process image data
-        image_data = []
-        for img in images:
-            img_info = {
-                'id': img.id,
-                'created_at': img.created_at.isoformat(),
-                'generation_status': img.generation_status,
-                'parameters': img.parameters
-            }
-            
-            # Include Azure blob URL if available
-            if img.azure_blob_url:
-                img_info['azure_blob_url'] = img.azure_blob_url
-                img_info['azure_blob_path'] = img.azure_blob_path
-            
-            # Include local image URL if available
-            if img.image:
-                try:
-                    img_info['image'] = request.build_absolute_uri(img.image.url)
-                except:
-                    pass  # Skip if there's an issue with the image URL
-            
-            image_data.append(img_info)
-            
-            # Only include up to 5 most recent images to keep response size reasonable
-            if len(image_data) >= 5:
-                break
-        
-        # Construct response with idea details and image information
         return JsonResponse({
             "success": True,
             "idea": {
@@ -1510,24 +1687,17 @@ def get_idea_details(request, idea_id):
                 "product_name": idea.product_name,
                 "description": idea.description,
                 "visualization_prompt": idea.visualization_prompt,
-                "enhanced_description": idea.enhanced_description,
-                "images": image_data,  # Include image data in response
-                "has_images": len(image_data) > 0
+                "enhanced_description": idea.enhanced_description
             }
         })
     except Exception as e:
-        import traceback
-        print(f"Error in get_idea_details: {str(e)}")
-        print(traceback.format_exc())
         return JsonResponse({
             "success": False,
             "error": str(e)
-        }, status=500)   
-      
+        }, status=500)       
+        
 
 # views.py
-# Updated get_idea_history function to handle Azure Blob storage
-
 def get_idea_history(request, idea_id):
     try:
         current_idea = get_object_or_404(Idea, id=idea_id)
@@ -1572,41 +1742,7 @@ def get_idea_history(request, idea_id):
         image_data = []
         for img in image_versions:
             try:
-                # First try to get the image from Azure Blob Storage
-                if img.azure_blob_url:
-                    # Use the Azure Blob URL directly
-                    image_base64 = None
-                    
-                    # Try to fetch the actual image content for base64 encoding
-                    try:
-                        from django.core.files.storage import default_storage
-                        from django.core.files.base import ContentFile
-                        import requests
-                        import io
-                        
-                        # Try to fetch the image content from Azure Blob Storage
-                        response = requests.get(img.azure_blob_url)
-                        if response.status_code == 200:
-                            image_base64 = base64.b64encode(response.content).decode('utf-8')
-                        else:
-                            # If fetching fails, create a placeholder
-                            image_base64 = None
-                    except Exception as fetch_error:
-                        print(f"Error fetching image from Azure: {fetch_error}")
-                        image_base64 = None
-                    
-                    # Add to image_data list
-                    image_data.append({
-                        'id': img.id,
-                        'image_url': image_base64,
-                        'azure_url': img.azure_blob_url,  # Include the Azure URL directly
-                        'created_at': img.created_at.isoformat(),
-                        'parameters': img.parameters,
-                        'idea_id': img.idea_id,
-                        'is_regenerated': json.loads(img.parameters).get('is_regenerated', False) if img.parameters else False
-                    })
-                # Fall back to local storage if Azure URL not available
-                elif img.image and os.path.exists(img.image.path):
+                if img.image and os.path.exists(img.image.path):
                     with open(img.image.path, 'rb') as image_file:
                         image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
                     
@@ -1637,10 +1773,6 @@ def get_idea_history(request, idea_id):
             'error': str(e)
         }, status=400)
 
-
-    
-# Updated restore_idea_version function to handle Azure Blob storage
-
 @api_view(['POST', 'GET', 'DELETE'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1654,6 +1786,9 @@ def restore_idea_version(request):
         # Get the version to restore and its associated image
         version_idea = get_object_or_404(Idea, id=version_id)
         current_idea = get_object_or_404(Idea, id=current_id)
+
+        # For updating project timestamp
+        project_id = current_idea.product_idea.project_id
         
         # Create a new version with restored data
         restored_idea = Idea.objects.create(
@@ -1669,7 +1804,6 @@ def restore_idea_version(request):
         # Copy all images from the original version
         restored_images = []
         restored_image_base64 = None
-        
         for original_image in original_images:
             # Create a new image instance for each original image
             restored_image = GeneratedImage2.objects.create(
@@ -1679,71 +1813,33 @@ def restore_idea_version(request):
                 created_at=original_image.created_at  # Preserve original creation timestamp
             )
             
-            # If the original image has an Azure Blob URL, copy it
-            if original_image.azure_blob_url and original_image.azure_blob_path:
-                restored_image.azure_blob_url = original_image.azure_blob_url
-                restored_image.azure_blob_path = original_image.azure_blob_path
-                restored_image.save()
-                
-                # Try to get image content for base64
-                try:
-                    import requests
-                    response = requests.get(original_image.azure_blob_url)
-                    if response.status_code == 200:
-                        image_data = response.content
-                        if (image_id and original_image.id == image_id) or (not image_id and not restored_image_base64):
-                            restored_image_base64 = base64.b64encode(image_data).decode('utf-8')
-                except Exception as e:
-                    print(f"Error fetching image from Azure: {str(e)}")
-            
-            # Fallback to local file if no Azure URL or if Azure fetch failed
-            elif original_image.image:
-                try:
-                    restored_image.image.save(
-                        original_image.image.name,
-                        ContentFile(original_image.image.read())
-                    )
-                    
-                    # If this is the specified image or the first image, convert to base64
-                    if (image_id and original_image.id == image_id) or (not image_id and not restored_image_base64):
-                        with open(restored_image.image.path, 'rb') as img_file:
-                            restored_image_base64 = base64.b64encode(img_file.read()).decode('utf-8')
-                except Exception as e:
-                    print(f"Error copying local image: {str(e)}")
+            # Copy the image file
+            if original_image.image:
+                restored_image.image.save(
+                    original_image.image.name,
+                    ContentFile(original_image.image.read())
+                )
             
             restored_images.append(restored_image)
+            
+            # If this is the specified image or the first image, convert to base64
+            if (image_id and original_image.id == image_id) or (not image_id and not restored_image_base64):
+                with open(restored_image.image.path, 'rb') as img_file:
+                    restored_image_base64 = base64.b64encode(img_file.read()).decode('utf-8')
         
+        update_project_timestamp(project_id, request.user)
+
         # Prepare image versions for response
         image_versions = []
         for img in restored_images:
-            try:
-                image_base64 = None
-                
-                # Try to get image from Azure Blob Storage
-                if img.azure_blob_url:
-                    try:
-                        import requests
-                        response = requests.get(img.azure_blob_url)
-                        if response.status_code == 200:
-                            image_base64 = base64.b64encode(response.content).decode('utf-8')
-                    except Exception as e:
-                        print(f"Error fetching image from Azure for response: {str(e)}")
-                
-                # Fallback to local file if needed
-                if not image_base64 and img.image and os.path.exists(img.image.path):
-                    with open(img.image.path, 'rb') as img_file:
-                        image_base64 = base64.b64encode(img_file.read()).decode('utf-8')
-                
-                if image_base64:
-                    image_versions.append({
-                        'id': img.id,
-                        'image_url': image_base64,
-                        'azure_url': img.azure_blob_url if img.azure_blob_url else None,
-                        'created_at': img.created_at.isoformat(),
-                        'parameters': img.parameters
-                    })
-            except Exception as e:
-                print(f"Error processing restored image for response: {str(e)}")
+            with open(img.image.path, 'rb') as img_file:
+                image_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+                image_versions.append({
+                    'id': img.id,
+                    'image_url': image_base64,
+                    'created_at': img.created_at.isoformat(),
+                    'parameters': img.parameters
+                })
         
         return JsonResponse({
             'success': True,
@@ -1909,6 +2005,9 @@ def project_operations(request, project_id=None):
                 user=request.user,
                 main_project_id=main_project_id,
             )
+
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             
             # Create initial response data
             project_data = {
@@ -1947,7 +2046,10 @@ def project_operations(request, project_id=None):
         try:
             # Filter by user
             project = get_object_or_404(Project, id=project_id, user=request.user)
+            main_project_id = project.main_project_id
             project.delete()
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             return JsonResponse({
                 'success': True,
                 'message': 'Project deleted successfully'
@@ -1974,6 +2076,12 @@ def project_operations(request, project_id=None):
             project.name = new_name
             project.last_modified = timezone.now()
             project.save()
+
+            # Get main_project_id for timestamp update
+            main_project_id = project.main_project_id
+            
+            if main_project_id:
+                update_project_timestamp(main_project_id, request.user)
             
             return JsonResponse({
                 'success': True,
@@ -1991,7 +2099,6 @@ def project_operations(request, project_id=None):
                 'error': str(e)
             }, status=500)
         
-       
     
             
 
@@ -2026,7 +2133,7 @@ def get_project(request, project_id):
                         'title': idea.product_name,
                         'product_name': idea.product_name,
                         'description': idea.description,
-                        'visualization_prompt': idea.visualization_prompt,
+                        'visualization_prompt': idea.visualization_prompt,  # Added this line(sourav 11-02-25)
                         'created_at': idea.created_at.isoformat(),
                         'idea_set': idea.idea_set,
                         'idea_set_label': idea.idea_set_label or f"Set {idea.idea_set}-1"
@@ -2057,75 +2164,38 @@ def get_project(request, project_id):
                     idea_data['metadata'] = idea_metadata
                     all_ideas.append(idea_data)
 
-                    # Check if this idea has successfully generated images
-                    # This will determine if it should be in the accepted state
-                    successful_images = GeneratedImage2.objects.filter(
-                        idea=idea, 
-                        generation_status='success'
-                    ).order_by('-created_at')
-                    
-                    # If there are successful images, this idea should be in accepted state
-                    if successful_images.exists():
-                        latest_image = successful_images.first()
+                    # Process accepted ideas (also include visualization_prompt)
+                    if idea in accepted_ideas:
                         accepted_idea = idea_data.copy()
-                        
-                        # Include the visualization prompt
                         accepted_idea['visualization_prompt'] = idea.visualization_prompt
-                        
-                        # Add the image URL (prioritize Azure blob URL if available)
-                        if latest_image.azure_blob_url:
-                            accepted_idea['image_url'] = latest_image.azure_blob_url
-                        elif latest_image.image:
-                            try:
-                                # For local storage fallback
-                                import base64
-                                with open(latest_image.image.path, 'rb') as img_file:
-                                    image_data = base64.b64encode(img_file.read()).decode('utf-8')
-                                accepted_idea['image_url'] = f"data:image/{latest_image.image.path.split('.')[-1]};base64,{image_data}"
-                            except Exception as e:
-                                print(f"Error reading image file: {str(e)}")
-                                # No valid image URL could be set
-                                pass
-                        
-                        # Add this to accepted ideas list
                         accepted_ideas.append(accepted_idea)
                     
                     # Handle image versions and history
                     image_versions = []
                     for image in idea.images.all().order_by('-created_at'):
-                        image_version = {
-                            'id': image.id,
-                            'created_at': image.created_at.isoformat(),
-                            'parameters': image.parameters if hasattr(image, 'parameters') else None,
-                            'generation_status': image.generation_status
-                        }
-                        
-                        # Add image data either from Azure or local storage
-                        if image.azure_blob_url:
-                            image_version['azure_blob_url'] = image.azure_blob_url
-                            image_version['image_url'] = image.azure_blob_url
-                            
-                            # Try to get base64 data for history view
-                            try:
-                                import requests
-                                import base64
-                                response = requests.get(image.azure_blob_url)
-                                if response.status_code == 200:
-                                    image_version['image_url'] = base64.b64encode(response.content).decode('utf-8')
-                            except Exception as e:
-                                print(f"Error fetching Azure image: {str(e)}")
-                                # Keep the azure_blob_url as fallback
-                        elif image and image.image:
+                        if image and image.image:
                             try:
                                 import base64
                                 with open(image.image.path, 'rb') as img_file:
                                     image_data = base64.b64encode(img_file.read()).decode('utf-8')
-                                image_version['image_url'] = image_data
+                                
+                                image_version = {
+                                    'image_url': image_data,
+                                    'created_at': image.created_at.isoformat(),
+                                    'parameters': image.parameters if hasattr(image, 'parameters') else None,
+                                }
+                                image_versions.append(image_version)
+                                
+                                # If this is the latest image, use it for accepted ideas
+                                if image == idea.images.first():
+                                    # Add image and copy metadata to accepted idea
+                                    accepted_idea = idea_data.copy()
+                                    accepted_idea['image_url'] = f"data:image/{image.image.path.split('.')[-1]};base64,{image_data}"
+                                    accepted_idea['visualization_prompt'] = idea.visualization_prompt  # Add this line
+                                    accepted_ideas.append(accepted_idea)
                             except Exception as e:
                                 print(f"Error processing image {image.id}: {str(e)}")
                                 continue
-                        
-                        image_versions.append(image_version)
                     
                     # Store version history for this idea
                     if image_versions:
@@ -2158,9 +2228,6 @@ def get_project(request, project_id):
             })
             
         except Exception as e:
-            import traceback
-            print(f"Error in get_project: {str(e)}")
-            print(traceback.format_exc())
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -2235,8 +2302,8 @@ def generate_ideas_from_document(request):
         category = idea_parameters.get('Category', '')
         number_of_ideas = int(data.get('number_of_ideas', 3))  # Default to 3 ideas
         description_length = int(data.get('description_length', 70))  # New field with default value of 70
-       
-    # Convert document parameters to dynamic fields format
+        
+	# Convert document parameters to dynamic fields format
         dynamic_fields = {
             "benefits": idea_parameters.get('Benefits', ''),
             "rtb": idea_parameters.get('RTB', ''),
@@ -2265,15 +2332,15 @@ def generate_ideas_from_document(request):
             source_document_id=document_id,
             source_document_name=document_name
         )
- 
+
         update_project_timestamp(project_id, request.user)
-       
+        
         # Get main project ID and update its timestamp too
         main_project_id = project.main_project_id
         if main_project_id:
             update_project_timestamp(main_project_id, request.user)
        
- 
+
         user_tokens = UserAPITokens.objects.get(user=request.user)
         GOOGLE_API_KEY = user_tokens.gemini_token 
         # hf_api_token = user_tokens.huggingface_token 
@@ -2376,7 +2443,7 @@ def generate_ideas_from_document(request):
                         # Remove any trailing characters after the closing brace
                         cleaned_json = json_text.split('}')[0] + '}'
                         idea_data = json.loads(cleaned_json)
- 
+
                         # Ensure brand name is in product name
                         if not idea_data['product_name'].startswith(brand):
                             idea_data['product_name'] = f"{brand} {idea_data['product_name']}"
@@ -2543,7 +2610,6 @@ def generate_ideas_from_document(request):
             "success": False,
             "error": str(e)
         }, status=500)
-
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated  # Changed from IsAdminUser

@@ -666,7 +666,8 @@ function WelcomeScreen() {
               <img
                 src={brandScarpeLogo}
                 alt="Brandscapes Logo"
-                className="w-33 h-6 object-contain rounded-lg"
+                className="w-33 h-6 object-contain rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => window.open('https://brandscapesworldwide.com', '_blank')}
               />
             </div>
           </div>
@@ -708,13 +709,13 @@ function WelcomeScreen() {
                 {/* <span className="text-white">AI insight command center</span> */}
               </h1>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-semibold mb-8 text-white">
-                AI insight command center
+                AI insights command center
               </h2>
 
               <p className="text-lg sm:text-xl text-slate-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-                One modular platform, infinite AI possibilities.
+                One modular platform, infinite AI possibilities
                 <br />
-                Tailored for unique intelligence needs.
+                Tailored for unique intelligence needs
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -748,7 +749,7 @@ function WelcomeScreen() {
               </span>
             </h2>
             <p className="text-xl text-slate-300 max-w-3xl mx-auto">
-              Modular design to transform how you work with documents and ideas.
+              Modular design to transform how you work with documents and ideas
             </p>
           </div>
 
@@ -766,7 +767,7 @@ function WelcomeScreen() {
                 </div>
 
                 <p className="text-xl text-slate-300 leading-relaxed">
-                  Transform your documents into intelligent conversations.
+                  Transform your documents into intelligent conversations<br/>
                   Upload files - Analyze content - Reveal insights
                 </p>
 
@@ -787,13 +788,13 @@ function WelcomeScreen() {
                   ))}
                 </div>
 
-                <button
+                {/* <button
                   onClick={handleGetStarted}
-                  className="group bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105"
+                  className="group bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  disabled={true}
                 >
-                  Try Notebook
-                  {/* <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" /> */}
-                </button>
+                  Preview
+                </button> */}
               </div>
 
               <div className="flex-1 ">
@@ -821,7 +822,7 @@ function WelcomeScreen() {
             {/* Idea Generator */}
             <div
               id="idea-generator"
-              className="flex flex-col lg:flex-row-reverse items-center gap-12 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out"
+              className="flex flex-col lg:flex-row-reverse items-center gap-12 scroll-reveal opacity-0 translate-y-8 transition-all duration-1000 ease-out pt-20 pb-20"
             >
               <div className="flex-1 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
@@ -834,7 +835,7 @@ function WelcomeScreen() {
                 </div>
 
                 <p className="text-xl text-slate-300 leading-relaxed">
-                  Bring your early stage ideas to life. From Concept to Canvas{" "}
+                  Bring your early stage ideas to life: From Concept to Canvas{" "}
                   <br />
                   Input Guidelines - Generate Copy - Visualize Ideas
                 </p>
@@ -856,13 +857,13 @@ function WelcomeScreen() {
                   ))}
                 </div>
 
-                <button
+                {/* <button
                   onClick={handleGetStarted}
-                  className="group bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 transform hover:scale-105"
+                  className="group bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  disabled={true}
                 >
-                  Generate Ideas
-                  {/* <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" /> */}
-                </button>
+                  Preview
+                </button> */}
               </div>
 
               <div className="flex-1">
@@ -945,7 +946,12 @@ function WelcomeScreen() {
             {/* Option 1 */}
             <div className="flex items-center justify-center gap-2 text-slate-400">
               <Mail className="w-5 h-5" />
-              <span>contact@klarifai.ai</span>
+              <a 
+                href="mailto:contact@klarifai.ai" 
+                className="text-slate-400 hover:text-blue-400 transition-colors duration-300"
+              >
+                contact@klarifai.ai
+              </a>
             </div>
           </div>
         </div>

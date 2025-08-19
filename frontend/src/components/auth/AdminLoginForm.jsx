@@ -5,7 +5,7 @@ import axiosInstance from '../../utils/axiosConfig';
 import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
 
-const LoginForm = ({ onSuccess = () => {} }) => {
+const AdminLoginForm = ({ onSuccess = () => {} }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -50,7 +50,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         required
-                        disabled={true}
+                        disabled={isLoading}
                         className="w-full px-4 py-2 border rounded-lg dark:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 disabled:opacity-50"
                     />
                 </div>
@@ -63,7 +63,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
-                        disabled={true}
+                        disabled={isLoading}
                         className="w-full px-4 py-2 border rounded-lg focus:outline-none dark:text-black focus:ring-2 focus:ring-blue-500 transition-all duration-300 disabled:opacity-50"
                     />
                 </div>
@@ -72,7 +72,7 @@ const LoginForm = ({ onSuccess = () => {} }) => {
 
                 <button
                     type="submit"
-                    disabled={true}
+                    disabled={isLoading}
                     className="w-full py-2 mt-6 font-semibold text-white bg-blue-900 rounded-lg hover:bg-blue-800 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isLoading ? 'Logging in...' : 'Login'}
@@ -113,8 +113,8 @@ const LoginForm = ({ onSuccess = () => {} }) => {
     );
 };
 
-LoginForm.propTypes = {
+AdminLoginForm.propTypes = {
     onSuccess: PropTypes.func
 };
 
-export default LoginForm;
+export default AdminLoginForm;

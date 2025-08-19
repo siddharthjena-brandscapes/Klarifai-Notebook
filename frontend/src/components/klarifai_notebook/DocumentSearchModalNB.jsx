@@ -165,7 +165,7 @@ const DocumentSearchModalNB = ({
     const highlightedTermRegex = new RegExp(term, 'gi');
     preview = preview.replace(
       highlightedTermRegex, 
-      match => `<b style="color: #5ff2b6">${match}</b>`
+      match => `<b class="text-[#a55233] dark:text-[#38bdf8]">${match}</b>`
     );
     
     return preview;

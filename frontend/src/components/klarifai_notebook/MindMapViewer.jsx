@@ -1,4 +1,4 @@
-// MindMapViewer.jsx - Enhanced with editable question textarea
+// MindMapViewer.jsx - Enhanced with closable panel and better selection indicators
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { 
   X, 
@@ -6,8 +6,7 @@ import {
   ChevronDown, 
   ChevronRight, 
   MessageSquare, 
-  Loader2, 
-  Download, 
+  Loader2,  
   ZoomIn, 
   ZoomOut, 
   RotateCcw,
@@ -16,7 +15,9 @@ import {
   AlertCircle,
   MoreVertical,
   Send,
-  Edit3
+  Edit3,
+  Eye,
+  Target
 } from 'lucide-react';
 import { ThemeContext } from '../../context/ThemeContext';
 
@@ -41,6 +42,7 @@ const MindMapViewer = ({
   const [showQuestionEditor, setShowQuestionEditor] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showSelectedPanel, setShowSelectedPanel] = useState(false); // New state for panel visibility
   const mindmapRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -88,6 +90,7 @@ const MindMapViewer = ({
       setLastMindmapId(null);
       setQuestionResponse(null);
       setSelectedNode(null);
+      setShowSelectedPanel(false); // Reset panel visibility
       setShowMobileMenu(false);
       setGeneratedQuestion('');
       setEditableQuestion('');
@@ -142,10 +145,18 @@ const MindMapViewer = ({
 
   const handleNodeClick = (node, nodePath) => {
     setSelectedNode({ ...node, path: nodePath });
+    setShowSelectedPanel(true); // Show panel when node is selected
     setQuestionResponse(null);
     setGeneratedQuestion('');
     setEditableQuestion('');
     setShowQuestionEditor(false);
+  };
+
+  // New function to close the selected panel
+  const handleCloseSelectedPanel = () => {
+    setShowSelectedPanel(false);
+    // Optionally also clear the selected node
+    // setSelectedNode(null);
   };
 
   useEffect(() => {
@@ -249,30 +260,6 @@ const MindMapViewer = ({
     setEditableQuestion(e.target.value);
   };
 
-  const exportMindmap = () => {
-    const exportData = {
-      mindmap: mindmapData,
-      metadata: {
-        id: mindmapId,
-        created_at: mindmapStats?.created_at || new Date().toISOString(),
-        document_sources: mindmapStats?.document_sources || [],
-        total_nodes: mindmapStats?.total_nodes || 0,
-        from_history: isFromHistory
-      }
-    };
-    
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `mindmap-${mindmapId || Date.now()}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -330,7 +317,7 @@ const MindMapViewer = ({
           className={`
             relative flex items-center group cursor-pointer mb-2
             transition-all duration-200 hover:scale-[1.02]
-            ${isSelected ? 'ring-2 ring-yellow-400 ring-opacity-50' : ''}
+            ${isSelected ? ' ring-3 ring-blue-400 ring-opacity-70 rounded-lg shadow-lg' : ''}
           `}
           onClick={() => handleNodeClick(node, nodePath)}
           style={{ marginLeft: `${depth * 24}px` }}
@@ -350,16 +337,33 @@ const MindMapViewer = ({
           )}
 
           <div className={`
-            flex-1 p-3 rounded-lg shadow-sm transition-all duration-200
+            flex-1 p-3 rounded-lg shadow-sm transition-all duration-200 relative
             ${getNodeColors(depth)}
             text-white
             group-hover:shadow-md group-hover:scale-[1.01]
+            ${isSelected ? 'shadow-xl ring-2 ring-white ring-opacity-30' : ''}
           `}>
+            {/* Selection indicator */}
+            {isSelected && (
+              <div className="absolute -top-2 -right-2 bg-blue-500 text-white rounded-full p-1 shadow-lg">
+                <Target size={12} />
+              </div>
+            )}
+            
             <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-sm">{node.name}</h4>
-              {(node.summary || node.description) && (
-                <MessageSquare size={14} className="opacity-70" />
-              )}
+              <h4 className={`font-semibold text-sm ${isSelected ? 'font-bold' : ''}`}>
+                {node.name}
+              </h4>
+              <div className="flex items-center space-x-1">
+                {(node.summary || node.description) && (
+                  <MessageSquare size={14} className="opacity-70" />
+                )}
+                {isSelected && (
+                  <div className="bg-white bg-opacity-20 rounded-full px-2 py-1">
+                    <span className="text-xs font-medium">SELECTED</span>
+                  </div>
+                )}
+              </div>
             </div>
             
             {(node.summary || node.description) && (
@@ -390,15 +394,7 @@ const MindMapViewer = ({
       : selectedDocuments || [];
     
     return (
-      <div className={`mb-4 p-3 rounded-lg border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-blue-50 border-blue-200'}`}>
-        <h4 className="font-medium mb-2 text-sm flex items-center">
-          <FileText className="w-4 h-4 mr-1" />
-          Question Context:
-          <span className="ml-2 text-xs opacity-60">
-            (Mindmap: {mindmapId})
-          </span>
-        </h4>
-        
+      <div className={`mb-4 p-2 rounded-lg border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-blue-50 border-blue-200'}`}> 
         {documentsToUse.length > 0 ? (
           <div className="space-y-2">
             <div className="flex items-center text-xs text-green-600 dark:text-green-400">
@@ -527,7 +523,7 @@ const MindMapViewer = ({
               
               <div className="min-w-0 flex-1">
                 {/* Title with proper wrapping */}
-                <h2 className="text-lg sm:text-xl font-bold leading-tight break-words">
+                <h2 className="text-lg sm:text-xl font-bold leading-tight break-words overflow-wrap-anywhere hyphens-auto">
                   {mindmapData.name}
                 </h2>
                 
@@ -536,6 +532,8 @@ const MindMapViewer = ({
                   <div className="text-xs sm:text-sm opacity-70">
                     Interactive document visualization
                   </div>
+                  
+
                   
                   {/* Secondary metadata row */}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-60">
@@ -611,16 +609,6 @@ const MindMapViewer = ({
                     <RotateCcw size={16} />
                   </button>
                 </div>
-
-                {/* <button
-                  onClick={exportMindmap}
-                  className={`p-2 rounded transition-colors ${
-                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
-                  }`}
-                  title="Export mindmap as JSON"
-                >
-                  <Download size={16} />
-                </button> */}
               </div>
 
               {/* Mobile menu button */}
@@ -699,20 +687,6 @@ const MindMapViewer = ({
                     <RotateCcw size={16} />
                   </button>
                 </div>
-                
-                {/* Export button */}
-                {/* <button
-                  onClick={() => {
-                    exportMindmap();
-                    setShowMobileMenu(false);
-                  }}
-                  className={`w-full p-2 rounded transition-colors flex items-center justify-center space-x-2 ${
-                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
-                  }`}
-                >
-                  <Download size={16} />
-                  <span>Export Mindmap</span>
-                </button> */}
               </div>
             </div>
           )}
@@ -721,7 +695,7 @@ const MindMapViewer = ({
         {/* Content area */}
         <div className="flex flex-1 min-h-0">
           {/* Mindmap panel */}
-          <div className={`flex-1 overflow-auto p-3 sm:p-6 custom-scrollbar ${selectedNode ? 'w-2/3' : 'w-full'}`}>
+          <div className={`flex-1 overflow-auto p-3 sm:p-6 custom-scrollbar ${selectedNode && showSelectedPanel ? 'w-2/3' : 'w-full'}`}>
             <div 
               ref={mindmapRef}
               style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top left' }}
@@ -731,12 +705,32 @@ const MindMapViewer = ({
             </div>
           </div>
 
-          {/* Question panel */}
-          {selectedNode && (
-            <div className={`w-1/3 border-l ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-gray-50'} p-3 sm:p-6 overflow-auto custom-scrollbar`}>
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">Selected Node</h3>
+          {/* Question panel - now conditionally rendered based on showSelectedPanel */}
+          {selectedNode && showSelectedPanel && (
+            <div className={`w-1/3 border-l ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-gray-50'}  p-2 sm:p-3 overflow-auto custom-scrollbar`}>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-base font-medium flex items-center">
+                    <Target className="w-4 h-4 mr-2 text-blue-500" />
+                    Selected Node
+                  </h5>
+                  <button
+                    onClick={handleCloseSelectedPanel}
+                    className={`p-2 rounded transition-colors ${
+                      theme === 'dark' ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-200 text-gray-600 hover:text-gray-800'
+                    }`}
+                    title="Close panel for full view"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Selected node info */}
+                <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-blue-50'} border-l-4 border-blue-500`}>
+                  <p className="font-medium text-sm text-blue-600 dark:text-blue-400 mb-1 rounded-xl">
+                    {selectedNode.name}
+                  </p>
+            
                 </div>
 
                 {renderDocumentContextIndicator()}
@@ -888,7 +882,6 @@ const MindMapViewer = ({
           background: rgba(16, 185, 129, 0.2);
           border-radius: 10px;
         }
-        
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: rgba(16, 185, 129, 0.3);
         }

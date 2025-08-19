@@ -34,40 +34,41 @@ class UserAPITokens(models.Model):
         max_length=255,
         blank=True,
         null=True,
-        default='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'
+        default=''
     )
     gemini_token = models.CharField(
         max_length=255,
         blank=True,
         null=True,
-        default='AIzaSyC5Dqjx0DLbkRXH9YWqWZ1SPTK0w0C4oFY'
+        default=''
     )
     llama_token = models.CharField(
         max_length=255,
         blank=True,
         null=True,
-        default='llx-NRa3hhTEIranlZsk6e9zucPfIU9AnuC11kXNsxS7kD0VICzR'
+        default=''
     )
     nebius_token = models.CharField(
         max_length=1024,
         blank=True,
         null=True,
-        default='eyJhbGciOiJIUzI1NiIsImtpZCI6IlV6SXJWd1h0dnprLVRvdzlLZWstc0M1akptWXBvX1VaVkxUZlpnMDRlOFUiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJnb29nbGUtb2F1dGgyfDEwNDA3NjM1MTQxNjY5Mzc1MzgxNiIsInNjb3BlIjoib3BlbmlkIG9mZmxpbmVfYWNjZXNzIiwiaXNzIjoiYXBpX2tleV9pc3N1ZXIiLCJhdWQiOlsiaHR0cHM6Ly9uZWJpdXMtaW5mZXJlbmNlLmV1LmF1dGgwLmNvbS9hcGkvdjIvIl0sImV4cCI6MTkwODA5OTQyNywidXVpZCI6IjY5N2ExOGI1LTVmMjMtNDM4YS1iYmVmLTdhNmYwZGUxYzY2MyIsIm5hbWUiOiJpbWdfZ2VuIiwiZXhwaXJlc19hdCI6IjIwMzAtMDYtMTlUMTE6Mzc6MDcrMDAwMCJ9.X_f-n1ginmJkWBmbkhMt12L-k-fapnoo8ws4WXFWC4E'
+        default=''
     )
  
-    page_limit = models.PositiveIntegerField(default=20)
+    page_limit = models.PositiveIntegerField(default=300)
     token_limit = models.PositiveBigIntegerField(default=1_000_000)
- 
+
     def __str__(self):
         return f"{self.user.username}'s API Tokens"
-
-        
+ 
+ 
 # Signal to automatically create UserAPITokens when a User is created
 @receiver(post_save, sender=User)
 def create_user_api_tokens(sender, instance, created, **kwargs):
     if created:
         UserAPITokens.objects.create(user=instance)
         print(f"Created API tokens for user: {instance.username}")  # Debug log
+# Signal to automatically create UserAPITokens when a User is created
  
  
 # class SSOAllowedUser(models.Model):

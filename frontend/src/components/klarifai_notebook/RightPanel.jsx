@@ -5,14 +5,13 @@ import React, { useState } from 'react';
 import { 
   Brain, 
   StickyNote, 
-  ChevronLeft, 
-  ChevronRight, 
+ 
   BookOpen, 
-  PanelLeftClose, 
+ Loader2,
   PanelLeft, 
   PanelRight,
   History,
-  Plus
+
 } from 'lucide-react';
 import PropTypes from 'prop-types';
 import MindMapHistory from './MindMapHistory';
@@ -173,48 +172,63 @@ const RightPanel = ({
             </button>
 
             {/* Generate New Mindmap Button */}
-            <button
-              onClick={(isPanelDisabled || isMindmapGenerationDisabled) ? undefined : handleGenerateNewMindmap}
-              disabled={isPanelDisabled || isMindmapGenerationDisabled || isMindmapGenerating || selectedDocuments.length === 0}
-              className={`p-2 ${
-                (isPanelDisabled || isMindmapGenerationDisabled || isMindmapGenerating || selectedDocuments.length === 0)
-                  ? 'text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-70 bg-gray-100 dark:bg-gray-800/50'
-                  : theme === "dark"
-                  ? "text-white hover:bg-gray-700"
-                  : "text-[#5e4636] hover:bg-[#f5e6d8]"
-              } rounded-full transition-colors relative`}
-              title={
-                isPanelDisabled
-                  ? "Right panel access disabled by administrator"
-                  : isMindmapGenerationDisabled
-                    ? "MindMap generation disabled by administrator"
-                    : selectedDocuments.length === 0 
-                      ? "Select documents to generate mindmap" 
-                      : isMindmapGenerating 
-                        ? "Generating mindmap..." 
-                        : `Generate New Mindmap (${selectedDocuments.length} docs)`
-              }
-            >
-              <Brain
-                size={20}
-                className={
-                  (isPanelDisabled || isMindmapGenerationDisabled || isMindmapGenerating || selectedDocuments.length === 0)
-                    ? 'text-gray-600 dark:text-gray-300'
-                    : theme === "dark" 
-                      ? "text-purple-400" 
-                      : "text-[#7a5741]"
-                }
-              />
-              
-              {/* Badge showing selected documents count - hide if panel disabled */}
-              {selectedDocuments.length > 0 && !isPanelDisabled && !isMindmapGenerationDisabled && (
-                <div className="absolute -top-1 -right-1 bg-[#a44704] dark:bg-blue-500 text-white text-xs font-semibold rounded-full w-4 h-4 flex items-center justify-center">
-                  {selectedDocuments.length > 99
-                    ? "99+"
-                    : selectedDocuments.length}
-                </div>
-              )}
-            </button>
+           <button
+  onClick={
+    isPanelDisabled || isMindmapGenerationDisabled
+      ? undefined
+      : handleGenerateNewMindmap
+  }
+  disabled={
+    isPanelDisabled ||
+    isMindmapGenerationDisabled ||
+    isMindmapGenerating ||
+    selectedDocuments.length === 0
+  }
+  className={`flex-1 p-3 rounded-lg transition-colors flex items-center justify-center relative ${
+    isPanelDisabled ||
+    isMindmapGenerationDisabled ||
+    isMindmapGenerating ||
+    selectedDocuments.length === 0
+      ? 'bg-transparent text-gray-400 cursor-not-allowed'
+      : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
+  }`}
+  title={
+    isPanelDisabled
+      ? "Right panel access disabled by administrator"
+      : isMindmapGenerationDisabled
+      ? "MindMap generation disabled by administrator"
+      : selectedDocuments.length === 0
+      ? "Select documents to generate mindmap"
+      : isMindmapGenerating
+      ? "Generating mindmap..."
+      : `Generate New MindMap (${selectedDocuments.length} docs)`
+  }
+>
+  {isMindmapGenerating ? (
+    <Loader2 className="h-5 w-5 animate-spin text-white" />
+  ) : (
+    <Brain
+      className={`h-5 w-5 ${
+        isPanelDisabled ||
+        isMindmapGenerationDisabled ||
+        isMindmapGenerating ||
+        selectedDocuments.length === 0
+          ? 'text-purple-400 opacity-60'
+          : 'text-white'
+      }`}
+    />
+  )}
+
+  {selectedDocuments.length > 0 &&
+    !isPanelDisabled &&
+    !isMindmapGenerationDisabled &&
+    !isMindmapGenerating && (
+      <span className="absolute -top-1 -right-1 bg-white text-purple-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-purple-600">
+        {selectedDocuments.length > 9 ? "9+" : selectedDocuments.length}
+      </span>
+    )}
+</button>
+
           </div>
 
           {/* Add space between main icons and footer */}

@@ -418,7 +418,7 @@ function App() {
       setShowWelcome(false);
       // Always default to projects view after welcome screen
       setCurrentView("projects");
-    }, 2000);
+    }, 1000);
     return () => clearTimeout(timer);
   }, []);
 
