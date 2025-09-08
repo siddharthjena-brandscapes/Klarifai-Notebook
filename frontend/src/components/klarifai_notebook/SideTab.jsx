@@ -2897,7 +2897,7 @@ body.dark #idea-generator-loading-overlay .idea-generator-loader:after,
                   ? "text-white hover:bg-gray-700"
                   : "text-[#5e4636] hover:bg-[#f5e6d8]"
               } rounded-full transition-colors`}
-              title="Frequently Asked Questions"
+              title="User Guide"
             >
               <HelpCircle
                 size={20}

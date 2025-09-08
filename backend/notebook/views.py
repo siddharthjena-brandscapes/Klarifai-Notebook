@@ -6865,47 +6865,7 @@ class ChatView(APIView):
         
         return processed_text, display_citation_sources
 
-    # def _format_citations_for_response(self, response_text, citation_sources):
-    #     """Format the citations for response and remove duplicates."""
-    #     # Extract all citations from the text
-    #     response_text = self._ensure_separate_citation_brackets(response_text)
-    #     citation_pattern = r'\[(\d+)\]'
-    #     citations = re.findall(citation_pattern, response_text)
-        
-    #     # Use set to get unique citations, then convert back to sorted list
-    #     unique_citations = sorted(set([int(c) for c in citations if c.isdigit()]))
-        
-    #     # Create mapping from original citation numbers to sequential display numbers
-    #     citation_mapping = {original_num: display_num for display_num, original_num in enumerate(unique_citations, 1)}
-        
-    #     # Replace original citation numbers with sequential display numbers
-    #     # Process in reverse order to avoid issues with overlapping replacements
-    #     processed_text = response_text
-    #     for original_num in sorted(citation_mapping.keys(), reverse=True):
-    #         # Use word boundaries to avoid partial matches
-    #         pattern = r'\[' + str(original_num) + r'\]'
-    #         replacement = f'[{citation_mapping[original_num]}]'
-    #         processed_text = re.sub(pattern, replacement, processed_text)
-        
-    #     # Remove duplicate citations that appear consecutively
-    #     processed_text = self._remove_consecutive_duplicate_citations(processed_text)
-        
-    #     # Create new citation sources dictionary with display numbers
-    #     display_citation_sources = {}
-    #     for display_num, original_num in enumerate(unique_citations, 1):
-    #         if original_num in citation_sources:
-    #             source_info = citation_sources[original_num]
-    #             snippet = source_info.get('text', '')
-    #             snippet_length = 1500 
-    #             display_citation_sources[display_num] = {
-    #                 'source_file': source_info.get('source_file', 'Unknown'),
-    #                 'page_number': 'Unknown',
-    #                 'section_title': 'Unknown',
-    #                 'snippet': snippet[:snippet_length] + "..." if len(snippet) > snippet_length else snippet,
-    #                 'document_id': source_info.get('document_id', 'Unknown')
-    #             }
-        
-    #     return processed_text, display_citation_sources
+    
 
     def _remove_consecutive_duplicate_citations(self, text):
         """Remove consecutive duplicate citations and ensure proper bracket separation."""
@@ -7665,6 +7625,8 @@ class ChatView(APIView):
             logger.error(f"Error getting project description: {str(e)}")
             return ""
 
+
+
     def get_general_chat_answer(self, query, use_web_knowledge=False, response_length='comprehensive', response_format='natural', conversation_context="", user=None):
         """
         Generate an answer for general chat mode, optionally using web knowledge.
@@ -7679,7 +7641,8 @@ class ChatView(APIView):
             user: User object for API access
        
         Returns:
-            tuple: (response_text, token_usage_dict)
+            tuple: (response_text, token_usage_dict, web_sources) when web_knowledge=True
+            tuple: (response_text, token_usage_dict) when web_knowledge=False
         """
         token_usage = {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0}
  
@@ -7736,7 +7699,11 @@ class ChatView(APIView):
             ]
             # Select a response using a simple hash of the query to ensure consistent responses
             response_index = hash(query_lower) % len(greeting_responses)
-            return greeting_responses[response_index], token_usage
+           
+            if use_web_knowledge:
+                return greeting_responses[response_index], token_usage, []  # Return empty sources for greetings
+            else:
+                return greeting_responses[response_index], token_usage
  
         # If not a greeting, proceed with the regular flow
         # If web knowledge is enabled, implement the full web search flow
@@ -7747,12 +7714,12 @@ class ChatView(APIView):
                 web_response, web_sources = self.get_web_knowledge_response(query, user=user, document_context=None)
  
                 if not web_response or not web_sources:
-                    return "I couldn't find relevant information on the web for your query.", token_usage
+                    return "I couldn't find relevant information on the web for your query.", token_usage, []
                
-                # Extract web source domains for display - FIXED TO USE PROPER DOMAINS
+                # FIXED: Extract web source domains for display from the domain field
                 web_source_domains = []
                 for source in web_sources:
-                    domain = source.get('domain', '')  # Use the processed domain from get_web_knowledge_response
+                    domain = source.get('domain', '')  # Use the processed domain
                     if domain and domain != "unknown.com" and domain != "vertexaisearch.cloud.google.com":
                         web_source_domains.append(domain)
            
@@ -7799,7 +7766,7 @@ class ChatView(APIView):
                
                 Provide detailed, comprehensive responses based on web sources."""
  
-                # Create the prompt for OpenAI - REMOVED THE SOURCES_JSON EXTRACTION REQUIREMENT
+                # Create the prompt for OpenAI
                 prompt = f"""
                 You are a web research assistant. Based ONLY on the following information from multiple web sources, answer the user question.
  
@@ -7881,20 +7848,27 @@ class ChatView(APIView):
                 print(formatted_web_response)
                 print("=== END FULL RESPONSE ===")
  
-                # FIXED: Use the properly processed domains from web_sources instead of trying to extract from content
+                # CRITICAL FIX: Return complete web_sources with URIs for frontend use
                 if web_source_domains:
                     source_info = ", ".join(web_source_domains)
-                    final_response = f"{formatted_web_response}\n\n*Sources: {source_info}*"
+                    final_response = f"{formatted_web_response}\n\n*Sources: {web_sources}*"
                     print("=== FINAL RESPONSE WITH SOURCES ===")
                     print(final_response)
                     print("=== END FINAL RESPONSE ===")
-                    return final_response, token_usage
+                   
+                    # Debug: Print web_sources to verify URI preservation
+                    print("=== WEB SOURCES RETURNED TO FRONTEND ===")
+                    for i, source in enumerate(web_sources):
+                        print(f"Source {i+1}: Title='{source['title']}', URI='{source.get('uri', 'NO URI')}'")
+                    print("=== END WEB SOURCES DEBUG ===")
+                   
+                    return final_response, token_usage  # Return sources with URIs
                 else:
-                    return formatted_web_response, token_usage
+                    return formatted_web_response, token_usage, web_sources
            
             except Exception as e:
                 logger.error(f"Error in web knowledge general chat: {str(e)}", exc_info=True)
-                return f"I encountered an error while searching the web: {str(e)}. Please try a different question or try again later.", token_usage
+                return f"I encountered an error while searching the web: {str(e)}. Please try a different question or try again later.", token_usage, []
  
         # If no web knowledge requested, use standard chat completion
         else:
@@ -7964,7 +7938,7 @@ class ChatView(APIView):
             except Exception as e:
                 logger.error(f"Error in general chat: {str(e)}", exc_info=True)
                 return f"I'm sorry, I encountered an error while processing your request. Please try again or rephrase your question.", token_usage
-
+ 
 
     def get_embeddings(self, texts):
         """

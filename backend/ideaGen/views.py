@@ -6,9 +6,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
 from .models import ProductIdea2, GeneratedImage2, Idea, Project
-from google import genai
-from google.genai import types
-# from huggingface_hub import InferenceClient
 from openai import OpenAI
 from PIL import Image
 from collections import defaultdict
@@ -28,17 +25,6 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from chat.models import UserAPITokens
 from core.utils import update_project_timestamp
 
-
-# HF_API_TOKEN = "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"
- 
-
-# hf_client = InferenceClient(
-#     model="black-forest-labs/FLUX.1-schnell",
-#     token=HF_API_TOKEN
-# )
- 
-
-
 # Add at the top of the file after imports
 def log_transaction(user, action_type, metadata, **references):
     """
@@ -57,6 +43,8 @@ def log_transaction(user, action_type, metadata, **references):
         )
     except Exception as e:
         print(f"Error logging transaction: {str(e)}")
+ 
+ 
  
 def generate_prompt_text(dynamic_fields):
     """Convert dynamic fields into a readable paragraph format"""
@@ -238,9 +226,9 @@ def generate_ideas_stream(request):
             
             update_project_timestamp(project_id, request.user)
             
-            user_tokens = UserAPITokens.objects.get(user=request.user)
-            GOOGLE_API_KEY = user_tokens.gemini_token 
-            client = genai.Client(api_key=GOOGLE_API_KEY)
+
+            OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+            client = OpenAI(api_key=OPENAI_API_KEY)
             
             # Generate ideas one by one and stream progress
             saved_ideas = []
@@ -269,15 +257,15 @@ def generate_ideas_stream(request):
                 }}
                 """
                 
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=single_idea_prompt,
-                    config=types.GenerateContentConfig(temperature=1.0)
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": single_idea_prompt}],
+                    temperature=1.0
                 )
                 
                 # Parse and process the idea
                 try:
-                    clean_response = re.sub(r'```json\s*|\s*```', '', response.text.strip())
+                    clean_response = re.sub(r'```json\s*|\s*```', '', response.choices[0].message.content.strip())
                     idea_data = json.loads(clean_response)
                     
                     if validate_and_process_idea(idea_data, brand):
@@ -415,12 +403,9 @@ def generate_ideas(request):
             )
 
             update_project_timestamp(project_id, request.user)
-            
-            user_tokens = UserAPITokens.objects.get(user=request.user)
-            GOOGLE_API_KEY = user_tokens.gemini_token 
-            
-            # Initialize new Gemini client
-            client = genai.Client(api_key=GOOGLE_API_KEY)
+
+            OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+            client = OpenAI(api_key=OPENAI_API_KEY)
             
             # IMPROVED PROMPT - More explicit formatting instructions
             ideas_prompt = f"""
@@ -464,20 +449,18 @@ def generate_ideas(request):
             """
 
             print("Generated prompt:", ideas_prompt)
-            
-            # Use higher temperature and longer max tokens for more creative output
-            response = client.models.generate_content(
-	    	model="gemini-2.0-flash",
-                contents=ideas_prompt,
-                config=types.GenerateContentConfig(temperature=1.0)
-              
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": ideas_prompt}],
+                temperature=1.0
             )
 
-            print("Generated Ideas Response:", response.text)
+            print("Generated Ideas Response:", response.choices[0].message.content)
             
             # Parse the response with improved logic
             validated_ideas = []
-            response_text = response.text.strip()
+            response_text = response.choices[0].message.content.strip()
             
             # First, try to parse as a direct JSON array
             try:
@@ -524,13 +507,13 @@ def generate_ideas(request):
                 ]
                 """
                 try:
-                    additional_response =client.models.generate_content(
-                        model="gemini-2.0-flash",
-                        contents=additional_prompt,
-                        config=types.GenerateContentConfig(temperature=1.0)
+                    additional_response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": additional_prompt}],
+                        temperature=1.0
                     )
                     
-                    additional_ideas = parse_json_ideas(additional_response.text, brand)
+                    additional_ideas = parse_json_ideas(additional_response.choices[0].message.content, brand)
                     validated_ideas.extend(additional_ideas[:remaining_ideas])  # Take only what we need
                     
                 except Exception as e:
@@ -644,12 +627,8 @@ def update_idea(request):
                 'description': data.get('description', original_idea.description)
             }
 
-            user_tokens = UserAPITokens.objects.get(user=request.user)
-            GOOGLE_API_KEY = user_tokens.gemini_token 
-           
-            
-            # Initialize new Gemini client
-            client = genai.Client(api_key=GOOGLE_API_KEY)
+            OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+            client = OpenAI(api_key=OPENAI_API_KEY)
             
             # Only regenerate visualization prompt if content changed
             if (idea_data['product_name'] != original_idea.product_name or 
@@ -797,12 +776,12 @@ def decompose_product_description(idea_data, client):
     """
    
     try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(temperature=1.0)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=1.0
         )
-        response_text = response.text.strip()
+        response_text = response.choices[0].message.content.strip()
         
         aspects = [
             line[1:].strip()
@@ -841,16 +820,16 @@ def synthesize_product_aspects(idea_data, aspects, client):
         - Do not include any formatting other than plain text paragraphs.
         - Avoid restating the bullet points verbatim; instead, synthesize them into a fluid, descriptive narrative."""
         
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=synthesis_prompt,
-            config=types.GenerateContentConfig(temperature=1.0)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": synthesis_prompt}],
+            temperature=1.0
         )
 
         print("Synthesized description: ")
-        print(response.text)                # Print the synthesized description
+        print(response.choices[0].message.content) # Print the synthesized description
 
-        return response.text.strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error in synthesis: {str(e)}")
         return idea_data['description']
@@ -993,15 +972,15 @@ def enhance_prompt(enhanced_description, client):
         Deliver your response as a single unified paragraph of instructions from the perspective of a professional product photographer directing a commercial shoot.
         """
  
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=visualization_prompt,
-            config=types.GenerateContentConfig(temperature=1.0)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": visualization_prompt}],
+            temperature=1.0
         )
  
         print("Generated Visualization Prompt:")
-        print(response.text)
-        return response.text.strip()
+        print(response.choices[0].message.content)
+        return response.choices[0].message.content.strip()
    
     except Exception as e:
         print(f"Error in enhance_prompt: {str(e)}")
@@ -2075,12 +2054,14 @@ def generate_ideas_from_document(request):
             update_project_timestamp(main_project_id, request.user)
        
 
-        user_tokens = UserAPITokens.objects.get(user=request.user)
-        GOOGLE_API_KEY = user_tokens.gemini_token 
-        # hf_api_token = user_tokens.huggingface_token 
+        # user_tokens = UserAPITokens.objects.get(user=request.user)
+        # GOOGLE_API_KEY = user_tokens.gemini_token 
+        # # hf_api_token = user_tokens.huggingface_token 
         
-        # Initialize APIs
-        client = genai.Client(api_key=GOOGLE_API_KEY)
+        # # Initialize APIs
+        # client = genai.Client(api_key=GOOGLE_API_KEY)
+        OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+        client = OpenAI(api_key=OPENAI_API_KEY)
 
         # Generate formatted prompt text
         formatted_dynamic_fields = generate_prompt_text(dynamic_fields)
@@ -2103,22 +2084,19 @@ def generate_ideas_from_document(request):
  
         print("Generated prompt for document-based idea generation:", ideas_prompt)
        
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=ideas_prompt,
-            config={
-                'temperature': 1.0,
-                # 'max_output_tokens': 4000
-            }
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": ideas_prompt}],
+            temperature=1.0
         )
  
-        print("Generated Ideas Response:", response.text)
+        print("Generated Ideas Response:", response.choices[0].message.content)
        
         # Process generated ideas (using same logic as in original function)
         validated_ideas = []
         try:
             # Split the response into individual JSON objects
-            json_objects = response.text.split('```json')
+            json_objects = response.choices[0].message.content.split('```json')
             cleaned_jsons = []
            
             for obj in json_objects:
@@ -2248,7 +2226,7 @@ def generate_ideas_from_document(request):
             # Fallback text parsing logic (same as original function)
             if not validated_ideas:
                 print("No ideas processed from JSON, falling back to text parsing")
-                lines = response.text.split('\n')
+                lines = response.choices[0].message.content.split('\n')
                 current_name = None
                 current_description = []
                

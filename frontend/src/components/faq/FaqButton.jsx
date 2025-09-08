@@ -15,9 +15,9 @@ const FaqButton = ({ className }) => {
   return (
     <button
       onClick={handleFaqClick}
-      className={`fixed bottom-2 right-2 text-neutral-400 p-3 transition-colors duration-300 hover:text-blue-500 focus:outline-none ${className || ''}`}
-      aria-label="Frequently Asked Questions"
-      title="Frequently Asked Questions"
+      className={`fixed bottom-2 left-2 text-neutral-400 p-3 transition-colors duration-300 hover:text-blue-500 focus:outline-none ${className || ''}`}
+      aria-label="User guide"
+      title="User guide"
     >
       <HelpCircle size={20} />
     </button>

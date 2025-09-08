@@ -49,27 +49,23 @@ import {
   Play,
 } from "lucide-react";
 import FaqButton from "./faq/FaqButton";
-// Video Modal Component
 
-const VideoModal = ({ isOpen, onClose, videoUrl }) => {
+
+// Video Modal Component
+const VideoModal = ({ isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      setIsLoading(true);
     } else {
       document.body.style.overflow = "unset";
-      setIsLoading(true);
     }
-
     return () => {
       document.body.style.overflow = "unset";
     };
   }, [isOpen]);
-
-  const handleVideoLoad = () => {
-    setIsLoading(false);
-  };
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
@@ -84,47 +80,89 @@ const VideoModal = ({ isOpen, onClose, videoUrl }) => {
       className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={handleBackdropClick}
     >
-      <div className="relative w-full max-w-4xl mx-auto">
+      <div className="relative w-full max-w-4xl mx-auto bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50">
+        {/* Gradient Border Effect */}
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur-xl -z-10"></div>
+
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors z-10"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors z-10 bg-slate-800/80 backdrop-blur-sm rounded-full p-2 hover:bg-slate-700/80"
           aria-label="Close video"
         >
-          <X className="w-8 h-8" />
+          <X className="w-5 h-5" />
         </button>
 
+        {/* Header */}
+        <div className="p-6 pb-4 border-b border-slate-700/50 bg-gradient-to-r from-slate-800/50 to-slate-900/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <Play className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                KLARIFai Complete Usage Guide
+              </h3>
+            </div>
+          </div>
+        </div>
+        
         {/* Video Container */}
-        <div className="relative bg-black rounded-lg overflow-hidden shadow-2xl">
-          {/* Loading Spinner */}
+        <div className="relative w-full aspect-video bg-black">
+          {/* Loading Animation */}
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-white text-lg">Loading demo...</p>
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-950 z-10">
+              <div className="flex flex-col items-center gap-6">
+                {/* AI-themed Loading Spinner */}
+                <div className="relative">
+                  <div className="w-16 h-16 border-4 border-slate-700 border-t-blue-500 border-r-purple-500 rounded-full animate-spin"></div>
+                  <div className="absolute inset-2 w-12 h-12 border-4 border-slate-800 border-b-pink-500 border-l-blue-400 rounded-full animate-spin animate-reverse"></div>
+                  {/* <div className="absolute inset-4 w-8 h-8 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full animate-pulse"></div> */}
+                </div>
+                
+                {/* Loading Text */}
+                <div className="text-center">
+                  <h4 className="text-white text-lg font-semibold mb-2">Loading KLARIFai Demo</h4>
+                  <p className="text-slate-400 text-sm">Preparing AI insights experience...</p>
+                </div>
+                
+                {/* Loading Dots */}
+                <div className="flex gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                  <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Video Element */}
-          <video
-            className="w-full h-auto max-h-[80vh]"
-            controls
-            autoPlay
-            onLoadedData={handleVideoLoad}
-            onError={() => setIsLoading(false)}
-          >
-            <source src={videoUrl} type="video/mp4" />
-            Your browser does not support the video tag.
-          </video>
+          <iframe
+            src="https://drive.google.com/file/d/1MSYgWT0GRnM5YOwqe5OZ0RY7WPlgPhRm/preview"
+            className="w-full h-full"
+            allow="autoplay; encrypted-media"
+            //remove the caption option from the video
+            frameBorder="0"
+            allowFullScreen
+            title="KLARIFai Demo Video"
+            onLoad={() => {
+              // Give a slight delay to ensure content is fully loaded
+              setTimeout(() => setIsLoading(false), 1000);
+            }}
+          />
         </div>
-
-        {/* Video Info */}
-        <div className="mt-4 text-center">
-          <h3 className="text-white text-xl font-semibold">KLARIFai Demo</h3>
-          <p className="text-gray-300 mt-2">
-            See how KLARIFai transforms your workflow
-          </p>
+        
+        {/* Footer */}
+        <div className="p-6 pt-4 bg-gradient-to-r from-slate-900/50 to-slate-800/50 border-t border-slate-700/30">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full animate-pulse"></div>
+              <span className="text-slate-300 text-sm font-medium">Live Demo</span>
+            </div>
+            <div className="h-4 w-px bg-slate-600"></div>
+            <p className="text-slate-400 text-sm flex-1">
+              This demo showcases KLARIFai's complete workflow.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -196,7 +234,7 @@ const LoginModal = ({ isOpen, onClose }) => {
       </div>
 
       {/* CSS Overrides for LoginForm */}
-      <style jsx>{`
+      <style>{`
         .themed-login-form input[type="text"],
         .themed-login-form input[type="password"] {
           background-color: rgba(30, 41, 59, 0.7) !important;
@@ -299,7 +337,7 @@ function FlipCard({ images }: { images: string[] }) {
 
   return (
     <div
-      className="flip-card aspect-square rounded-lg overflow-hidden"
+      className="flip-card w-32 h-32 aspect-square rounded-lg overflow-hidden"
       style={{ perspective: 1000 }}
     >
       <div className={`flip-card-inner ${flipped ? "flipped" : ""}`}>
@@ -720,6 +758,13 @@ function WelcomeScreen() {
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                 <button
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25"
+                >
+                  Sign in
+                  {/* <ArrowRight className="inline-block ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" /> */}
+                </button>
+                <button
                   onClick={handleWatchDemo}
                   className="group px-8 py-4 rounded-xl text-lg font-semibold border border-slate-600 hover:border-slate-400 transition-all duration-300 backdrop-blur-sm hover:bg-slate-800/50 flex items-center gap-2"
                 >
@@ -810,14 +855,14 @@ function WelcomeScreen() {
             </div>
 
             {/* ChevronDown for KLARIFai Notebook */}
-            <div className="text-center">
+            {/* <div className="text-center">
               <div className="animate-bounce">
                 <ChevronDown
                   className="w-12 h-12 text-blue-500 mx-auto cursor-pointer hover:text-white transition-colors"
                   onClick={() => scrollToSection("idea-generator")}
                 />
               </div>
-            </div>
+            </div> */}
 
             {/* Idea Generator */}
             <div
@@ -871,7 +916,7 @@ function WelcomeScreen() {
                   <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-8 border border-slate-700 hover:border-purple-500/50 transition-all duration-300 transform hover:scale-105">
                     <div className="space-y-4">
                       <div className="h-4 bg-gradient-to-r from-purple-400 to-pink-400 rounded w-2/3"></div>
-                      <div className="grid grid-cols-2 gap-3 mt-6">
+                      <div className="grid grid-cols-2 gap-2 mt-4 max-w-md mx-auto">
                         {flipImages.map((images, i) => (
                           <FlipCard key={i} images={images} />
                         ))}
@@ -884,14 +929,14 @@ function WelcomeScreen() {
             </div>
 
             {/* ChevronDown for Idea Generator */}
-            <div className="text-center">
+            {/* <div className="text-center">
               <div className="animate-bounce">
                 <ChevronDown
                   className="w-12 h-12 text-purple-500 mx-auto cursor-pointer hover:text-white transition-colors"
                   onClick={() => scrollToSection("cta-section")}
                 />
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
       </section>
@@ -930,10 +975,18 @@ function WelcomeScreen() {
           </div>
         </div>
       </section>
+
+      
       {/* Floating FAQ Button - always visible, not inside header/footer/cta */}
-      <div className="fixed bottom-6 right-6 z-50">
+      {/* <div className="fixed bottom-6 right-6 z-50">
         <FaqButton />
-      </div>
+      </div> */}
+
+      {/* Floating FAQ Button - forced to at right bottom */}
+      <FaqButton 
+        className="fixed bottom-2 right-2 z-[9999] !left-auto" 
+        style={{position: 'fixed', right: '0.5rem', bottom: '0.5rem', left: 'auto', zIndex: 9999}} 
+      />
 
       {/* Footer */}
       <footer id="contact" className="bg-slate-900 border-t border-slate-800">
@@ -956,7 +1009,7 @@ function WelcomeScreen() {
           </div>
         </div>
       </footer>
-      <style jsx>{`
+      <style>{`
         .cta-emphasis-gradient {
           background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899);
           -webkit-background-clip: text;

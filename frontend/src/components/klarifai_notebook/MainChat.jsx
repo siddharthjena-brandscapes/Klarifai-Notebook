@@ -2135,33 +2135,7 @@ const dispatchRefreshEvent = () => {
               response.data.response || response.data.content;
             let citations = response.data.citations || [];
 
-            // Process web sources using the helper function
-            const webSources = processWebSources(
-              response.data.sources_info,
-              response.data.extracted_urls
-            );
-
-            console.log("Processed web sources:", webSources);
-
-            // If the response is a JSON string, parse it
-            if (
-              typeof responseContent === "string" &&
-              responseContent.startsWith("{")
-            ) {
-              try {
-                const parsedResponse = JSON.parse(responseContent);
-                responseContent = parsedResponse.content || responseContent;
-                // Update citations if they're in the JSON response
-                if (parsedResponse.citations) {
-                  citations = parsedResponse.citations;
-                }
-              } catch (jsonError) {
-                console.warn(
-                  "⚠️ Failed to parse JSON response, using as-is:",
-                  jsonError
-                );
-              }
-            }
+            const webSources = response.data.sources_info;
 
             const assistantMessage = {
               role: "assistant",
@@ -2245,135 +2219,37 @@ const dispatchRefreshEvent = () => {
       [handleSendMessage, setSelectedDocuments, handleFileChange, hasUploadPermissions]
     );
 
-   const WebSourcesDisplay = ({ sources }) => {
-    if (!sources || sources.length === 0) return null;
- 
-    // Define file extensions that should not be clickable
-    const fileExtensions = [
-      ".pdf",
-      ".docx",
-      ".txt",
-      ".pptx",
-      ".jpg",
-      ".jpeg",
-      ".bmp",
-      ".png",
-      ".mp3",
-      ".mp4",
-      ".wav",
-      ".mpeg",
-      ".doc",
-      ".xls",
-      ".xlsx",
-      ".ppt",
-      ".gif",
-      ".tiff",
-      ".zip",
-      ".rar",
-    ];
- 
-    // Process sources to determine if they're web links or files
-    const processedSources = sources.map((source, index) => {
-      // Remove any leading/trailing whitespace and asterisks
-      let cleanSource = source.trim().replace(/\*$/, "");
+const WebSourcesDisplay = ({ sources }) => {
+  if (!sources) return null;
 
-      if (cleanSource.includes('|')) {
-    const [displayDomain, actualUrl] = cleanSource.split('|');
-    return {
-      type: "web",
-      url: actualUrl,  // Use the actual Gemini redirect URL
-      display: displayDomain,
-    };
-  }
- 
-      // Check if it's a file by looking for file extensions
-      const isFile = fileExtensions.some((ext) =>
-        cleanSource.toLowerCase().includes(ext.toLowerCase())
-      );
- 
-      if (isFile) {
-        // For files, just return the clean source as display text
-        return {
-          type: "file",
-          display: cleanSource,
-          url: null,
-        };
-      } else {
-        // For web sources, process as before
-        // If it's just a domain without http/https, add https://
-        if (!cleanSource.startsWith("http")) {
-          cleanSource = `https://${cleanSource}`;
-        }
- 
-        // Extract just the domain for display
-        const domainMatch = cleanSource.match(
-          /^https?:\/\/(?:www\.)?([^\/]+)/i
-        );
-        const displayText = domainMatch ? domainMatch[1] : cleanSource;
- 
-        return {
-          type: "web",
-          url: cleanSource,
-          display: displayText,
-        };
-      }
-    });
- 
-    return (
-      <div className="web-sources-container">
-        <style>{`
-          .web-source-link {
-            color: #0066cc;
-            text-decoration: underline;
-            cursor: pointer;
-          }
-         
-          .web-source-link:hover {
-            color: #0052a3;
-          }
-         
-          .file-source-text {
-            color: #666;
-            font-style: italic;
-          }
-         
-          .sources-label {
-            font-weight: 500;
-            margin-right: 8px;
-          }
-         
-          .source-item {
-            display: inline;
-          }
-        `}</style>
-        <div className="web-sources-header">
-          <span className="sources-label">Sources:</span>
-        </div>
-        <div className="web-sources-list">
-          {processedSources.map((source, index) => (
-            <span key={index} className="source-item">
-              {source.type === "web" ? (
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="web-source-link"
-                >
-                  {source.display}
-                </a>
-              ) : (
-                <span className="file-source-text">{source.display}</span>
-              )}
-              {index < processedSources.length - 1 && ", "}
-            </span>
-          ))}
-        </div>
-      </div>
-    );
-  };
-    const toggleFollowUpQuestions = () => {
-      setIsFollowUpQuestionsMinimized((prev) => !prev);
-    };
+  return (
+    <div style={{ 
+      marginTop: '10px', 
+      padding: '10px', 
+      backgroundColor: '#f0f0f0', 
+      border: '1px solid #ccc',
+      borderRadius: '5px',
+      color: '#333',
+    }}>
+      <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Raw Sources:</div>
+      <pre style={{ 
+        fontSize: '11px', 
+        backgroundColor: '#e0e0e0', 
+        padding: '5px', 
+        overflow: 'auto',
+        maxHeight: '200px',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all'
+      }}>
+        {typeof sources === 'string' ? sources : JSON.stringify(sources, null, 2)}
+      </pre>
+    </div>
+  );
+};
+
+const toggleFollowUpQuestions = () => {
+  setIsFollowUpQuestionsMinimized((prev) => !prev);
+};
 
     // Add a method to clean up duplicate messages
     const cleanupConversation = (messages) => {
@@ -3144,28 +3020,9 @@ const dispatchRefreshEvent = () => {
                           </div>
                         )}
                         {/* NEW: Display web sources if available */}
-                        {(() => {
-                          const sources =
-                            msg.webSources ||
-                            processWebSources(
-                              msg.sources_info,
-                              msg.extracted_urls
-                            );
-                          return (
-                            sources &&
-                            sources.length > 0
-                          );
-                        })() && (
-                          <WebSourcesDisplay
-                            sources={
-                              msg.webSources ||
-                              processWebSources(
-                                msg.sources_info,
-                                msg.extracted_urls
-                              )
-                            }
-                          />
-                        )}
+                    {msg.webSources && (
+  <WebSourcesDisplay sources={msg.webSources} />
+)}
 
                         {/* Add Copy option for Klarifai messages only */}
                         {msg.role !== "user" && (

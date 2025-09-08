@@ -948,8 +948,12 @@ from rest_framework.response import Response
 from django.db.models import Min
 from .models import Project
 from notebook.models import ChatHistory
-from ideaGen.models import ProductIdea2
+from ideaGen.models import UserActivityLog
 from notebook.models import UserTransaction, TransactionType
+from django.db.models import Count  
+from django.db import models
+
+
 @api_view(['GET'])
 def get_first_activities(request):
     """Get timestamps of first activities across all modules"""
@@ -965,8 +969,11 @@ def get_first_activities(request):
         'notebook_conversation_details'  # Join with ConversationTransaction
     ).order_by('created_at').first()
    
-    # Get first idea generation
-    first_idea = ProductIdea2.objects.select_related('user').order_by('created_at').first()
+    # Get first idea generation from UserActivityLog
+    first_idea = UserActivityLog.objects.filter(
+        activity_type='idea_generate'
+    ).select_related('user').order_by('timestamp').first()
+
  
     return Response({
         'first_project': {
@@ -982,8 +989,8 @@ def get_first_activities(request):
         },
         'first_idea': {
             'username': first_idea.user.username if first_idea else None,
-            'timestamp': first_idea.created_at if first_idea else None,
-            'idea_name': first_idea.product if first_idea else None
+            'timestamp': first_idea.timestamp if first_idea else None,
+            'idea_details': first_idea.metadata.get('idea_name', 'Unknown') if first_idea else None
         }
     })
 
@@ -1004,8 +1011,10 @@ def get_all_activities(request):
         'notebook_conversation_details'
     ).order_by('created_at')
     
-    # Fetch all ideas
-    ideas = ProductIdea2.objects.select_related('user', 'project').order_by('created_at')
+    # Fetch all idea-related activities from UserActivityLog
+    idea_activities = UserActivityLog.objects.filter(
+        activity_type__in=['idea_generate', 'idea_edit']
+    ).select_related('user').order_by('timestamp')
    
     activities = []
    
@@ -1032,28 +1041,35 @@ def get_all_activities(request):
             }
         })
    
-    # Add ideas
-    for idea in ideas:
-        try:
-            project_name = idea.project.name if idea.project else "Unknown Project"
-            activities.append({
-                'type': 'Idea Generation',
-                'username': idea.user.username,
-                'details': f"Created idea session '{project_name}'",
-                'timestamp': idea.created_at
-            })
-        except Exception as e:
-            activities.append({
-                'type': 'Idea Generation',
-                'username': idea.user.username,
-                'details': f"Generated idea '{idea.product}'",
-                'timestamp': idea.created_at
-            })
+    # Add ideas from activity log
+    for activity in idea_activities:
+        activities.append({
+            'type': 'Idea Generation',
+            'username': activity.user.username,
+            'details': f"Generated an Idea",
+            'timestamp': activity.timestamp,
+            'metadata': {
+                'project_id': activity.project_id,
+                'idea_id': activity.idea_id,
+                'additional_info': activity.metadata
+            }
+        })
    
     # Sort all activities by timestamp
     activities.sort(key=lambda x: x['timestamp'], reverse=True)
+
+    # Calculate total ideas per user
+    user_idea_stats = UserActivityLog.objects.filter(
+        activity_type='idea_generate'
+    ).values('user__username').annotate(
+        total_ideas=Count('id'),
+        first_idea_date=models.Min('timestamp')
+    )
    
     return Response({
         'status': 'success',
-        'activities': activities
+        'activities': activities,
+        'user_stats': {
+            'idea_generation': user_idea_stats
+        }
     })

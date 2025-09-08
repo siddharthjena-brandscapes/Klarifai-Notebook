@@ -1610,7 +1610,7 @@ const fillFormWithDocParams = () => {
     
     return (
       <div className="fixed inset-0 bg-[#faf4ee]/70 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-  <div className="bg-white shadow-lg dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 rounded-xl shadow-xl max-w-lg w-full border border-[#e8ddcc] dark:border-purple-500/30 overflow-hidden">
+  <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 rounded-xl shadow-xl max-w-lg w-full border border-[#e8ddcc] dark:border-purple-500/30 overflow-hidden">
     <div className="p-5 bg-gradient-to-r from-[#f5e6d8] to-[#e9dcc9] dark:from-purple-600/30 dark:to-blue-600/30 border-b border-[#d6cbbf] dark:border-purple-500/20 flex justify-between items-center">
       <h3 className="text-xl font-bold text-[#0a3b25] dark:text-white">
         Document Parameters Detected
@@ -1990,7 +1990,7 @@ const fillFormWithDocParams = () => {
                   <div className="flex justify-center pt-6 space-x-4">
                     <CircularProgressButton
                       type="submit"
-                      disabled={!hasFormChanged || isLoading}
+                      disabled={isLoading}
                       isLoading={isLoading}
                       currentIdea={currentIdeaProgress}
                       totalIdeas={totalIdeasExpected}
