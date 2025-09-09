@@ -36,6 +36,7 @@ import {
   FilePlus,
   Trash,
   X,
+  ExternalLink
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
@@ -2124,6 +2125,11 @@ const dispatchRefreshEvent = () => {
         const response = await chatServiceNB.sendMessage(messageData);
 
         console.log("📦 Full Response Object:", response);
+        // Before creating the assistant message
+        console.log('🔄 Processing sources:', {
+          sources_info: response.data.sources_info,
+          extracted_urls: response.data.extracted_urls
+        });
 
         if (response && response.data) {
           // If backend returns the full conversation/messages array, use it:
@@ -2136,7 +2142,7 @@ const dispatchRefreshEvent = () => {
             let citations = response.data.citations || [];
 
             const webSources = response.data.sources_info;
-
+            
             const assistantMessage = {
               role: "assistant",
               content: responseContent,
@@ -2145,12 +2151,13 @@ const dispatchRefreshEvent = () => {
               use_web_knowledge: response.data.use_web_knowledge || useWebMode,
               response_length: response.data.response_length || responseLength,
               response_format: response.data.response_format || responseFormat,
-              webSources: webSources, // Use processed web sources
+              webSources: response.data.sources_info,// Use processed web sources
               sources_info: response.data.sources_info, // Store original sources_info
               extracted_urls: response.data.extracted_urls, // Store original extracted_urls
             };
-
+            
             setConversation([...newConversation, assistantMessage]);
+            console.log('💬 Updated conversation:', [...newConversation, assistantMessage]);
           }
 
           // Update follow-up questions if available
@@ -2219,30 +2226,291 @@ const dispatchRefreshEvent = () => {
       [handleSendMessage, setSelectedDocuments, handleFileChange, hasUploadPermissions]
     );
 
+
+// const WebSourcesDisplay = ({ sources }) => {
+//   // Debug logging
+//   console.log('🔍 WebSourcesDisplay received sources:', sources);
+//   console.log('🔍 Sources type:', typeof sources);
+//   console.log('🔍 Sources stringified:', JSON.stringify(sources, null, 2));
+  
+//   if (!sources) {
+//     console.log('❌ No sources provided');
+//     return null;
+//   }
+
+//   // Function to parse and extract sources
+//   const parseSourcesInfo = (sourcesData) => {
+//     try {
+//       console.log('🔍 Raw sourcesData:', sourcesData);
+//       console.log('🔍 Type:', typeof sourcesData);
+      
+//       let parsedSources = [];
+      
+//       // If it's an array of string fragments, reconstruct and parse manually
+//       if (Array.isArray(sourcesData)) {
+//         console.log('📋 Received array of strings, reconstructing...');
+        
+//         // Join all the fragments back into a single string
+//         const reconstructedString = sourcesData.join('');
+//         console.log('🔧 Reconstructed string:', reconstructedString.substring(0, 500) + '...');
+        
+//         // This looks like Python dict format, so we need to convert it to valid JSON
+//         let jsonString = reconstructedString
+//           .replace(/\*$/, '') // Remove trailing asterisk
+//           .replace(/'/g, '"') // Replace single quotes with double quotes
+//           .replace(/\n/g, '') // Remove newlines
+//           .replace(/\\/g, '\\\\') // Escape backslashes properly
+//           // Fix missing commas between key-value pairs
+//           .replace(/(")\s*(["{])/g, '$1, $2') // Add comma between }" and next key or {
+//           .replace(/("\s*)({")/g, '$1, $2') // Add comma between quoted values and opening braces
+//           .replace(/("})\s*(")/g, '$1, $2') // Add comma between closing brace and next quoted key
+//           .trim();
+        
+//         console.log('🧹 Converted to JSON format:', jsonString.substring(0, 500) + '...');
+        
+//         // Parse as JSON
+//         parsedSources = JSON.parse(jsonString);
+//         console.log('📋 Parsed sources count:', parsedSources.length);
+//         console.log('📋 First parsed source:', parsedSources[0]);
+//       }
+//       // If it's a string, try to parse it directly
+//       else if (typeof sourcesData === 'string') {
+//         // Apply same transformations for string input
+//         let jsonString = sourcesData
+//           .replace(/'/g, '"')
+//           .replace(/\n/g, '')
+//           .replace(/\\/g, '\\\\')
+//           .replace(/(")\s*(["{])/g, '$1, $2')
+//           .replace(/("\s*)({")/g, '$1, $2')
+//           .replace(/("})\s*(")/g, '$1, $2')
+//           .trim();
+        
+//         parsedSources = JSON.parse(jsonString);
+//         console.log('📋 Parsed from string:', parsedSources);
+//       }
+//       // If it's an object, wrap it in an array
+//       else if (typeof sourcesData === 'object' && sourcesData !== null) {
+//         parsedSources = [sourcesData];
+//         console.log('📋 Wrapped object in array:', parsedSources);
+//       }
+//       else {
+//         console.log('❌ Unrecognized data type');
+//         return [];
+//       }
+
+//       // Ensure we have an array
+//       if (!Array.isArray(parsedSources)) {
+//         console.log('❌ Not an array after parsing');
+//         return [];
+//       }
+
+//       // Extract title and URL from each source dictionary
+//       const extracted = parsedSources
+//         .filter(source => {
+//           const isValid = source && typeof source === 'object' && source.title && source.url;
+//           if (!isValid) {
+//             console.log('⚠️ Filtered out invalid source:', typeof source, source);
+//           }
+//           return isValid;
+//         })
+//         .map((source, index) => {
+//           const extractedSource = {
+//             id: index,
+//             title: source.title || source.domain || 'Unknown Source',
+//             url: source.url || source.actual_url || '#',
+//             domain: source.domain || '',
+//             snippet: source.snippet || ''
+//           };
+//           console.log('✅ Extracted source:', extractedSource);
+//           return extractedSource;
+//         });
+        
+//       console.log('🎯 Final extracted sources count:', extracted.length);
+//       return extracted;
+        
+//     } catch (error) {
+//       console.error('❌ Error parsing sources:', error);
+//       console.error('❌ Error details:', error.message);
+      
+//       // Fallback: try to extract data manually using regex
+//       console.log('🔄 Attempting manual extraction as fallback...');
+//       return attemptManualExtraction(sourcesData);
+//     }
+//   };
+
+//   // Fallback manual extraction function
+//   const attemptManualExtraction = (sourcesData) => {
+//     try {
+//       if (!Array.isArray(sourcesData)) return [];
+      
+//       const fullString = sourcesData.join('');
+//       const sources = [];
+      
+//       // Look for the pattern: {'title': 'value', 'url': 'value', ...}
+//       // Use regex to match complete dictionary patterns
+//       const dictPattern = /\{'title':\s*'([^']+)'[^}]*'url':\s*'([^']+)'[^}]*'domain':\s*'([^']+)'[^}]*\}/g;
+//       let match;
+      
+//       while ((match = dictPattern.exec(fullString)) !== null) {
+//         const [, title, url, domain] = match;
+//         if (title && url) {
+//           sources.push({
+//             id: sources.length,
+//             title: title.trim(),
+//             url: url.trim(),
+//             domain: domain?.trim() || '',
+//             snippet: ''
+//           });
+//         }
+//       }
+      
+//       console.log('🔄 Manual extraction found:', sources.length, 'sources');
+//       console.log('🔄 Manual extraction result:', sources);
+//       return sources;
+      
+//     } catch (error) {
+//       console.error('❌ Manual extraction also failed:', error);
+//       return [];
+//     }
+//   };
+
+//   const extractedSources = parseSourcesInfo(sources);
+
+//   // Don't render if no valid sources found
+//   if (extractedSources.length === 0) {
+//     console.log('❌ No valid sources to display');
+//     return null;
+//   }
+
+//   return (
+//     <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-lg">
+//       <div className="flex items-center mb-2">
+//         <Globe className="h-4 w-4 mr-2 text-blue-500 dark:text-blue-400" />
+//         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+//           Sources ({extractedSources.length})
+//         </span>
+//       </div>
+      
+//       <div className="space-y-2">
+//         {extractedSources.map((source) => (
+//           <div 
+//             key={source.id} 
+//             className="flex items-center p-2 bg-white dark:bg-gray-700/50 rounded border border-gray-100 dark:border-gray-600/50 hover:bg-gray-50 dark:hover:bg-gray-600/50 transition-colors"
+//           >
+//             <div className="flex-1 min-w-0">
+//               <div className="flex items-center space-x-2">
+//                 <a
+//                   href={source.url}
+//                   target="_blank"
+//                   rel="noopener noreferrer"
+//                   className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline truncate"
+//                   title={`Visit ${source.title}`}
+//                 >
+//                   {source.title}
+//                 </a>
+//                 {source.domain && source.domain !== source.title && (
+//                   <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-600/50 px-2 py-0.5 rounded-full">
+//                     {source.domain}
+//                   </span>
+//                 )}
+//               </div>
+              
+//               {source.snippet && (
+//                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+//                   {source.snippet.length > 100 
+//                     ? `${source.snippet.substring(0, 100)}...` 
+//                     : source.snippet
+//                   }
+//                 </p>
+//               )}
+//             </div>
+            
+//             <div className="ml-2 flex-shrink-0">
+//               <button
+//                 onClick={() => window.open(source.url, '_blank')}
+//                 className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+//                 title="Open in new tab"
+//               >
+//                 <ExternalLink className="h-3 w-3" />
+//               </button>
+//             </div>
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// };
+
+
 const WebSourcesDisplay = ({ sources }) => {
-  if (!sources) return null;
+  // console.log('🔍 WebSourcesDisplay received sources:', sources);
+  
+  if (!sources) {
+    console.log('❌ No sources provided');
+    return null;
+  }
+
+  const attemptManualExtraction = (sourcesData) => {
+    try {
+      if (!Array.isArray(sourcesData)) return [];
+      
+      const fullString = sourcesData.join('');
+      const sources = [];
+      
+      // Look for the pattern: {'title': 'value', 'url': 'value', ...}
+      // Use regex to match complete dictionary patterns
+      const dictPattern = /\{'title':\s*'([^']+)'[^}]*'url':\s*'([^']+)'[^}]*'domain':\s*'([^']+)'[^}]*\}/g;
+      let match;
+      
+      while ((match = dictPattern.exec(fullString)) !== null) {
+        const [, title, url, domain] = match;
+        if (title && url) {
+          sources.push({
+            id: sources.length,
+            title: title.trim(),
+            url: url.trim(),
+            domain: domain?.trim() || '',
+            snippet: ''
+          });
+        }
+      }
+      
+      // console.log('🔄 Manual extraction found:', sources.length, 'sources');
+      return sources;
+      
+    } catch (error) {
+      console.error('❌ Manual extraction failed:', error);
+      return [];
+    }
+  };
+
+  const extractedSources = attemptManualExtraction(sources);
+
+  if (extractedSources.length === 0) {
+    console.log('❌ No valid sources to display');
+    return null;
+  }
 
   return (
-    <div style={{ 
-      marginTop: '10px', 
-      padding: '10px', 
-      backgroundColor: '#f0f0f0', 
-      border: '1px solid #ccc',
-      borderRadius: '5px',
-      color: '#333',
-    }}>
-      <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Raw Sources:</div>
-      <pre style={{ 
-        fontSize: '11px', 
-        backgroundColor: '#e0e0e0', 
-        padding: '5px', 
-        overflow: 'auto',
-        maxHeight: '200px',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-all'
-      }}>
-        {typeof sources === 'string' ? sources : JSON.stringify(sources, null, 2)}
-      </pre>
+    <div className="mt-2 text-sm flex flex-wrap items-center gap-1">
+      <span className="text-gray-500 dark:text-gray-400 font-medium">Sources:</span>
+      <div className="flex flex-wrap items-center gap-1 ml-1">
+        {extractedSources.map((source, index) => (
+          <React.Fragment key={source.id}>
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
+            >
+              {source.domain || source.title}
+            </a>
+            {index < extractedSources.length - 1 && (
+              <span className="text-gray-400 last:hidden">,</span>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
     </div>
   );
 };
@@ -2852,31 +3120,7 @@ const toggleFollowUpQuestions = () => {
                                 </div>
                               )}
 
-                              {/* Format Badge - Show ALL formats including "natural" */}
-                              {/* <div className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs  dark:text-[#e67e5e] text-[#9c6644]">
-                              <ScrollText className="h-3 w-3 mr-0.5" />
-                              <span>
-                                {(() => {
-                                  // Format display names mapping
-                                  const formatNames = {
-                                    natural: "Natural",
-                                    executive_summary: "Summary",
-                                    detailed_analysis: "Analysis",
-                                    strategic_recommendation: "Recommendation",
-                                    comparative_analysis: "Comparison",
-                                    market_insights: "Market",
-                                    factual_brief: "Factual",
-                                    technical_deep_dive: "Technical",
-                                    auto_detect: "Auto-Detect",
-                                  };
-                                  return (
-                                    formatNames[
-                                      msg.response_format || "natural"
-                                    ] || "Natural"
-                                  );
-                                })()}
-                              </span>
-                            </div> */}
+                             
                             </div>
                           )}
                           {msg.role === "assistant" && (
@@ -3019,10 +3263,32 @@ const toggleFollowUpQuestions = () => {
                             )}
                           </div>
                         )}
+                        
                         {/* NEW: Display web sources if available */}
-                    {msg.webSources && (
-  <WebSourcesDisplay sources={msg.webSources} />
-)}
+                   {/* NEW: Display web sources if available */}
+                        {(() => {
+                          const sources =
+                            msg.webSources ||
+                            processWebSources(
+                              msg.sources_info,
+                              msg.extracted_urls
+                            );
+                          return (
+                            sources &&
+                            sources.length > 0
+                          );
+                        })() && (
+                          <WebSourcesDisplay
+                            sources={
+                              msg.webSources ||
+                              processWebSources(
+                                msg.sources_info,
+                                msg.extracted_urls
+                              )
+                            }
+                          />
+                        )}
+ 
 
                         {/* Add Copy option for Klarifai messages only */}
                         {msg.role !== "user" && (
@@ -3306,28 +3572,16 @@ const toggleFollowUpQuestions = () => {
             renderSummaryView()
           )}
         </div>
-        {/* Document Processing Loader - Add this at the top level */}
-        {/* {isDocumentProcessing && (
-          <DocumentProcessingLoader
-            documents={filteredProcessingDocuments}
-            queuedFilenames={currentUploadFilenames}
-            showLoader={isDocumentProcessing}
-            onComplete={() => {
-              setIsDocumentProcessing(false);
-              setProcessingDocuments([]);
-              setCurrentUploadFilenames([]);
-            }}
-            onCancel={() => {
-              setIsDocumentProcessing(false);
-              setProcessingDocuments([]);
-              setCurrentUploadFilenames([]);
-              toast.info("Document processing cancelled");
-            }}
-          />
-        )} */}
+        
 
         {/* Custom Scrollbar Styles */}
         <style>{`
+        .line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
       @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }

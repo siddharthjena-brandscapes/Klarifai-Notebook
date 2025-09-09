@@ -47,7 +47,7 @@ const ProfileDropdown = ({
   // Function to refresh usage statistics - MOVED BEFORE useEffect
  const handleRefreshStats = useCallback(async () => {
   setIsRefreshing(true);
-  console.log('Refreshing user stats...');
+  // console.log('Refreshing user stats...');
 
   try {
     const response = await axiosInstance.get("/user/profile/");
@@ -84,7 +84,7 @@ const ProfileDropdown = ({
   useEffect(() => {
     // Auto-refresh stats when a query is made
     const handleQueryComplete = () => {
-      console.log('Query complete event received, refreshing stats...');
+      // console.log('Query complete event received, refreshing stats...');
       // Add a small delay to ensure backend has processed the request
       setTimeout(() => {
         handleRefreshStats();

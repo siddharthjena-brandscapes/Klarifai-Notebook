@@ -511,11 +511,11 @@ export const documentService = {
     }
 
     try {
-      console.log("Fetching documents for project:", mainProjectId);
+    
       const response = await axiosInstance.get("/user-documents/", {
         params: { main_project_id: mainProjectId },
       });
-      console.log("Documents response:", response.data);
+    
       return response;
     } catch (error) {
       console.error("Error in getUserDocuments:", error);
@@ -558,12 +558,7 @@ getOriginalDocument: (documentId, mainProjectId) => {
         }
     })
     .then(response => {
-        console.log("=== AXIOS RESPONSE DEBUG ===");
-        console.log("Response status:", response.status);
-        console.log("Response headers:", response.headers);
-        console.log("Response data type:", typeof response.data);
-        console.log("Response data instanceof Blob:", response.data instanceof Blob);
-        console.log("Content-Type:", response.headers['content-type']);
+
         
         // Check if response is a redirect URL object (would be JSON)
         if (response.headers['content-type']?.includes('application/json')) {
@@ -775,7 +770,7 @@ getOriginalDocument: (documentId, mainProjectId) => {
 
 export const chatService = {
   sendMessage: (data) => {
-    console.log("Sending message data:", data);
+  
 
     // Validate required parameters
     if (!data.message) {
@@ -2028,7 +2023,7 @@ export const chatServiceNB = {
 },
 
    updateConversationTitle: (conversationId, data) => {
-    console.log("Updating conversation title:", conversationId, data);
+
 
     // Create a properly formatted request payload
     const payload = {
@@ -2042,7 +2037,7 @@ export const chatServiceNB = {
     return axiosInstance
       .patch(`notebook/conversations-NB/${conversationId}/`, payload)
       .then((response) => {
-        console.log("Conversation title update response:", response.data);
+      
         return response;
       })
       .catch((error) => {
@@ -2072,12 +2067,7 @@ export const chatServiceNB = {
 
   getConversationDetails: async (conversationId, mainProjectId, processCitations = false) => {
     try {
-      console.log(
-        "Fetching conversation:",
-        conversationId,
-        "for project:",
-        mainProjectId
-      );
+   
       const response = await axiosInstance.get(
         `notebook/conversations-NB/${conversationId}/`,
         {
@@ -2116,11 +2106,10 @@ export const chatServiceNB = {
       message: data.message,
       max_length: data.max_length || 40
     }).then(response => {
-      console.log("Title generation response:", response.data);
+    
       return response;
     }).catch(error => {
-      console.error("Title generation error:", error);
-      throw error;
+      
     });
   },
 
@@ -2141,7 +2130,7 @@ export const chatServiceNB = {
       const response = await axiosInstance.get("notebook/chat-history-NB/", {
         params: { main_project_id: mainProjectId,  archived  },
       });
-      console.log("Chat history response:", response.data);
+     
       return response;
     } catch (error) {
       console.error("Error fetching chat history:", error);

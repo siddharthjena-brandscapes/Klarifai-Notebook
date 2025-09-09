@@ -19,7 +19,7 @@ export const UserProvider = ({ children }) => {
   const fetchCurrentUserRightPanelPermissions = useCallback(async () => {
     try {
       const permissions = await userService.getCurrentUserRightPanelPermissions();
-      console.log('Fetched user permissions:', permissions);
+      
       
       setCurrentUser({
         id: permissions.user_id,
@@ -46,7 +46,7 @@ export const UserProvider = ({ children }) => {
   }, []);
 
  useEffect(() => {
-    console.log('UserProvider effect running, path:', location.pathname, 'token:', localStorage.getItem('token'));
+  
     const token = localStorage.getItem('token');
     // Skip fetching permissions on login/signup/forgot/reset pages
     if (
@@ -104,7 +104,7 @@ export const UserProvider = ({ children }) => {
 
 export const useUser = () => {
   const context = useContext(UserContext);
-  console.log('useUser called from:', new Error().stack);
+
   if (!context) {
     throw new Error('useUser must be used within a UserProvider');
   }
