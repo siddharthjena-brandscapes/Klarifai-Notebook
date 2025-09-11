@@ -36,7 +36,7 @@ import {
   FilePlus,
   Trash,
   X,
-  ExternalLink
+  ExternalLink,
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { documentServiceNB, chatServiceNB } from "../../utils/axiosConfig";
@@ -283,9 +283,9 @@ const MainChat = forwardRef(
       return () => clearInterval(intervalId);
     }, [isDocumentProcessing]);
 
-const dispatchRefreshEvent = () => {
-  document.dispatchEvent(new CustomEvent('queryComplete'));
-};
+    const dispatchRefreshEvent = () => {
+      document.dispatchEvent(new CustomEvent("queryComplete"));
+    };
 
     const handleImageMessage = async (message, images, mode) => {
       if (!message.trim() && images.length === 0) return;
@@ -1268,30 +1268,32 @@ const dispatchRefreshEvent = () => {
 
     const handleTopicClick = async (topic) => {
       console.log("Topic clicked:", topic);
- 
+
       try {
         // Call backend to generate a question from the topic
         const res = await chatServiceNB.generateQuestionFromTopic({ topic });
         const generatedQuestion = res?.data?.question || `Discuss ${topic}`;
- 
+
         // Set the generated question in the input field
         setMessage(generatedQuestion);
- 
+
         // Send the generated question as a message
         handleSendMessage(generatedQuestion);
- 
+
         // Switch to chat view if currently in summary view
         if (currentView === "summary") {
           setCurrentView("chat");
         }
- 
+
         // Minimize follow-up questions to focus on the new discussion
         if (!isFollowUpQuestionsMinimized) {
           setIsFollowUpQuestionsMinimized(true);
         }
       } catch (error) {
         console.error("Failed to generate question from topic:", error);
-        toast.error("Could not generate a question for this topic. Please try again.");
+        toast.error(
+          "Could not generate a question for this topic. Please try again."
+        );
       }
     };
 
@@ -1463,14 +1465,14 @@ const dispatchRefreshEvent = () => {
                     text-white transition-all duration-300 flex items-center space-x-2
         `}
                         >
-                        {isSummaryGenerating ? (
-    <span>Generating...</span>
-  ) : (
-    <>
-      <Bot className="h-4 w-4" />
-      <span>Generate Summary</span>
-    </>
-  )}
+                          {isSummaryGenerating ? (
+                            <span>Generating...</span>
+                          ) : (
+                            <>
+                              <Bot className="h-4 w-4" />
+                              <span>Generate Summary</span>
+                            </>
+                          )}
                         </button>
                       ) : (
                         <button
@@ -1899,7 +1901,7 @@ const dispatchRefreshEvent = () => {
         );
 
         if (
-          response?.status && response.status === 429 ||
+          (response?.status && response.status === 429) ||
           response?.data?.error ||
           response?.data?.status === "error"
         ) {
@@ -2126,9 +2128,9 @@ const dispatchRefreshEvent = () => {
 
         console.log("📦 Full Response Object:", response);
         // Before creating the assistant message
-        console.log('🔄 Processing sources:', {
+        console.log("🔄 Processing sources:", {
           sources_info: response.data.sources_info,
-          extracted_urls: response.data.extracted_urls
+          extracted_urls: response.data.extracted_urls,
         });
 
         if (response && response.data) {
@@ -2142,7 +2144,7 @@ const dispatchRefreshEvent = () => {
             let citations = response.data.citations || [];
 
             const webSources = response.data.sources_info;
-            
+
             const assistantMessage = {
               role: "assistant",
               content: responseContent,
@@ -2151,13 +2153,16 @@ const dispatchRefreshEvent = () => {
               use_web_knowledge: response.data.use_web_knowledge || useWebMode,
               response_length: response.data.response_length || responseLength,
               response_format: response.data.response_format || responseFormat,
-              webSources: response.data.sources_info,// Use processed web sources
+              webSources: response.data.sources_info, // Use processed web sources
               sources_info: response.data.sources_info, // Store original sources_info
               extracted_urls: response.data.extracted_urls, // Store original extracted_urls
             };
-            
+
             setConversation([...newConversation, assistantMessage]);
-            console.log('💬 Updated conversation:', [...newConversation, assistantMessage]);
+            console.log("💬 Updated conversation:", [
+              ...newConversation,
+              assistantMessage,
+            ]);
           }
 
           // Update follow-up questions if available
@@ -2223,301 +2228,177 @@ const dispatchRefreshEvent = () => {
         handleFileChange,
         hasUploadPermissions,
       }),
-      [handleSendMessage, setSelectedDocuments, handleFileChange, hasUploadPermissions]
+      [
+        handleSendMessage,
+        setSelectedDocuments,
+        handleFileChange,
+        hasUploadPermissions,
+      ]
     );
 
+    // const WebSourcesDisplay = ({ sources }) => {
+    //   // console.log('🔍 WebSourcesDisplay received sources:', sources);
 
-// const WebSourcesDisplay = ({ sources }) => {
-//   // Debug logging
-//   console.log('🔍 WebSourcesDisplay received sources:', sources);
-//   console.log('🔍 Sources type:', typeof sources);
-//   console.log('🔍 Sources stringified:', JSON.stringify(sources, null, 2));
-  
-//   if (!sources) {
-//     console.log('❌ No sources provided');
-//     return null;
-//   }
+    //   if (!sources) {
+    //     console.log('❌ No sources provided');
+    //     return null;
+    //   }
 
-//   // Function to parse and extract sources
-//   const parseSourcesInfo = (sourcesData) => {
-//     try {
-//       console.log('🔍 Raw sourcesData:', sourcesData);
-//       console.log('🔍 Type:', typeof sourcesData);
-      
-//       let parsedSources = [];
-      
-//       // If it's an array of string fragments, reconstruct and parse manually
-//       if (Array.isArray(sourcesData)) {
-//         console.log('📋 Received array of strings, reconstructing...');
-        
-//         // Join all the fragments back into a single string
-//         const reconstructedString = sourcesData.join('');
-//         console.log('🔧 Reconstructed string:', reconstructedString.substring(0, 500) + '...');
-        
-//         // This looks like Python dict format, so we need to convert it to valid JSON
-//         let jsonString = reconstructedString
-//           .replace(/\*$/, '') // Remove trailing asterisk
-//           .replace(/'/g, '"') // Replace single quotes with double quotes
-//           .replace(/\n/g, '') // Remove newlines
-//           .replace(/\\/g, '\\\\') // Escape backslashes properly
-//           // Fix missing commas between key-value pairs
-//           .replace(/(")\s*(["{])/g, '$1, $2') // Add comma between }" and next key or {
-//           .replace(/("\s*)({")/g, '$1, $2') // Add comma between quoted values and opening braces
-//           .replace(/("})\s*(")/g, '$1, $2') // Add comma between closing brace and next quoted key
-//           .trim();
-        
-//         console.log('🧹 Converted to JSON format:', jsonString.substring(0, 500) + '...');
-        
-//         // Parse as JSON
-//         parsedSources = JSON.parse(jsonString);
-//         console.log('📋 Parsed sources count:', parsedSources.length);
-//         console.log('📋 First parsed source:', parsedSources[0]);
-//       }
-//       // If it's a string, try to parse it directly
-//       else if (typeof sourcesData === 'string') {
-//         // Apply same transformations for string input
-//         let jsonString = sourcesData
-//           .replace(/'/g, '"')
-//           .replace(/\n/g, '')
-//           .replace(/\\/g, '\\\\')
-//           .replace(/(")\s*(["{])/g, '$1, $2')
-//           .replace(/("\s*)({")/g, '$1, $2')
-//           .replace(/("})\s*(")/g, '$1, $2')
-//           .trim();
-        
-//         parsedSources = JSON.parse(jsonString);
-//         console.log('📋 Parsed from string:', parsedSources);
-//       }
-//       // If it's an object, wrap it in an array
-//       else if (typeof sourcesData === 'object' && sourcesData !== null) {
-//         parsedSources = [sourcesData];
-//         console.log('📋 Wrapped object in array:', parsedSources);
-//       }
-//       else {
-//         console.log('❌ Unrecognized data type');
-//         return [];
-//       }
+    //   const attemptManualExtraction = (sourcesData) => {
+    //     try {
+    //       if (!Array.isArray(sourcesData)) return [];
 
-//       // Ensure we have an array
-//       if (!Array.isArray(parsedSources)) {
-//         console.log('❌ Not an array after parsing');
-//         return [];
-//       }
+    //       const fullString = sourcesData.join('');
+    //       const sources = [];
 
-//       // Extract title and URL from each source dictionary
-//       const extracted = parsedSources
-//         .filter(source => {
-//           const isValid = source && typeof source === 'object' && source.title && source.url;
-//           if (!isValid) {
-//             console.log('⚠️ Filtered out invalid source:', typeof source, source);
-//           }
-//           return isValid;
-//         })
-//         .map((source, index) => {
-//           const extractedSource = {
-//             id: index,
-//             title: source.title || source.domain || 'Unknown Source',
-//             url: source.url || source.actual_url || '#',
-//             domain: source.domain || '',
-//             snippet: source.snippet || ''
-//           };
-//           console.log('✅ Extracted source:', extractedSource);
-//           return extractedSource;
-//         });
-        
-//       console.log('🎯 Final extracted sources count:', extracted.length);
-//       return extracted;
-        
-//     } catch (error) {
-//       console.error('❌ Error parsing sources:', error);
-//       console.error('❌ Error details:', error.message);
-      
-//       // Fallback: try to extract data manually using regex
-//       console.log('🔄 Attempting manual extraction as fallback...');
-//       return attemptManualExtraction(sourcesData);
-//     }
-//   };
+    //       // Look for the pattern: {'title': 'value', 'url': 'value', ...}
+    //       // Use regex to match complete dictionary patterns
+    //       const dictPattern = /\{'title':\s*'([^']+)'[^}]*'url':\s*'([^']+)'[^}]*'domain':\s*'([^']+)'[^}]*\}/g;
+    //       let match;
 
-//   // Fallback manual extraction function
-//   const attemptManualExtraction = (sourcesData) => {
-//     try {
-//       if (!Array.isArray(sourcesData)) return [];
-      
-//       const fullString = sourcesData.join('');
-//       const sources = [];
-      
-//       // Look for the pattern: {'title': 'value', 'url': 'value', ...}
-//       // Use regex to match complete dictionary patterns
-//       const dictPattern = /\{'title':\s*'([^']+)'[^}]*'url':\s*'([^']+)'[^}]*'domain':\s*'([^']+)'[^}]*\}/g;
-//       let match;
-      
-//       while ((match = dictPattern.exec(fullString)) !== null) {
-//         const [, title, url, domain] = match;
-//         if (title && url) {
-//           sources.push({
-//             id: sources.length,
-//             title: title.trim(),
-//             url: url.trim(),
-//             domain: domain?.trim() || '',
-//             snippet: ''
-//           });
-//         }
-//       }
-      
-//       console.log('🔄 Manual extraction found:', sources.length, 'sources');
-//       console.log('🔄 Manual extraction result:', sources);
-//       return sources;
-      
-//     } catch (error) {
-//       console.error('❌ Manual extraction also failed:', error);
-//       return [];
-//     }
-//   };
+    //       while ((match = dictPattern.exec(fullString)) !== null) {
+    //         const [, title, url, domain] = match;
+    //         if (title && url) {
+    //           sources.push({
+    //             id: sources.length,
+    //             title: title.trim(),
+    //             url: url.trim(),
+    //             domain: domain?.trim() || '',
+    //             snippet: ''
+    //           });
+    //         }
+    //       }
 
-//   const extractedSources = parseSourcesInfo(sources);
+    //       // console.log('🔄 Manual extraction found:', sources.length, 'sources');
+    //       return sources;
 
-//   // Don't render if no valid sources found
-//   if (extractedSources.length === 0) {
-//     console.log('❌ No valid sources to display');
-//     return null;
-//   }
+    //     } catch (error) {
+    //       console.error('❌ Manual extraction failed:', error);
+    //       return [];
+    //     }
+    //   };
 
-//   return (
-//     <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-lg">
-//       <div className="flex items-center mb-2">
-//         <Globe className="h-4 w-4 mr-2 text-blue-500 dark:text-blue-400" />
-//         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-//           Sources ({extractedSources.length})
-//         </span>
-//       </div>
-      
-//       <div className="space-y-2">
-//         {extractedSources.map((source) => (
-//           <div 
-//             key={source.id} 
-//             className="flex items-center p-2 bg-white dark:bg-gray-700/50 rounded border border-gray-100 dark:border-gray-600/50 hover:bg-gray-50 dark:hover:bg-gray-600/50 transition-colors"
-//           >
-//             <div className="flex-1 min-w-0">
-//               <div className="flex items-center space-x-2">
-//                 <a
-//                   href={source.url}
-//                   target="_blank"
-//                   rel="noopener noreferrer"
-//                   className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline truncate"
-//                   title={`Visit ${source.title}`}
-//                 >
-//                   {source.title}
-//                 </a>
-//                 {source.domain && source.domain !== source.title && (
-//                   <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-600/50 px-2 py-0.5 rounded-full">
-//                     {source.domain}
-//                   </span>
-//                 )}
-//               </div>
-              
-//               {source.snippet && (
-//                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
-//                   {source.snippet.length > 100 
-//                     ? `${source.snippet.substring(0, 100)}...` 
-//                     : source.snippet
-//                   }
-//                 </p>
-//               )}
-//             </div>
-            
-//             <div className="ml-2 flex-shrink-0">
-//               <button
-//                 onClick={() => window.open(source.url, '_blank')}
-//                 className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
-//                 title="Open in new tab"
-//               >
-//                 <ExternalLink className="h-3 w-3" />
-//               </button>
-//             </div>
-//           </div>
-//         ))}
-//       </div>
-//     </div>
-//   );
-// };
+    //   const extractedSources = attemptManualExtraction(sources);
 
+    //   if (extractedSources.length === 0) {
+    //     console.log('❌ No valid sources to display');
+    //     return null;
+    //   }
 
-const WebSourcesDisplay = ({ sources }) => {
-  // console.log('🔍 WebSourcesDisplay received sources:', sources);
-  
-  if (!sources) {
-    console.log('❌ No sources provided');
-    return null;
-  }
+    //   return (
+    //     <div className="mt-2 text-sm flex flex-wrap items-center gap-1">
+    //       <span className="text-gray-500 dark:text-gray-400 font-medium">Sources:</span>
+    //       <div className="flex flex-wrap items-center gap-1 ml-1">
+    //         {extractedSources.map((source, index) => (
+    //           <React.Fragment key={source.id}>
+    //             <a
+    //               href={source.url}
+    //               target="_blank"
+    //               rel="noopener noreferrer"
+    //               className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
+    //             >
+    //               {source.domain || source.title}
+    //             </a>
+    //             {index < extractedSources.length - 1 && (
+    //               <span className="text-gray-400 last:hidden">,</span>
+    //             )}
+    //           </React.Fragment>
+    //         ))}
+    //       </div>
+    //     </div>
+    //   );
+    // };
 
-  const attemptManualExtraction = (sourcesData) => {
-    try {
-      if (!Array.isArray(sourcesData)) return [];
-      
-      const fullString = sourcesData.join('');
-      const sources = [];
-      
-      // Look for the pattern: {'title': 'value', 'url': 'value', ...}
-      // Use regex to match complete dictionary patterns
-      const dictPattern = /\{'title':\s*'([^']+)'[^}]*'url':\s*'([^']+)'[^}]*'domain':\s*'([^']+)'[^}]*\}/g;
-      let match;
-      
-      while ((match = dictPattern.exec(fullString)) !== null) {
-        const [, title, url, domain] = match;
-        if (title && url) {
-          sources.push({
-            id: sources.length,
-            title: title.trim(),
-            url: url.trim(),
-            domain: domain?.trim() || '',
-            snippet: ''
-          });
-        }
+    // Modify the WebSourcesDisplay component to handle both web and document sources
+    const WebSourcesDisplay = ({ sources, citations, useWebKnowledge }) => {
+      if (!sources && !citations) {
+        return null;
       }
-      
-      // console.log('🔄 Manual extraction found:', sources.length, 'sources');
-      return sources;
-      
-    } catch (error) {
-      console.error('❌ Manual extraction failed:', error);
-      return [];
-    }
-  };
 
-  const extractedSources = attemptManualExtraction(sources);
+      // Handle document sources from citations
+      const documentSources = citations
+        ?.map((citation) => citation.source_file)
+        .filter((value, index, self) => self.indexOf(value) === index); // Remove duplicates
 
-  if (extractedSources.length === 0) {
-    console.log('❌ No valid sources to display');
-    return null;
-  }
+      // Extract web sources as before
+      const webSources = (() => {
+        try {
+          if (!Array.isArray(sources)) return [];
 
-  return (
-    <div className="mt-2 text-sm flex flex-wrap items-center gap-1">
-      <span className="text-gray-500 dark:text-gray-400 font-medium">Sources:</span>
-      <div className="flex flex-wrap items-center gap-1 ml-1">
-        {extractedSources.map((source, index) => (
-          <React.Fragment key={source.id}>
-            <a
-              href={source.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
-            >
-              {source.domain || source.title}
-            </a>
-            {index < extractedSources.length - 1 && (
-              <span className="text-gray-400 last:hidden">,</span>
-            )}
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-};
+          const fullString = sources.join("");
+          const extractedSources = [];
 
-const toggleFollowUpQuestions = () => {
-  setIsFollowUpQuestionsMinimized((prev) => !prev);
-};
+          const dictPattern =
+            /\{'title':\s*'([^']+)'[^}]*'url':\s*'([^']+)'[^}]*'domain':\s*'([^']+)'[^}]*\}/g;
+          let match;
+
+          while ((match = dictPattern.exec(fullString)) !== null) {
+            const [, title, url, domain] = match;
+            if (title && url) {
+              extractedSources.push({
+                id: extractedSources.length,
+                title: title.trim(),
+                url: url.trim(),
+                domain: domain?.trim() || "",
+              });
+            }
+          }
+
+          return extractedSources;
+        } catch (error) {
+          console.error("Failed to extract web sources:", error);
+          return [];
+        }
+      })();
+
+      // If there's nothing to display, return null
+      if (!documentSources?.length && !webSources.length) {
+        return null;
+      }
+
+      return (
+        <div className="mt-2 text-sm flex flex-wrap items-center gap-1">
+          <span className="text-gray-500 dark:text-gray-400 font-medium">
+            Sources:
+          </span>
+          <div className="flex flex-wrap items-center gap-1 ml-1">
+            {/* Display document sources first */}
+            {documentSources?.map((source, index) => (
+              <React.Fragment key={`doc-${index}`}>
+                <span className="text-gray-600 dark:text-gray-300">
+                  {source}
+                </span>
+                {(index < documentSources.length - 1 ||
+                  webSources.length > 0) && (
+                  <span className="text-gray-400 last:hidden">,</span>
+                )}
+              </React.Fragment>
+            ))}
+
+            {/* Display web sources if available */}
+            {webSources.map((source, index) => (
+              <React.Fragment key={`web-${index}`}>
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
+                >
+                  {source.domain || source.title}
+                </a>
+                {index < webSources.length - 1 && (
+                  <span className="text-gray-400 last:hidden">,</span>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const toggleFollowUpQuestions = () => {
+      setIsFollowUpQuestionsMinimized((prev) => !prev);
+    };
 
     // Add a method to clean up duplicate messages
     const cleanupConversation = (messages) => {
@@ -3119,8 +3000,6 @@ const toggleFollowUpQuestions = () => {
                                   </span>
                                 </div>
                               )}
-
-                             
                             </div>
                           )}
                           {msg.role === "assistant" && (
@@ -3263,9 +3142,9 @@ const toggleFollowUpQuestions = () => {
                             )}
                           </div>
                         )}
-                        
-                        {/* NEW: Display web sources if available */}
-                   {/* NEW: Display web sources if available */}
+
+                       
+                        {/* Update where WebSourcesDisplay is used in the message rendering */}
                         {(() => {
                           const sources =
                             msg.webSources ||
@@ -3274,21 +3153,16 @@ const toggleFollowUpQuestions = () => {
                               msg.extracted_urls
                             );
                           return (
-                            sources &&
-                            sources.length > 0
+                            ((sources && sources.length > 0) ||
+                              (msg.citations && msg.citations.length > 0)) && (
+                              <WebSourcesDisplay
+                                sources={sources}
+                                citations={msg.citations}
+                                useWebKnowledge={msg.use_web_knowledge}
+                              />
+                            )
                           );
-                        })() && (
-                          <WebSourcesDisplay
-                            sources={
-                              msg.webSources ||
-                              processWebSources(
-                                msg.sources_info,
-                                msg.extracted_urls
-                              )
-                            }
-                          />
-                        )}
- 
+                        })()}
 
                         {/* Add Copy option for Klarifai messages only */}
                         {msg.role !== "user" && (
@@ -3572,7 +3446,6 @@ const toggleFollowUpQuestions = () => {
             renderSummaryView()
           )}
         </div>
-        
 
         {/* Custom Scrollbar Styles */}
         <style>{`

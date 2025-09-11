@@ -97,7 +97,7 @@ const ChatInputArea = ({
           hasImages
             ? "Ask a question about your pasted images..."
             : propSelectedDocuments.length === 0
-            ? "Ask me anything using web knowledge..."
+            ? "Please select a document to start the conversation..."
             : useWebKnowledge
             ? "Ask me about your documents with web assistance..."
             : "Ask me about your documents..."

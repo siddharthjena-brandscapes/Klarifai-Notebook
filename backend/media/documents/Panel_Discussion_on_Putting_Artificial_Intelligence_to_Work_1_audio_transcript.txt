@@ -1,0 +1,20 @@
+
+
+[Error transcribing segment 1: 'Models' object has no attribute 'generate_content']
+
+
+
+[Error transcribing segment 2: 'Models' object has no attribute 'generate_content']
+
+
+
+[Error transcribing segment 3: 'Models' object has no attribute 'generate_content']
+
+
+
+[Error transcribing segment 4: 'Models' object has no attribute 'generate_content']
+
+
+
+[Error transcribing segment 5: 'Models' object has no attribute 'generate_content']
+

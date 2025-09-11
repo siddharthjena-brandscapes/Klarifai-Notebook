@@ -62,11 +62,13 @@ const Header = () => {
   const [userProjects, setUserProjects] = useState([]);
   const [currentProject, setCurrentProject] = useState(null);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const dropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const moduleDropdownRef = useRef(null);
   const projectDropdownRef = useRef(null);
+  
 
   // Determine current module
   const isDocQA = location.pathname.includes("/dashboard");
@@ -366,31 +368,54 @@ const Header = () => {
     }
   };
 
-  // Function to handle project switching
-  const handleProjectSwitch = (project) => {
-    if (project.id === mainProjectId) {
-      toast.info("You are already in this project");
-      setShowProjectDropdown(false);
-      return;
-    }
+  // Inside Header component
+// const handleProjectSwitch = (project) => {
+//   if (project.id === mainProjectId) {
+//     toast.info("You are already in this project");
+//     setShowProjectDropdown(false);
+//     return;
+//   }
 
+//   setShowProjectDropdown(false);
+
+//   // Get the current module to maintain context
+//   let targetRoute = "/dashboard"; // Default to document-qa
+//   if (isIdeaGen) {
+//     targetRoute = "/idea-generation";
+//   } else if (isKlarifaiNotebook) {
+//     targetRoute = "/klarifai-notebook";
+//   }
+
+//   // Force a full page reload to clear the chat interface
+//   window.location.href = `${targetRoute}/${project.id}`;
+  
+//   // The following line won't execute due to page reload, but keeping for reference
+//   toast.success(`Switched to project: ${project.name}`);
+// }
+
+const handleProjectSwitch = (project) => {
+  if (project.id === mainProjectId) {
+    toast.info("You are already in this project");
     setShowProjectDropdown(false);
+    return;
+  }
 
-    // Get the current module to maintain context
-    let targetRoute = "/dashboard"; // Default to document-qa
-    if (isIdeaGen) {
-      targetRoute = "/idea-generation";
-    } else if (isKlarifaiNotebook) {
-      targetRoute = "/klarifai-notebook";
-    }
+  setShowProjectDropdown(false);
+  setIsTransitioning(true); // Start transition
 
-    // Navigate to the same module in the new project
-    navigate(`${targetRoute}/${project.id}`, {
-      state: { projectName: project.name },
-    });
+  // Get the current module to maintain context
+  let targetRoute = "/dashboard"; // Default to document-qa
+  if (isIdeaGen) {
+    targetRoute = "/idea-generation";
+  } else if (isKlarifaiNotebook) {
+    targetRoute = "/klarifai-notebook";
+  }
 
-    toast.success(`Switched to project: ${project.name}`);
-  };
+  // Add a small delay before reload to show loading overlay
+  setTimeout(() => {
+    window.location.href = `${targetRoute}/${project.id}`;
+  }, 300);
+};
 
   // Helper function to get module display names
   const getModuleName = (moduleId) => {
@@ -798,6 +823,31 @@ const Header = () => {
             </button>
           </div>
         )}
+        {/* Loading Overlay */}
+{isTransitioning && (
+  <div className="fixed inset-0 bg-white dark:bg-gray-900 z-[9999] flex items-center justify-center transition-opacity duration-300 ease-in-out">
+    <div className="flex flex-col items-center space-y-4">
+      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <p className="text-gray-600 dark:text-gray-300">Switching projects...</p>
+    </div>
+  </div>
+)}
+<style>
+  {`
+  /* Add these classes if they don't exist */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}`}
+</style>
     </header>
   );
 };

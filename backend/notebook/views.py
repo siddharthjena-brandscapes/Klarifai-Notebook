@@ -97,7 +97,8 @@ import yt_dlp
 from django.db import transaction
 import tempfile
 from google import genai
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -242,776 +243,7 @@ class ManageConversationView(APIView):
         return self.update_conversation(request, conversation_id)
 
 
-# class DocumentProcessingMixin:
-#     from google import genai
-#     def _parse_json_response(self, response_content, fallback_message="Error processing response"):
-#         """Helper method to safely parse JSON responses from LLM"""
-#         try:
-#             return json.loads(response_content)
-#         except json.JSONDecodeError as e:
-#             logger.error(f"JSON parsing failed: {str(e)}")
-#             return {
-#                 "content": fallback_message,
-#                 "error": True,
-#                 "format_type": "error"
-#             }
- 
-#     def init_gemini(self, user=None):
-#         """Initialize Gemini 2.5 Flash client"""
-#         try:
-#             # Get the user's Gemini API token
-#             gemini_api_key = None
-#             if user:
-#                 try:
-#                     from .models import UserAPITokens  # Adjust import based on your models location
-#                     user_api_tokens = UserAPITokens.objects.get(user=user)
-#                     gemini_api_key = user_api_tokens.gemini_token
-                   
-#                     if not gemini_api_key:
-#                         logger.warning(f"No Gemini API token found for user {user.username}")
-#                         # Fallback to environment variable
-#                         gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
-#                         if not gemini_api_key:
-#                             raise ValueError("Gemini API token is required for processing")
-                       
-#                 except Exception as e:
-#                     logger.error(f"Error getting API tokens for user {user.username}: {str(e)}")
-#                     # Fallback to environment variable
-#                     gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
-#                     if not gemini_api_key:
-#                         raise ValueError("Gemini API token is required for processing")
-#             else:
-#                 # Fallback to environment variable if no user provided
-#                 gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
-#                 if not gemini_api_key:
-#                     raise ValueError("Gemini API token is required for processing")
-           
-#             from google import genai
-#             client = genai.Client(api_key=gemini_api_key)
-#             return client
-#         except Exception as e:
-#             logger.error(f"Error initializing Gemini: {str(e)}")
-#             return None
- 
-#     def detect_document_structure(self, text: str, client) -> str:
-#         """Analyze document structure to determine if it has clear headings/titles"""
-#         try:
-#             system_message = "You are an expert at analyzing document structure. Determine if documents have clear headings and sections."
-           
-#             user_prompt = f"""
-#             Analyze this document text and determine if it has clear structure with headings, titles, or sections:
-           
-#             Text: {text[:2000]}
-           
-#             Look for:
-#             - Clear headings (numbered sections, bold titles, etc.)
-#             - Section breaks
-#             - Structured format
-#             - Table of contents references
-           
-#             Respond with only: "STRUCTURED" or "UNSTRUCTURED"
-#             """
-           
-#             completion = client.chat.completions.create(
-#                 model="gpt-4o",
-#                 messages=[
-#                     {"role": "system", "content": system_message},
-#                     {"role": "user", "content": user_prompt}
-#                 ],
-#                 temperature=0.1,
-#                 max_tokens=10
-#             )
-           
-#             response_text = completion.choices[0].message.content.strip().upper()
-#             return response_text
-#         except Exception as e:
-#             logger.error(f"Error detecting document structure: {str(e)}")
-#             return "UNSTRUCTURED"  # Default to unstructured if analysis fails
- 
-#     def generate_topics_from_content(self, text: str, client) -> List[str]:
-#         """Generate key topics from document content when no clear headings exist"""
-#         try:
-#             system_message = "You are an expert at identifying main topics and themes from documents. Generate concise, specific topic phrases."
-           
-#             user_prompt = f"""
-#             Analyze this document and identify 5-7 main topics or themes discussed:
-           
-#             Text: {text[:6000]}
-           
-#             Generate concise topic phrases (3-5 words each) that represent the main concepts, ideas, or subjects covered in this document.
-           
-#             IMPORTANT:
-#             - Focus on the most important themes and concepts
-#             - Use clear, descriptive phrases
-#             - Make topics specific to the document content
-#             - Avoid generic terms
-#             - Each topic should be 3-5 words
-           
-#             Format as a simple numbered list:
-#             1. Topic phrase
-#             2. Topic phrase
-#             ...
-#             """
-           
-#             completion = client.chat.completions.create(
-#                 model="gpt-4o",
-#                 messages=[
-#                     {"role": "system", "content": system_message},
-#                     {"role": "user", "content": user_prompt}
-#                 ],
-#                 temperature=0.4,
-#                 max_tokens=500
-#             )
-           
-#             response_text = completion.choices[0].message.content.strip()
-#             topics = []
-           
-#             # Parse the numbered list
-#             lines = response_text.split('\n')
-#             for line in lines:
-#                 line = line.strip()
-#                 if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
-#                     # Extract topic after number/bullet
-#                     topic = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
-#                     if topic:
-#                         topics.append(topic)
-           
-#             return topics[:7]  # Limit to 7 topics
-#         except Exception as e:
-#             logger.error(f"Error generating topics: {str(e)}")
-#             return []
- 
-#     def extract_headings_from_structured_doc(self, text: str, client) -> List[str]:
-#         """Extract actual headings from structured documents"""
-#         try:
-#             system_message = "You are an expert at extracting headings and section titles from structured documents. Extract only exact headings that appear in the document."
-           
-#             user_prompt = f"""
-#             Extract the main headings and section titles from this structured document:
-           
-#             Text: {text[:8000]}
-           
-#             IMPORTANT:
-#             - Extract ONLY actual headings, titles, or section names that appear in the document
-#             - Use exact words from the document (3-6 words per heading)
-#             - Look for numbered sections, bold text, capitalized headings
-#             - Do not create new phrases - use exact text from document
-           
-#             Format as a simple numbered list:
-#             1. Exact heading from document
-#             2. Exact heading from document
-#             ...
-#             """
-           
-#             completion = client.chat.completions.create(
-#                 model="gpt-4o",
-#                 messages=[
-#                     {"role": "system", "content": system_message},
-#                     {"role": "user", "content": user_prompt}
-#                 ],
-#                 temperature=0.2,
-#                 max_tokens=800
-#             )
-           
-#             response_text = completion.choices[0].message.content.strip()
-#             headings = []
-           
-#             # Parse the numbered list
-#             lines = response_text.split('\n')
-#             for line in lines:
-#                 line = line.strip()
-#                 if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
-#                     # Extract heading after number/bullet
-#                     heading = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
-#                     if heading:
-#                         headings.append(heading)
-           
-#             return headings[:7]  # Limit to 7 headings
-#         except Exception as e:
-#             logger.error(f"Error extracting headings: {str(e)}")
-#             return []
- 
-#     def generate_summary(self, text, file_name, user=None):
-#         """
-#         REPLACED: Generate summary and key points using GPT-4 with smart topic detection
-#         Returns: (summary_text, key_points_list)
-#         """
-#         if not text.strip():
-#             return "No extractable text found in the document.", []
-       
-#         try:
-           
-#             # First, detect if document has structure
-#             doc_structure = self.detect_document_structure(text, client)
-           
-#             # Generate summary
-#             summary_system_message = """You are an expert document analyzer. Provide comprehensive document summaries with proper HTML-like formatting."""
-           
-#             summary_user_prompt = f"""
-#             Please analyze the following document '{file_name}' and provide a comprehensive quick summary (8-10 lines):
-           
-#             Text: {text[:8000]}
-           
-#             IMPORTANT FOR SUMMARY:
-#             - Must be 8-10 lines providing comprehensive coverage
-#             - FOCUS ON EXECUTION AND VALIDATION: Emphasize practical implementation steps, validation methods, testing approaches, and measurable outcomes
-#             - DESCRIBE MORE CLEARLY: Use specific language, avoid vague terms, provide clear explanations of processes and concepts
-#             - MENTION SPECIFIC SECTORS: Identify and name the exact industries, market segments, business sectors, or domains discussed
-#             - BE MORE CONCRETE: Include specific numbers, percentages, timeframes, locations, company names, product names, or measurable data points
-#             - COMPREHENSIVE AND APPLIED PICTURE: Show how the analysis translates to real-world applications, practical benefits, and actionable insights
-#             - Include key findings, main themes, important data/statistics if present
-#             - Cover methodology, results, conclusions, and recommendations if applicable
-#             - Explain the context, significance, and implications with specific examples
-#             - Make it thorough but still readable and well-structured
-           
-#             ### Expected Response Format:
-#             <b>Summary Overview</b>
-#             <p>High-level introduction to the document's main theme</p>
- 
-#             <b>Key Highlights</b>
-#             <ul>
-#                 <li>First major insight</li>
-#                 <li>Second major insight</li>
-#                 <li>Third major insight</li>
-#             </ul>
- 
-#             <b>Detailed Insights</b>
-#             <p>Expanded explanation of the document's core content and significance</p>
-#             """
-           
-#             summary_completion = client.chat.completions.create(
-#                 model="gpt-4o",
-#                 messages=[
-#                     {"role": "system", "content": summary_system_message},
-#                     {"role": "user", "content": summary_user_prompt}
-#                 ],
-#                 temperature=0.4,
-#                 max_tokens=2000
-#             )
-           
-#             summary = summary_completion.choices[0].message.content.strip()
-           
-#             # Format the summary response to ensure proper HTML-like formatting
-#             summary = self.format_summary_response(summary)
-           
-#             # Generate key points based on document structure
-#             if doc_structure == "STRUCTURED":
-#                 key_points = self.extract_headings_from_structured_doc(text, client)
-#             else:
-#                 key_points = self.generate_topics_from_content(text, client)
-           
-#             # Fallback if no key points were generated
-#             if not key_points:
-#                 fallback_system_message = "You are an expert at identifying main topics and themes from documents."
-               
-#                 fallback_user_prompt = f"""
-#                 From this document, identify 5 main topics or themes:
-               
-#                 Text: {text[:4000]}
-               
-#                 Provide 5 short phrases (3-4 words each) that capture the main ideas.
-#                 Format as:
-#                 1. Topic phrase
-#                 2. Topic phrase
-#                 ...
-#                 """
-               
-#                 fallback_completion = client.chat.completions.create(
-#                     model="gpt-4o",
-#                     messages=[
-#                         {"role": "system", "content": fallback_system_message},
-#                         {"role": "user", "content": fallback_user_prompt}
-#                     ],
-#                     temperature=0.4,
-#                     max_tokens=500
-#                 )
-               
-#                 fallback_response = fallback_completion.choices[0].message.content.strip()
-#                 lines = fallback_response.split('\n')
-#                 key_points = []
-#                 for line in lines:
-#                     line = line.strip()
-#                     if line and (line[0].isdigit() or line.startswith('•')):
-#                         topic = line.split('.', 1)[-1].strip() if '.' in line else line[1:].strip()
-#                         if topic:
-#                             key_points.append(topic)
-           
-#             logger.info(f"Successfully generated summary and {len(key_points)} key points for {file_name}")
-#             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", key_points)
-#             return summary, key_points
-           
-#         except Exception as e:
-#             logger.error(f"Error generating content with GPT-4: {str(e)}")
-#             return self.format_error_message(file_name), []
-   
-#     def format_summary_response(self, response_text):
-#         """Ensures proper HTML-like formatting in the summary response."""
-#         import re
-       
-#         # Wrap paragraphs in <p> tags if not already wrapped
-#         response_text = re.sub(r'^(?!<[p|b|u|ul|li])(.*?)$', r'<p>\1</p>', response_text, flags=re.MULTILINE)
-       
-#         # Ensure bold tags for section headers
-#         section_headers = ['Summary Overview', 'Key Highlights', 'Detailed Insights']
-#         for header in section_headers:
-#             response_text = response_text.replace(header, f'<b>{header}</b>')
-       
-#         return response_text
- 
-#     def format_error_message(self, file_name):
-#         """Returns a formatted error message."""
-#         return f"""
-#         <b>Summary Generation Error</b>
-#         <p>Unable to generate a comprehensive summary for {file_name}</p>
-       
-#         <b>Possible Reasons</b>
-#         <ul>
-#             <li>Document may be too complex</li>
-#             <li>Parsing issues encountered</li>
-#             <li>Insufficient context extracted</li>
-#         </ul>
-#         """
- 
- 
-#     def convert_video_to_audio(self, video_path):
-#         """
-#         Convert video files to audio format using MoviePy.
-#         Returns the path to the created audio file.
-       
-#         Args:
-#             video_path: Path to the video file
-#         """
-       
-#         from moviepy import VideoFileClip
-#         import logging
-       
-#         logger = logging.getLogger(__name__)
-       
-#         # Set up the audio directory
-#         AUDIO_DIR = "audio_files"
-#         os.makedirs(AUDIO_DIR, exist_ok=True)
-       
-#         try:
-#             # Generate output path for the audio file
-#             base_name = os.path.splitext(os.path.basename(video_path))[0]
-#             output_path = os.path.join(AUDIO_DIR, f"{base_name}.mp3")
-           
-#             logger.info(f"Loading video: {video_path}")
-#             video = VideoFileClip(video_path)
-           
-#             logger.info("Extracting audio...")
-#             audio = video.audio
-           
-#             if audio is None:
-#                 logger.warning(f"No audio stream found in video: {video_path}")
-#                 return None
-           
-#             logger.info(f"Converting to MP3: {output_path}")
-#             audio.write_audiofile(output_path, codec='mp3')
-           
-#             # Close files
-#             audio.close()
-#             video.close()
-           
-#             logger.info(f"Video-to-audio conversion complete: {output_path}")
-#             return output_path
-       
-#         except Exception as e:
-#             logger.error(f"Error during video-to-audio conversion: {str(e)}")
-#             return None
-#     def extract_text_from_video(self, file_path, user=None):
-#         """
-#         Extract text from video files by first converting to audio, then transcribing.
-#         Returns the transcribed text.
-       
-#         Args:
-#             file_path: Path to the video file
-#             user: Django user object to get API token
-#         """
-       
-#         logger = logging.getLogger(__name__)
-#         print(f"Starting video-to-text extraction for: {file_path}")
-       
-#         try:
-#             # First convert video to audio
-#             print("Attempting to convert video to audio...")
-#             audio_path = self.convert_video_to_audio(file_path)
-           
-#             if not audio_path:
-#                 print(f"Failed to convert video to audio: {file_path}")
-#                 logger.error(f"Failed to convert video to audio: {file_path}")
-#                 return f"Error: Failed to extract audio from video file."
-           
-#             print(f"Successfully converted video to audio: {audio_path}")
-           
-#             # Then extract text from the resulting audio file
-#             print(f"Starting audio transcription...")
-#             extracted_text = self.extract_text_from_audio(audio_path, user=user)
-           
-#             print(f"Audio transcription completed, text length: {len(extracted_text) if extracted_text else 0}")
-           
-#             #Clean up the temporary audio file if needed
-#             #Uncomment if you want to delete the audio file after processing
-#             if os.path.exists(audio_path):
-#                 os.remove(audio_path)
-           
-#             return extracted_text
-       
-#         except Exception as e:
-#             print(f"Exception in extract_text_from_video: {str(e)}")
-#             logger.error(f"Error extracting text from video: {str(e)}")
-#             return f"Error transcribing video: {str(e)}"
- 
-#     def process_document_from_text(self, text, filename):
-#         """
-#         Process document directly from provided text.
-#         For use with transcripts that are already extracted.
-#         """
-       
-#         try:
-#             # Clean the text
-#             cleaned_text = self.clean_text(text)
-           
-#             # Create document record for processing
-#             doc = {
-#                 'text': cleaned_text,
-#                 'name': filename
-#             }
-           
-#             all_chunks = []
-#             # Split text into chunks, with smaller size for transcripts
-#             chunks = self.split_text_into_chunks(doc['text'], chunk_size=800, chunk_overlap=200)
-           
-#             for i, chunk in enumerate(chunks):
-#                 all_chunks.append({
-#                     'text': chunk,
-#                     'source': doc['name'],
-#                     'source_file': doc['name'],
-#                     'chunk_id': i,
-#                     'is_transcript': True  # Mark this as a transcript
-#                 })
-           
-#             # Get embeddings for all chunks
-#             text_chunks = [chunk['text'] for chunk in all_chunks]
-#             print(f"Getting embeddings for {len(text_chunks)} text chunks")
-#             embeddings = self.get_embeddings(text_chunks)
-           
-#             if not embeddings:
-#                 raise ValueError("Failed to generate embeddings for document chunks")
-           
-#             # Create FAISS index
-#             index = self.create_faiss_index(embeddings)
-           
-#             # Generate a unique session ID for this document
-#             session_id = uuid.uuid4().hex
-           
-#             # Save the index and chunks
-#             index_file, pickle_file = self.save_faiss_index(index, all_chunks, session_id)
-           
-#             print(f"Transcript processed successfully: {len(all_chunks)} chunks created")
-           
-#             return {
-#                 'index_path': index_file,
-#                 'metadata_path': pickle_file,
-#                 'full_text': doc['text']
-#             }
-           
-#         except Exception as e:
-#             print(f"Error in process_document_from_text: {str(e)}")
-#             raise
- 
- 
-#     def extract_text_from_audio(self, file_path, user=None):
-#         """
-#         Extract text from audio files using Google's Gemini API.
-#         For large files, chunks the audio before transcription.
-#         Returns the transcribed text.
-       
-#         Args:
-#             file_path: Path to the audio file
-#             user: Django user object to get API token
-#         """
- 
-#         logger = logging.getLogger(__name__)
-       
-#         # Set up the transcripts directory
-#         TRANSCRIPT_DIR = "transcripts"
-#         os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
-       
-#         # Audio chunking settings
-#         CHUNK_LENGTH_MINUTES = 5
-#         CHUNK_THRESHOLD_MB = 20
-#         DURATION_THRESHOLD_MINUTES = 10
-#         MAX_RETRIES = 3
-       
-#         try:
-#             # Initialize Gemini client
-#             client = self.init_gemini(user)
-#             if not client:
-#                 raise ValueError("Failed to initialize Gemini client")
-           
-#             # Generate a unique base filename for this transcription
-#             base_filename = f"audio_transcript_{uuid.uuid4().hex}"
-#             full_transcript = ""
-#             temp_files = []
-           
-#             # Check if audio file needs chunking
-#             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-           
-#             # Load audio file to check duration using MoviePy
-#             audio_clip = AudioFileClip(file_path)
-#             duration_minutes = audio_clip.duration / 60  # Convert seconds to minutes
-           
-#             logger.info(f"Audio file: {file_path}, Size: {file_size_mb:.2f}MB, Duration: {duration_minutes:.2f} minutes")
-           
-#             # Determine if chunking is needed
-#             need_chunking = False
-#             if file_size_mb > CHUNK_THRESHOLD_MB or duration_minutes > DURATION_THRESHOLD_MINUTES:
-#                 need_chunking = True
-#                 logger.info(f"File exceeds size/duration thresholds, will chunk for processing")
-           
-#             if need_chunking:
-#                 # Calculate parameters for chunking
-#                 chunk_length_seconds = CHUNK_LENGTH_MINUTES * 60
-#                 overlap_seconds = 5  # 5 second overlap
-#                 total_chunks = int(audio_clip.duration / chunk_length_seconds) + (1 if audio_clip.duration % chunk_length_seconds > 0 else 0)
-               
-#                 logger.info(f"Splitting audio into {total_chunks} chunks of {CHUNK_LENGTH_MINUTES} minutes each")
-               
-#                 for i in range(total_chunks):
-#                     # Calculate start and end times with overlap
-#                     start_time = max(0, i * chunk_length_seconds - overlap_seconds) if i > 0 else 0
-#                     end_time = min(audio_clip.duration, (i + 1) * chunk_length_seconds + overlap_seconds)
-                   
-#                     # Create a subclip
-#                     chunk = audio_clip.subclipped(start_time, end_time)
-                   
-#                     # Export the chunk to a temporary file
-#                     chunk_filename = f"{os.path.splitext(file_path)[0]}_chunk_{i}.mp3"
-#                     chunk.write_audiofile(chunk_filename, codec='mp3')
-#                     temp_files.append(chunk_filename)
-#                     chunk.close()  # Close the subclip to free resources
-                   
-#                     # Process the chunk
-#                     logger.info(f"Processing chunk {i + 1}/{total_chunks}")
-                   
-#                     # Transcribe each chunk with retry logic
-#                     retry_count = 0
-#                     success = False
-                   
-#                     while retry_count < MAX_RETRIES and not success:
-#                         try:
-#                             myfile = client.files.upload(file=chunk_filename)
- 
-#                             prompt = """You are a transcription and translation assistant. Your job is to:
-#                             1. Transcribe spoken content from audio.
-#                             2. Translate everything fully into English.
-#                             3. Output only the translated English version.
-#                             4. If other languages are spoken, translate them fully into English.
-#                             5. Identify intelligently the Moderator and Respondent(s) in the conversation.
-#                             6. If a speaker is continously speaking, do not repeat the speaker label.
- 
-#                             **Formatting Instructions:**
-#                             - Format each line like this:
-#                             M: [Moderator's translated English speech]
-#                             R: [Respondent's translated English speech]
-#                             - Use "M:" for the moderator and "R:" for any respondent. Do not attempt to label or distinguish individual respondents.
-#                             - Do not include names or speaker numbers.
-#                             - Do not include the original language (e.g., Hindi).
-#                             - Do not paraphrase or summarize. Translate every spoken sentence accurately.
-#                             - Output should be clean, easy-to-read translated English dialogue.
-#                             - Do not use JSON or structured formats.
- 
-#                             **Example Output:**
-#                             M: Thank you all for joining today's session. Let's begin by getting to know each other a little.
-#                             R: Sure. My name is Khushboo. I live in Lucknow and work as a school teacher.
-#                             R: I live with my parents and younger brother.
- 
-#                             Only output the above format. Nothing else."""
-                               
-#                             # Generate the transcription using new API
-#                             response = client.models.generate_content(
-#                                 model="gemini-2.5-flash",
-#                                 contents=[prompt, myfile]
-#                             )
-#                             chunk_transcription = response.text
-                           
-#                             # Add a separator between chunks
-#                             if i > 0:
-#                                 full_transcript += "\n\n--- NEXT SEGMENT ---\n\n"
-                           
-#                             full_transcript += chunk_transcription
-#                             success = True
-                           
-#                         except Exception as e:
-#                             retry_count += 1
-#                             logger.error(f"Error in chunk transcription (attempt {retry_count}): {str(e)}")
-#                             if retry_count >= MAX_RETRIES:
-#                                 full_transcript += f"\n\n[Error transcribing segment {i + 1}: {str(e)}]\n\n"
-#                             else:
-#                                 time.sleep(2)  # Wait before retry
-               
-#                 # Close the main audio clip
-#                 audio_clip.close()
-                   
-#             else:
-#                 # Process the entire file at once if it's small enough
-#                 logger.info("Processing audio file in a single pass")
-#                 audio_clip.close()  # Close the clip since we're not using it for chunking
-               
-#                 myfile = client.files.upload(file=file_path)
-               
-#                 # Define the prompt for transcription
-#                 prompt = """You are a transcription and translation assistant. Your job is to:
-#                             1. Transcribe spoken content from audio.
-#                             2. Translate everything fully into English.
-#                             3. Output only the translated English version.
-#                             4. If other languages are spoken, translate them fully into English.
-#                             5. Identify intelligently the Moderator and Respondent(s) in the conversation.
-#                             6. If a speaker is continously speaking, do not repeat the speaker label.
- 
-#                             **Formatting Instructions:**
-#                             - Format each line like this:
-#                             M: [Moderator's translated English speech]
-#                             R: [Respondent's translated English speech]
-#                             - Use "M:" for the moderator and "R:" for any respondent. Do not attempt to label or distinguish individual respondents.
-#                             - Do not include names or speaker numbers.
-#                             - Do not include the original language (e.g., Hindi).
-#                             - Do not paraphrase or summarize. Translate every spoken sentence accurately.
-#                             - Output should be clean, easy-to-read translated English dialogue.
-#                             - Do not use JSON or structured formats.
- 
-#                             **Example Output:**
-#                             M: Thank you all for joining today's session. Let's begin by getting to know each other a little.
-#                             R: Sure. My name is Khushboo. I live in Lucknow and work as a school teacher.
-#                             R: I live with my parents and younger brother.
- 
-#                             Only output the above format. Nothing else.
-#                             """
-               
-#                 # Generate the transcription
-#                 response = client.models.generate_content(
-#                     model="gemini-2.5-flash",
-#                     contents=[prompt, myfile]
-#                 )
-#                 full_transcript = response.text
-           
-#             # Save the full transcription as a text file
-#             txt_path = os.path.join(TRANSCRIPT_DIR, f"{base_filename}.txt")
-#             with open(txt_path, "w", encoding="utf-8") as f:
-#                 f.write(full_transcript)
-           
-#             # Clean up temporary chunk files
-#             for temp_file in temp_files:
-#                 try:
-#                     if os.path.exists(temp_file):
-#                         os.remove(temp_file)
-#                         logger.info(f"Removed temporary file: {temp_file}")
-#                 except Exception as e:
-#                     logger.error(f"Error removing file {temp_file}: {str(e)}")
-           
-#             # Extract the text from the saved text file using the existing method
-#             extracted_text = self.extract_text_from_txt(txt_path)
-           
-#             return extracted_text
-       
-#         except Exception as e:
-#             logger.error(f"Error transcribing audio file: {str(e)}")
-#             return f"Error transcribing audio: {str(e)}"
-           
-#     def extract_text_from_file(self, file_path, user=None):
-#         """Extract text from different file types."""
-#         from pathlib import Path
-#         ext = Path(file_path).suffix.lower()
-#         if ext == '.pdf':
-#             return self.extract_text_from_pdf(file_path)
-#         elif ext == '.docx':
-#             return self.extract_text_from_docx(file_path)
-#         elif ext == '.pptx':
-#             return self.extract_text_from_pptx(file_path)
-#         elif ext == '.xlsx':
-#             return self.extract_text_from_xlsx(file_path)
-#         elif ext == '.txt':
-#             return self.extract_text_from_txt(file_path)
-       
-#         elif ext in ['.mp3', '.wav', '.mpeg']:
-#             return self.extract_text_from_audio(file_path, user)
-#         else:
-#             return ""
- 
-#     def extract_text_from_pdf(self, file_path):
-#         import fitz
-#         text = ""
-#         with fitz.open(file_path) as doc:
-#             for page in doc:
-#                 text += page.get_text()
-#         return text
- 
-#     def extract_text_from_docx(self, file_path):
-#         import docx
-#         doc = docx.Document(file_path)
-#         text = [para.text for para in doc.paragraphs]
-#         return "\n".join(text)
- 
-#     def extract_text_from_pptx(self, file_path):
-#         import pptx
-#         pres = pptx.Presentation(file_path)
-#         text = []
-#         for slide in pres.slides:
-#             for shape in slide.shapes:
-#                 if hasattr(shape, "text"):
-#                     text.append(shape.text)
-#         return "\n".join(text)
- 
-#     def extract_text_from_xlsx(self, file_path):
-#         import openpyxl
-#         wb = openpyxl.load_workbook(file_path, data_only=True)
-#         text = []
-#         for sheet in wb.sheetnames:
-#             ws = wb[sheet]
-#             text.append(f"Sheet: {sheet}")
-#             for row in ws.iter_rows(values_only=True):
-#                 row_text = [str(cell) if cell is not None else "" for cell in row]
-#                 text.append(" | ".join(row_text))
-#         return "\n".join(text)
-   
-#     def extract_text_from_txt(self, file_path):
-#         """Extract text from a plain text file."""
-#         try:
-#             # Try multiple encodings in case UTF-8 fails
-#             encodings = ['utf-8', 'latin-1', 'cp1252']
-           
-#             for encoding in encodings:
-#                 try:
-#                     with open(file_path, 'r', encoding=encoding) as file:
-#                         text = file.read()
-#                     return text
-#                 except UnicodeDecodeError:
-#                     continue
-           
-#             # If all encodings fail, try binary mode and decode with errors='replace'
-#             with open(file_path, 'rb') as file:
-#                 binary_data = file.read()
-#                 return binary_data.decode('utf-8', errors='replace')
-               
-#         except Exception as e:
-#             print(f"Error extracting text from txt file: {str(e)}")
-#             return f"Error extracting text: {str(e)}"
- 
-#     def clean_text(self, text):
-#         """Clean and normalize extracted text."""
-#         import re
-#         import unicodedata
-       
-#         # Remove excessive whitespace while preserving paragraph breaks
-#         text = re.sub(r'\s+', ' ', text)
-#         text = re.sub(r'\n\s*\n', '\n\n', text)
-#         text = text.strip()
-       
-#         # Remove any control characters
-#         text = ''.join(char for char in text if unicodedata.category(char)[0] != 'C')
-       
-#         return text
+
  
  
 
@@ -5655,12 +4887,122 @@ class ChatView(APIView):
             logger.error(f"Error in web knowledge search: {str(e)}", exc_info=True)
             return f"An error occurred while searching the web: {str(e)}", []
 
-    def search_web(self, query, max_results=5, user=None):
+
+    def validate_url(self, url, timeout=5):
+        """
+        Validate if a URL is accessible and returns valid status
+        Returns: dict with url, status_code, is_valid, and error info
+        """
+        try:
+            # Parse URL to ensure it's properly formatted
+            parsed = urlparse(url)
+            if not parsed.scheme or not parsed.netloc:
+                return {
+                    'url': url,
+                    'status_code': None,
+                    'is_valid': False,
+                    'error': 'Invalid URL format'
+                }
+           
+            # Make HEAD request first (faster than GET)
+            response = requests.head(
+                url,
+                timeout=timeout,
+                allow_redirects=True,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            )
+           
+            # If HEAD doesn't work, try GET with small range
+            if response.status_code == 405:  # Method not allowed
+                response = requests.get(
+                    url,
+                    timeout=timeout,
+                    allow_redirects=True,
+                    headers={
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Range': 'bytes=0-1024'  # Only fetch first 1KB
+                    }
+                )
+           
+            is_valid = 200 <= response.status_code < 400
+           
+            return {
+                'url': url,
+                'status_code': response.status_code,
+                'is_valid': is_valid,
+                'error': None if is_valid else f'HTTP {response.status_code}'
+            }
+           
+        except requests.exceptions.Timeout:
+            return {
+                'url': url,
+                'status_code': None,
+                'is_valid': False,
+                'error': 'Timeout'
+            }
+        except requests.exceptions.ConnectionError:
+            return {
+                'url': url,
+                'status_code': None,
+                'is_valid': False,
+                'error': 'Connection error'
+            }
+        except Exception as e:
+            return {
+                'url': url,
+                'status_code': None,
+                'is_valid': False,
+                'error': str(e)
+            }
+ 
+    def validate_sources_parallel(self, sources, max_workers=3, timeout=5):
+        """
+        Validate multiple URLs in parallel
+        Returns: list of validation results
+        """
+        if not sources:
+            return []
+       
+        urls = [source.get('uri', '') for source in sources if source.get('uri')]
+       
+        if not urls:
+            return []
+       
+        validation_results = []
+       
+        # Use ThreadPoolExecutor for parallel validation
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all URL validation tasks
+            future_to_url = {
+                executor.submit(self.validate_url, url, timeout): url
+                for url in urls
+            }
+           
+            # Collect results as they complete
+            for future in as_completed(future_to_url):
+                try:
+                    result = future.result()
+                    validation_results.append(result)
+                except Exception as e:
+                    url = future_to_url[future]
+                    validation_results.append({
+                        'url': url,
+                        'status_code': None,
+                        'is_valid': False,
+                        'error': f'Validation error: {str(e)}'
+                    })
+       
+        return validation_results
+ 
+    def search_web(self, query, max_results=5, user=None, validate_urls=True, validation_timeout=5):
         """Search the web using Google Gemini and return response text + metadata with sources"""
         try:
             # Get API key from user tokens
-            user_api_tokens = UserAPITokens.objects.get(user=user)
+            user_api_tokens = UserAPITokens.objects.get(user=user)  # Make sure to import UserAPITokens
             GOOGLE_API_KEY = user_api_tokens.gemini_token
+           
             if not GOOGLE_API_KEY:
                 logger.error("GOOGLE_API_KEY not found in user tokens.")
                 return "", {'error': 'GOOGLE_API_KEY not found'}
@@ -5675,21 +5017,21 @@ class ChatView(APIView):
                 contents=query,
                 config={"tools": [{"google_search": {}}]},
             )
+ 
             print("\nRaw Gemini Response:")
             print(response.text if hasattr(response, "text") else "No text in response")
             print("\nResponse Metadata:")
             print(f"Response type: {type(response)}")
+           
             if hasattr(response, 'candidates'):
                 print(f"Number of candidates: {len(response.candidates)}")
+           
             if hasattr(response, 'sources'):
                 print("\nSource URLs:")
                 for source in response.sources:
                     print(f"- {source.uri if hasattr(source, 'uri') else source}")
-
+           
             print("=== GEMINI SEARCH DEBUG END ===\n")
-
-
-
  
             # Extract response text
             response_text = response.text if response.text else ""
@@ -5699,12 +5041,16 @@ class ChatView(APIView):
                 'response_text': response_text,
                 'search_queries': [],
                 'sources': [],
+                'valid_sources': [],
+                'invalid_sources': [],
+                'validation_summary': {},
                 'error': None
             }
  
             try:
                 if hasattr(response, 'candidates') and response.candidates:
                     candidate = response.candidates[0]
+                   
                     if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
                         grounding = candidate.grounding_metadata
  
@@ -5722,26 +5068,87 @@ class ChatView(APIView):
                                     uri = getattr(chunk.web, 'uri', '')
                                     if not uri:
                                         continue
- 
                                     sources.append({
                                         'title': title,
                                         'uri': uri
                                     })
                                     if len(sources) >= max_results:
                                         break
+                           
                             metadata['sources'] = sources
+                           
+                            # Validate URLs if requested
+                            if validate_urls and sources:
+                                logger.info(f"Validating {len(sources)} source URLs...")
+                                start_time = time.time()
+                               
+                                validation_results = self.validate_sources_parallel(
+                                    sources,
+                                    max_workers=3,
+                                    timeout=validation_timeout
+                                )
+                               
+                                validation_time = time.time() - start_time
+                                logger.info(f"URL validation completed in {validation_time:.2f} seconds")
+                               
+                                # Separate valid and invalid sources
+                                valid_sources = []
+                                invalid_sources = []
+                               
+                                # Create a mapping for quick lookup
+                                validation_map = {result['url']: result for result in validation_results}
+                               
+                                for source in sources:
+                                    url = source['uri']
+                                    validation_result = validation_map.get(url, {})
+                                   
+                                    source_with_validation = {
+                                        **source,
+                                        'validation': validation_result
+                                    }
+                                   
+                                    if validation_result.get('is_valid', False):
+                                        valid_sources.append(source_with_validation)
+                                    else:
+                                        invalid_sources.append(source_with_validation)
+                               
+                                metadata['valid_sources'] = valid_sources
+                                metadata['invalid_sources'] = invalid_sources
+                               
+                                # Add validation summary
+                                total_sources = len(sources)
+                                valid_count = len(valid_sources)
+                                invalid_count = len(invalid_sources)
+                               
+                                metadata['validation_summary'] = {
+                                    'total_sources': total_sources,
+                                    'valid_sources': valid_count,
+                                    'invalid_sources': invalid_count,
+                                    'validation_time': round(validation_time, 2),
+                                    'success_rate': round((valid_count / total_sources) * 100, 2) if total_sources > 0 else 0
+                                }
+                               
+                                logger.info(f"URL validation summary: {valid_count}/{total_sources} sources valid "
+                                        f"({metadata['validation_summary']['success_rate']:.1f}% success rate)")
+                               
+                                # Log invalid sources for debugging
+                                if invalid_sources:
+                                    logger.warning("Invalid sources found:")
+                                    for source in invalid_sources:
+                                        validation = source.get('validation', {})
+                                        logger.warning(f"- {source['uri']}: {validation.get('error', 'Unknown error')}")
+ 
             except Exception as e:
                 logger.error(f"Error extracting grounding metadata: {e}", exc_info=True)
                 metadata['error'] = str(e)
+ 
             print("metadata", metadata)
             return response_text, metadata
  
-        except UserAPITokens.DoesNotExist:
-            logger.error(f"User API tokens not found for user: {user}")
-            return "", {'error': 'User API tokens not found'}
         except Exception as e:
-            logger.error(f"Error searching the web via Google Gemini: {str(e)}", exc_info=True)
+            logger.error(f"Error in search_web: {e}", exc_info=True)
             return "", {'error': str(e)}
+        
     def extract_domain(self, url):
         """Extract domain from URL - helper method"""
         try:
